@@ -1,0 +1,1 @@
+# geotel-speccomllc
