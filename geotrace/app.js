@@ -111,17 +111,17 @@ function showAuth(show){
 
 function setWhoami(){
   if (isDemo){
-    $("whoami").textContent = `Demo -> ${state.demo.role}`;
+    $("whoami").textContent = `Signed in (Demo: ${state.demo.role})`;
     $("btnSignOut").style.display = "";
     return;
   }
 
   if (state.user){
     const role = state.profile?.role ? ` -> ${state.profile.role}` : "";
-    $("whoami").textContent = `${state.user.email}${role}`;
+    $("whoami").textContent = `Signed in (${state.user.email}${role})`;
     $("btnSignOut").style.display = "";
   } else {
-    $("whoami").textContent = "Not signed in";
+    $("whoami").textContent = "Signed out";
     $("btnSignOut").style.display = "none";
   }
 }
@@ -1284,7 +1284,7 @@ function wireUI(){
       state.activeNode = null;
       showAuth(true);
       $("btnSignOut").style.display = "none";
-      $("whoami").textContent = "Not signed in";
+      $("whoami").textContent = "Signed out";
       clearProof();
       return;
     }

@@ -10,29 +10,29 @@
   <div class="container">
     <div class="topbar">
       <div class="brand">
-        <span style="display:inline-flex; width:34px; height:34px; border-radius:12px; background:rgba(124,58,237,.25); border:1px solid rgba(124,58,237,.55); align-items:center; justify-content:center; font-weight:900;">SC</span>
+        <span class="brand-mark">GT</span>
         <div>
-          <div style="font-size:14px; font-weight:900;">GeoTel</div>
+          <div class="brand-title">GeoTel</div>
           <div class="muted small">Field verification, documentation, and billing control</div>
-          <div class="muted small">by <b>Spec Communications, LLC</b></div>
         </div>
       </div>
       <div class="row">
-        <span id="whoami" class="badge">Not signed in</span>
+        <span id="whoami" class="badge">Signed out</span>
         <button id="btnSignOut" class="btn secondary" style="display:none;">Sign out</button>
       </div>
     </div>
 
-    <div style="height:16px"></div>
+    <div class="spacer"></div>
 
-    <div id="viewAuth" class="grid cols-2">
-      <div class="card">
+    <div id="viewAuth" class="stack">
+      <div class="auth-wrap">
+        <div class="card auth-card">
         <h1>Sign in to GeoTel (starter)</h1>
         <p class="muted">This starter supports Supabase Auth if you wire your keys. If not, it runs in demo mode so you can click around.</p>
 
         <div class="hr"></div>
 
-        <div class="row">
+        <div class="field-stack">
           <input id="email" class="input" placeholder="email" />
           <input id="password" class="input" placeholder="password" type="password" />
         </div>
@@ -42,25 +42,28 @@
           <button id="btnSignUp" class="btn secondary">Create user</button>
           <button id="btnDemo" class="btn ghost">Use demo</button>
         </div>
-
-        <div class="note" style="margin-top:14px;">
-          <div style="font-weight:900;">Roles in this build</div>
-          <div class="muted small">TDS -> PRIME -> SUB -> SPLICER -> OWNER (Spec Communications, LLC Louis Garcia)</div>
         </div>
       </div>
 
-      <div class="card">
-        <h2>What you'll see in the demo</h2>
-        <ul class="muted">
-          <li><b>Inventory checklist</b> with item photos (example Millennium item included).</li>
-          <li><b>Node workflow</b>: enter node number, then work one node at a time.</li>
-          <li><b>Splice locations</b>: GPS capture + photo + timestamp required before "Complete".</li>
-          <li><b>Units threshold alert</b>: when used units approach allowed units, PRIME gets warned.</li>
-          <li><b>Pricing privacy</b>: prices are hidden from SPLICERS (and can be hidden between other parties via RLS).</li>
-        </ul>
-        <div class="hr"></div>
-        <div class="muted small">
-          Tip: Once Supabase is wired, this becomes real: files upload to Storage, rows land in Postgres, and policies enforce who can see what.
+      <div class="grid cols-2">
+        <div class="card">
+          <h2>Roles in this build</h2>
+          <div class="muted small">TDS -> PRIME -> SUB -> SPLICER -> OWNER (Spec Communications, LLC Louis Garcia)</div>
+        </div>
+
+        <div class="card">
+          <h2>What you'll see in the demo</h2>
+          <ul class="muted">
+            <li><b>Inventory checklist</b> with item photos (example Millennium item included).</li>
+            <li><b>Node workflow</b>: enter node number, then work one node at a time.</li>
+            <li><b>Splice locations</b>: GPS capture + photo + timestamp required before "Complete".</li>
+            <li><b>Units threshold alert</b>: when used units approach allowed units, PRIME gets warned.</li>
+            <li><b>Pricing privacy</b>: prices are hidden from SPLICERS (and can be hidden between other parties via RLS).</li>
+          </ul>
+          <div class="hr"></div>
+          <div class="muted small">
+            Tip: Once Supabase is wired, this becomes real: files upload to Storage, rows land in Postgres, and policies enforce who can see what.
+          </div>
         </div>
       </div>
     </div>
