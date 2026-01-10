@@ -58,12 +58,14 @@ with check (
 create table if not exists public.projects (
   id uuid primary key default gen_random_uuid(),
   name text unique not null,
+  job_number text,
   location text,
   created_at timestamptz not null default now()
 );
 
 alter table public.projects
   add column if not exists customer_name text,
+  add column if not exists job_number text,
   add column if not exists active boolean not null default true;
 
 alter table public.projects enable row level security;
@@ -101,12 +103,33 @@ create table if not exists public.nodes (
   node_number text unique not null,
   project_id uuid references public.projects(id),
   description text,
+  status text not null default 'NOT_STARTED',
+  started_at timestamptz,
+  completed_at timestamptz,
   allowed_units integer not null default 0,
   used_units integer not null default 0,
   created_by uuid references public.profiles(id),
   created_at timestamptz not null default now(),
   ready_for_billing boolean not null default false
 );
+
+alter table public.nodes
+  add column if not exists status text not null default 'NOT_STARTED',
+  add column if not exists started_at timestamptz,
+  add column if not exists completed_at timestamptz;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'nodes_status_check'
+      and conrelid = 'public.nodes'::regclass
+  ) then
+    alter table public.nodes
+      add constraint nodes_status_check
+      check (status in ('NOT_STARTED','ACTIVE','COMPLETE'));
+  end if;
+end $$;
 
 alter table public.nodes enable row level security;
 
@@ -138,6 +161,29 @@ using (
       and p.role in ('PRIME','SUB','OWNER','TDS')
   )
 );
+
+create or replace function public.fn_enforce_single_active_node()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.status = 'ACTIVE' then
+    if exists (
+      select 1 from public.nodes n
+      where n.project_id = new.project_id
+        and n.status = 'ACTIVE'
+        and n.id <> new.id
+    ) then
+      raise exception 'Another node is already ACTIVE for this project.';
+    end if;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_single_active_node on public.nodes;
+create trigger trg_single_active_node
+before insert or update on public.nodes
+for each row execute function public.fn_enforce_single_active_node();
 
 -- 3) Splice locations (documentation gate)
 create table if not exists public.splice_locations (
@@ -183,6 +229,22 @@ using (
       and p.role in ('SPLICER','SUB','PRIME','OWNER')
   )
 );
+
+create or replace function public.fn_stamp_splice_taken_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.photo_path is not null and new.taken_at is null then
+    new.taken_at := now();
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_stamp_splice_taken_at on public.splice_locations;
+create trigger trg_stamp_splice_taken_at
+before insert or update on public.splice_locations
+for each row execute function public.fn_stamp_splice_taken_at();
 
 -- 4) Inventory master (NO pricing fields here)
 create table if not exists public.inventory_items (
@@ -275,6 +337,8 @@ create table if not exists public.usage_events (
   status text not null default 'approved',
   photo_path text,
   captured_at timestamptz,
+  captured_at_client timestamptz,
+  captured_at_server timestamptz not null default now(),
   gps_lat double precision,
   gps_lng double precision,
   gps_accuracy_m double precision,
@@ -283,6 +347,10 @@ create table if not exists public.usage_events (
 );
 
 alter table public.usage_events enable row level security;
+
+alter table public.usage_events
+  add column if not exists captured_at_client timestamptz,
+  add column if not exists captured_at_server timestamptz not null default now();
 
 create policy "usage_events_read_all_authed"
 on public.usage_events for select
@@ -299,6 +367,25 @@ with check (
       and p.role in ('SPLICER','SUB','PRIME','OWNER')
   )
 );
+
+create or replace function public.fn_usage_events_server_time()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.captured_at_server is null then
+    new.captured_at_server := now();
+  end if;
+  if new.captured_at is null then
+    new.captured_at := new.captured_at_server;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_usage_events_server_time on public.usage_events;
+create trigger trg_usage_events_server_time
+before insert on public.usage_events
+for each row execute function public.fn_usage_events_server_time();
 
 -- 6) Pricing tables (kept separate, heavily locked)
 -- TDS price sheet: only TDS + OWNER can read/manage
@@ -454,7 +541,7 @@ select
   (select bool_and(ni.completed) from public.node_inventory ni where ni.node_id = n.id) as all_inventory_complete,
   (select bool_and(
      coalesce(ue.proof_required, true) = false
-     or (ue.photo_path is not null and ue.gps_lat is not null and ue.captured_at is not null)
+     or (ue.photo_path is not null and ue.gps_lat is not null and ue.captured_at_server is not null)
    ) from public.usage_events ue where ue.node_id = n.id) as all_usage_proof_complete
 from public.nodes n;
 
@@ -589,11 +676,19 @@ create table if not exists public.proof_uploads (
   lat double precision,
   lng double precision,
   captured_at timestamptz,
+  captured_at_client timestamptz,
+  captured_at_server timestamptz not null default now(),
+  device_info text,
   captured_by uuid references public.profiles(id),
   created_at timestamptz not null default now()
 );
 
 alter table public.proof_uploads enable row level security;
+
+alter table public.proof_uploads
+  add column if not exists captured_at_client timestamptz,
+  add column if not exists captured_at_server timestamptz not null default now(),
+  add column if not exists device_info text;
 
 create policy "proof_uploads_read_all_authed"
 on public.proof_uploads for select
@@ -610,6 +705,34 @@ with check (
       and p.role in ('SPLICER','SUB','PRIME','OWNER')
   )
 );
+
+create or replace function public.fn_validate_proof_upload()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.lat is null or new.lng is null then
+    raise exception 'GPS required for proof.';
+  end if;
+  if new.captured_at_client is null then
+    raise exception 'Client timestamp required for proof.';
+  end if;
+  if abs(extract(epoch from (now() - new.captured_at_client))) > 300 then
+    raise exception 'Proof timestamp too old.';
+  end if;
+  if new.captured_at_server is null then
+    new.captured_at_server := now();
+  end if;
+  if new.captured_at is null then
+    new.captured_at := new.captured_at_server;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_validate_proof_upload on public.proof_uploads;
+create trigger trg_validate_proof_upload
+before insert on public.proof_uploads
+for each row execute function public.fn_validate_proof_upload();
 
 -- 10) Alerts
 create table if not exists public.alerts (
@@ -914,7 +1037,7 @@ begin
     select 1 from public.usage_events ue
     where ue.node_id = new.node_id
       and coalesce(ue.proof_required, true) = true
-      and (ue.photo_path is null or ue.gps_lat is null or ue.captured_at is null)
+      and (ue.photo_path is null or ue.gps_lat is null or ue.captured_at_server is null)
   ) into missing_usage;
 
   if missing_splice or missing_usage then

@@ -90,6 +90,16 @@
 
       <main class="content">
         <section id="viewDashboard" class="view active">
+          <div class="card job-card">
+            <div class="row" style="justify-content:space-between;">
+              <div>
+                <h2 id="jobTitle">Job 731022136</h2>
+                <div id="jobSubtitle" class="muted small">Ruidoso FTTH Rebuild (node-by-node workflow)</div>
+              </div>
+              <div class="no-pay-badge">No pay without proof</div>
+            </div>
+            <div id="nodeCards" class="node-grid" style="margin-top:12px;"></div>
+          </div>
           <div class="grid cols-2">
             <div class="card">
               <h2>Active node</h2>
@@ -136,6 +146,7 @@
         <section id="viewNodes" class="view">
           <div class="card">
             <h1>Node workspace</h1>
+            <div class="muted small">Only one ACTIVE node at a time. Finish splicing before moving to the next node.</div>
 
             <div class="row" style="margin-bottom:12px;">
               <input id="nodeNumber" class="input" placeholder="Enter node number (example: NODE-1001)" />
@@ -168,21 +179,24 @@
           <div class="grid cols-2">
             <div class="card">
               <h2>Proof checklist</h2>
+              <div class="no-pay-banner">Proof missing → Cannot bill → No pay</div>
               <div id="proofChecklist"></div>
             </div>
             <div class="card">
               <h2>Capture proof</h2>
-              <div class="muted small">Capture GPS first, then attach the photo to the current splice location and usage.</div>
+              <div class="muted small">Capture in the moment with GPS. No uploads from later photos.</div>
               <div class="row" style="margin-top:12px;">
                 <button id="btnCaptureGPS" class="btn secondary">Capture GPS</button>
-                <input id="photoFile" type="file" accept="image/*" />
-                <button id="btnAttachPhoto" class="btn">Attach splice photo</button>
+                <button id="btnCaptureSplice" class="btn secondary">Capture splice photo</button>
+                <input id="splicePhotoFile" class="file-input" type="file" accept="image/*" capture="environment" />
+                <button id="btnSubmitSpliceProof" class="btn">Submit splice proof</button>
               </div>
               <div class="row" style="margin-top:12px;">
-                <button id="btnCaptureProof" class="btn secondary">Capture proof photo</button>
-                <input id="proofPhotoFile" type="file" accept="image/*" capture="environment" />
+                <button id="btnCaptureProof" class="btn secondary">Capture usage proof</button>
+                <input id="proofPhotoFile" class="file-input" type="file" accept="image/*" capture="environment" />
               </div>
               <div id="proofStatus" class="muted small" style="margin-top:10px;">No proof photo captured</div>
+              <div id="proofPreview" class="proof-preview" style="margin-top:12px;"></div>
             </div>
           </div>
         </section>
@@ -191,6 +205,7 @@
           <div class="grid cols-2">
             <div class="card">
               <h2>Invoice actions</h2>
+              <div class="no-pay-banner">Proof missing → Cannot bill → No pay</div>
               <div class="muted small">Billing entry is blocked until proof is complete.</div>
               <div class="row" style="margin-top:12px;">
                 <button id="btnMarkNodeReady" class="btn">Mark node READY for billing</button>
