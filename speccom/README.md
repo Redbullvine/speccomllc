@@ -1,4 +1,4 @@
-# GeoTel Starter (Netlify drop-in zip)
+# SpecCom Starter (Netlify drop-in zip)
 
 This is a *starter* static web app that demonstrates:
 
