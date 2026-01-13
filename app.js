@@ -1,4 +1,4 @@
-import { isDemo, makeClient } from "./supabaseClient.js";
+import { appMode, hasSupabaseConfig, isDemo, makeClient } from "./supabaseClient.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -10,6 +10,17 @@ const state = {
   activeProject: null,
   activeNode: null,
   projectNodes: [],
+  billingLocations: [],
+  billingLocation: null,
+  billingInvoice: null,
+  billingItems: [],
+  workCodes: [],
+  rateCards: [],
+  rateCardItems: [],
+  locationProofRules: [],
+  activeRateCardId: null,
+  locationWorkCodes: new Map(),
+  billingStatus: null,
   lastGPS: null,
   lastProof: null,
   cameraStream: null,
@@ -37,6 +48,10 @@ const state = {
     allowedQuantities: [],
     alerts: [],
     materialCatalog: [],
+    workCodes: [],
+    rateCards: [],
+    rateCardItems: [],
+    locationProofRules: [],
   },
 };
 
@@ -51,6 +66,12 @@ function nowISO(){ return new Date().toISOString(); }
 
 const DEFAULT_TERMINAL_PORTS = 2;
 const MAX_TERMINAL_PORTS = 8;
+const DEFAULT_RATE_CARD_NAME = String(
+  (window.__ENV && window.__ENV.DEFAULT_RATE_CARD_NAME)
+  || (window.ENV && window.ENV.DEFAULT_RATE_CARD_NAME)
+  || (window.process && window.process.env && window.process.env.DEFAULT_RATE_CARD_NAME)
+  || ""
+).trim();
 
 function normalizeTerminalPorts(value){
   const parsed = Number.parseInt(value, 10);
@@ -100,6 +121,36 @@ function setText(id, value){
   if (el) el.textContent = value;
 }
 
+function setAppModeUI(){
+  const badge = $("appModeBadge");
+  if (!badge) return;
+  const live = appMode === "real";
+  badge.textContent = live ? "LIVE" : "DEMO";
+  badge.classList.toggle("live", live);
+  badge.classList.toggle("demo", !live);
+}
+
+function setEnvWarning(){
+  const banner = $("envWarning");
+  if (!banner) return;
+  if (appMode === "real" && !hasSupabaseConfig){
+    banner.style.display = "";
+    banner.classList.add("warning-banner");
+    banner.textContent = "LIVE mode requires SUPABASE_URL and SUPABASE_ANON_KEY. Set Netlify env vars before using the app.";
+  } else {
+    banner.style.display = "none";
+    banner.textContent = "";
+  }
+}
+
+function setAuthButtonsDisabled(disabled){
+  const ids = ["btnSignIn", "btnMagicLink", "btnSignUp", "btnDemo"];
+  ids.forEach((id) => {
+    const el = $(id);
+    if (el) el.disabled = disabled;
+  });
+}
+
 function setActiveView(viewId){
   document.querySelectorAll(".view").forEach((view) => {
     view.classList.toggle("active", view.id === viewId);
@@ -120,6 +171,16 @@ function startVisibilityWatch(){
 
 function getRole(){
   return state.profile?.role || state.demo.role;
+}
+
+function isBillingManager(){
+  const role = getRole();
+  return role === "OWNER" || role === "PRIME" || role === "TDS";
+}
+
+function formatMoney(value){
+  const num = Number(value || 0);
+  return `$${num.toFixed(2)}`;
 }
 
 function getNodeUnits(node){
@@ -204,7 +265,7 @@ function setRoleUI(){
 
   const seedBtn = $("btnSeedDemo");
   if (seedBtn){
-    seedBtn.style.display = (!isDemo && canSeedDemo()) ? "" : "none";
+    seedBtn.style.display = (isDemo && canSeedDemo()) ? "" : "none";
   }
 
   updateAlertsBadge();
@@ -234,6 +295,7 @@ function setWhoami(){
 }
 
 function ensureDemoSeed(){
+  if (!isDemo) return;
   if (Object.keys(state.demo.nodes).length) return;
 
   const project = {
@@ -373,6 +435,23 @@ function ensureDemoSeed(){
       status: "open",
       created_at: nowISO(),
     },
+  ];
+
+  state.demo.workCodes = [
+    { id: "wc-2015", code: "2015", description: "Fiber drop install", unit: "EA", default_rate: 95 },
+    { id: "wc-mst", code: "MST-SP", description: "MST splice", unit: "PORT", default_rate: 12 },
+    { id: "wc-tray", code: "TRAY", description: "Splice tray", unit: "EA", default_rate: 65 },
+  ];
+  state.demo.rateCards = [
+    { id: "rc-1", name: "TDS 2026 Rates - NM", project_id: project.id },
+  ];
+  state.demo.rateCardItems = [
+    { id: "rci-1", rate_card_id: "rc-1", work_code_id: "wc-2015", rate: 95 },
+    { id: "rci-2", rate_card_id: "rc-1", work_code_id: "wc-mst", rate: 12 },
+    { id: "rci-3", rate_card_id: "rc-1", work_code_id: "wc-tray", rate: 65 },
+  ];
+  state.demo.locationProofRules = [
+    { id: "lpr-1", project_id: project.id, location_type: null, required_photos: 0, enforce_geofence: false },
   ];
 }
 
@@ -659,11 +738,207 @@ async function loadAlerts(nodeId){
   updateAlertsBadge();
 }
 
+async function loadWorkCodes(){
+  if (isDemo){
+    state.workCodes = state.demo.workCodes || [];
+    return;
+  }
+  const { data, error } = await state.client
+    .from("work_codes")
+    .select("id, code, description, unit, default_rate")
+    .order("code");
+  if (error){
+    toast("Work codes error", error.message);
+    return;
+  }
+  state.workCodes = data || [];
+}
+
+async function loadRateCards(projectId){
+  if (isDemo){
+    state.rateCards = state.demo.rateCards || [];
+    return;
+  }
+  let query = state.client
+    .from("rate_cards")
+    .select("id, name, project_id")
+    .order("created_at", { ascending: false });
+  if (projectId){
+    query = query.or(`project_id.eq.${projectId},project_id.is.null`);
+  }
+  const { data, error } = await query;
+  if (error){
+    toast("Rate cards error", error.message);
+    return;
+  }
+  state.rateCards = data || [];
+  if (DEFAULT_RATE_CARD_NAME){
+    const named = state.rateCards.find(r => r.name === DEFAULT_RATE_CARD_NAME);
+    if (named) state.activeRateCardId = named.id;
+  }
+  if (!state.activeRateCardId && state.rateCards.length){
+    state.activeRateCardId = state.rateCards[0].id;
+  } else if (state.activeRateCardId){
+    const exists = state.rateCards.find(r => r.id === state.activeRateCardId);
+    if (!exists && state.rateCards.length){
+      state.activeRateCardId = state.rateCards[0].id;
+    }
+  }
+  if (state.activeRateCardId){
+    await loadRateCardItems(state.activeRateCardId);
+  }
+}
+
+async function loadRateCardItems(rateCardId){
+  if (!rateCardId) {
+    state.rateCardItems = [];
+    return;
+  }
+  if (isDemo){
+    state.rateCardItems = (state.demo.rateCardItems || []).filter(r => r.rate_card_id === rateCardId);
+    return;
+  }
+  const { data, error } = await state.client
+    .from("rate_card_items")
+    .select("id, rate_card_id, work_code_id, rate")
+    .eq("rate_card_id", rateCardId);
+  if (error){
+    toast("Rate card items error", error.message);
+    return;
+  }
+  state.rateCardItems = data || [];
+}
+
+async function loadLocationProofRequirements(projectId){
+  if (isDemo){
+    state.locationProofRules = state.demo.locationProofRules || [];
+    return;
+  }
+  if (!projectId){
+    state.locationProofRules = [];
+    return;
+  }
+  const { data, error } = await state.client
+    .from("location_proof_requirements")
+    .select("id, project_id, location_type, required_photos, enforce_geofence")
+    .eq("project_id", projectId);
+  if (error){
+    toast("Proof rules error", error.message);
+    return;
+  }
+  state.locationProofRules = data || [];
+}
+
+async function loadBillingLocations(projectId){
+  if (!projectId){
+    state.billingLocations = [];
+    renderBillingLocations();
+    return;
+  }
+  if (isDemo){
+    const rows = Object.values(state.demo.nodes || {}).flatMap(node => (node.splice_locations || []).map((loc) => ({
+      id: loc.id,
+      node_id: node.id,
+      location_label: loc.name,
+      completed: loc.completed,
+      terminal_ports: loc.terminal_ports,
+      photo_count: getLocationProofUploaded(loc),
+      node_number: node.node_number,
+      invoice_status: "draft",
+    })));
+    state.billingLocations = rows;
+    state.locationWorkCodes = new Map();
+    renderBillingLocations();
+    return;
+  }
+  if (!state.client) return;
+  const { data: locs, error: locErr } = await state.client
+    .from("splice_locations")
+    .select("id, node_id, location_label, completed, terminal_ports, nodes!inner(project_id,node_number)")
+    .eq("nodes.project_id", projectId)
+    .order("created_at", { ascending: true });
+  if (locErr){
+    toast("Locations load error", locErr.message);
+    return;
+  }
+  const locationIds = (locs || []).map(l => l.id);
+  let counts = new Map();
+  let invoiceStatus = new Map();
+  let invoiceIdsByLocation = new Map();
+  if (locationIds.length){
+    const { data: photos, error: photoErr } = await state.client
+      .from("splice_location_photos")
+      .select("splice_location_id")
+      .in("splice_location_id", locationIds);
+    if (photoErr){
+      toast("Proof load error", photoErr.message);
+    } else {
+      (photos || []).forEach((row) => {
+        counts.set(row.splice_location_id, (counts.get(row.splice_location_id) || 0) + 1);
+      });
+    }
+    const { data: invoices } = await state.client
+      .from("invoices")
+      .select("id, location_id, status")
+      .in("location_id", locationIds);
+    (invoices || []).forEach((row) => {
+      if (row.location_id) invoiceStatus.set(row.location_id, row.status);
+      if (row.location_id && row.id) invoiceIdsByLocation.set(row.location_id, row.id);
+    });
+
+    const invoiceIds = Array.from(invoiceIdsByLocation.values());
+    if (invoiceIds.length){
+      const locationByInvoice = new Map();
+      invoiceIdsByLocation.forEach((invId, locId) => {
+        locationByInvoice.set(invId, locId);
+      });
+      const { data: items } = await state.client
+        .from("invoice_items")
+        .select("invoice_id, work_codes(code)")
+        .in("invoice_id", invoiceIds);
+      const codeMap = new Map();
+      (items || []).forEach((row) => {
+        const code = row.work_codes?.code;
+        if (!code) return;
+        const locId = locationByInvoice.get(row.invoice_id);
+        if (!locId) return;
+        if (!codeMap.has(locId)) codeMap.set(locId, new Set());
+        codeMap.get(locId).add(code);
+      });
+      state.locationWorkCodes = codeMap;
+    } else {
+      state.locationWorkCodes = new Map();
+    }
+  }
+  state.billingLocations = (locs || []).map((loc) => ({
+    id: loc.id,
+    node_id: loc.node_id,
+    location_label: loc.location_label,
+    completed: loc.completed,
+    terminal_ports: normalizeTerminalPorts(loc.terminal_ports ?? DEFAULT_TERMINAL_PORTS),
+    photo_count: counts.get(loc.id) || 0,
+    node_number: loc.nodes?.node_number || "",
+    invoice_status: invoiceStatus.get(loc.id) || "draft",
+  }));
+  if (state.billingLocation){
+    const updated = state.billingLocations.find(l => l.id === state.billingLocation.id);
+    if (updated) state.billingLocation = updated;
+  }
+  renderBillingLocations();
+}
+
 function setActiveProjectById(id){
   const next = state.projects.find(p => p.id === id) || null;
   state.activeProject = next;
   renderProjects();
   loadProjectNodes(state.activeProject?.id || null);
+  loadRateCards(state.activeProject?.id || null);
+  loadLocationProofRequirements(state.activeProject?.id || null);
+  loadBillingLocations(state.activeProject?.id || null);
+  state.billingLocation = null;
+  state.billingInvoice = null;
+  state.billingItems = [];
+  renderBillingDetail();
 }
 
 function canSeedDemo(){
@@ -856,6 +1131,8 @@ function renderLocations(){
     const counts = countRequiredSlotUploads(r);
     const missing = counts.uploaded < counts.required;
     const disableToggle = !r.completed && missing;
+    const workCodes = state.locationWorkCodes?.get(r.id);
+    const workCodesLabel = workCodes && workCodes.size ? Array.from(workCodes).join(", ") : "None";
     const done = r.completed ? '<span class="pill-ok">COMPLETE</span>' : '<span class="pill-warn">INCOMPLETE</span>';
 
     const card = document.createElement("div");
@@ -866,6 +1143,7 @@ function renderLocations(){
           <div style="font-weight:900">${escapeHtml(r.name)}</div>
           <div class="muted small">${escapeHtml(r.id)}</div>
           <div class="muted small">Photos: <b>${counts.uploaded}/${counts.required}</b> required</div>
+          <div class="muted small">Work codes logged here: <b>${escapeHtml(workCodesLabel)}</b></div>
         </div>
         <div>${done}</div>
       </div>
@@ -1560,6 +1838,601 @@ function renderInvoicePanel(){
   wrap.innerHTML = html;
 }
 
+function renderBillingLocations(){
+  const wrap = $("billingLocationList");
+  const status = $("billingStatus");
+  if (!wrap || !status) return;
+  if (!state.activeProject){
+    wrap.innerHTML = '<div class="muted small">Select a project to see locations.</div>';
+    status.textContent = "";
+    return;
+  }
+  const rows = state.billingLocations || [];
+  status.textContent = rows.length ? `${rows.length} locations` : "No locations";
+  if (!rows.length){
+    wrap.innerHTML = '<div class="muted small">No splice locations yet.</div>';
+    return;
+  }
+  wrap.innerHTML = rows.map((loc) => {
+    const required = getLocationRequiredPhotos(loc, state.activeProject?.id);
+    const uploaded = loc.photo_count || 0;
+    const proofOk = uploaded >= required;
+    const proofLabel = required === 0 ? "Proof: Not required" : `Proof: ${uploaded}/${required}`;
+    const invoiceStatus = loc.invoice_status || "draft";
+    const invoiceLabel = invoiceStatus.toUpperCase();
+    const disabled = !proofOk;
+    return `
+      <div class="billing-location-card ${disabled ? "disabled" : ""}">
+        <div class="row" style="justify-content:space-between;">
+          <div>
+            <div style="font-weight:900">${escapeHtml(loc.location_label || "Splice location")}</div>
+            <div class="muted small">${escapeHtml(loc.node_number || "")}</div>
+          </div>
+          <span class="status-pill ${proofOk ? "ok" : "warn"}">${proofLabel} ${proofOk ? "✅" : "🔒"}</span>
+        </div>
+        <div class="row" style="justify-content:space-between;">
+          <span class="status-pill">${invoiceLabel}</span>
+          <button class="btn secondary" data-action="openBilling" data-id="${loc.id}" ${disabled ? "disabled" : ""}>Open billing</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderBillingDetail(){
+  const wrap = $("billingDetail");
+  if (!wrap) return;
+  const loc = state.billingLocation;
+  const exportBtn = $("btnBillingExportCsv");
+  const printBtn = $("btnBillingPrint");
+  const importBtn = $("btnImportUsage");
+  if (!loc){
+    wrap.innerHTML = '<div class="muted small">Select a location to start billing.</div>';
+    if (exportBtn) exportBtn.disabled = true;
+    if (printBtn) printBtn.disabled = true;
+    if (importBtn) importBtn.disabled = true;
+    return;
+  }
+  const invoice = state.billingInvoice;
+  const items = state.billingItems || [];
+  const canEditRates = isBillingManager();
+  const proofRequired = getLocationRequiredPhotos(loc, state.activeProject?.id);
+  const proofUploaded = loc.photo_count || 0;
+  const proofOk = proofUploaded >= proofRequired;
+  const proofLabel = proofRequired === 0 ? "Not required" : `${proofUploaded}/${proofRequired}`;
+  const totals = computeInvoiceTotals(items);
+  const status = invoice?.status || "draft";
+  const locked = ["submitted", "paid", "void"].includes(status);
+  const rateCard = state.rateCards.find(r => r.id === state.activeRateCardId);
+
+  wrap.innerHTML = `
+    <div class="note">
+      <div style="font-weight:900;">${escapeHtml(loc.location_label || "Location")}</div>
+      <div class="muted small">Node: ${escapeHtml(loc.node_number || "-")}</div>
+      <div class="muted small">Proof: ${proofLabel} ${proofOk ? "✅" : "🔒"}</div>
+      <div class="muted small">Rate card: ${escapeHtml(rateCard?.name || "Default")}</div>
+      <div class="muted small">Status: ${escapeHtml(status.toUpperCase())}</div>
+    </div>
+    <div class="hr"></div>
+    <table class="table billing-table">
+      <thead>
+        <tr>
+          <th>Work code</th>
+          <th>Description</th>
+          <th>Unit</th>
+          <th>Qty</th>
+          <th>Rate</th>
+          <th>Amount</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map((item, idx) => renderBillingItemRow(item, idx, canEditRates && !locked, locked)).join("")}
+      </tbody>
+    </table>
+    <div class="billing-actions">
+      <button id="btnAddLineItem" class="btn secondary" ${locked ? "disabled" : ""}>Add line item</button>
+    </div>
+    <div class="hr"></div>
+    <div class="billing-summary">
+      <div>Subtotal: <b>${formatMoney(totals.subtotal)}</b></div>
+      <div>Tax: <b>${formatMoney(totals.tax)}</b></div>
+      <div>Total: <b>${formatMoney(totals.total)}</b></div>
+    </div>
+    <div class="hr"></div>
+    <div>
+      <div class="muted small">Notes</div>
+      <textarea id="billingNotes" class="input" rows="3" style="width:100%;" ${locked ? "disabled" : ""}>${escapeHtml(invoice?.notes || "")}</textarea>
+    </div>
+    <div class="billing-actions">
+      <button id="btnBillingSave" class="btn" ${locked ? "disabled" : ""}>Save</button>
+      <button id="btnBillingReady" class="btn secondary" ${locked || !proofOk || !hasBillableItems(items) ? "disabled" : ""}>Ready to submit</button>
+    </div>
+  `;
+
+  wrap.querySelectorAll("[data-action='removeLine']").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = Number.parseInt(btn.dataset.index, 10);
+      removeBillingItem(idx);
+    });
+  });
+  wrap.querySelectorAll("[data-action='codeChange']").forEach((el) => {
+    el.addEventListener("change", () => handleBillingItemChange(el.dataset.index, "work_code_id", el.value));
+  });
+  wrap.querySelectorAll("[data-action='qtyChange']").forEach((el) => {
+    el.addEventListener("input", () => handleBillingItemChange(el.dataset.index, "qty", el.value));
+  });
+  wrap.querySelectorAll("[data-action='rateChange']").forEach((el) => {
+    el.addEventListener("input", () => handleBillingItemChange(el.dataset.index, "rate", el.value));
+  });
+
+  const addBtn = wrap.querySelector("#btnAddLineItem");
+  if (addBtn) addBtn.addEventListener("click", () => addBillingItem());
+  const saveBtn = wrap.querySelector("#btnBillingSave");
+  if (saveBtn) saveBtn.addEventListener("click", () => saveBillingInvoice());
+  const readyBtn = wrap.querySelector("#btnBillingReady");
+  if (readyBtn) readyBtn.addEventListener("click", () => markInvoiceReady());
+
+  const canExport = ["ready", "submitted", "paid"].includes(status);
+  if (exportBtn) exportBtn.disabled = !canExport;
+  if (printBtn) printBtn.disabled = !canExport;
+  if (importBtn) importBtn.disabled = locked;
+}
+
+function renderBillingItemRow(item, idx, canEditRates, locked){
+  const workCodes = state.workCodes || [];
+  const options = ['<option value="">Select</option>'].concat(
+    workCodes.map((code) => `<option value="${code.id}" ${code.id === item.work_code_id ? "selected" : ""}>${escapeHtml(code.code)}</option>`)
+  );
+  const amount = Number(item.qty || 0) * Number(item.rate || 0);
+  const desc = item.description || "";
+  const unit = item.unit || "";
+  return `
+    <tr>
+      <td><select data-action="codeChange" data-index="${idx}" ${locked ? "disabled" : ""}>${options.join("")}</select></td>
+      <td>${escapeHtml(desc)}</td>
+      <td>${escapeHtml(unit)}</td>
+      <td><input data-action="qtyChange" data-index="${idx}" type="number" min="0" step="0.01" value="${item.qty ?? 0}" ${locked ? "disabled" : ""} /></td>
+      <td><input data-action="rateChange" data-index="${idx}" type="number" min="0" step="0.01" value="${item.rate ?? 0}" ${canEditRates ? "" : "disabled"} /></td>
+      <td>${formatMoney(amount)}</td>
+      <td><button class="btn ghost small" data-action="removeLine" data-index="${idx}" ${locked ? "disabled" : ""}>Remove</button></td>
+    </tr>
+  `;
+}
+
+function computeInvoiceTotals(items){
+  const subtotal = (items || []).reduce((sum, item) => {
+    const qty = Number(item.qty || 0);
+    const rate = Number(item.rate || 0);
+    return sum + qty * rate;
+  }, 0);
+  const tax = 0;
+  const total = subtotal + tax;
+  return { subtotal, tax, total };
+}
+
+function hasBillableItems(items){
+  return (items || []).some(item => Number(item.qty || 0) > 0);
+}
+
+function getWorkCodeById(id){
+  return (state.workCodes || []).find(code => code.id === id) || null;
+}
+
+function getRateForWorkCode(workCodeId){
+  const cardItem = (state.rateCardItems || []).find(r => r.work_code_id === workCodeId);
+  if (cardItem) return Number(cardItem.rate || 0);
+  const work = getWorkCodeById(workCodeId);
+  return Number(work?.default_rate || 0);
+}
+
+function addBillingItem(){
+  state.billingItems = state.billingItems || [];
+  state.billingItems.push({
+    work_code_id: "",
+    description: "",
+    unit: "",
+    qty: 0,
+    rate: 0,
+    sort_order: state.billingItems.length,
+  });
+  renderBillingDetail();
+}
+
+function removeBillingItem(index){
+  state.billingItems = (state.billingItems || []).filter((_, idx) => idx !== index);
+  renderBillingDetail();
+}
+
+function handleBillingItemChange(index, field, value){
+  const item = (state.billingItems || [])[Number(index)];
+  if (!item) return;
+  if (field === "work_code_id"){
+    item.work_code_id = value;
+    const code = getWorkCodeById(value);
+    item.description = code?.description || "";
+    item.unit = code?.unit || "";
+    item.rate = getRateForWorkCode(value);
+  } else if (field === "qty"){
+    item.qty = Number(value || 0);
+  } else if (field === "rate"){
+    if (isBillingManager()){
+      item.rate = Number(value || 0);
+    }
+  }
+  renderBillingDetail();
+}
+
+async function openBillingLocation(locationId){
+  const loc = (state.billingLocations || []).find(l => l.id === locationId);
+  if (!loc) return;
+  state.billingLocation = loc;
+  if (!state.activeRateCardId && state.rateCards.length){
+    state.activeRateCardId = state.rateCards[0].id;
+    await loadRateCardItems(state.activeRateCardId);
+  }
+  await ensureBillingInvoice();
+  renderBillingDetail();
+}
+
+async function ensureBillingInvoice(){
+  const loc = state.billingLocation;
+  if (!loc) return;
+  if (isDemo){
+    state.billingInvoice = {
+      id: `inv-${loc.id}`,
+      project_id: state.activeProject?.id || null,
+      location_id: loc.id,
+      invoice_number: `SC-${new Date().getFullYear()}-0001`,
+      status: "draft",
+      notes: "",
+    };
+    state.billingItems = state.billingItems?.length ? state.billingItems : [];
+    return;
+  }
+  const { data, error } = await state.client
+    .from("invoices")
+    .select("id, project_id, location_id, invoice_number, status, notes, subtotal, tax, total")
+    .eq("project_id", state.activeProject?.id || null)
+    .eq("location_id", loc.id)
+    .maybeSingle();
+  if (error){
+    toast("Invoice load error", error.message);
+    return;
+  }
+  if (data){
+    state.billingInvoice = data;
+    await loadInvoiceItems(data.id);
+    return;
+  }
+  const invoiceNumber = await generateInvoiceNumber();
+  const { data: created, error: createErr } = await state.client
+    .from("invoices")
+    .insert({
+      project_id: state.activeProject?.id || null,
+      location_id: loc.id,
+      invoice_number: invoiceNumber,
+      status: "draft",
+      created_by: state.user?.id || null,
+    })
+    .select("id, project_id, location_id, invoice_number, status, notes, subtotal, tax, total")
+    .maybeSingle();
+  if (createErr){
+    toast("Invoice create error", createErr.message);
+    return;
+  }
+  state.billingInvoice = created;
+  state.billingItems = [];
+}
+
+async function loadInvoiceItems(invoiceId){
+  if (!invoiceId){
+    state.billingItems = [];
+    return;
+  }
+  if (isDemo){
+    return;
+  }
+  const { data, error } = await state.client
+    .from("invoice_items")
+    .select("id, invoice_id, work_code_id, description, unit, qty, rate, sort_order")
+    .eq("invoice_id", invoiceId)
+    .order("sort_order");
+  if (error){
+    toast("Line items error", error.message);
+    return;
+  }
+  state.billingItems = (data || []).map((row) => {
+    const work = getWorkCodeById(row.work_code_id);
+    return {
+      ...row,
+      description: row.description || work?.description || "",
+      unit: row.unit || work?.unit || "",
+    };
+  });
+}
+
+async function saveBillingInvoice(){
+  const invoice = state.billingInvoice;
+  if (!invoice){
+    toast("No invoice", "Select a location first.");
+    return;
+  }
+  const totals = computeInvoiceTotals(state.billingItems);
+  const notes = $("billingNotes")?.value || "";
+
+  if (isDemo){
+    state.billingInvoice = { ...invoice, notes, ...totals };
+    toast("Saved", "Invoice saved (demo).");
+    renderBillingDetail();
+    return;
+  }
+
+  const { error: invErr } = await state.client
+    .from("invoices")
+    .update({
+      notes,
+      subtotal: totals.subtotal,
+      tax: totals.tax,
+      total: totals.total,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", invoice.id);
+  if (invErr){
+    toast("Save failed", invErr.message);
+    return;
+  }
+
+  await upsertInvoiceItems(invoice.id, state.billingItems || []);
+  toast("Saved", "Invoice saved.");
+  await loadBillingLocations(state.activeProject?.id || null);
+}
+
+async function upsertInvoiceItems(invoiceId, items){
+  if (isDemo) return;
+  const payload = (items || []).map((item, idx) => ({
+    invoice_id: invoiceId,
+    work_code_id: item.work_code_id || null,
+    description: item.description || "",
+    unit: item.unit || "",
+    qty: Number(item.qty || 0),
+    rate: Number(item.rate || 0),
+    sort_order: item.sort_order ?? idx,
+  })).map((row, idx) => {
+    const item = items[idx];
+    if (item && item.id) row.id = item.id;
+    return row;
+  });
+  if (!payload.length){
+    await state.client.from("invoice_items").delete().eq("invoice_id", invoiceId);
+    return;
+  }
+  const keepIds = payload.map(r => r.id).filter(Boolean);
+  if (keepIds.length){
+    const idList = keepIds.map(id => `"${id}"`).join(",");
+    await state.client
+      .from("invoice_items")
+      .delete()
+      .eq("invoice_id", invoiceId)
+      .not("id", "in", `(${idList})`);
+  }
+  const { error } = await state.client
+    .from("invoice_items")
+    .upsert(payload, { onConflict: "id" });
+  if (error){
+    toast("Line items save failed", error.message);
+  }
+}
+
+async function markInvoiceReady(){
+  const invoice = state.billingInvoice;
+  if (!invoice){
+    toast("No invoice", "Select a location first.");
+    return;
+  }
+  if (!hasBillableItems(state.billingItems)){
+    toast("Missing items", "Add at least one line item with qty.");
+    return;
+  }
+  const loc = state.billingLocation;
+  const required = getLocationRequiredPhotos(loc, state.activeProject?.id);
+  const uploaded = loc?.photo_count || 0;
+  if (uploaded < required){
+    toast("Proof missing", "Proof photos are required before submission.");
+    return;
+  }
+  if (isDemo){
+    state.billingInvoice.status = "ready";
+    toast("Ready", "Invoice marked ready (demo).");
+    renderBillingDetail();
+    return;
+  }
+  const { error } = await state.client
+    .from("invoices")
+    .update({ status: "ready", updated_at: new Date().toISOString() })
+    .eq("id", invoice.id);
+  if (error){
+    toast("Update failed", error.message);
+    return;
+  }
+  state.billingInvoice.status = "ready";
+  toast("Ready", "Invoice marked ready.");
+  await loadBillingLocations(state.activeProject?.id || null);
+  renderBillingDetail();
+}
+
+async function generateInvoiceNumber(){
+  const year = new Date().getFullYear();
+  if (isDemo) return `SC-${year}-0001`;
+  const { data } = await state.client
+    .from("invoices")
+    .select("invoice_number")
+    .ilike("invoice_number", `SC-${year}-%`);
+  const used = (data || []).map(r => Number(String(r.invoice_number || "").split("-")[2] || 0)).filter(n => Number.isFinite(n));
+  const next = (used.length ? Math.max(...used) + 1 : 1);
+  return `SC-${year}-${String(next).padStart(4, "0")}`;
+}
+
+function exportInvoiceCsv(){
+  const invoice = state.billingInvoice;
+  const loc = state.billingLocation;
+  if (!invoice || !loc) return;
+  const project = state.activeProject;
+  const header = [
+    ["Invoice Number", invoice.invoice_number || ""],
+    ["Project", project?.name || ""],
+    ["Job Number", project?.job_number || ""],
+    ["Location", loc.location_label || ""],
+    ["Prepared By", state.profile?.display_name || state.user?.email || ""],
+    ["Prepared At", new Date().toLocaleString()],
+    ["Work Codes", (state.billingItems || []).map(i => getWorkCodeById(i.work_code_id)?.code).filter(Boolean).join(", ")],
+    ["Status", invoice.status || ""],
+  ];
+  const rows = (state.billingItems || []).map((item) => ([
+    getWorkCodeById(item.work_code_id)?.code || "",
+    item.description || "",
+    item.unit || "",
+    item.qty ?? 0,
+    item.rate ?? 0,
+    (Number(item.qty || 0) * Number(item.rate || 0)).toFixed(2),
+  ]));
+  const csv = []
+    .concat(header.map(row => row.map(escapeCsv).join(",")))
+    .concat([["Work Code","Description","Unit","Qty","Rate","Amount"].join(",")])
+    .concat(rows.map(row => row.map(escapeCsv).join(",")))
+    .join("\n");
+  downloadFile(`invoice-${invoice.invoice_number || "draft"}.csv`, csv, "text/csv");
+}
+
+function escapeCsv(value){
+  const str = String(value ?? "");
+  if (/[",\n]/.test(str)){
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function downloadFile(filename, content, type){
+  const blob = new Blob([content], { type });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+function printInvoice(){
+  const invoice = state.billingInvoice;
+  const loc = state.billingLocation;
+  if (!invoice || !loc) return;
+  const project = state.activeProject;
+  const items = state.billingItems || [];
+  const totals = computeInvoiceTotals(items);
+  const now = new Date().toLocaleString();
+  const codeList = items.map(i => getWorkCodeById(i.work_code_id)?.code).filter(Boolean).join(", ");
+  const html = `
+    <html>
+      <head>
+        <title>Invoice ${invoice.invoice_number || ""}</title>
+        <style>
+          body{font-family:Arial, sans-serif; padding:24px; color:#111;}
+          h1{margin:0 0 8px;}
+          table{width:100%; border-collapse:collapse; margin-top:16px;}
+          th,td{border-bottom:1px solid #ccc; text-align:left; padding:8px;}
+          .meta{margin-top:12px; font-size:14px;}
+          .totals{margin-top:16px; text-align:right;}
+        </style>
+      </head>
+      <body>
+        <h1>Invoice ${invoice.invoice_number || ""}</h1>
+        <div class="meta">Project: ${escapeHtml(project?.name || "")} (${escapeHtml(project?.job_number || "")})</div>
+        <div class="meta">Location: ${escapeHtml(loc.location_label || "")}</div>
+        <div class="meta">Prepared by: ${escapeHtml(state.profile?.display_name || state.user?.email || "")}</div>
+        <div class="meta">Prepared at: ${escapeHtml(now)}</div>
+        <div class="meta">Work codes: ${escapeHtml(codeList || "-")}</div>
+        <table>
+          <thead><tr><th>Work Code</th><th>Description</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
+          <tbody>
+            ${items.map((item) => `
+              <tr>
+                <td>${escapeHtml(getWorkCodeById(item.work_code_id)?.code || "")}</td>
+                <td>${escapeHtml(item.description || "")}</td>
+                <td>${escapeHtml(item.unit || "")}</td>
+                <td>${Number(item.qty || 0)}</td>
+                <td>${formatMoney(item.rate)}</td>
+                <td>${formatMoney(Number(item.qty || 0) * Number(item.rate || 0))}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+        <div class="totals">
+          <div>Subtotal: ${formatMoney(totals.subtotal)}</div>
+          <div>Tax: ${formatMoney(totals.tax)}</div>
+          <div><b>Total: ${formatMoney(totals.total)}</b></div>
+        </div>
+      </body>
+    </html>
+  `;
+  const win = window.open("", "_blank");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  win.print();
+}
+
+async function importUsageToInvoice(){
+  const invoice = state.billingInvoice;
+  if (!invoice){
+    toast("No invoice", "Select a location first.");
+    return;
+  }
+  const nodeId = state.billingLocation?.node_id;
+  if (!nodeId){
+    toast("No node", "Node data unavailable for this location.");
+    return;
+  }
+  if (isDemo){
+    toast("Imported", "Usage imported (demo).");
+    return;
+  }
+  const { data, error } = await state.client
+    .from("usage_events")
+    .select("qty, unit_type_id, unit_types(code, description)")
+    .eq("node_id", nodeId)
+    .eq("status", "approved");
+  if (error){
+    toast("Usage load error", error.message);
+    return;
+  }
+  const map = new Map();
+  (data || []).forEach((row) => {
+    const code = row.unit_types?.code;
+    if (!code) return;
+    map.set(code, (map.get(code) || 0) + Number(row.qty || 0));
+  });
+  const items = [];
+  map.forEach((qty, code) => {
+    const work = (state.workCodes || []).find(w => w.code === code);
+    if (!work) return;
+    items.push({
+      work_code_id: work.id,
+      description: work.description || "",
+      unit: work.unit || "",
+      qty,
+      rate: getRateForWorkCode(work.id),
+    });
+  });
+  if (!items.length){
+    toast("No matches", "No usage matches work codes.");
+    return;
+  }
+  state.billingItems = items;
+  renderBillingDetail();
+  toast("Imported", "Usage imported into invoice.");
+}
+
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
@@ -1607,6 +2480,25 @@ function getUnitTypeMeta(unitTypeId){
   const unit = state.unitTypes.find(u => u.id === unitTypeId);
   if (!unit) return { code: "-", description: "" };
   return { code: unit.code, description: unit.description || "" };
+}
+
+function getLocationProofRule(projectId){
+  if (!projectId) return null;
+  return (state.locationProofRules || []).find(r => r.project_id === projectId && !r.location_type) || null;
+}
+
+function getLocationRequiredPhotos(loc, projectId){
+  const rule = getLocationProofRule(projectId);
+  if (rule && Number.isFinite(rule.required_photos)){
+    return Math.max(0, rule.required_photos);
+  }
+  const slots = requiredSlotsForPorts(loc?.terminal_ports ?? DEFAULT_TERMINAL_PORTS);
+  return slots.length;
+}
+
+function getLocationProofUploaded(loc){
+  const photos = loc?.photosBySlot || {};
+  return Object.keys(photos).length;
 }
 
 function getRemainingForItem(item){
@@ -2372,7 +3264,18 @@ async function createInvoice(){
 }
 
 async function initAuth(){
+  setAppModeUI();
+  setEnvWarning();
+
+  if (appMode === "real" && !hasSupabaseConfig){
+    showAuth(true);
+    setWhoami();
+    setAuthButtonsDisabled(true);
+    return;
+  }
+
   state.client = await makeClient();
+  setAuthButtonsDisabled(false);
 
   // Demo: choose role via prompt for now
   if (isDemo){
@@ -2384,6 +3287,10 @@ async function initAuth(){
     await loadProjects();
     await loadProjectNodes(state.activeProject?.id || null);
     await loadUnitTypes();
+    await loadWorkCodes();
+    await loadRateCards(state.activeProject?.id || null);
+    await loadLocationProofRequirements(state.activeProject?.id || null);
+    await loadBillingLocations(state.activeProject?.id || null);
     await loadMaterialCatalog();
     setWhoami();
     setRoleUI();
@@ -2393,6 +3300,7 @@ async function initAuth(){
     renderAllowedQuantities();
     renderAlerts();
     renderProofChecklist();
+    renderBillingLocations();
     updateKPI();
     setProofStatus();
     renderCatalogResults("catalogResults", "");
@@ -2416,11 +3324,16 @@ async function initAuth(){
       await loadProjects();
       await loadProjectNodes(state.activeProject?.id || null);
       await loadUnitTypes();
+      await loadWorkCodes();
+      await loadRateCards(state.activeProject?.id || null);
+      await loadLocationProofRequirements(state.activeProject?.id || null);
+      await loadBillingLocations(state.activeProject?.id || null);
       await loadMaterialCatalog();
       await loadAlerts();
       renderAlerts();
       renderCatalogResults("catalogResults", "");
       renderCatalogResults("catalogResultsQuick", "");
+      renderBillingLocations();
       setActiveView("viewDashboard");
     } else {
       showAuth(true);
@@ -2439,11 +3352,16 @@ async function initAuth(){
     await loadProjects();
     await loadProjectNodes(state.activeProject?.id || null);
     await loadUnitTypes();
+    await loadWorkCodes();
+    await loadRateCards(state.activeProject?.id || null);
+    await loadLocationProofRequirements(state.activeProject?.id || null);
+    await loadBillingLocations(state.activeProject?.id || null);
     await loadMaterialCatalog();
     await loadAlerts();
     renderAlerts();
     renderCatalogResults("catalogResults", "");
     renderCatalogResults("catalogResultsQuick", "");
+    renderBillingLocations();
     setActiveView("viewDashboard");
   }
   setWhoami();
@@ -2497,10 +3415,41 @@ function wireUI(){
     });
   }
 
-  $("btnDemo").addEventListener("click", () => {
-    showAuth(false);
-    initAuth();
-  });
+  const billingList = $("billingLocationList");
+  if (billingList){
+    billingList.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      if (btn.dataset.action === "openBilling"){
+        openBillingLocation(btn.dataset.id);
+      }
+    });
+  }
+
+  const importBtn = $("btnImportUsage");
+  if (importBtn){
+    importBtn.addEventListener("click", () => importUsageToInvoice());
+  }
+  const exportBtn = $("btnBillingExportCsv");
+  if (exportBtn){
+    exportBtn.addEventListener("click", () => exportInvoiceCsv());
+  }
+  const printBtn = $("btnBillingPrint");
+  if (printBtn){
+    printBtn.addEventListener("click", () => printInvoice());
+  }
+
+  const demoBtn = $("btnDemo");
+  if (demoBtn){
+    if (appMode === "real"){
+      demoBtn.style.display = "none";
+    }
+    demoBtn.addEventListener("click", () => {
+      if (appMode === "real") return;
+      showAuth(false);
+      initAuth();
+    });
+  }
 
   $("btnSignOut").addEventListener("click", async () => {
     if (isDemo){

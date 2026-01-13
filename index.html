@@ -17,12 +17,14 @@
         </div>
       </div>
       <div class="row">
+        <span id="appModeBadge" class="badge">DEMO</span>
         <span id="whoami" class="badge">Signed out</span>
         <button id="btnSignOut" class="btn secondary" style="display:none;">Sign out</button>
       </div>
     </div>
 
     <div class="spacer"></div>
+    <div id="envWarning" class="note" style="display:none;"></div>
 
     <div id="viewAuth" class="stack">
       <div class="auth-wrap">
@@ -81,6 +83,7 @@
           <button class="nav-item active" data-view="viewDashboard">Dashboard</button>
           <button class="nav-item" data-view="viewNodes">Nodes</button>
           <button class="nav-item" data-view="viewPhotos">Photos</button>
+          <button class="nav-item" data-view="viewBilling">Billing</button>
           <button class="nav-item" data-view="viewInvoices">Invoices</button>
           <button class="nav-item" data-view="viewCatalog">Material Catalog</button>
           <button class="nav-item" data-view="viewAlerts">Alerts <span id="alertsNavBadge" class="nav-badge"></span></button>
@@ -218,6 +221,29 @@
 
               <div class="hr"></div>
               <div id="invoicePanel"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="viewBilling" class="view">
+          <div class="grid cols-2">
+            <div class="card">
+              <div class="row" style="justify-content:space-between;">
+                <h2>Locations</h2>
+                <span id="billingStatus" class="muted small"></span>
+              </div>
+              <div id="billingLocationList" class="location-list" style="margin-top:12px;"></div>
+            </div>
+            <div class="card">
+              <div class="row" style="justify-content:space-between;">
+                <h2>Billing</h2>
+                <div class="row">
+                  <button id="btnImportUsage" class="btn ghost">Import usage</button>
+                  <button id="btnBillingExportCsv" class="btn ghost">Export CSV</button>
+                  <button id="btnBillingPrint" class="btn ghost">Print</button>
+                </div>
+              </div>
+              <div id="billingDetail" class="muted small" style="margin-top:12px;">Select a location to start billing.</div>
             </div>
           </div>
         </section>

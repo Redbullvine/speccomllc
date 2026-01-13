@@ -1,15 +1,29 @@
 // Supabase client loader.
-// If SUPABASE_URL / SUPABASE_ANON_KEY aren't present, the app runs in DEMO mode.
+// APP_MODE controls demo vs real; missing keys show a warning in the UI.
 
 export const config = {
-  url: (window.__ENV && window.__ENV.SUPABASE_URL) || "",
-  anonKey: (window.__ENV && window.__ENV.SUPABASE_ANON_KEY) || "",
+  url: (window.__ENV && window.__ENV.SUPABASE_URL)
+    || (window.ENV && window.ENV.SUPABASE_URL)
+    || (window.process && window.process.env && window.process.env.SUPABASE_URL)
+    || "",
+  anonKey: (window.__ENV && window.__ENV.SUPABASE_ANON_KEY)
+    || (window.ENV && window.ENV.SUPABASE_ANON_KEY)
+    || (window.process && window.process.env && window.process.env.SUPABASE_ANON_KEY)
+    || "",
+  appMode: String(
+    (window.__ENV && window.__ENV.APP_MODE)
+    || (window.ENV && window.ENV.APP_MODE)
+    || (window.process && window.process.env && window.process.env.APP_MODE)
+    || "demo"
+  ).toLowerCase(),
 };
 
-export const isDemo = !config.url || !config.anonKey;
+export const appMode = config.appMode === "real" ? "real" : "demo";
+export const hasSupabaseConfig = Boolean(config.url && config.anonKey);
+export const isDemo = appMode === "demo";
 
 export function getSupabase(){
-  if (isDemo) return null;
+  if (!hasSupabaseConfig) return null;
 
   // Load supabase-js from CDN (keeps the starter zip simple).
   // Note: You can switch to bundling later.
@@ -17,7 +31,7 @@ export function getSupabase(){
 }
 
 export async function ensureSupabaseLoaded(){
-  if (isDemo) return;
+  if (!hasSupabaseConfig) return;
 
   if (window.supabase) return;
 
@@ -31,7 +45,7 @@ export async function ensureSupabaseLoaded(){
 }
 
 export async function makeClient(){
-  if (isDemo) return null;
+  if (!hasSupabaseConfig) return null;
   await ensureSupabaseLoaded();
   return window.supabase.createClient(config.url, config.anonKey, {
     auth: {

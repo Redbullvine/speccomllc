@@ -3,4 +3,4 @@
 // In demo mode, this file is unused.
 //
 // If you want to hardcode for quick testing (NOT recommended for production):
-// window.__ENV = { SUPABASE_URL: "https://xyz.supabase.co", SUPABASE_ANON_KEY: "..." };
+// window.__ENV = { APP_MODE: "demo", SUPABASE_URL: "https://xyz.supabase.co", SUPABASE_ANON_KEY: "...", DEFAULT_RATE_CARD_NAME: "TDS 2026 Rates - NM" };
