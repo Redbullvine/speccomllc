@@ -144,7 +144,7 @@ function setEnvWarning(){
 }
 
 function setAuthButtonsDisabled(disabled){
-  const ids = ["btnSignIn", "btnMagicLink", "btnSignUp", "btnDemo"];
+  const ids = ["btnSignIn", "btnMagicLink", "btnSignUp"];
   ids.forEach((id) => {
     const el = $(id);
     if (el) el.disabled = disabled;
@@ -263,11 +263,6 @@ function setRoleUI(){
     ? `<span class="dot bad"></span><span>Pricing hidden (splicer view)</span>`
     : `<span class="dot ok"></span><span>Pricing protected by role</span>`;
 
-  const seedBtn = $("btnSeedDemo");
-  if (seedBtn){
-    seedBtn.style.display = (isDemo && canSeedDemo()) ? "" : "none";
-  }
-
   updateAlertsBadge();
   renderAlerts();
 }
@@ -295,164 +290,7 @@ function setWhoami(){
 }
 
 function ensureDemoSeed(){
-  if (!isDemo) return;
-  if (Object.keys(state.demo.nodes).length) return;
-
-  const project = {
-    id: "demo-project-ruidoso",
-    name: "Ruidoso FTTH Rebuild",
-    location: "Ruidoso, NM",
-    job_number: "731022136",
-  };
-  state.demo.project = project;
-
-  const nodes = [
-    {
-      id: "demo-node-11",
-      node_number: "NODE 11",
-      description: "Ruidoso Node 11 (FTTH)",
-      status: "ACTIVE",
-    },
-    {
-      id: "demo-node-54",
-      node_number: "NODE 54",
-      description: "Ruidoso Node 54 (FTTH)",
-      status: "NOT_STARTED",
-    },
-    {
-      id: "demo-node-x1",
-      node_number: "NODE TBD-1",
-      description: "Placeholder node (rename later)",
-      status: "NOT_STARTED",
-    },
-    {
-      id: "demo-node-x2",
-      node_number: "NODE TBD-2",
-      description: "Placeholder node (rename later)",
-      status: "NOT_STARTED",
-    },
-  ];
-  state.demo.nodesList = nodes.map((n) => ({ ...n, project_id: project.id }));
-
-  const node = {
-    ...nodes[0],
-    units_allowed: 120,
-    units_used: 103,
-    splice_locations: [
-      { id:"loc-1", name:"Cabinet A - Tray 1", gps:null, photo:null, taken_at:null, completed:false, terminal_ports: 2, photosBySlot: {} },
-      { id:"loc-2", name:"Pedestal 12B - Splice Case", gps:null, photo:null, taken_at:null, completed:false, terminal_ports: 4, photosBySlot: {} },
-    ],
-    inventory_checks: [
-      { id:"inv-1", item_code:"HAFO(OFDC-B8G)", item_name:"TDS Millennium example", photo:"./assets/millennium_example.png", qty_used: 2, planned_qty: 12, completed:false },
-      { id:"inv-2", item_code:"HxFO(1X2)PCOT(80/20)MO", item_name:"Splitter (example)", photo:"./assets/millennium_example.png", qty_used: 1, planned_qty: 6, completed:false },
-    ],
-    ready_for_billing: false,
-  };
-  state.demo.nodes[node.node_number] = node;
-  nodes.slice(1).forEach((n) => {
-    state.demo.nodes[n.node_number] = {
-      ...n,
-      units_allowed: 0,
-      units_used: 0,
-      splice_locations: [],
-      inventory_checks: [],
-      ready_for_billing: false,
-    };
-  });
-
-  state.demo.invoices = [
-    { id:"inv-demo-1", node_number:"NODE 11", from:"SUB", to:"PRIME", status:"Draft", amount_hidden:true },
-  ];
-
-  state.demo.unitTypes = [
-    { id:"ut-ho-1", code:"HO-1", description:"Fiber housing 1" },
-    { id:"ut-ho-2", code:"HO-2", description:"Fiber housing 2" },
-    { id:"ut-splice", code:"SPLICE", description:"Splice unit" },
-  ];
-
-  state.demo.allowedQuantities = [
-    {
-      id: "aq-1",
-      node_id: node.id,
-      unit_type_id: "ut-ho-1",
-      allowed_qty: 362,
-      alert_threshold_pct: 0.15,
-      alert_threshold_abs: 50,
-    },
-  ];
-
-  state.demo.usageEvents = [
-    {
-      id: "use-1",
-      node_id: node.id,
-      item_id: null,
-      unit_type_id: "ut-ho-1",
-      qty: 320,
-      status: "approved",
-      captured_at: nowISO(),
-      captured_at_client: nowISO(),
-      gps_lat: 32.123456,
-      gps_lng: -104.987654,
-      photo_path: "demo-only",
-      proof_required: true,
-    },
-  ];
-
-  state.demo.materialCatalog = [
-    {
-      id: "mc-1",
-      millennium_part: "HAFO(OFDC-B8G)",
-      mfg_sku: "MFG-HAFO-B8G",
-      description: "TDS Millennium housing assembly (8G)",
-      photo_url: "./assets/millennium_example.png",
-    },
-    {
-      id: "mc-2",
-      millennium_part: "HxFO(1X2)PCOT(80/20)MO",
-      mfg_sku: "MFG-1X2-8020",
-      description: "Splitter module 1x2, 80/20",
-      photo_url: "./assets/millennium_example.png",
-    },
-    {
-      id: "mc-3",
-      millennium_part: "PF3-3",
-      mfg_sku: "MFG-PF3-3",
-      description: "PF3-3 splice tray kit",
-      photo_url: "./assets/millennium_example.png",
-    },
-  ];
-
-  state.demo.alerts = [
-    {
-      id: "alert-1",
-      node_id: node.id,
-      unit_type_id: "ut-ho-1",
-      allowed_qty: 362,
-      used_qty: 320,
-      remaining_qty: 42,
-      message: "Remaining units below threshold. Request approval for additional units.",
-      severity: "warning",
-      status: "open",
-      created_at: nowISO(),
-    },
-  ];
-
-  state.demo.workCodes = [
-    { id: "wc-2015", code: "2015", description: "Fiber drop install", unit: "EA", default_rate: 95 },
-    { id: "wc-mst", code: "MST-SP", description: "MST splice", unit: "PORT", default_rate: 12 },
-    { id: "wc-tray", code: "TRAY", description: "Splice tray", unit: "EA", default_rate: 65 },
-  ];
-  state.demo.rateCards = [
-    { id: "rc-1", name: "TDS 2026 Rates - NM", project_id: project.id },
-  ];
-  state.demo.rateCardItems = [
-    { id: "rci-1", rate_card_id: "rc-1", work_code_id: "wc-2015", rate: 95 },
-    { id: "rci-2", rate_card_id: "rc-1", work_code_id: "wc-mst", rate: 12 },
-    { id: "rci-3", rate_card_id: "rc-1", work_code_id: "wc-tray", rate: 65 },
-  ];
-  state.demo.locationProofRules = [
-    { id: "lpr-1", project_id: project.id, location_type: null, required_photos: 0, enforce_geofence: false },
-  ];
+  return;
 }
 
 function renderProjects(){
@@ -947,162 +785,7 @@ function canSeedDemo(){
 }
 
 async function seedDemoNode(){
-  if (isDemo) return;
-  if (!canSeedDemo()){
-    toast("Not allowed", "Only Owner/PM can load the demo node.");
-    return;
-  }
-
-  const projectName = "Ruidoso FTTH Rebuild";
-  const projectLocation = "Ruidoso, NM";
-  const projectJob = "731022136";
-
-  const { data: project, error: projectErr } = await state.client
-    .from("projects")
-    .upsert({ name: projectName, location: projectLocation, job_number: projectJob }, { onConflict: "name" })
-    .select("id, name, location, job_number")
-    .maybeSingle();
-  if (projectErr){
-    toast("Project seed failed", projectErr.message);
-    return;
-  }
-
-  const nodeSeed = [
-    { node_number: "NODE 11", description: "Ruidoso Node 11 (FTTH)" },
-    { node_number: "NODE 54", description: "Ruidoso Node 54 (FTTH)" },
-    { node_number: "NODE TBD-1", description: "Placeholder node (rename later)" },
-    { node_number: "NODE TBD-2", description: "Placeholder node (rename later)" },
-  ];
-
-  const { data: nodeRows, error: nodeErr } = await state.client
-    .from("nodes")
-    .upsert(
-      nodeSeed.map((n) => ({
-        node_number: n.node_number,
-        description: n.description,
-        project_id: project.id,
-        allowed_units: 0,
-        used_units: 0,
-        status: n.node_number === "NODE 11" ? "ACTIVE" : "NOT_STARTED",
-      })),
-      { onConflict: "node_number" }
-    )
-    .select("id, node_number, project_id");
-  if (nodeErr){
-    toast("Node seed failed", nodeErr.message);
-    return;
-  }
-
-  const node = (nodeRows || []).find(n => n.node_number === "NODE 11");
-  if (!node){
-    toast("Node seed failed", "Missing NODE 11 after seed.");
-    return;
-  }
-
-  const items = [
-    { code: "HO-1", name: "HO-1", planned_qty: 362 },
-    { code: "HO-2", name: "HO-2", planned_qty: 120 },
-    { code: "HO-3", name: "HO-3", planned_qty: 85 },
-    { code: "Drop/Bury", name: "Drop/Bury", planned_qty: 40 },
-    { code: "Splice", name: "Splice", planned_qty: 60 },
-  ];
-
-  const { data: itemRows, error: itemErr } = await state.client
-    .from("inventory_items")
-    .upsert(
-      items.map(i => ({ vendor_code: i.code, display_name: i.name })),
-      { onConflict: "vendor_code" }
-    )
-    .select("id, vendor_code");
-  if (itemErr){
-    toast("Item seed failed", itemErr.message);
-    return;
-  }
-
-  const itemMap = new Map((itemRows || []).map(r => [r.vendor_code, r.id]));
-  const itemIds = Array.from(itemMap.values());
-
-  const { data: existingInv } = await state.client
-    .from("node_inventory")
-    .select("id, item_id")
-    .eq("node_id", node.id)
-    .in("item_id", itemIds);
-
-  const existingMap = new Map((existingInv || []).map(r => [r.item_id, r.id]));
-
-  const inserts = [];
-  const updates = [];
-
-  items.forEach((i) => {
-    const itemId = itemMap.get(i.code);
-    if (!itemId) return;
-    const existingId = existingMap.get(itemId);
-    if (existingId){
-      updates.push({ id: existingId, planned_qty: i.planned_qty });
-    } else {
-      inserts.push({
-        node_id: node.id,
-        item_id: itemId,
-        qty_used: 0,
-        planned_qty: i.planned_qty,
-        completed: false,
-      });
-    }
-  });
-
-  if (updates.length){
-    const { error } = await state.client.from("node_inventory").upsert(updates, { onConflict: "id" });
-    if (error){
-      toast("Inventory update failed", error.message);
-      return;
-    }
-  }
-  if (inserts.length){
-    const { error } = await state.client.from("node_inventory").insert(inserts);
-    if (error){
-      toast("Inventory seed failed", error.message);
-      return;
-    }
-  }
-
-  const { data: unitRows, error: unitErr } = await state.client
-    .from("unit_types")
-    .upsert(
-      items.map(i => ({ code: i.code, description: i.name })),
-      { onConflict: "code" }
-    )
-    .select("id, code");
-  if (unitErr){
-    toast("Unit types seed failed", unitErr.message);
-    return;
-  }
-
-  const unitMap = new Map((unitRows || []).map(r => [r.code, r.id]));
-  const allowedRows = items.map((i) => ({
-    node_id: node.id,
-    unit_type_id: unitMap.get(i.code),
-    allowed_qty: i.planned_qty,
-    alert_threshold_pct: 0.15,
-    alert_threshold_abs: 50,
-  })).filter(r => r.unit_type_id);
-
-  if (allowedRows.length){
-    const { error } = await state.client
-      .from("allowed_quantities")
-      .upsert(allowedRows, { onConflict: "node_id,unit_type_id" });
-    if (error){
-      toast("Allowed qty seed failed", error.message);
-      return;
-    }
-  }
-
-  await loadProjects();
-  state.activeProject = project;
-  renderProjects();
-  $("nodeNumber").value = "NODE 11";
-  await openNode("NODE 11");
-  await loadProjectNodes(project.id);
-  toast("Demo loaded", "Project and NODE 11 are ready.");
+  toast("Demo disabled", "Demo mode is disabled in LIVE mode.");
 }
 
 function renderLocations(){
@@ -3439,18 +3122,6 @@ function wireUI(){
     printBtn.addEventListener("click", () => printInvoice());
   }
 
-  const demoBtn = $("btnDemo");
-  if (demoBtn){
-    if (appMode === "real"){
-      demoBtn.style.display = "none";
-    }
-    demoBtn.addEventListener("click", () => {
-      if (appMode === "real") return;
-      showAuth(false);
-      initAuth();
-    });
-  }
-
   $("btnSignOut").addEventListener("click", async () => {
     if (isDemo){
       // reset
@@ -3528,11 +3199,6 @@ function wireUI(){
       setActiveProjectById(projectSelect.value);
     });
   }
-  const seedBtn = $("btnSeedDemo");
-  if (seedBtn){
-    seedBtn.addEventListener("click", () => seedDemoNode());
-  }
-
   $("btnAddLocation").addEventListener("click", () => addSpliceLocation());
 
   const startCameraBtn = $("btnStartCamera");

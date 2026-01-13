@@ -14,13 +14,13 @@ export const config = {
     (window.__ENV && window.__ENV.APP_MODE)
     || (window.ENV && window.ENV.APP_MODE)
     || (window.process && window.process.env && window.process.env.APP_MODE)
-    || "demo"
+    || "real"
   ).toLowerCase(),
 };
 
-export const appMode = config.appMode === "real" ? "real" : "demo";
+export const appMode = "real";
 export const hasSupabaseConfig = Boolean(config.url && config.anonKey);
-export const isDemo = appMode === "demo";
+export const isDemo = false;
 
 export function getSupabase(){
   if (!hasSupabaseConfig) return null;

@@ -30,7 +30,7 @@
       <div class="auth-wrap">
         <div class="card auth-card">
           <h1>Sign in to SpecCom</h1>
-          <p class="muted">This starter supports Supabase Auth if you wire your keys. If not, it runs in demo mode so you can click around.</p>
+          <p class="muted">This app requires Supabase Auth. Configure SUPABASE_URL and SUPABASE_ANON_KEY to sign in.</p>
 
           <div class="hr"></div>
 
@@ -42,7 +42,6 @@
             <button id="btnSignIn" class="btn">Sign in</button>
             <button id="btnMagicLink" class="btn secondary">Send magic link</button>
             <button id="btnSignUp" class="btn secondary">Create user</button>
-            <button id="btnDemo" class="btn ghost">Use demo</button>
           </div>
         </div>
       </div>
@@ -54,18 +53,8 @@
         </div>
 
         <div class="card">
-          <h2>What you'll see in the demo</h2>
-          <ul class="muted">
-            <li><b>Inventory checklist</b> with item photos (example Millennium item included).</li>
-            <li><b>Node workflow</b>: enter node number, then work one node at a time.</li>
-            <li><b>Splice locations</b>: port testing + splice completion photos required before "Complete".</li>
-            <li><b>Units threshold alert</b>: when used units approach allowed units, PRIME gets warned.</li>
-            <li><b>Pricing privacy</b>: prices are hidden from SPLICERS (and can be hidden between other parties via RLS).</li>
-          </ul>
-          <div class="hr"></div>
-          <div class="muted small">
-            Tip: Once Supabase is wired, this becomes real: files upload to Storage, rows land in Postgres, and policies enforce who can see what.
-          </div>
+          <h2>Live setup</h2>
+          <div class="muted small">Ensure Supabase Auth, Storage, and RLS policies are configured for your roles.</div>
         </div>
       </div>
     </div>
@@ -155,7 +144,6 @@
               <input id="nodeNumber" class="input" placeholder="Enter node number (example: NODE-1001)" />
               <button id="btnOpenNode" class="btn">Open node</button>
               <button id="btnNewNode" class="btn secondary">Create node</button>
-              <button id="btnSeedDemo" class="btn ghost" style="display:none;">Load Demo Node (NODE 11)</button>
             </div>
 
             <div class="hr"></div>
