@@ -49,6 +49,52 @@ function toast(title, body){
 
 function nowISO(){ return new Date().toISOString(); }
 
+const DEFAULT_TERMINAL_PORTS = 2;
+const MAX_TERMINAL_PORTS = 8;
+
+function normalizeTerminalPorts(value){
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_TERMINAL_PORTS;
+  return Math.min(MAX_TERMINAL_PORTS, Math.max(1, parsed));
+}
+
+function requiredSlotsForPorts(ports){
+  const count = normalizeTerminalPorts(ports);
+  const slots = [];
+  for (let i = 1; i <= count; i += 1){
+    slots.push(`port_${i}`);
+  }
+  slots.push("splice_completion");
+  return slots;
+}
+
+function getSlotLabel(slotKey){
+  if (slotKey === "splice_completion") return "Splice completion";
+  const match = String(slotKey || "").match(/^port_(\d+)$/);
+  if (match) return `Port ${match[1]}`;
+  return slotKey;
+}
+
+function getRequiredSlotsForLocation(loc){
+  return requiredSlotsForPorts(loc?.terminal_ports ?? DEFAULT_TERMINAL_PORTS);
+}
+
+function countRequiredSlotUploads(loc){
+  const required = getRequiredSlotsForLocation(loc);
+  const photos = loc?.photosBySlot || {};
+  let uploaded = 0;
+  required.forEach((slot) => {
+    if (photos[slot]) uploaded += 1;
+  });
+  return { uploaded, required: required.length };
+}
+
+function hasAllRequiredSlotPhotos(loc){
+  const required = getRequiredSlotsForLocation(loc);
+  const photos = loc?.photosBySlot || {};
+  return required.length > 0 && required.every((slot) => Boolean(photos[slot]));
+}
+
 function setText(id, value){
   const el = $(id);
   if (el) el.textContent = value;
@@ -94,11 +140,7 @@ function computeNodeCompletion(node){
 
 function computeProofStatus(node){
   const locs = node.splice_locations || [];
-  const locPhotosOk = locs.length > 0 && locs.every((l) => {
-    const openOk = Boolean(l.photos?.open);
-    const closedOk = Boolean(l.photos?.closed);
-    return openOk && closedOk;
-  });
+  const locPhotosOk = locs.length > 0 && locs.every((l) => hasAllRequiredSlotPhotos(l));
   const missingUsage = getMissingUsageProof(node.id);
   const usagePhotosOk = missingUsage.length === 0;
   return { locPhotosOk, usagePhotosOk, photosOk: locPhotosOk && usagePhotosOk };
@@ -235,8 +277,8 @@ function ensureDemoSeed(){
     units_allowed: 120,
     units_used: 103,
     splice_locations: [
-      { id:"loc-1", name:"Cabinet A - Tray 1", gps:null, photo:null, taken_at:null, completed:false, photos:{ open:null, closed:null } },
-      { id:"loc-2", name:"Pedestal 12B - Splice Case", gps:null, photo:null, taken_at:null, completed:false, photos:{ open:null, closed:null } },
+      { id:"loc-1", name:"Cabinet A - Tray 1", gps:null, photo:null, taken_at:null, completed:false, terminal_ports: 2, photosBySlot: {} },
+      { id:"loc-2", name:"Pedestal 12B - Splice Case", gps:null, photo:null, taken_at:null, completed:false, terminal_ports: 4, photosBySlot: {} },
     ],
     inventory_checks: [
       { id:"inv-1", item_code:"HAFO(OFDC-B8G)", item_name:"TDS Millennium example", photo:"./assets/millennium_example.png", qty_used: 2, planned_qty: 12, completed:false },
@@ -806,12 +848,15 @@ function renderLocations(){
   const list = document.createElement("div");
   list.className = "location-list";
   rows.forEach((r) => {
-    const openPhoto = r.photos?.open;
-    const closedPhoto = r.photos?.closed;
-    const openOk = Boolean(openPhoto);
-    const closedOk = Boolean(closedPhoto);
+    r.terminal_ports = normalizeTerminalPorts(r.terminal_ports ?? DEFAULT_TERMINAL_PORTS);
+    r.photosBySlot = r.photosBySlot || {};
+    const portValue = [2, 4, 6, 8].includes(r.terminal_ports) ? String(r.terminal_ports) : "custom";
+    const customValue = portValue === "custom" ? r.terminal_ports : "";
+    const customStyle = portValue === "custom" ? "" : 'style="display:none;"';
+    const counts = countRequiredSlotUploads(r);
+    const missing = counts.uploaded < counts.required;
+    const disableToggle = !r.completed && missing;
     const done = r.completed ? '<span class="pill-ok">COMPLETE</span>' : '<span class="pill-warn">INCOMPLETE</span>';
-    const missing = !openOk || !closedOk;
 
     const card = document.createElement("div");
     card.className = "card location-card";
@@ -820,29 +865,61 @@ function renderLocations(){
         <div>
           <div style="font-weight:900">${escapeHtml(r.name)}</div>
           <div class="muted small">${escapeHtml(r.id)}</div>
-          <div class="muted small">Photo must be taken at the splice location.</div>
+          <div class="muted small">Photos: <b>${counts.uploaded}/${counts.required}</b> required</div>
         </div>
         <div>${done}</div>
       </div>
       <div class="hr"></div>
-      <div class="grid cols-2">
-        <div>
-          <div style="font-weight:900;">Open splice photo</div>
-          ${openOk ? renderPhotoMeta(openPhoto) : '<div class="muted small">No photo yet.</div>'}
-          <button class="btn secondary" data-action="takePhoto" data-id="${r.id}" data-type="open">Take open photo</button>
-        </div>
-        <div>
-          <div style="font-weight:900;">Closed splice photo</div>
-          ${closedOk ? renderPhotoMeta(closedPhoto) : '<div class="muted small">No photo yet.</div>'}
-          <button class="btn secondary" data-action="takePhoto" data-id="${r.id}" data-type="closed">Take closed photo</button>
-        </div>
+      <div class="row" style="align-items:flex-end;">
+        <div class="muted small">Terminal ports</div>
+        <select class="input" data-action="portsSelect" data-id="${r.id}" style="width:140px; flex:0 0 auto;">
+          <option value="2" ${portValue === "2" ? "selected" : ""}>2</option>
+          <option value="4" ${portValue === "4" ? "selected" : ""}>4</option>
+          <option value="6" ${portValue === "6" ? "selected" : ""}>6</option>
+          <option value="8" ${portValue === "8" ? "selected" : ""}>8</option>
+          <option value="custom" ${portValue === "custom" ? "selected" : ""}>Custom</option>
+        </select>
+        <input class="input" type="number" min="1" max="8" step="1" data-action="portsCustom" data-id="${r.id}" value="${customValue}" ${customStyle} style="width:120px; flex:0 0 auto;" />
+        <div class="muted small">Required = ports + 1 completion.</div>
       </div>
       <div class="hr"></div>
+      ${renderSplicePhotoGrid(r)}
+      <div class="hr"></div>
       <div class="row">
-        <button class="btn ghost" data-action="toggleComplete" data-id="${r.id}" ${missing ? "disabled" : ""}>${r.completed ? "Undo complete" : "Mark complete"}</button>
+        <button class="btn ghost" data-action="toggleComplete" data-id="${r.id}" ${disableToggle ? "disabled" : ""}>${r.completed ? "Undo complete" : "Mark complete"}</button>
       </div>
     `;
     list.appendChild(card);
+  });
+
+  list.addEventListener("change", async (e) => {
+    const target = e.target;
+    if (!target) return;
+    if (target.matches('input[type="file"][data-slot-key]')){
+      const locId = target.dataset.locationId;
+      const slotKey = target.dataset.slotKey;
+      const file = target.files?.[0];
+      await handleSpliceSlotPhotoUpload(locId, slotKey, file);
+      target.value = "";
+      return;
+    }
+    if (target.dataset.action === "portsSelect"){
+      const loc = node.splice_locations.find(x => x.id === target.dataset.id);
+      if (!loc) return;
+      if (target.value === "custom"){
+        loc.terminal_ports = normalizeTerminalPorts(loc.terminal_ports ?? DEFAULT_TERMINAL_PORTS);
+        renderLocations();
+        return;
+      }
+      const nextPorts = normalizeTerminalPorts(target.value);
+      await updateTerminalPorts(loc.id, nextPorts);
+      return;
+    }
+    if (target.dataset.action === "portsCustom"){
+      const nextPorts = normalizeTerminalPorts(target.value);
+      target.value = String(nextPorts);
+      await updateTerminalPorts(target.dataset.id, nextPorts);
+    }
   });
 
   list.addEventListener("click", async (e) => {
@@ -850,16 +927,11 @@ function renderLocations(){
     if (!btn) return;
     const action = btn.dataset.action;
     const id = btn.dataset.id;
-    if (action === "takePhoto"){
-      const type = btn.dataset.type;
-      await captureSplicePhotoForLocation(id, type);
-      return;
-    }
     if (action === "toggleComplete"){
       const loc = node.splice_locations.find(x => x.id === id);
       if (!loc) return;
-      if (!loc.photos?.open || !loc.photos?.closed){
-        toast("Photos required", "Open and closed splice photos are required before completion.");
+      if (!hasAllRequiredSlotPhotos(loc)){
+        toast("Photos required", "All required splice photos are needed before completion.");
         return;
       }
       const next = !loc.completed;
@@ -886,6 +958,152 @@ function renderLocations(){
   });
 
   wrap.appendChild(list);
+}
+
+function renderSplicePhotoGrid(loc){
+  const requiredSlots = getRequiredSlotsForLocation(loc);
+  const photos = loc.photosBySlot || {};
+  const extraSlots = Object.keys(photos).filter((slot) => !requiredSlots.includes(slot));
+  const orderedExtras = extraSlots.sort((a, b) => {
+    const aNum = Number.parseInt(String(a).replace("port_", ""), 10);
+    const bNum = Number.parseInt(String(b).replace("port_", ""), 10);
+    if (Number.isFinite(aNum) && Number.isFinite(bNum)) return aNum - bNum;
+    return String(a).localeCompare(String(b));
+  });
+  const slots = requiredSlots.concat(orderedExtras);
+  return `
+    <div class="photo-grid">
+      ${slots.map((slotKey) => renderSpliceSlotCard(loc, slotKey, requiredSlots.includes(slotKey))).join("")}
+    </div>
+  `;
+}
+
+function renderSpliceSlotCard(loc, slotKey, isRequired){
+  const photo = loc.photosBySlot?.[slotKey];
+  const label = getSlotLabel(slotKey);
+  const badge = isRequired ? "" : '<span class="slot-badge">Extra</span>';
+  const timestamp = photo?.taken_at ? new Date(photo.taken_at).toLocaleString() : "";
+  const thumb = photo?.previewUrl
+    ? `<img class="slot-thumb" src="${photo.previewUrl}" alt="${escapeHtml(label)} photo"/>`
+    : photo
+      ? `<div class="muted small">Photo captured</div>`
+      : "";
+  const placeholder = `
+    <div class="slot-placeholder">
+      <div class="camera-icon" aria-hidden="true"></div>
+      <div class="muted small">Tap to capture</div>
+    </div>
+  `;
+  return `
+    <label class="photo-slot ${isRequired ? "" : "extra"}">
+      <input type="file" accept="image/*" capture="environment" data-location-id="${loc.id}" data-slot-key="${slotKey}" />
+      <div class="row" style="justify-content:space-between; width:100%;">
+        <div class="slot-title">${escapeHtml(label)}</div>
+        ${badge}
+      </div>
+      ${photo ? `
+        ${thumb}
+        <div class="slot-meta">${timestamp || "Timestamp pending"}</div>
+      ` : placeholder}
+    </label>
+  `;
+}
+
+async function updateTerminalPorts(locationId, nextPorts){
+  const node = state.activeNode;
+  if (!node) return;
+  const loc = node.splice_locations.find(x => x.id === locationId);
+  if (!loc) return;
+  const normalized = normalizeTerminalPorts(nextPorts);
+  if (normalized === loc.terminal_ports) return;
+  if (isDemo){
+    loc.terminal_ports = normalized;
+    renderLocations();
+    renderProofChecklist();
+    return;
+  }
+  const { error } = await state.client
+    .from("splice_locations")
+    .update({ terminal_ports: normalized })
+    .eq("id", loc.id);
+  if (error){
+    toast("Update failed", error.message);
+    return;
+  }
+  loc.terminal_ports = normalized;
+  renderLocations();
+  renderProofChecklist();
+}
+
+async function handleSpliceSlotPhotoUpload(locationId, slotKey, file){
+  const node = state.activeNode;
+  if (!node) return;
+  if (!file){
+    toast("Choose a photo", "Pick a photo file first.");
+    return;
+  }
+  const loc = node.splice_locations.find(l => l.id === locationId);
+  if (!loc){
+    toast("Location missing", "Splice location not found.");
+    return;
+  }
+  const takenAt = nowISO();
+  const previewUrl = URL.createObjectURL(file);
+  loc.photosBySlot = loc.photosBySlot || {};
+  loc.photosBySlot[slotKey] = { previewUrl, taken_at: takenAt, pending: true };
+  renderLocations();
+  renderProofChecklist();
+
+  if (isDemo){
+    loc.photosBySlot[slotKey] = { previewUrl, taken_at: takenAt };
+    renderLocations();
+    renderProofChecklist();
+    return;
+  }
+
+  const uploadPath = await uploadProofPhoto(file, node.id, `splice-location/${locationId}`);
+  if (!uploadPath){
+    delete loc.photosBySlot[slotKey];
+    renderLocations();
+    renderProofChecklist();
+    return;
+  }
+
+  const gps = state.lastGPS;
+  const { data, error } = await state.client
+    .from("splice_location_photos")
+    .upsert({
+      splice_location_id: loc.id,
+      slot_key: slotKey,
+      photo_path: uploadPath,
+      taken_at: takenAt,
+      gps_lat: gps?.lat ?? null,
+      gps_lng: gps?.lng ?? null,
+      gps_accuracy_m: gps?.accuracy_m ?? null,
+      uploaded_by: state.user?.id || null,
+    }, { onConflict: "splice_location_id,slot_key" })
+    .select("photo_path, taken_at, gps_lat, gps_lng, gps_accuracy_m")
+    .maybeSingle();
+
+  if (error){
+    delete loc.photosBySlot[slotKey];
+    renderLocations();
+    renderProofChecklist();
+    toast("Upload failed", error.message);
+    return;
+  }
+
+  loc.photosBySlot[slotKey] = {
+    path: data?.photo_path || uploadPath,
+    taken_at: data?.taken_at || takenAt,
+    gps: data?.gps_lat != null && data?.gps_lng != null
+      ? { lat: data.gps_lat, lng: data.gps_lng, accuracy_m: data.gps_accuracy_m }
+      : null,
+    previewUrl,
+  };
+  await loadSplicePhotos(node.id, [loc]);
+  renderLocations();
+  renderProofChecklist();
 }
 
 function renderInventory(){
@@ -982,22 +1200,6 @@ function setProofStatus(){
   renderProofPreview();
 }
 
-function renderPhotoMeta(photo){
-  if (!photo) return "";
-  const gps = photo.gps ? `${photo.gps.lat.toFixed(6)}, ${photo.gps.lng.toFixed(6)}` : "GPS missing";
-  const ts = photo.captured_at ? new Date(photo.captured_at).toLocaleString() : "Timestamp missing";
-  const thumb = photo.previewUrl
-    ? `<img class="photo-thumb" src="${photo.previewUrl}" alt="splice photo"/>`
-    : `<div class="muted small">Photo captured</div>`;
-  return `
-    <div class="photo-meta">
-      ${thumb}
-      <div class="muted small">Time: ${ts}</div>
-      <div class="gps-badge">GPS: ${gps}</div>
-    </div>
-  `;
-}
-
 function renderProofPreview(){
   const wrap = $("photoPreview");
   if (!wrap) return;
@@ -1053,73 +1255,6 @@ async function captureUsageProof(){
     camera: true,
   };
   setProofStatus();
-}
-
-async function captureSplicePhotoForLocation(locationId, photoType){
-  const node = state.activeNode;
-  if (!node){
-    toast("No node", "Open a node first.");
-    return;
-  }
-  if (photoType !== "open" && photoType !== "closed"){
-    toast("Photo type required", "Select open or closed splice photo.");
-    return;
-  }
-  const loc = node.splice_locations.find(l => l.id === locationId);
-  if (!loc){
-    toast("Location missing", "Splice location not found.");
-    return;
-  }
-  const jobNumber = state.activeProject?.job_number;
-  if (!jobNumber){
-    toast("Job required", "Job number required to save photos.");
-    return;
-  }
-  const shot = await captureFrame();
-  if (!shot) return;
-
-  const file = makeFileFromBlob(shot.blob);
-
-  if (isDemo){
-    loc.photos = loc.photos || { open: null, closed: null };
-    loc.photos[photoType] = {
-      previewUrl: shot.previewUrl,
-      captured_at: shot.captured_at,
-      gps: shot.gps,
-    };
-    state.cameraInvalidated = false;
-    renderLocations();
-    renderProofChecklist();
-    return;
-  }
-
-  const uploadPath = await uploadProofPhoto(file, node.id, `splice-${photoType}`);
-  if (!uploadPath) return;
-
-  const gps = shot.gps;
-  await recordProofUpload({
-    node_id: node.id,
-    splice_location_id: loc.id,
-    photo_url: uploadPath,
-    lat: gps?.lat ?? null,
-    lng: gps?.lng ?? null,
-    captured_at_client: shot.captured_at,
-    photo_type: photoType,
-    job_number: jobNumber,
-    camera: true,
-    captured_by: state.user?.id || null,
-  });
-
-  loc.photos = loc.photos || { open: null, closed: null };
-  loc.photos[photoType] = {
-    path: uploadPath,
-    previewUrl: shot.previewUrl,
-    captured_at: shot.captured_at,
-    gps: shot.gps,
-  };
-  state.cameraInvalidated = false;
-  renderLocations();
-  renderProofChecklist();
 }
 
 async function uploadProofPhoto(file, nodeId, prefix){
@@ -1502,38 +1637,45 @@ function updateAlertsBadge(){
 async function loadSplicePhotos(nodeId, locs){
   if (isDemo){
     locs.forEach((loc) => {
-      loc.photos = loc.photos || { open: null, closed: null };
+      loc.photosBySlot = loc.photosBySlot || {};
     });
     return;
   }
   if (!state.client || !locs.length) return;
+  const locIds = locs.map((loc) => loc.id);
   const { data, error } = await state.client
-    .from("proof_uploads")
-    .select("splice_location_id, photo_url, lat, lng, captured_at_server, photo_type")
-    .eq("node_id", nodeId)
-    .not("splice_location_id", "is", null);
+    .from("splice_location_photos")
+    .select("splice_location_id, slot_key, photo_path, taken_at, gps_lat, gps_lng, gps_accuracy_m")
+    .in("splice_location_id", locIds);
   if (error){
     toast("Photos load error", error.message);
     return;
   }
   const byLoc = new Map();
   (data || []).forEach((row) => {
-    if (!row.photo_type) return;
+    if (!row.slot_key) return;
     const key = row.splice_location_id;
     if (!byLoc.has(key)) byLoc.set(key, {});
     const current = byLoc.get(key);
-    current[row.photo_type] = {
-      path: row.photo_url,
-      gps: row.lat != null && row.lng != null ? { lat: row.lat, lng: row.lng } : null,
-      captured_at: row.captured_at_server,
+    current[row.slot_key] = {
+      path: row.photo_path,
+      taken_at: row.taken_at,
+      gps: row.gps_lat != null && row.gps_lng != null
+        ? { lat: row.gps_lat, lng: row.gps_lng, accuracy_m: row.gps_accuracy_m }
+        : null,
     };
   });
   locs.forEach((loc) => {
     const photos = byLoc.get(loc.id) || {};
-    loc.photos = {
-      open: photos.open || null,
-      closed: photos.closed || null,
-    };
+    const existing = loc.photosBySlot || {};
+    const merged = {};
+    Object.keys(photos).forEach((slotKey) => {
+      merged[slotKey] = {
+        ...photos[slotKey],
+        previewUrl: existing[slotKey]?.previewUrl || null,
+      };
+    });
+    loc.photosBySlot = merged;
   });
 }
 
@@ -1677,12 +1819,23 @@ function renderProofChecklist(){
   }
 
   const locs = node.splice_locations || [];
-  const missingLocs = locs.filter(l => !l.photos?.open || !l.photos?.closed);
+  const missingLocs = locs.filter(l => !hasAllRequiredSlotPhotos(l));
+  const slotCounts = locs.map((loc) => {
+    const requiredSlots = getRequiredSlotsForLocation(loc);
+    const photos = loc.photosBySlot || {};
+    const missingSlots = requiredSlots.filter((slot) => !photos[slot]).length;
+    return {
+      required: requiredSlots.length,
+      missing: missingSlots,
+      uploaded: requiredSlots.length - missingSlots,
+    };
+  });
+  const missingSlotCount = slotCounts.reduce((sum, row) => sum + row.missing, 0);
   const missingUsage = getMissingUsageProof(node.id);
 
   summary.innerHTML = `
     <div style="font-weight:900;">Photos required</div>
-    <div class="muted small">${missingLocs.length} splice locations missing photos, ${missingUsage.length} usage entries missing photos.</div>
+    <div class="muted small">${missingLocs.length} splice locations missing photos (${missingSlotCount} slots), ${missingUsage.length} usage entries missing photos.</div>
   `;
 
   if (!locs.length){
@@ -1692,15 +1845,19 @@ function renderProofChecklist(){
 
   wrap.innerHTML = `
     <table class="table">
-      <thead><tr><th>Location</th><th>Open photo</th><th>Closed photo</th></tr></thead>
+      <thead><tr><th>Location</th><th>Photos</th><th>Status</th></tr></thead>
       <tbody>
-        ${locs.map((loc) => `
-          <tr>
-            <td>${escapeHtml(loc.name)}</td>
-            <td>${loc.photos?.open ? '<span class="pill-ok">OK</span>' : '<span class="pill-warn">Missing</span>'}</td>
-            <td>${loc.photos?.closed ? '<span class="pill-ok">OK</span>' : '<span class="pill-warn">Missing</span>'}</td>
-          </tr>
-        `).join("")}
+        ${locs.map((loc) => {
+          const counts = countRequiredSlotUploads(loc);
+          const ok = counts.uploaded >= counts.required;
+          return `
+            <tr>
+              <td>${escapeHtml(loc.name)}</td>
+              <td>${counts.uploaded}/${counts.required}</td>
+              <td>${ok ? '<span class="pill-ok">OK</span>' : '<span class="pill-warn">Missing</span>'}</td>
+            </tr>
+          `;
+        }).join("")}
       </tbody>
     </table>
   `;
@@ -1823,7 +1980,8 @@ async function addSpliceLocation(){
       photo: null,
       taken_at: null,
       completed: false,
-      photos: { open: null, closed: null },
+      terminal_ports: DEFAULT_TERMINAL_PORTS,
+      photosBySlot: {},
     });
     renderLocations();
     updateKPI();
@@ -1836,8 +1994,9 @@ async function addSpliceLocation(){
     .insert({
       node_id: node.id,
       location_label: `Splice location ${n}`,
+      terminal_ports: DEFAULT_TERMINAL_PORTS,
     })
-    .select("id, location_label, gps_lat, gps_lng, gps_accuracy_m, photo_path, taken_at, completed")
+    .select("id, location_label, gps_lat, gps_lng, gps_accuracy_m, photo_path, taken_at, completed, terminal_ports")
     .maybeSingle();
 
   if (error){
@@ -1854,7 +2013,8 @@ async function addSpliceLocation(){
     photo: data.photo_path ? { kind:"storage", path:data.photo_path } : null,
     taken_at: data.taken_at,
     completed: data.completed,
-    photos: { open: null, closed: null },
+    terminal_ports: normalizeTerminalPorts(data.terminal_ports ?? DEFAULT_TERMINAL_PORTS),
+    photosBySlot: {},
   });
   renderLocations();
   updateKPI();
@@ -1894,7 +2054,8 @@ async function openNode(nodeNumber){
     await loadAlerts(state.activeNode.id);
     state.activeNode.splice_locations = (state.activeNode.splice_locations || []).map((loc) => ({
       ...loc,
-      photos: loc.photos || { open: null, closed: null },
+      terminal_ports: normalizeTerminalPorts(loc.terminal_ports ?? DEFAULT_TERMINAL_PORTS),
+      photosBySlot: loc.photosBySlot || {},
     }));
 
     // In real app, pricing is server-side protected.
@@ -1970,7 +2131,7 @@ async function openNode(nodeNumber){
   const [spliceRes, invRes, subInvRes, primeInvRes] = await Promise.all([
     state.client
       .from("splice_locations")
-      .select("id, location_label, gps_lat, gps_lng, gps_accuracy_m, photo_path, taken_at, completed")
+      .select("id, location_label, gps_lat, gps_lng, gps_accuracy_m, photo_path, taken_at, completed, terminal_ports")
       .eq("node_id", node.id),
     state.client
       .from("node_inventory")
@@ -2008,7 +2169,8 @@ async function openNode(nodeNumber){
     photo: r.photo_path ? { kind:"storage", path:r.photo_path } : null,
     taken_at: r.taken_at,
     completed: r.completed,
-    photos: { open: null, closed: null },
+    terminal_ports: normalizeTerminalPorts(r.terminal_ports ?? DEFAULT_TERMINAL_PORTS),
+    photosBySlot: {},
   }));
 
   node.inventory_checks = (invRes.data || []).map((r) => ({

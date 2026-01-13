@@ -382,6 +382,86 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
   flex-direction:column;
   gap:12px;
 }
+.photo-grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap:12px;
+}
+.photo-slot{
+  border:1px dashed rgba(27,59,90,.7);
+  background: rgba(7,20,38,.65);
+  border-radius:14px;
+  padding:12px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  min-height:170px;
+  cursor:pointer;
+  transition: border-color .12s ease, transform .12s ease;
+}
+.photo-slot:hover{
+  border-color: rgba(212,175,55,.7);
+  transform: translateY(-1px);
+}
+.photo-slot.extra{
+  border-style: solid;
+  border-color: rgba(212,175,55,.35);
+}
+.photo-slot input{display:none}
+.slot-title{font-weight:900}
+.slot-badge{
+  font-size:11px;
+  padding:2px 8px;
+  border-radius:999px;
+  border:1px solid rgba(212,175,55,.5);
+  color:var(--brand);
+  background: rgba(7,20,38,.7);
+}
+.slot-placeholder{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  color:var(--muted);
+  text-align:center;
+}
+.camera-icon{
+  width:44px;
+  height:30px;
+  border:2px solid rgba(255,255,255,.25);
+  border-radius:8px;
+  position:relative;
+}
+.camera-icon::before{
+  content:"";
+  position:absolute;
+  width:16px;
+  height:10px;
+  border-radius:6px 6px 3px 3px;
+  border:2px solid rgba(255,255,255,.25);
+  left:12px;
+  top:6px;
+}
+.camera-icon::after{
+  content:"";
+  position:absolute;
+  width:10px;
+  height:6px;
+  border-radius:3px;
+  background: rgba(255,255,255,.25);
+  left:4px;
+  top:-6px;
+}
+.slot-thumb{
+  width:100%;
+  max-width:200px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  display:block;
+}
+.slot-meta{color:var(--muted); font-size:12px}
 .badge.warn{
   border-color: rgba(245,158,11,.7);
   color: #fcd34d;
