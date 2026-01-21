@@ -36,6 +36,7 @@ const state = {
   alerts: [],
   materialCatalog: [],
   projects: [],
+  adminProfiles: [],
   realtime: {
     usageChannel: null,
   },
@@ -74,6 +75,12 @@ const DEFAULT_RATE_CARD_NAME = String(
   || (window.process && window.process.env && window.process.env.DEFAULT_RATE_CARD_NAME)
   || ""
 ).trim();
+const BUILD_MODE = String(
+  (window.__ENV && window.__ENV.BUILD_MODE)
+  || (window.ENV && window.ENV.BUILD_MODE)
+  || (window.process && window.process.env && window.process.env.BUILD_MODE)
+  || ""
+).toLowerCase() === "true";
 const SINGLE_PROOF_PHOTO_MODE = String(
   (window.__ENV && window.__ENV.SINGLE_PROOF_PHOTO_MODE)
   || (window.ENV && window.ENV.SINGLE_PROOF_PHOTO_MODE)
@@ -109,8 +116,12 @@ function getRequiredSlotsForLocation(loc){
 }
 
 function countRequiredSlotUploads(loc){
-  const required = getRequiredSlotsForLocation(loc);
   const photos = loc?.photosBySlot || {};
+  if (SINGLE_PROOF_PHOTO_MODE){
+    const uploaded = Object.keys(photos).length > 0 ? 1 : 0;
+    return { uploaded, required: 1 };
+  }
+  const required = getRequiredSlotsForLocation(loc);
   let uploaded = 0;
   required.forEach((slot) => {
     if (photos[slot]) uploaded += 1;
@@ -119,8 +130,11 @@ function countRequiredSlotUploads(loc){
 }
 
 function hasAllRequiredSlotPhotos(loc){
-  const required = getRequiredSlotsForLocation(loc);
   const photos = loc?.photosBySlot || {};
+  if (SINGLE_PROOF_PHOTO_MODE){
+    return Object.keys(photos).length > 0;
+  }
+  const required = getRequiredSlotsForLocation(loc);
   return required.length > 0 && required.every((slot) => Boolean(photos[slot]));
 }
 
@@ -211,6 +225,9 @@ function setActiveView(viewId){
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.view === viewId);
   });
+  if (viewId === "viewAdmin"){
+    loadAdminProfiles();
+  }
 }
 
 function startVisibilityWatch(){
@@ -237,6 +254,7 @@ function isOwner(){
 
 function isBillingUnlocked(){
   if (isDemo) return true;
+  if (BUILD_MODE) return true;
   return Boolean(state.nodeProofStatus?.billing_unlocked);
 }
 
@@ -325,6 +343,14 @@ function setRoleUI(){
     ? `<span class="dot bad"></span><span>Pricing hidden (splicer view)</span>`
     : `<span class="dot ok"></span><span>Pricing protected by role</span>`;
 
+  const buildChip = $("chipBuildMode");
+  if (buildChip){
+    buildChip.style.display = BUILD_MODE ? "inline-flex" : "none";
+  }
+  document.querySelectorAll(".no-pay-banner").forEach((el) => {
+    el.style.display = BUILD_MODE ? "none" : "";
+  });
+
   updateAlertsBadge();
   renderAlerts();
 }
@@ -411,6 +437,168 @@ async function loadProjects(){
   renderProjects();
 }
 
+async function loadAdminProfiles(){
+  const gate = $("adminBuildGate");
+  const panel = $("adminUsersPanel");
+  const allowed = BUILD_MODE && isOwner();
+  if (gate) gate.style.display = allowed ? "none" : "";
+  if (panel) panel.style.display = allowed ? "" : "none";
+  if (!allowed) return;
+  if (!state.client || !state.user) return;
+  if (isDemo){
+    state.adminProfiles = [];
+    renderAdminProfiles();
+    return;
+  }
+  const { data, error } = await state.client
+    .from("profiles")
+    .select("id, display_name, role, created_at")
+    .order("created_at", { ascending: true });
+  if (error){
+    toast("Profiles load error", error.message);
+    return;
+  }
+  state.adminProfiles = data || [];
+  renderAdminProfiles();
+}
+
+function renderAdminProfiles(){
+  const wrap = $("adminUsersList");
+  if (!wrap) return;
+  if (!BUILD_MODE || !isOwner()){
+    wrap.innerHTML = "";
+    return;
+  }
+  const rows = state.adminProfiles || [];
+  if (!rows.length){
+    wrap.innerHTML = '<div class="muted small">No profiles found.</div>';
+    return;
+  }
+  wrap.innerHTML = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>User id</th>
+          <th>Name</th>
+          <th>Role</th>
+          <th>Created</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => `
+          <tr>
+            <td class="muted small">${escapeHtml(row.id)}</td>
+            <td>
+              <input class="input compact" data-field="display_name" data-id="${row.id}" value="${escapeHtml(row.display_name || "")}" />
+            </td>
+            <td>
+              <select class="input compact" data-field="role" data-id="${row.id}">
+                ${state.demo.roles.map(role => `
+                  <option value="${role}" ${String(row.role) === role ? "selected" : ""}>${role}</option>
+                `).join("")}
+              </select>
+            </td>
+            <td class="muted small">${row.created_at ? new Date(row.created_at).toLocaleDateString() : "-"}</td>
+            <td>
+              <div class="row" style="justify-content:flex-end;">
+                <button class="btn secondary small" data-action="adminUpdateUser" data-id="${row.id}">Save</button>
+                <button class="btn danger small" data-action="adminDeleteUser" data-id="${row.id}">Delete</button>
+              </div>
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+async function createAdminProfile(){
+  if (!BUILD_MODE || !isOwner()){
+    toast("Not allowed", "Owner role required.");
+    return;
+  }
+  const userId = $("adminUserId")?.value.trim();
+  const email = $("adminUserEmail")?.value.trim();
+  const role = $("adminUserRole")?.value || "SPLICER";
+  if (!userId){
+    toast("User id required", "Enter the auth user id (UUID).");
+    return;
+  }
+  if (isDemo){
+    toast("Demo disabled", "Profiles are not available in demo mode.");
+    return;
+  }
+  const { error } = await state.client
+    .from("profiles")
+    .insert({
+      id: userId,
+      display_name: email || null,
+      role,
+    });
+  if (error){
+    toast("Create failed", error.message);
+    return;
+  }
+  if ($("adminUserId")) $("adminUserId").value = "";
+  if ($("adminUserEmail")) $("adminUserEmail").value = "";
+  await loadAdminProfiles();
+  toast("Profile created", "User profile created.");
+}
+
+async function updateAdminProfile(userId){
+  if (!BUILD_MODE || !isOwner()){
+    toast("Not allowed", "Owner role required.");
+    return;
+  }
+  const roleEl = document.querySelector(`[data-field="role"][data-id="${userId}"]`);
+  const nameEl = document.querySelector(`[data-field="display_name"][data-id="${userId}"]`);
+  if (!roleEl || !nameEl) return;
+  const nextRole = roleEl.value;
+  const nextName = String(nameEl.value || "").trim();
+  if (isDemo){
+    toast("Demo disabled", "Profiles are not available in demo mode.");
+    return;
+  }
+  const { error } = await state.client
+    .from("profiles")
+    .update({ role: nextRole, display_name: nextName || null })
+    .eq("id", userId);
+  if (error){
+    toast("Update failed", error.message);
+    return;
+  }
+  await loadAdminProfiles();
+  toast("Profile updated", "User profile saved.");
+}
+
+async function deleteAdminProfile(userId){
+  if (!BUILD_MODE || !isOwner()){
+    toast("Not allowed", "Owner role required.");
+    return;
+  }
+  if (!confirm("Delete user profile?\nThis removes the profile row (not the auth user).")) return;
+  const typed = prompt("Type DELETE to confirm.");
+  if (typed !== "DELETE"){
+    toast("Delete canceled", "Type DELETE to confirm.");
+    return;
+  }
+  if (isDemo){
+    toast("Demo disabled", "Profiles are not available in demo mode.");
+    return;
+  }
+  const { error } = await state.client
+    .from("profiles")
+    .delete()
+    .eq("id", userId);
+  if (error){
+    toast("Delete failed", error.message);
+    return;
+  }
+  await loadAdminProfiles();
+  toast("Profile deleted", "User profile removed.");
+}
+
 async function loadProjectNodes(projectId){
   if (isDemo){
     state.projectNodes = (state.demo.nodesList || []).filter(n => !projectId || n.project_id === projectId);
@@ -442,6 +630,7 @@ function renderNodeCards(){
     wrap.innerHTML = '<div class="muted small">Select a project to see nodes.</div>';
     return;
   }
+  const showBuildControls = BUILD_MODE && isOwner();
   const activeNode = state.projectNodes.find(n => n.status === "ACTIVE");
   wrap.innerHTML = state.projectNodes.map((node) => {
     const status = node.status || "NOT_STARTED";
@@ -451,6 +640,13 @@ function renderNodeCards(){
     const actionLabel = isComplete ? "Completed" : isActive ? "Continue" : "Start";
     const disabled = !canStart && !isActive;
     const completeDisabled = !isActive && !isComplete;
+    const deleting = Boolean(node.isDeleting);
+    const buildButtons = showBuildControls
+      ? `
+        <button class="btn ghost" data-action="editNode" data-id="${node.id}" ${deleting ? "disabled" : ""}>Edit</button>
+        <button class="btn danger" data-action="deleteNode" data-id="${node.id}" ${deleting ? "disabled" : ""}>${deleting ? "Deleting..." : "Delete"}</button>
+      `
+      : "";
     return `
       <div class="node-card">
         <div class="node-meta">
@@ -461,6 +657,7 @@ function renderNodeCards(){
         <div class="row">
           <button class="btn ${isActive ? "" : "secondary"}" data-action="openNode" data-id="${node.id}" ${disabled ? "disabled" : ""}>${actionLabel}</button>
           <button class="btn ghost" data-action="completeNode" data-id="${node.id}" ${completeDisabled ? "disabled" : ""}>Complete</button>
+          ${buildButtons}
         </div>
       </div>
     `;
@@ -513,7 +710,8 @@ async function completeNode(nodeId){
     return;
   }
   const role = getRole();
-  if (!(role === "PRIME" || role === "OWNER")){
+  const canComplete = BUILD_MODE ? (role === "OWNER" || role === "PRIME") : (role === "PRIME" || role === "OWNER");
+  if (!canComplete){
     toast("Not allowed", "Only PRIME/OWNER can complete a node.");
     return;
   }
@@ -522,7 +720,7 @@ async function completeNode(nodeId){
     return;
   }
   const photos = computeProofStatus(state.activeNode);
-  if (!photos.photosOk){
+  if (!BUILD_MODE && !photos.photosOk){
     toast("No pay", "Photos missing. Completion is blocked.");
     return;
   }
@@ -543,6 +741,122 @@ async function completeNode(nodeId){
   }
   node.status = "COMPLETE";
   await loadProjectNodes(node.project_id);
+}
+
+async function editNodeMeta(nodeId){
+  if (!BUILD_MODE || !isOwner()){
+    toast("Not allowed", "Owner role required.");
+    return;
+  }
+  const node = state.projectNodes.find(n => n.id === nodeId);
+  if (!node){
+    toast("Node missing", "Node not found.");
+    return;
+  }
+  const nextNumber = prompt("Edit node number", node.node_number || "");
+  if (nextNumber === null) return;
+  const nextDesc = prompt("Edit node description", node.description || "");
+  if (nextDesc === null) return;
+  const trimmedNumber = String(nextNumber).trim() || node.node_number;
+  const trimmedDesc = String(nextDesc).trim();
+  if (trimmedNumber === node.node_number && trimmedDesc === (node.description || "")) return;
+
+  if (isDemo){
+    const demoNode = state.demo.nodes[node.node_number];
+    if (demoNode){
+      delete state.demo.nodes[node.node_number];
+      demoNode.node_number = trimmedNumber;
+      demoNode.description = trimmedDesc;
+      state.demo.nodes[trimmedNumber] = demoNode;
+    }
+    node.node_number = trimmedNumber;
+    node.description = trimmedDesc;
+    state.demo.nodesList = (state.demo.nodesList || []).map((row) => (
+      row.id === node.id ? { ...row, node_number: trimmedNumber, description: trimmedDesc } : row
+    ));
+    renderNodeCards();
+    return;
+  }
+
+  const { error } = await state.client
+    .from("nodes")
+    .update({ node_number: trimmedNumber, description: trimmedDesc })
+    .eq("id", node.id);
+  if (error){
+    toast("Update failed", error.message);
+    return;
+  }
+  node.node_number = trimmedNumber;
+  node.description = trimmedDesc;
+  if (state.activeNode?.id === node.id){
+    state.activeNode.node_number = trimmedNumber;
+    state.activeNode.description = trimmedDesc;
+    updateKPI();
+  }
+  renderNodeCards();
+}
+
+async function deleteNode(nodeId){
+  if (!BUILD_MODE || !isOwner()){
+    toast("Not allowed", "Owner role required.");
+    return;
+  }
+  const node = state.projectNodes.find(n => n.id === nodeId);
+  if (!node){
+    toast("Node missing", "Node not found.");
+    return;
+  }
+  if (!confirm("Delete node?\nThis will remove the node and all related data. This cannot be undone.")) return;
+  const typed = prompt("Type DELETE to confirm.");
+  if (typed !== "DELETE"){
+    toast("Delete canceled", "Type DELETE to confirm.");
+    return;
+  }
+  node.isDeleting = true;
+  renderNodeCards();
+
+  if (isDemo){
+    delete state.demo.nodes[node.node_number];
+    state.demo.nodesList = (state.demo.nodesList || []).filter(n => n.id !== node.id);
+    state.projectNodes = state.projectNodes.filter(n => n.id !== node.id);
+    if (state.activeNode?.id === node.id){
+      state.activeNode = null;
+      clearProof();
+    }
+    renderNodeCards();
+    renderLocations();
+    renderInventory();
+    renderInvoicePanel();
+    renderProofChecklist();
+    updateKPI();
+    renderBillingDetail();
+    toast("Deleted", "Node deleted.");
+    return;
+  }
+
+  const { error } = await state.client
+    .from("nodes")
+    .delete()
+    .eq("id", node.id);
+  if (error){
+    toast("Delete failed", error.message);
+    node.isDeleting = false;
+    renderNodeCards();
+    return;
+  }
+  if (state.activeNode?.id === node.id){
+    state.activeNode = null;
+    clearProof();
+  }
+  await loadProjectNodes(node.project_id);
+  await loadBillingLocations(state.activeProject?.id || null);
+  renderLocations();
+  renderInventory();
+  renderInvoicePanel();
+  renderProofChecklist();
+  updateKPI();
+  renderBillingDetail();
+  toast("Deleted", "Node deleted.");
 }
 
 async function loadUnitTypes(){
@@ -2020,11 +2334,11 @@ function renderInvoicePanel(){
 
   const completion = computeNodeCompletion(node);
   const photos = computeProofStatus(node);
-  const eligible = completion.pct === 100 && node.ready_for_billing && photos.photosOk;
+  const eligible = BUILD_MODE ? true : (completion.pct === 100 && node.ready_for_billing && photos.photosOk);
 
   html += `<div class="note">
     <div style="font-weight:900;">Billing gate</div>
-    <div class="muted small">Node can be invoiced only when: splice locations complete + inventory checklist complete + photos captured + node marked READY.</div>
+    <div class="muted small">${BUILD_MODE ? "Build mode enabled: proof gates are bypassed." : "Node can be invoiced only when: splice locations complete + inventory checklist complete + photos captured + node marked READY."}</div>
     <div style="margin-top:8px;">Status: ${eligible ? '<span class="pill-ok">ELIGIBLE</span>' : '<span class="pill-warn">NOT READY</span>'}</div>
   </div>`;
 
@@ -2109,7 +2423,7 @@ function renderBillingLocations(){
     const proofLabel = required === 0 ? "Proof: Not required" : `Proof: ${uploaded}/${required}`;
     const invoiceStatus = loc.invoice_status || "draft";
     const invoiceLabel = invoiceStatus.toUpperCase();
-    const disabled = !proofOk && !isOwner();
+    const disabled = !proofOk && !isOwner() && !BUILD_MODE;
     return `
       <div class="billing-location-card ${disabled ? "disabled" : ""}">
         <div class="row" style="justify-content:space-between;">
@@ -2159,6 +2473,21 @@ function renderBillingDetail(){
   const overrides = state.ownerOverrides || [];
   const hasOverride = overrides.length > 0;
   const showOverrideAction = !billingUnlocked && isOwner() && !isDemo;
+  const buildModeStatusControls = (BUILD_MODE && invoice)
+    ? `
+      <div class="note" style="margin-top:12px;">
+        <div style="font-weight:900;">Invoice status (build mode)</div>
+        <div class="row" style="flex-wrap:wrap; margin-top:8px;">
+          <select id="buildInvoiceStatus" class="input" style="min-width:180px;">
+            <option value="draft" ${status === "draft" ? "selected" : ""}>Draft</option>
+            <option value="sent" ${status === "sent" ? "selected" : ""}>Sent</option>
+            <option value="paid" ${status === "paid" ? "selected" : ""}>Paid</option>
+          </select>
+          <button id="btnBuildInvoiceStatus" class="btn secondary">Update status</button>
+        </div>
+      </div>
+    `
+    : "";
 
   wrap.innerHTML = `
     <div class="note">
@@ -2176,6 +2505,7 @@ function renderBillingDetail(){
         ${showOverrideAction ? '<button id="btnOwnerOverride" class="btn secondary" style="margin-top:10px;">Owner override</button>' : ""}
       </div>
     ` : ""}
+    ${buildModeStatusControls}
     ${showOverrideAction ? `
       <div id="ownerOverridePanel" class="note override-panel" style="display:none; margin-top:12px;">
         <div style="font-weight:900;">Owner override</div>
@@ -2249,6 +2579,8 @@ function renderBillingDetail(){
   if (saveBtn) saveBtn.addEventListener("click", () => saveBillingInvoice());
   const readyBtn = wrap.querySelector("#btnBillingReady");
   if (readyBtn) readyBtn.addEventListener("click", () => markInvoiceReady());
+  const buildStatusBtn = wrap.querySelector("#btnBuildInvoiceStatus");
+  if (buildStatusBtn) buildStatusBtn.addEventListener("click", () => updateInvoiceStatus());
 
   const overrideBtn = wrap.querySelector("#btnOwnerOverride");
   if (overrideBtn){
@@ -2266,7 +2598,7 @@ function renderBillingDetail(){
     });
   }
 
-  const canExport = ["ready", "submitted", "paid"].includes(status);
+  const canExport = BUILD_MODE || ["ready", "submitted", "paid"].includes(status);
   if (exportBtn) exportBtn.disabled = !canExport;
   if (printBtn) printBtn.disabled = !canExport;
   if (importBtn) importBtn.disabled = editLocked;
@@ -2557,6 +2889,37 @@ async function markInvoiceReady(){
   renderBillingDetail();
 }
 
+async function updateInvoiceStatus(){
+  if (!BUILD_MODE || !isOwner()){
+    toast("Not allowed", "Owner role required.");
+    return;
+  }
+  const invoice = state.billingInvoice;
+  if (!invoice){
+    toast("No invoice", "Select a location first.");
+    return;
+  }
+  const nextStatus = $("buildInvoiceStatus")?.value || "draft";
+  if (isDemo){
+    state.billingInvoice.status = nextStatus;
+    renderBillingDetail();
+    toast("Status updated", `Invoice set to ${nextStatus}.`);
+    return;
+  }
+  const { error } = await state.client
+    .from("invoices")
+    .update({ status: nextStatus, updated_at: new Date().toISOString() })
+    .eq("id", invoice.id);
+  if (error){
+    toast("Update failed", error.message);
+    return;
+  }
+  state.billingInvoice.status = nextStatus;
+  await loadBillingLocations(state.activeProject?.id || null);
+  renderBillingDetail();
+  toast("Status updated", `Invoice set to ${nextStatus}.`);
+}
+
 async function createOwnerOverride(overrideType, reason){
   if (!isOwner()){
     toast("Not allowed", "Owner role required.");
@@ -2836,6 +3199,7 @@ function getLocationProofRule(projectId){
 }
 
 function getLocationRequiredPhotos(loc, projectId){
+  if (SINGLE_PROOF_PHOTO_MODE) return 1;
   if (loc && Number.isFinite(loc.proof_required)){
     return Math.max(0, Number(loc.proof_required || 0));
   }
@@ -2858,6 +3222,7 @@ function getLocationBillingStatus(locationId){
 }
 
 function isLocationBillingLocked(locationId){
+  if (BUILD_MODE) return false;
   const status = getLocationBillingStatus(locationId);
   return ["ready", "submitted", "paid", "void"].includes(String(status).toLowerCase());
 }
@@ -3084,7 +3449,9 @@ function renderProofChecklist(){
       uploaded: requiredSlots.length - missingSlots,
     };
   });
-  const missingSlotCount = slotCounts.reduce((sum, row) => sum + row.missing, 0);
+  const missingSlotCount = SINGLE_PROOF_PHOTO_MODE
+    ? missingLocs.length
+    : slotCounts.reduce((sum, row) => sum + row.missing, 0);
   const missingUsage = getMissingUsageProof(node.id);
 
   summary.innerHTML = `
@@ -3565,12 +3932,12 @@ async function markNodeReady(){
   if (!node) return;
 
   const c = computeNodeCompletion(node);
-  if (!(c.locOk && c.invOk)){
+  if (!BUILD_MODE && !(c.locOk && c.invOk)){
     toast("Not ready", "Finish all splice locations + inventory checklist first.");
     return;
   }
   const photos = computeProofStatus(node);
-  if (!photos.photosOk){
+  if (!BUILD_MODE && !photos.photosOk){
     toast("Photos required", "Take photos (GPS + photo + timestamp) before marking the node ready.");
     return;
   }
@@ -3607,12 +3974,12 @@ async function createInvoice(){
   }
 
   const completion = computeNodeCompletion(node);
-  if (!(completion.pct === 100 && node.ready_for_billing)){
+  if (!BUILD_MODE && !(completion.pct === 100 && node.ready_for_billing)){
     toast("Blocked", "Invoices are blocked until documentation is complete and node is marked READY.");
     return;
   }
   const photos = computeProofStatus(node);
-  if (!photos.photosOk){
+  if (!BUILD_MODE && !photos.photosOk){
     toast("Blocked", "Photos are required before invoice submission.");
     return;
   }
@@ -3639,7 +4006,7 @@ async function createInvoice(){
     return;
   }
 
-  if (role === "TDS"){
+  if (!BUILD_MODE && role === "TDS"){
     toast("Blocked", "TDS can't create invoices in this MVP.");
     return;
   }
@@ -3819,6 +4186,10 @@ function wireUI(){
         startNode(id);
       } else if (action === "completeNode"){
         completeNode(id);
+      } else if (action === "editNode"){
+        editNodeMeta(id);
+      } else if (action === "deleteNode"){
+        deleteNode(id);
       }
     });
   }
@@ -3830,6 +4201,22 @@ function wireUI(){
       if (!btn) return;
       if (btn.dataset.action === "openBilling"){
         openBillingLocation(btn.dataset.id);
+      }
+    });
+  }
+
+  const adminList = $("adminUsersList");
+  if (adminList){
+    adminList.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const id = btn.dataset.id;
+      if (!id) return;
+      if (action === "adminUpdateUser"){
+        updateAdminProfile(id);
+      } else if (action === "adminDeleteUser"){
+        deleteAdminProfile(id);
       }
     });
   }
@@ -3923,6 +4310,11 @@ function wireUI(){
 
   $("btnOpenNode").addEventListener("click", () => openNode($("nodeNumber").value));
   $("btnNewNode").addEventListener("click", () => createNode($("nodeNumber").value));
+
+  const btnAdminCreate = $("btnAdminCreateUser");
+  if (btnAdminCreate){
+    btnAdminCreate.addEventListener("click", () => createAdminProfile());
+  }
 
   const projectSelect = $("projectSelect");
   if (projectSelect){

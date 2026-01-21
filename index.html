@@ -114,6 +114,7 @@
                 <span id="chipStatus" class="chip"><span class="dot warn"></span><span>Waiting</span></span>
                 <span id="chipRole" class="chip"><span class="dot ok"></span><span>Role: ?</span></span>
                 <span id="chipPricing" class="chip"><span class="dot bad"></span><span>Pricing hidden from splicers</span></span>
+                <span id="chipBuildMode" class="chip" style="display:none;"><span class="dot warn"></span><span>BUILD MODE (restrictions disabled)</span></span>
               </div>
               <div class="hr"></div>
               <div id="photoChecklistSummary" class="note"></div>
@@ -290,6 +291,30 @@
                 <li>Enable Storage bucket for photos (private).</li>
                 <li>Add real node sheets import and Millennium part lookup.</li>
               </ol>
+            </div>
+          </div>
+          <div class="card" style="margin-top:12px;">
+            <h2>User management</h2>
+            <div class="muted small">Create/update profile rows for authenticated users. Auth users must already exist in Supabase.</div>
+            <div id="adminBuildGate" class="note warning" style="display:none; margin-top:10px;">
+              <div style="font-weight:900;">Build mode disabled</div>
+              <div class="muted small">Enable BUILD_MODE to manage user profiles.</div>
+            </div>
+            <div id="adminUsersPanel" style="margin-top:12px;">
+              <div class="row" style="flex-wrap:wrap;">
+                <input id="adminUserId" class="input" placeholder="Auth user id (UUID)" />
+                <input id="adminUserEmail" class="input" placeholder="Email or display name" />
+                <select id="adminUserRole" class="input" style="min-width:180px;">
+                  <option value="SPLICER">SPLICER</option>
+                  <option value="SUB">SUB</option>
+                  <option value="PRIME">PRIME</option>
+                  <option value="TDS">TDS</option>
+                  <option value="OWNER">OWNER</option>
+                </select>
+                <button id="btnAdminCreateUser" class="btn secondary">Create profile</button>
+              </div>
+              <div class="hr"></div>
+              <div id="adminUsersList"></div>
             </div>
           </div>
         </section>
