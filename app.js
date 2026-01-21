@@ -118,6 +118,36 @@ function hasAllRequiredSlotPhotos(loc){
   return required.length > 0 && required.every((slot) => Boolean(photos[slot]));
 }
 
+function getSpliceLocationDefaultName(index){
+  const safeIndex = Number.isFinite(index) && index >= 0 ? index : 0;
+  return `Splice location ${safeIndex + 1}`;
+}
+
+function getSpliceLocationDisplayName(loc, index){
+  const label = String(loc?.label ?? "").trim();
+  if (label) return label;
+  if (Number.isFinite(index)) return getSpliceLocationDefaultName(index);
+  const legacy = String(loc?.location_label ?? loc?.name ?? "").trim();
+  if (legacy) return legacy;
+  return "Splice location";
+}
+
+function getSortedSpliceLocations(node){
+  const rows = [...(node?.splice_locations || [])];
+  rows.sort((a, b) => {
+    const aOrder = Number.isFinite(a.sort_order) ? a.sort_order : null;
+    const bOrder = Number.isFinite(b.sort_order) ? b.sort_order : null;
+    if (aOrder != null && bOrder != null && aOrder !== bOrder) return aOrder - bOrder;
+    if (aOrder != null && bOrder == null) return -1;
+    if (aOrder == null && bOrder != null) return 1;
+    const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
+    if (aCreated !== bCreated) return aCreated - bCreated;
+    return String(a.id).localeCompare(String(b.id));
+  });
+  return rows;
+}
+
 function getBackfillSlotKey(loc, photoType){
   if (photoType === "splice_complete") return "splice_completion";
   const photos = loc?.photosBySlot || {};
@@ -217,7 +247,7 @@ function getNodeUnits(node){
 
 function computeNodeCompletion(node){
   // completion = (all splice locations complete) and (inventory checklist complete)
-  const locs = node.splice_locations || [];
+  const locs = getSortedSpliceLocations(node);
   const inv = node.inventory_checks || [];
   const locOk = locs.length > 0 && locs.every(l => l.completed);
   const invOk = inv.length > 0 && inv.every(i => i.completed);
@@ -729,7 +759,8 @@ async function loadBillingLocations(projectId){
     const rows = Object.values(state.demo.nodes || {}).flatMap(node => (node.splice_locations || []).map((loc) => ({
       id: loc.id,
       node_id: node.id,
-      location_label: loc.name,
+      label: loc.label ?? null,
+      location_label: loc.location_label || loc.name,
       completed: loc.completed,
       terminal_ports: loc.terminal_ports,
       photo_count: getLocationProofUploaded(loc),
@@ -744,8 +775,9 @@ async function loadBillingLocations(projectId){
   if (!state.client) return;
   const { data: locs, error: locErr } = await state.client
     .from("splice_locations")
-    .select("id, node_id, location_label, completed, terminal_ports, nodes!inner(project_id,node_number)")
+    .select("id, node_id, label, location_label, completed, terminal_ports, sort_order, nodes!inner(project_id,node_number)")
     .eq("nodes.project_id", projectId)
+    .order("sort_order", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: true });
   if (locErr){
     toast("Locations load error", locErr.message);
@@ -815,6 +847,7 @@ async function loadBillingLocations(projectId){
   state.billingLocations = (locs || []).map((loc) => ({
     id: loc.id,
     node_id: loc.node_id,
+    label: loc.label ?? null,
     location_label: loc.location_label,
     completed: loc.completed,
     terminal_ports: normalizeTerminalPorts(loc.terminal_ports ?? DEFAULT_TERMINAL_PORTS),
@@ -862,7 +895,7 @@ function renderLocations(){
     return;
   }
 
-  const rows = node.splice_locations || [];
+  const rows = getSortedSpliceLocations(node);
   if (!rows.length){
     wrap.innerHTML = '<div class="muted small">No splice locations yet. Click "Add splice location".</div>';
     return;
@@ -870,39 +903,65 @@ function renderLocations(){
 
   const list = document.createElement("div");
   list.className = "location-list";
-  rows.forEach((r) => {
+  rows.forEach((r, index) => {
     r.terminal_ports = normalizeTerminalPorts(r.terminal_ports ?? DEFAULT_TERMINAL_PORTS);
     r.photosBySlot = r.photosBySlot || {};
-    r.isEditing = Boolean(r.isEditing);
+    r.isEditingName = Boolean(r.isEditingName);
     r.isEditingPorts = Boolean(r.isEditingPorts);
+    r.isDeleting = Boolean(r.isDeleting);
     const activePorts = normalizeTerminalPorts(r.isEditingPorts ? (r.pending_ports ?? r.terminal_ports) : r.terminal_ports);
     const portValue = [2, 4, 6, 8].includes(activePorts) ? String(activePorts) : "custom";
     const customValue = portValue === "custom" ? activePorts : "";
     const customStyle = portValue === "custom" ? "" : 'style="display:none;"';
     const counts = countRequiredSlotUploads(r);
     const missing = counts.uploaded < counts.required;
-    const disableToggle = !r.completed && missing;
+    const disableToggle = r.isDeleting || (!r.completed && missing);
     const billingLocked = isLocationBillingLocked(r.id);
-    if (billingLocked && r.isEditing) r.isEditing = false;
+    if (billingLocked && r.isEditingName) r.isEditingName = false;
     if (billingLocked && r.isEditingPorts) r.isEditingPorts = false;
-    const nameHtml = r.isEditing
-      ? `<input class="input" data-action="nameInput" data-id="${r.id}" value="${escapeHtml(r.name)}" ${billingLocked ? "disabled" : ""} data-autofocus="true" />`
-      : `<span class="clickable-name" data-action="editName" data-id="${r.id}" ${billingLocked ? "" : ""}>${escapeHtml(r.name)}</span>`;
+    const displayName = getSpliceLocationDisplayName(r, index);
+    const inputValue = r.pending_label ?? (r.label ?? "");
+    const canDelete = getRole() === "OWNER";
+    const disableActions = r.isDeleting;
+    const nameHtml = r.isEditingName
+      ? `
+        <div class="field-stack" style="gap:6px;">
+          <input class="input compact" data-action="nameInput" data-id="${r.id}" value="${escapeHtml(inputValue)}" ${billingLocked ? "disabled" : ""} data-autofocus="true" />
+          <div class="muted small">Optional label (e.g., "MST-3 / East Pedestal").</div>
+          <div class="row" style="justify-content:flex-end;">
+            <button class="btn ghost small" data-action="cancelName" data-id="${r.id}" ${disableActions ? "disabled" : ""}>Cancel</button>
+            <button class="btn secondary small" data-action="saveName" data-id="${r.id}" ${billingLocked || disableActions ? "disabled" : ""}>Save</button>
+          </div>
+        </div>
+      `
+      : `<div style="font-weight:900">${escapeHtml(displayName)}</div>`;
     const workCodes = state.locationWorkCodes?.get(r.id);
     const workCodesLabel = workCodes && workCodes.size ? Array.from(workCodes).join(", ") : "None";
     const done = r.completed ? '<span class="pill-ok">COMPLETE</span>' : '<span class="pill-warn">INCOMPLETE</span>';
+    const editNameBtn = r.isEditingName
+      ? ""
+      : `<button class="btn ghost small" data-action="editName" data-id="${r.id}" ${billingLocked || disableActions ? "disabled" : ""}>Edit name</button>`;
+    const deleteBtn = canDelete
+      ? `<button class="btn danger small" data-action="deleteLocation" data-id="${r.id}" ${disableActions ? "disabled" : ""}>${r.isDeleting ? "Deleting..." : "Delete"}</button>`
+      : "";
 
     const card = document.createElement("div");
     card.className = "card location-card";
     card.innerHTML = `
       <div class="row" style="justify-content:space-between;">
         <div>
-          <div style="font-weight:900">${nameHtml}</div>
+          ${nameHtml}
           <div class="muted small">${escapeHtml(r.id)}</div>
           <div class="muted small">Photos: <b>${counts.uploaded}/${counts.required}</b> required</div>
           <div class="muted small">Work codes logged here: <b>${escapeHtml(workCodesLabel)}</b></div>
         </div>
-        <div>${done}</div>
+        <div>
+          <div style="display:flex; justify-content:flex-end;">${done}</div>
+          <div class="row" style="justify-content:flex-end; margin-top:6px;">
+            ${editNameBtn}
+            ${deleteBtn}
+          </div>
+        </div>
       </div>
       <div class="hr"></div>
       ${r.isEditingPorts ? `
@@ -919,14 +978,14 @@ function renderLocations(){
           <div class="muted small">Required = ports + 1 completion.</div>
         </div>
         <div class="row" style="justify-content:flex-end;">
-          <button class="btn ghost" data-action="cancelPorts" data-id="${r.id}">Cancel</button>
-          <button class="btn secondary" data-action="savePorts" data-id="${r.id}">Save ports</button>
+          <button class="btn ghost" data-action="cancelPorts" data-id="${r.id}" ${disableActions ? "disabled" : ""}>Cancel</button>
+          <button class="btn secondary" data-action="savePorts" data-id="${r.id}" ${disableActions ? "disabled" : ""}>Save ports</button>
         </div>
         <div class="muted small">Required photos update after Save.</div>
       ` : `
         <div class="row" style="align-items:center; justify-content:space-between;">
           <div class="muted small">Ports required: <b>${activePorts}</b></div>
-          <button class="btn ghost" data-action="editPorts" data-id="${r.id}" ${billingLocked ? "disabled" : ""}>Edit ports</button>
+          <button class="btn ghost" data-action="editPorts" data-id="${r.id}" ${billingLocked || disableActions ? "disabled" : ""}>Edit ports</button>
         </div>
       `}
       <div class="hr"></div>
@@ -948,6 +1007,12 @@ function renderLocations(){
       const file = target.files?.[0];
       await handleSpliceSlotPhotoUpload(locId, slotKey, file);
       target.value = "";
+      return;
+    }
+    if (target.dataset.action === "nameInput"){
+      const loc = node.splice_locations.find(x => x.id === target.dataset.id);
+      if (!loc) return;
+      loc.pending_label = target.value;
       return;
     }
     if (target.dataset.action === "portsSelect"){
@@ -973,7 +1038,6 @@ function renderLocations(){
 
   list.addEventListener("click", async (e) => {
     const btn = e.target.closest("button");
-    const label = e.target.closest("[data-action='editName']");
     const removeBtn = e.target.closest("[data-action='removeSlotPhoto']");
     if (removeBtn){
       e.preventDefault();
@@ -983,20 +1047,34 @@ function renderLocations(){
       await deleteSpliceSlotPhoto(locId, slotKey);
       return;
     }
-    if (label){
-      const loc = node.splice_locations.find(x => x.id === label.dataset.id);
+    if (!btn) return;
+    const action = btn.dataset.action;
+    const id = btn.dataset.id;
+    if (action === "editName"){
+      const loc = node.splice_locations.find(x => x.id === id);
       if (!loc) return;
       if (isLocationBillingLocked(loc.id)){
         toast("Billing locked", "Location name is locked after billing is ready.");
         return;
       }
-      loc.isEditing = true;
+      loc.isEditingName = true;
+      loc.pending_label = loc.label ?? "";
       renderLocations();
       return;
     }
-    if (!btn) return;
-    const action = btn.dataset.action;
-    const id = btn.dataset.id;
+    if (action === "saveName"){
+      const input = list.querySelector(`[data-action="nameInput"][data-id="${id}"]`);
+      await saveSpliceLocationName(id, input ? input.value : "");
+      return;
+    }
+    if (action === "cancelName"){
+      cancelSpliceLocationNameEdit(id);
+      return;
+    }
+    if (action === "deleteLocation"){
+      await deleteSpliceLocation(id);
+      return;
+    }
     if (action === "editPorts"){
       const loc = node.splice_locations.find(x => x.id === id);
       if (!loc) return;
@@ -1067,13 +1145,14 @@ function renderLocations(){
       nameInput.focus();
       nameInput.select();
     }, 0);
-    nameInput.addEventListener("blur", async () => {
-      await saveSpliceLocationName(nameInput.dataset.id, nameInput.value);
-    });
     nameInput.addEventListener("keydown", async (e) => {
       if (e.key === "Enter"){
         e.preventDefault();
         await saveSpliceLocationName(nameInput.dataset.id, nameInput.value);
+      }
+      if (e.key === "Escape"){
+        e.preventDefault();
+        cancelSpliceLocationNameEdit(nameInput.dataset.id);
       }
     });
   }
@@ -1167,6 +1246,16 @@ async function updateTerminalPorts(locationId, nextPorts){
   return true;
 }
 
+function cancelSpliceLocationNameEdit(locationId){
+  const node = state.activeNode;
+  if (!node) return;
+  const loc = node.splice_locations.find(x => x.id === locationId);
+  if (!loc) return;
+  loc.isEditingName = false;
+  loc.pending_label = null;
+  renderLocations();
+}
+
 async function saveSpliceLocationName(locationId, nextName){
   const node = state.activeNode;
   if (!node) return;
@@ -1174,38 +1263,136 @@ async function saveSpliceLocationName(locationId, nextName){
   if (!loc) return;
   if (isLocationBillingLocked(loc.id)){
     toast("Billing locked", "Location name is locked after billing is ready.");
-    loc.isEditing = false;
+    loc.isEditingName = false;
+    loc.pending_label = null;
     renderLocations();
     return;
   }
   const trimmed = String(nextName || "").trim();
-  if (!trimmed){
-    toast("Name required", "Enter a location name.");
+  const currentLabel = String(loc.label || "").trim();
+  if (trimmed === currentLabel){
+    loc.isEditingName = false;
+    loc.pending_label = null;
     renderLocations();
     return;
   }
-  if (trimmed === loc.name){
-    loc.isEditing = false;
-    renderLocations();
-    return;
-  }
+  const ordered = getSortedSpliceLocations(node);
+  const index = ordered.findIndex((row) => row.id === loc.id);
+  const fallbackName = getSpliceLocationDefaultName(index);
+  const nextLabel = trimmed || null;
+  const nextLegacyLabel = trimmed || fallbackName;
   if (isDemo){
-    loc.name = trimmed;
-    loc.isEditing = false;
+    loc.label = nextLabel;
+    loc.location_label = nextLegacyLabel;
+    loc.isEditingName = false;
+    loc.pending_label = null;
     renderLocations();
     return;
   }
   const { error } = await state.client
     .from("splice_locations")
-    .update({ location_label: trimmed })
+    .update({ label: nextLabel, location_label: nextLegacyLabel })
     .eq("id", loc.id);
   if (error){
     toast("Rename failed", error.message);
     return;
   }
-  loc.name = trimmed;
-  loc.isEditing = false;
+  loc.label = nextLabel;
+  loc.location_label = nextLegacyLabel;
+  loc.isEditingName = false;
+  loc.pending_label = null;
   renderLocations();
+}
+
+async function deleteSpliceLocation(locationId){
+  const node = state.activeNode;
+  if (!node) return;
+  const loc = node.splice_locations.find(l => l.id === locationId);
+  if (!loc) return;
+  if (getRole() !== "OWNER"){
+    toast("Not allowed", "Only OWNER can delete locations.");
+    return;
+  }
+  if (loc.isDeleting) return;
+  const confirmText = "Delete splice location?\nThis will remove the splice location and all its photos. This cannot be undone.";
+  if (!confirm(confirmText)) return;
+  const typed = prompt("Type DELETE to confirm.");
+  if (typed !== "DELETE"){
+    toast("Delete canceled", "Type DELETE to confirm.");
+    return;
+  }
+
+  loc.isDeleting = true;
+  renderLocations();
+
+  if (isDemo){
+    node.splice_locations = (node.splice_locations || []).filter(l => l.id !== loc.id);
+    if (state.billingLocation?.id === loc.id){
+      state.billingLocation = null;
+      renderBillingDetail();
+    }
+    renderLocations();
+    updateKPI();
+    renderProofChecklist();
+    await loadBillingLocations(state.activeProject?.id || null);
+    toast("Deleted", "Splice location deleted.");
+    return;
+  }
+
+  const { data: photos, error: photoErr } = await state.client
+    .from("splice_location_photos")
+    .select("photo_path")
+    .eq("splice_location_id", loc.id);
+  if (photoErr){
+    toast("Delete failed", photoErr.message);
+    loc.isDeleting = false;
+    renderLocations();
+    return;
+  }
+
+  const photoPaths = (photos || []).map(row => row.photo_path).filter(Boolean);
+  if (photoPaths.length){
+    const { error: storageErr } = await state.client
+      .storage
+      .from("proof-photos")
+      .remove(photoPaths);
+    if (storageErr){
+      toast("Storage cleanup failed", storageErr.message);
+    }
+  }
+
+  const { error: deletePhotosErr } = await state.client
+    .from("splice_location_photos")
+    .delete()
+    .eq("splice_location_id", loc.id);
+  if (deletePhotosErr){
+    toast("Delete failed", deletePhotosErr.message);
+    loc.isDeleting = false;
+    renderLocations();
+    return;
+  }
+
+  const { error: deleteLocErr } = await state.client
+    .from("splice_locations")
+    .delete()
+    .eq("id", loc.id);
+  if (deleteLocErr){
+    toast("Delete failed", deleteLocErr.message);
+    loc.isDeleting = false;
+    renderLocations();
+    return;
+  }
+
+  node.splice_locations = (node.splice_locations || []).filter(l => l.id !== loc.id);
+  if (state.billingLocation?.id === loc.id){
+    state.billingLocation = null;
+    renderBillingDetail();
+  }
+  renderLocations();
+  updateKPI();
+  renderProofChecklist();
+  await loadBillingLocations(state.activeProject?.id || null);
+  toast("Deleted", "Splice location deleted.");
 }
 
 async function handleSpliceSlotPhotoUpload(locationId, slotKey, file){
@@ -1919,7 +2106,7 @@ function renderBillingLocations(){
       <div class="billing-location-card ${disabled ? "disabled" : ""}">
         <div class="row" style="justify-content:space-between;">
           <div>
-            <div style="font-weight:900">${escapeHtml(loc.location_label || "Splice location")}</div>
+            <div style="font-weight:900">${escapeHtml(getSpliceLocationDisplayName(loc))}</div>
             <div class="muted small">${escapeHtml(loc.node_number || "")}</div>
           </div>
           <span class="status-pill ${proofOk ? "ok" : "warn"}">${proofLabel} ${proofOk ? "OK" : "LOCKED"}</span>
@@ -1967,7 +2154,7 @@ function renderBillingDetail(){
 
   wrap.innerHTML = `
     <div class="note">
-      <div style="font-weight:900;">${escapeHtml(loc.location_label || "Location")}</div>
+      <div style="font-weight:900;">${escapeHtml(getSpliceLocationDisplayName(loc))}</div>
       <div class="muted small">Node: ${escapeHtml(loc.node_number || "-")}</div>
       <div class="muted small">Proof: ${proofLabel} ${proofOk ? "OK" : "LOCKED"}</div>
       <div class="muted small">Rate card: ${escapeHtml(rateCard?.name || "Default")}</div>
@@ -2432,7 +2619,7 @@ function exportInvoiceCsv(){
     ["Invoice Number", invoice.invoice_number || ""],
     ["Project", project?.name || ""],
     ["Job Number", project?.job_number || ""],
-    ["Location", loc.location_label || ""],
+    ["Location", getSpliceLocationDisplayName(loc)],
     ["Prepared By", state.profile?.display_name || state.user?.email || ""],
     ["Prepared At", new Date().toLocaleString()],
     ["Work Codes", (state.billingItems || []).map(i => getWorkCodeById(i.work_code_id)?.code).filter(Boolean).join(", ")],
@@ -2499,7 +2686,7 @@ function printInvoice(){
       <body>
         <h1>Invoice ${invoice.invoice_number || ""}</h1>
         <div class="meta">Project: ${escapeHtml(project?.name || "")} (${escapeHtml(project?.job_number || "")})</div>
-        <div class="meta">Location: ${escapeHtml(loc.location_label || "")}</div>
+        <div class="meta">Location: ${escapeHtml(getSpliceLocationDisplayName(loc))}</div>
         <div class="meta">Prepared by: ${escapeHtml(state.profile?.display_name || state.user?.email || "")}</div>
         <div class="meta">Prepared at: ${escapeHtml(now)}</div>
         <div class="meta">Work codes: ${escapeHtml(codeList || "-")}</div>
@@ -2906,12 +3093,12 @@ function renderProofChecklist(){
     <table class="table">
       <thead><tr><th>Location</th><th>Photos</th><th>Status</th></tr></thead>
       <tbody>
-        ${locs.map((loc) => {
+        ${locs.map((loc, index) => {
           const counts = countRequiredSlotUploads(loc);
           const ok = counts.uploaded >= counts.required;
           return `
             <tr>
-              <td>${escapeHtml(loc.name)}</td>
+              <td>${escapeHtml(getSpliceLocationDisplayName(loc, index))}</td>
               <td>${counts.uploaded}/${counts.required}</td>
               <td>${ok ? '<span class="pill-ok">OK</span>' : '<span class="pill-warn">Missing</span>'}</td>
             </tr>
@@ -2934,10 +3121,10 @@ function renderBackfillPanel(){
     return;
   }
   panel.style.display = "";
-  const locs = node.splice_locations || [];
+  const locs = getSortedSpliceLocations(node);
   const current = select.value;
   const options = ['<option value=\"\">Select splice location</option>'].concat(
-    locs.map((loc) => `<option value=\"${loc.id}\">${escapeHtml(loc.name || loc.location_label || loc.id)}</option>`)
+    locs.map((loc, index) => `<option value=\"${loc.id}\">${escapeHtml(getSpliceLocationDisplayName(loc, index))}</option>`)
   );
   select.innerHTML = options.join("");
   if (current && locs.some(l => l.id === current)){
@@ -3052,20 +3239,22 @@ function makeFileFromBlob(blob){
 async function addSpliceLocation(){
   const node = state.activeNode;
   if (!node) return;
-  const n = (node.splice_locations?.length || 0) + 1;
-  const tempName = `Splice location ${n}`;
+  const nextSortOrder = Math.max(...(node.splice_locations || []).map(l => l.sort_order || 0), 0) + 1;
+  const tempName = getSpliceLocationDefaultName(nextSortOrder - 1);
   if (isDemo){
     node.splice_locations = node.splice_locations || [];
     node.splice_locations.push({
       id: `loc-${Date.now()}`,
-      name: tempName,
+      label: null,
+      location_label: tempName,
       gps: null,
       photo: null,
       taken_at: null,
       completed: false,
       terminal_ports: DEFAULT_TERMINAL_PORTS,
       photosBySlot: {},
-      isEditing: true,
+      sort_order: nextSortOrder,
+      isEditingName: true,
     });
     renderLocations();
     updateKPI();
@@ -3078,9 +3267,11 @@ async function addSpliceLocation(){
     .insert({
       node_id: node.id,
       location_label: tempName,
+      label: null,
       terminal_ports: DEFAULT_TERMINAL_PORTS,
+      sort_order: nextSortOrder,
     })
-    .select("id, location_label, gps_lat, gps_lng, gps_accuracy_m, photo_path, taken_at, completed, terminal_ports")
+    .select("id, label, location_label, gps_lat, gps_lng, gps_accuracy_m, photo_path, taken_at, completed, terminal_ports, sort_order, created_at")
     .maybeSingle();
 
   if (error){
@@ -3090,7 +3281,8 @@ async function addSpliceLocation(){
   node.splice_locations = node.splice_locations || [];
   node.splice_locations.push({
     id: data.id,
-    name: data.location_label,
+    label: data.label,
+    location_label: data.location_label,
     gps: (data.gps_lat != null && data.gps_lng != null)
       ? { lat: data.gps_lat, lng: data.gps_lng, accuracy_m: data.gps_accuracy_m }
       : null,
@@ -3099,7 +3291,9 @@ async function addSpliceLocation(){
     completed: data.completed,
     terminal_ports: normalizeTerminalPorts(data.terminal_ports ?? DEFAULT_TERMINAL_PORTS),
     photosBySlot: {},
-    isEditing: true,
+    sort_order: data.sort_order ?? nextSortOrder,
+    created_at: data.created_at,
+    isEditingName: true,
   });
   renderLocations();
   updateKPI();
@@ -3216,8 +3410,10 @@ async function openNode(nodeNumber){
   const [spliceRes, invRes, subInvRes, primeInvRes] = await Promise.all([
     state.client
       .from("splice_locations")
-      .select("id, location_label, gps_lat, gps_lng, gps_accuracy_m, photo_path, taken_at, completed, terminal_ports")
-      .eq("node_id", node.id),
+      .select("id, label, location_label, gps_lat, gps_lng, gps_accuracy_m, photo_path, taken_at, completed, terminal_ports, sort_order, created_at")
+      .eq("node_id", node.id)
+      .order("sort_order", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true }),
     state.client
       .from("node_inventory")
       .select("id, item_id, qty_used, planned_qty, completed, inventory_items(id, vendor_code, display_name, photo_path)")
@@ -3247,7 +3443,8 @@ async function openNode(nodeNumber){
 
   node.splice_locations = (spliceRes.data || []).map((r) => ({
     id: r.id,
-    name: r.location_label,
+    label: r.label ?? null,
+    location_label: r.location_label,
     gps: (r.gps_lat != null && r.gps_lng != null)
       ? { lat: r.gps_lat, lng: r.gps_lng, accuracy_m: r.gps_accuracy_m }
       : null,
@@ -3256,6 +3453,8 @@ async function openNode(nodeNumber){
     completed: r.completed,
     terminal_ports: normalizeTerminalPorts(r.terminal_ports ?? DEFAULT_TERMINAL_PORTS),
     photosBySlot: {},
+    sort_order: r.sort_order,
+    created_at: r.created_at,
   }));
 
   node.inventory_checks = (invRes.data || []).map((r) => ({

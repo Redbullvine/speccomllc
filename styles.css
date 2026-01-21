@@ -116,6 +116,12 @@ h2::after{
   color:var(--muted);
   font-weight:800;
 }
+.btn.danger{
+  background: rgba(239,68,68,.12);
+  border:1px solid rgba(239,68,68,.55);
+  color:#fca5a5;
+  font-weight:800;
+}
 .btn:disabled{opacity:.55; cursor:not-allowed}
 .input, select{
   background: rgba(7,20,38,.7);
@@ -125,6 +131,11 @@ h2::after{
   border-radius: 12px;
   min-width: 220px;
   flex:1 1 220px;
+}
+.input.compact{
+  min-width: 200px;
+  max-width: 320px;
+  flex: 0 1 320px;
 }
 .input:focus, select:focus{
   outline:none;
