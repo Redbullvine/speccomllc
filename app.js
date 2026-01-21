@@ -74,6 +74,12 @@ const DEFAULT_RATE_CARD_NAME = String(
   || (window.process && window.process.env && window.process.env.DEFAULT_RATE_CARD_NAME)
   || ""
 ).trim();
+const SINGLE_PROOF_PHOTO_MODE = String(
+  (window.__ENV && window.__ENV.SINGLE_PROOF_PHOTO_MODE)
+  || (window.ENV && window.ENV.SINGLE_PROOF_PHOTO_MODE)
+  || (window.process && window.process.env && window.process.env.SINGLE_PROOF_PHOTO_MODE)
+  || ""
+).toLowerCase() === "true";
 
 function normalizeTerminalPorts(value){
   const parsed = Number.parseInt(value, 10);
@@ -937,7 +943,9 @@ function renderLocations(){
       : `<div style="font-weight:900">${escapeHtml(displayName)}</div>`;
     const workCodes = state.locationWorkCodes?.get(r.id);
     const workCodesLabel = workCodes && workCodes.size ? Array.from(workCodes).join(", ") : "None";
-    const done = r.completed ? '<span class="pill-ok">COMPLETE</span>' : '<span class="pill-warn">INCOMPLETE</span>';
+    const done = SINGLE_PROOF_PHOTO_MODE
+      ? ""
+      : (r.completed ? '<span class="pill-ok">COMPLETE</span>' : '<span class="pill-warn">INCOMPLETE</span>');
     const editNameBtn = r.isEditingName
       ? ""
       : `<button class="btn ghost small" data-action="editName" data-id="${r.id}" ${billingLocked || disableActions ? "disabled" : ""}>Edit name</button>`;
@@ -952,11 +960,11 @@ function renderLocations(){
         <div>
           ${nameHtml}
           <div class="muted small">${escapeHtml(r.id)}</div>
-          <div class="muted small">Photos: <b>${counts.uploaded}/${counts.required}</b> required</div>
+          ${SINGLE_PROOF_PHOTO_MODE ? "" : `<div class="muted small">Photos: <b>${counts.uploaded}/${counts.required}</b> required</div>`}
           <div class="muted small">Work codes logged here: <b>${escapeHtml(workCodesLabel)}</b></div>
         </div>
         <div>
-          <div style="display:flex; justify-content:flex-end;">${done}</div>
+          ${done ? `<div style="display:flex; justify-content:flex-end;">${done}</div>` : ""}
           <div class="row" style="justify-content:flex-end; margin-top:6px;">
             ${editNameBtn}
             ${deleteBtn}
@@ -975,13 +983,13 @@ function renderLocations(){
             <option value="custom" ${portValue === "custom" ? "selected" : ""}>Custom</option>
           </select>
           <input class="input" type="number" min="1" max="8" step="1" data-action="portsCustom" data-id="${r.id}" value="${customValue}" ${customStyle} style="width:120px; flex:0 0 auto;" />
-          <div class="muted small">Required = ports + 1 completion.</div>
+          ${SINGLE_PROOF_PHOTO_MODE ? "" : '<div class="muted small">Required = ports + 1 completion.</div>'}
         </div>
         <div class="row" style="justify-content:flex-end;">
           <button class="btn ghost" data-action="cancelPorts" data-id="${r.id}" ${disableActions ? "disabled" : ""}>Cancel</button>
           <button class="btn secondary" data-action="savePorts" data-id="${r.id}" ${disableActions ? "disabled" : ""}>Save ports</button>
         </div>
-        <div class="muted small">Required photos update after Save.</div>
+        ${SINGLE_PROOF_PHOTO_MODE ? "" : '<div class="muted small">Required photos update after Save.</div>'}
       ` : `
         <div class="row" style="align-items:center; justify-content:space-between;">
           <div class="muted small">Ports required: <b>${activePorts}</b></div>
