@@ -1241,7 +1241,7 @@ function renderLocations(){
     if (billingLocked && r.isEditingPorts) r.isEditingPorts = false;
     const displayName = getSpliceLocationDisplayName(r, index);
     const inputValue = r.pending_label ?? (r.label ?? "");
-    const canDelete = getRole() === "OWNER";
+    const canDelete = BUILD_MODE ? true : getRole() === "OWNER";
     const disableActions = r.isDeleting;
     const nameHtml = r.isEditingName
       ? `
@@ -1263,8 +1263,8 @@ function renderLocations(){
     const editNameBtn = r.isEditingName
       ? ""
       : `<button class="btn ghost small" data-action="editName" data-id="${r.id}" ${billingLocked || disableActions ? "disabled" : ""}>Edit name</button>`;
-    const deleteBtn = canDelete
-      ? `<button class="btn danger small" data-action="deleteLocation" data-id="${r.id}" ${disableActions ? "disabled" : ""}>${r.isDeleting ? "Deleting..." : "Delete"}</button>`
+    const deleteBtn = canDelete && !r.isEditingPorts
+      ? `<button class="btn danger small" data-action="deleteLocation" data-id="${r.id}" ${disableActions ? "disabled" : ""}>${r.isDeleting ? "Deleting..." : "Delete location"}</button>`
       : "";
 
     const card = document.createElement("div");
@@ -1281,7 +1281,6 @@ function renderLocations(){
           ${done ? `<div style="display:flex; justify-content:flex-end;">${done}</div>` : ""}
           <div class="row" style="justify-content:flex-end; margin-top:6px;">
             ${editNameBtn}
-            ${deleteBtn}
           </div>
         </div>
       </div>
@@ -1307,7 +1306,10 @@ function renderLocations(){
       ` : `
         <div class="row" style="align-items:center; justify-content:space-between;">
           <div class="muted small">Ports required: <b>${activePorts}</b></div>
-          <button class="btn ghost" data-action="editPorts" data-id="${r.id}" ${billingLocked || disableActions ? "disabled" : ""}>Edit ports</button>
+          <div class="row" style="justify-content:flex-end;">
+            <button class="btn ghost" data-action="editPorts" data-id="${r.id}" ${billingLocked || disableActions ? "disabled" : ""}>Edit ports</button>
+            ${deleteBtn}
+          </div>
         </div>
       `}
       <div class="hr"></div>
@@ -1394,7 +1396,7 @@ function renderLocations(){
       return;
     }
     if (action === "deleteLocation"){
-      await deleteSpliceLocation(id);
+      openDeleteSpliceLocationModal(id);
       return;
     }
     if (action === "editPorts"){
@@ -1626,22 +1628,97 @@ async function saveSpliceLocationName(locationId, nextName){
   renderLocations();
 }
 
-async function deleteSpliceLocation(locationId){
+let deleteSpliceModalState = { locationId: null };
+
+function ensureDeleteSpliceModal(){
+  let modal = document.getElementById("deleteSpliceModal");
+  if (modal) return modal;
+  modal = document.createElement("div");
+  modal.id = "deleteSpliceModal";
+  modal.className = "modal-backdrop";
+  modal.innerHTML = `
+    <div class="modal">
+      <div class="modal-title">Delete splice location?</div>
+      <div class="modal-body">This removes this location and all photos. This cannot be undone.</div>
+      <input id="deleteSpliceConfirmInput" class="input compact" placeholder="Type DELETE to confirm" />
+      <div class="modal-actions">
+        <button class="btn ghost" data-action="cancel">Cancel</button>
+        <button class="btn danger" data-action="confirm" disabled>Delete</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  const input = modal.querySelector("#deleteSpliceConfirmInput");
+  const cancelBtn = modal.querySelector("[data-action='cancel']");
+  const confirmBtn = modal.querySelector("[data-action='confirm']");
+
+  const updateState = () => {
+    confirmBtn.disabled = input.value.trim() !== "DELETE";
+  };
+
+  input.addEventListener("input", updateState);
+  cancelBtn.addEventListener("click", () => closeDeleteSpliceModal());
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeDeleteSpliceModal();
+  });
+  confirmBtn.addEventListener("click", async () => {
+    if (confirmBtn.disabled) return;
+    confirmBtn.disabled = true;
+    const prior = confirmBtn.textContent;
+    confirmBtn.textContent = "Deleting...";
+    const ok = await deleteSpliceLocation(deleteSpliceModalState.locationId, { skipConfirm: true });
+    confirmBtn.textContent = prior;
+    updateState();
+    if (ok) closeDeleteSpliceModal();
+  });
+  updateState();
+  return modal;
+}
+
+function openDeleteSpliceLocationModal(locationId){
   const node = state.activeNode;
   if (!node) return;
-  const loc = node.splice_locations.find(l => l.id === locationId);
-  if (!loc) return;
-  if (getRole() !== "OWNER"){
+  const canDelete = BUILD_MODE ? true : getRole() === "OWNER";
+  if (!canDelete){
     toast("Not allowed", "Only OWNER can delete locations.");
     return;
   }
-  if (loc.isDeleting) return;
-  const confirmText = "Delete splice location?\nThis will remove the splice location and all its photos. This cannot be undone.";
-  if (!confirm(confirmText)) return;
-  const typed = prompt("Type DELETE to confirm.");
-  if (typed !== "DELETE"){
-    toast("Delete canceled", "Type DELETE to confirm.");
-    return;
+  const modal = ensureDeleteSpliceModal();
+  deleteSpliceModalState.locationId = locationId;
+  const input = modal.querySelector("#deleteSpliceConfirmInput");
+  const confirmBtn = modal.querySelector("[data-action='confirm']");
+  input.value = "";
+  confirmBtn.disabled = true;
+  modal.classList.add("show");
+  setTimeout(() => input.focus(), 0);
+}
+
+function closeDeleteSpliceModal(){
+  const modal = document.getElementById("deleteSpliceModal");
+  if (!modal) return;
+  modal.classList.remove("show");
+  deleteSpliceModalState.locationId = null;
+}
+
+async function deleteSpliceLocation(locationId, options = {}){
+  const node = state.activeNode;
+  if (!node) return false;
+  const loc = node.splice_locations.find(l => l.id === locationId);
+  if (!loc) return false;
+  const canDelete = BUILD_MODE ? true : getRole() === "OWNER";
+  if (!canDelete){
+    toast("Not allowed", "Only OWNER can delete locations.");
+    return false;
+  }
+  if (loc.isDeleting) return false;
+  if (!options.skipConfirm){
+    const confirmText = "Delete splice location?\nThis will remove the splice location and all its photos. This cannot be undone.";
+    if (!confirm(confirmText)) return false;
+    const typed = prompt("Type DELETE to confirm.");
+    if (typed !== "DELETE"){
+      toast("Delete canceled", "Type DELETE to confirm.");
+      return false;
+    }
   }
 
   loc.isDeleting = true;
@@ -1658,7 +1735,7 @@ async function deleteSpliceLocation(locationId){
     renderProofChecklist();
     await loadBillingLocations(state.activeProject?.id || null);
     toast("Deleted", "Splice location deleted.");
-    return;
+    return true;
   }
 
   const { data: photos, error: photoErr } = await state.client
@@ -1669,7 +1746,7 @@ async function deleteSpliceLocation(locationId){
     toast("Delete failed", photoErr.message);
     loc.isDeleting = false;
     renderLocations();
-    return;
+    return false;
   }
 
   const photoPaths = (photos || []).map(row => row.photo_path).filter(Boolean);
@@ -1691,7 +1768,7 @@ async function deleteSpliceLocation(locationId){
     toast("Delete failed", deletePhotosErr.message);
     loc.isDeleting = false;
     renderLocations();
-    return;
+    return false;
   }
 
   const { error: deleteLocErr } = await state.client
@@ -1702,7 +1779,7 @@ async function deleteSpliceLocation(locationId){
     toast("Delete failed", deleteLocErr.message);
     loc.isDeleting = false;
     renderLocations();
-    return;
+    return false;
   }
 
   node.splice_locations = (node.splice_locations || []).filter(l => l.id !== loc.id);
@@ -1715,6 +1792,7 @@ async function deleteSpliceLocation(locationId){
   renderProofChecklist();
   await loadBillingLocations(state.activeProject?.id || null);
   toast("Deleted", "Splice location deleted.");
+  return true;
 }
 
 async function handleSpliceSlotPhotoUpload(locationId, slotKey, file){

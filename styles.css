@@ -218,6 +218,35 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
 .toast.show{display:block}
 .toast .title{font-weight:900}
 .toast .body{color:var(--muted); margin-top:4px}
+.modal-backdrop{
+  position:fixed;
+  inset:0;
+  background:rgba(5,12,23,.72);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+  z-index: 50;
+}
+.modal-backdrop.show{display:flex;}
+.modal{
+  width:min(520px, 96vw);
+  background: rgba(7,20,38,.95);
+  border:1px solid rgba(27,59,90,.8);
+  border-radius:16px;
+  padding:16px;
+  box-shadow: var(--shadow);
+  display:grid;
+  gap:12px;
+}
+.modal-title{font-weight:900; font-size:18px}
+.modal-body{color:var(--muted)}
+.modal-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:10px;
+  flex-wrap:wrap;
+}
 .footer{
   margin-top:20px;
   padding-top:14px;
