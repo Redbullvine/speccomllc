@@ -50,6 +50,7 @@ const state = {
     activeOnly: true,
     search: "",
   },
+  storageUrlCache: new Map(),
   realtime: {
     usageChannel: null,
   },
@@ -204,6 +205,14 @@ const I18N = {
     openNodePhotoRequirements: "Open a node to see photo requirements.",
     noNodeSelected: "No node selected.",
     spliceLocationLabel: "Splice location",
+    codesUsedTitle: "Codes used",
+    briefDescriptionTitle: "Brief description",
+    editCodesLabel: "Edit",
+    saveLabel: "Save",
+    cancelLabel: "Cancel",
+    noneLabel: "None",
+    codesPlaceholder: "Enter codes separated by commas",
+    descriptionPlaceholder: "Brief description (max 400 chars)",
     noInvoices: "No invoices created yet.",
     fromLabel: "From",
     toLabel: "To",
@@ -367,6 +376,14 @@ const I18N = {
     openNodePhotoRequirements: "Abre un nodo para ver requisitos de fotos.",
     noNodeSelected: "No hay nodo seleccionado.",
     spliceLocationLabel: "Ubicación de empalme",
+    codesUsedTitle: "Códigos usados",
+    briefDescriptionTitle: "Descripción breve",
+    editCodesLabel: "Editar",
+    saveLabel: "Guardar",
+    cancelLabel: "Cancelar",
+    noneLabel: "Ninguno",
+    codesPlaceholder: "Ingresa códigos separados por comas",
+    descriptionPlaceholder: "Descripción breve (máx 400 caracteres)",
     noInvoices: "Aún no hay facturas.",
     fromLabel: "De",
     toLabel: "Para",
@@ -439,6 +456,35 @@ function applyI18n(root = document){
     const key = el.getAttribute("data-i18n-placeholder");
     if (key) el.setAttribute("placeholder", t(key));
   });
+}
+
+async function getPublicOrSignedUrl(bucket, storagePath){
+  if (!storagePath || !state.client) return "";
+  const cached = state.storageUrlCache.get(storagePath);
+  if (cached && cached.expiresAt > Date.now()){
+    return cached.url;
+  }
+  const storage = state.client.storage?.from(bucket);
+  if (!storage) return "";
+  try{
+    const { data, error } = await storage.createSignedUrl(storagePath, 60 * 60);
+    if (!error && data?.signedUrl){
+      state.storageUrlCache.set(storagePath, {
+        url: data.signedUrl,
+        expiresAt: Date.now() + 55 * 60 * 1000,
+      });
+      return data.signedUrl;
+    }
+  } catch {}
+  const { data } = storage.getPublicUrl(storagePath);
+  if (data?.publicUrl){
+    state.storageUrlCache.set(storagePath, {
+      url: data.publicUrl,
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+    });
+    return data.publicUrl;
+  }
+  return "";
 }
 
 function renderTranslatedText(sourceText, { valueClass = "muted small" } = {}){
@@ -621,6 +667,77 @@ function getSpliceLocationDisplayName(loc, index){
   const legacy = String(loc?.location_label ?? loc?.name ?? "").trim();
   if (legacy) return legacy;
   return t("spliceLocationLabel");
+}
+
+function normalizeWorkCodes(input){
+  return String(input || "")
+    .split(",")
+    .map((part) => part.trim().replace(/\s+/g, " ").toUpperCase())
+    .filter(Boolean);
+}
+
+function renderCodesSection(loc){
+  const codes = Array.isArray(loc.work_codes) ? loc.work_codes : [];
+  const description = String(loc.work_description || "");
+  const isEditing = Boolean(loc.isEditingCodes);
+  const template = $("spliceCodesTemplate");
+  const codesHtml = codes.length
+    ? codes.map((code) => `<span class="code-chip">${escapeHtml(code)}</span>`).join("")
+    : `<span class="muted small">${t("noneLabel")}</span>`;
+  const descHtml = description.trim()
+    ? `<div class="muted small">${escapeHtml(description)}</div>`
+    : `<div class="muted small">${t("noneLabel")}</div>`;
+
+  const editBody = isEditing
+    ? `
+      <div class="field-stack" style="margin-top:10px;">
+        <input class="input code-input" data-action="codesInput" data-location-id="${loc.id}" value="${escapeHtml((loc.pending_work_codes || codes).join(", "))}" placeholder="${t("codesPlaceholder")}" />
+        <textarea class="input desc-textarea" data-action="descInput" data-location-id="${loc.id}" maxlength="400" placeholder="${t("descriptionPlaceholder")}">${escapeHtml(loc.pending_work_description ?? description)}</textarea>
+        <div class="row" style="justify-content:flex-end;">
+          <button class="btn ghost small" data-action="cancelCodes" data-id="${loc.id}">${t("cancelLabel")}</button>
+          <button class="btn secondary small" data-action="saveCodes" data-id="${loc.id}">${t("saveLabel")}</button>
+        </div>
+      </div>
+    `
+    : "";
+  const actionsHtml = isEditing
+    ? ""
+    : `<button class="btn ghost small" data-action="editCodes" data-id="${loc.id}">${t("editCodesLabel")}</button>`;
+
+  if (template){
+    const fragment = template.content.cloneNode(true);
+    const wrapper = document.createElement("div");
+    wrapper.appendChild(fragment);
+    const title = wrapper.querySelector("[data-role=\"codes-title\"]");
+    if (title) title.textContent = t("codesUsedTitle");
+    const descTitle = wrapper.querySelector("[data-role=\"desc-title\"]");
+    if (descTitle) descTitle.textContent = t("briefDescriptionTitle");
+    const actions = wrapper.querySelector("[data-role=\"codes-actions\"]");
+    if (actions) actions.innerHTML = actionsHtml;
+    const codesBody = wrapper.querySelector("[data-role=\"codes-body\"]");
+    if (codesBody) codesBody.innerHTML = isEditing ? "" : codesHtml;
+    const descBody = wrapper.querySelector("[data-role=\"desc-body\"]");
+    if (descBody) descBody.innerHTML = isEditing ? "" : descHtml;
+    if (isEditing){
+      const editContainer = document.createElement("div");
+      editContainer.innerHTML = editBody;
+      wrapper.querySelector(".codes-section")?.appendChild(editContainer);
+    }
+    return wrapper.innerHTML;
+  }
+
+  return `
+    <div class="codes-section">
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <div class="codes-title">${t("codesUsedTitle")}</div>
+        ${actionsHtml}
+      </div>
+      ${isEditing ? "" : codesHtml}
+      <div class="codes-title" style="margin-top:8px;">${t("briefDescriptionTitle")}</div>
+      ${isEditing ? "" : descHtml}
+      ${editBody}
+    </div>
+  `;
 }
 
 function getSortedSpliceLocations(node){
@@ -1957,8 +2074,11 @@ function renderLocations(){
   rows.forEach((r, index) => {
     r.terminal_ports = normalizeTerminalPorts(r.terminal_ports ?? DEFAULT_TERMINAL_PORTS);
     r.photosBySlot = r.photosBySlot || {};
+    r.work_codes = Array.isArray(r.work_codes) ? r.work_codes : [];
+    r.work_description = r.work_description || "";
     r.isEditingName = Boolean(r.isEditingName);
     r.isEditingPorts = Boolean(r.isEditingPorts);
+    r.isEditingCodes = Boolean(r.isEditingCodes);
     r.isDeleting = Boolean(r.isDeleting);
     const activePorts = normalizeTerminalPorts(r.isEditingPorts ? (r.pending_ports ?? r.terminal_ports) : r.terminal_ports);
     const portValue = [2, 4, 6, 8].includes(activePorts) ? String(activePorts) : "custom";
@@ -2046,6 +2166,8 @@ function renderLocations(){
       <div class="hr"></div>
       ${renderSplicePhotoGrid(r)}
       <div class="hr"></div>
+      ${renderCodesSection(r)}
+      <div class="hr"></div>
       <div class="row">
         <button class="btn ghost" data-action="toggleComplete" data-id="${r.id}" ${disableToggle ? "disabled" : ""}>${r.completed ? "Undo complete" : "Mark complete"}</button>
       </div>
@@ -2092,6 +2214,23 @@ function renderLocations(){
   });
 
   list.addEventListener("click", async (e) => {
+    const openPhoto = e.target.closest("[data-action='openSlotPhoto']");
+    if (openPhoto){
+      e.preventDefault();
+      e.stopPropagation();
+      const url = openPhoto.dataset.url;
+      if (url) window.open(url, "_blank", "noopener");
+      return;
+    }
+    const retakeBtn = e.target.closest("[data-action='retakeSlotPhoto']");
+    if (retakeBtn){
+      e.preventDefault();
+      e.stopPropagation();
+      const inputId = retakeBtn.dataset.inputId;
+      const input = list.querySelector(`input[type="file"][data-input-id="${inputId}"]`);
+      if (input) input.click();
+      return;
+    }
     const btn = e.target.closest("button");
     const removeBtn = e.target.closest("[data-action='removeSlotPhoto']");
     if (removeBtn){
@@ -2158,6 +2297,40 @@ function renderLocations(){
       if (ok){
         loc.isEditingPorts = false;
         loc.pending_ports = null;
+        renderLocations();
+      }
+      return;
+    }
+    if (action === "editCodes"){
+      const loc = node.splice_locations.find(x => x.id === id);
+      if (!loc) return;
+      loc.isEditingCodes = true;
+      loc.pending_work_codes = Array.isArray(loc.work_codes) ? [...loc.work_codes] : [];
+      loc.pending_work_description = loc.work_description || "";
+      renderLocations();
+      return;
+    }
+    if (action === "cancelCodes"){
+      const loc = node.splice_locations.find(x => x.id === id);
+      if (!loc) return;
+      loc.isEditingCodes = false;
+      loc.pending_work_codes = null;
+      loc.pending_work_description = null;
+      renderLocations();
+      return;
+    }
+    if (action === "saveCodes"){
+      const loc = node.splice_locations.find(x => x.id === id);
+      if (!loc) return;
+      const codesInput = list.querySelector(`[data-action="codesInput"][data-location-id="${id}"]`);
+      const descInput = list.querySelector(`[data-action="descInput"][data-location-id="${id}"]`);
+      const nextCodes = normalizeWorkCodes(codesInput?.value || "");
+      const nextDesc = String(descInput?.value || "").trim();
+      const ok = await updateSpliceLocationCodes(id, nextCodes, nextDesc);
+      if (ok){
+        loc.isEditingCodes = false;
+        loc.pending_work_codes = null;
+        loc.pending_work_description = null;
         renderLocations();
       }
       return;
@@ -2231,14 +2404,19 @@ function renderSplicePhotoGrid(loc){
   `;
 }
 
+function getSlotInputId(locId, slotKey){
+  return `slot-${String(locId || "").replace(/[^a-zA-Z0-9_-]/g, "_")}-${String(slotKey || "").replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+}
+
 function renderSpliceSlotCard(loc, slotKey, isRequired){
   const photo = loc.photosBySlot?.[slotKey];
   const label = getSlotLabel(slotKey);
   const badge = isRequired ? "" : '<span class="slot-badge">Extra</span>';
   const timestamp = photo?.taken_at ? new Date(photo.taken_at).toLocaleString() : "";
   const locked = isLocationBillingLocked(loc.id);
-  const thumb = photo?.previewUrl
-    ? `<img class="slot-thumb" src="${photo.previewUrl}" alt="${escapeHtml(label)} photo"/>`
+  const thumbUrl = photo?.previewUrl || "";
+  const thumb = thumbUrl
+    ? `<img class="photo-thumb" src="${thumbUrl}" alt="${escapeHtml(label)} photo" data-action="openSlotPhoto" data-url="${thumbUrl}"/>`
     : photo
       ? `<div class="muted small">Photo captured</div>`
       : "";
@@ -2248,23 +2426,34 @@ function renderSpliceSlotCard(loc, slotKey, isRequired){
       <div class="muted small">Tap to capture</div>
     </div>
   `;
+  const inputId = getSlotInputId(loc.id, slotKey);
+  const inputEl = `<input id="${inputId}" class="file-input-hidden" type="file" accept="image/*" capture="environment" data-location-id="${loc.id}" data-slot-key="${slotKey}" data-input-id="${inputId}" />`;
+  if (!photo){
+    return `
+      <label class="photo-slot ${isRequired ? "" : "extra"}" for="${inputId}">
+        ${inputEl}
+        <div class="row" style="justify-content:space-between; width:100%;">
+          <div class="slot-title">${escapeHtml(label)}</div>
+          ${badge}
+        </div>
+        ${placeholder}
+      </label>
+    `;
+  }
   return `
-    <label class="photo-slot ${isRequired ? "" : "extra"}">
-      <input type="file" accept="image/*" capture="environment" data-location-id="${loc.id}" data-slot-key="${slotKey}" />
+    <div class="photo-slot ${isRequired ? "" : "extra"}">
+      ${inputEl}
       <div class="row" style="justify-content:space-between; width:100%;">
         <div class="slot-title">${escapeHtml(label)}</div>
         ${badge}
       </div>
-      ${photo ? `
-        ${thumb}
-        <div class="slot-meta">${timestamp || "Timestamp pending"}</div>
-        ${locked ? "" : `
-          <div class="row" style="justify-content:flex-end; width:100%;">
-            <button type="button" class="btn ghost small" data-action="removeSlotPhoto" data-location-id="${loc.id}" data-slot-key="${slotKey}">Remove</button>
-          </div>
-        `}
-      ` : placeholder}
-    </label>
+      ${thumb}
+      <div class="slot-meta">${timestamp || "Timestamp pending"}</div>
+      <div class="row" style="justify-content:flex-end; width:100%;">
+        ${locked ? "" : `<button type="button" class="btn ghost small" data-action="retakeSlotPhoto" data-input-id="${inputId}">Upload / Retake</button>`}
+        ${locked ? "" : `<button type="button" class="btn ghost small" data-action="removeSlotPhoto" data-location-id="${loc.id}" data-slot-key="${slotKey}">Remove</button>`}
+      </div>
+    </div>
   `;
 }
 
@@ -2357,6 +2546,34 @@ async function saveSpliceLocationName(locationId, nextName){
   loc.isEditingName = false;
   loc.pending_label = null;
   renderLocations();
+}
+
+async function updateSpliceLocationCodes(locationId, workCodes, workDescription){
+  const node = state.activeNode;
+  if (!node) return false;
+  const loc = node.splice_locations.find(x => x.id === locationId);
+  if (!loc) return false;
+  if (isDemo){
+    loc.work_codes = Array.isArray(workCodes) ? workCodes : [];
+    loc.work_description = workDescription || "";
+    toast("Saved", "Codes and description updated.");
+    return true;
+  }
+  const { error } = await state.client
+    .from("splice_locations")
+    .update({
+      work_codes: Array.isArray(workCodes) ? workCodes : [],
+      work_description: workDescription || "",
+    })
+    .eq("id", locationId);
+  if (error){
+    toast("Save failed", error.message);
+    return false;
+  }
+  loc.work_codes = Array.isArray(workCodes) ? workCodes : [];
+  loc.work_description = workDescription || "";
+  toast("Saved", "Codes and description updated.");
+  return true;
 }
 
 let deleteSpliceModalState = { locationId: null };
@@ -4079,27 +4296,30 @@ async function loadSplicePhotos(nodeId, locs){
     return;
   }
   const byLoc = new Map();
-  (data || []).forEach((row) => {
-    if (!row.slot_key) return;
+  for (const row of (data || [])){
+    if (!row.slot_key) continue;
     const key = row.splice_location_id;
     if (!byLoc.has(key)) byLoc.set(key, {});
     const current = byLoc.get(key);
+    const previewUrl = row.photo_path ? await getPublicOrSignedUrl("proof-photos", row.photo_path) : "";
     current[row.slot_key] = {
       path: row.photo_path,
       taken_at: row.taken_at,
+      previewUrl,
       gps: row.gps_lat != null && row.gps_lng != null
         ? { lat: row.gps_lat, lng: row.gps_lng, accuracy_m: row.gps_accuracy_m }
         : null,
     };
-  });
+  }
   locs.forEach((loc) => {
     const photos = byLoc.get(loc.id) || {};
     const existing = loc.photosBySlot || {};
     const merged = {};
     Object.keys(photos).forEach((slotKey) => {
+      const previewUrl = photos[slotKey]?.previewUrl || existing[slotKey]?.previewUrl || null;
       merged[slotKey] = {
         ...photos[slotKey],
-        previewUrl: existing[slotKey]?.previewUrl || null,
+        previewUrl,
       };
     });
     loc.photosBySlot = merged;
@@ -4436,6 +4656,8 @@ async function addSpliceLocation(){
       taken_at: null,
       completed: false,
       terminal_ports: DEFAULT_TERMINAL_PORTS,
+      work_codes: [],
+      work_description: "",
       photosBySlot: {},
       sort_order: nextSortOrder,
       isEditingName: true,
@@ -4455,7 +4677,7 @@ async function addSpliceLocation(){
       terminal_ports: DEFAULT_TERMINAL_PORTS,
       sort_order: nextSortOrder,
     })
-    .select("id, label, location_label, gps_lat, gps_lng, gps_accuracy_m, photo_path, taken_at, completed, terminal_ports, sort_order, created_at")
+    .select("id, label, location_label, gps_lat, gps_lng, gps_accuracy_m, photo_path, taken_at, completed, terminal_ports, sort_order, created_at, work_codes, work_description")
     .maybeSingle();
 
   if (error){
@@ -4474,6 +4696,8 @@ async function addSpliceLocation(){
     taken_at: data.taken_at,
     completed: data.completed,
     terminal_ports: normalizeTerminalPorts(data.terminal_ports ?? DEFAULT_TERMINAL_PORTS),
+    work_codes: Array.isArray(data.work_codes) ? data.work_codes : [],
+    work_description: data.work_description || "",
     photosBySlot: {},
     sort_order: data.sort_order ?? nextSortOrder,
     created_at: data.created_at,
@@ -4518,6 +4742,8 @@ async function openNode(nodeNumber){
     state.activeNode.splice_locations = (state.activeNode.splice_locations || []).map((loc) => ({
       ...loc,
       terminal_ports: normalizeTerminalPorts(loc.terminal_ports ?? DEFAULT_TERMINAL_PORTS),
+      work_codes: Array.isArray(loc.work_codes) ? loc.work_codes : [],
+      work_description: loc.work_description || "",
       photosBySlot: loc.photosBySlot || {},
     }));
 
@@ -4594,7 +4820,7 @@ async function openNode(nodeNumber){
   const [spliceRes, invRes, subInvRes, primeInvRes] = await Promise.all([
     state.client
       .from("splice_locations")
-      .select("id, label, location_label, gps_lat, gps_lng, gps_accuracy_m, photo_path, taken_at, completed, terminal_ports, sort_order, created_at")
+      .select("id, label, location_label, gps_lat, gps_lng, gps_accuracy_m, photo_path, taken_at, completed, terminal_ports, sort_order, created_at, work_codes, work_description")
       .eq("node_id", node.id)
       .order("sort_order", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: true }),
@@ -4636,6 +4862,8 @@ async function openNode(nodeNumber){
     taken_at: r.taken_at,
     completed: r.completed,
     terminal_ports: normalizeTerminalPorts(r.terminal_ports ?? DEFAULT_TERMINAL_PORTS),
+    work_codes: Array.isArray(r.work_codes) ? r.work_codes : [],
+    work_description: r.work_description || "",
     photosBySlot: {},
     sort_order: r.sort_order,
     created_at: r.created_at,

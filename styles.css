@@ -177,6 +177,27 @@ h2::after{
   padding:7px 10px; border-radius:999px;
   font-size:12px; color:var(--muted)
 }
+.code-chip{
+  display:inline-block;
+  padding:4px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.15);
+  margin:0 6px 6px 0;
+  font-size:12px;
+  color:var(--text);
+  background: rgba(7,26,43,.55);
+}
+.code-input{
+  width:100%;
+}
+.desc-textarea{
+  width:100%;
+  min-height:80px;
+  resize:vertical;
+}
+.codes-title{
+  font-weight:800;
+}
 .dot{width:9px; height:9px; border-radius:99px; display:inline-block; background: var(--muted)}
 .dot.ok{background:var(--ok)}
 .dot.warn{background:var(--warn)}
@@ -469,9 +490,11 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
 }
 .photo-thumb{
   width:100%;
-  max-width:220px;
+  height:100%;
+  object-fit:cover;
   border-radius:12px;
   border:1px solid var(--line);
+  display:block;
 }
 .gps-badge{
   display:inline-flex;
@@ -611,6 +634,13 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
   border-radius:12px;
   border:1px solid var(--line);
   display:block;
+}
+.file-input-hidden{
+  position:absolute;
+  width:1px;
+  height:1px;
+  opacity:0;
+  pointer-events:none;
 }
 .slot-meta{color:var(--muted); font-size:12px}
 .badge.warn{
