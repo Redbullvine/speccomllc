@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SpecCom | Field Verification</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -13,13 +14,13 @@
         <span class="brand-mark">GT</span>
         <div>
           <div class="brand-title">SpecCom</div>
-          <div class="muted small">Field verification, documentation, and billing control</div>
+          <div class="muted small" data-i18n="brandSubtitle">Field verification, documentation, and billing control</div>
         </div>
       </div>
       <div class="row">
         <span id="appModeBadge" class="badge">DEMO</span>
         <span id="whoami" class="badge">Signed out</span>
-        <button id="btnSignOut" class="btn secondary" style="display:none;">Sign out</button>
+        <button id="btnSignOut" class="btn secondary" style="display:none;" data-i18n="signOut">Sign out</button>
       </div>
     </div>
 
@@ -29,33 +30,33 @@
     <div id="viewAuth" class="stack">
       <div class="auth-wrap">
         <div class="card auth-card">
-          <h1>Sign in to SpecCom</h1>
-          <p class="muted">This app requires Supabase Auth. Configure SUPABASE_URL and SUPABASE_ANON_KEY to sign in.</p>
+          <h1 data-i18n="authTitle">Sign in to SpecCom</h1>
+          <p class="muted" data-i18n="authSubtitle">This app requires Supabase Auth. Configure SUPABASE_URL and SUPABASE_ANON_KEY to sign in.</p>
 
           <div class="hr"></div>
 
           <div class="field-stack">
-            <input id="email" class="input" placeholder="email" />
-            <input id="password" class="input" placeholder="password" type="password" />
+            <input id="email" class="input" placeholder="email" data-i18n-placeholder="emailPlaceholder" />
+            <input id="password" class="input" placeholder="password" type="password" data-i18n-placeholder="passwordPlaceholder" />
           </div>
           <div class="row" style="margin-top:12px;">
-            <button id="btnSignIn" class="btn">Sign in</button>
-            <button id="btnMagicLink" class="btn secondary">Send magic link</button>
-            <button id="btnSignUp" class="btn secondary">Create user</button>
+            <button id="btnSignIn" class="btn" data-i18n="signIn">Sign in</button>
+            <button id="btnMagicLink" class="btn secondary" data-i18n="magicLink">Send magic link</button>
+            <button id="btnSignUp" class="btn secondary" data-i18n="createUser">Create user</button>
           </div>
-          <div id="authConfigNote" class="muted small" style="display:none; margin-top:8px;">Supabase not configured.</div>
+          <div id="authConfigNote" class="muted small" style="display:none; margin-top:8px;" data-i18n="authConfigNote">Supabase not configured.</div>
         </div>
       </div>
 
       <div class="grid cols-2">
         <div class="card">
-          <h2>Roles in this build</h2>
-          <div class="muted small">TDS -> PRIME -> SUB -> SPLICER -> OWNER (Spec Communications, LLC Louis Garcia)</div>
+          <h2 data-i18n="rolesTitle">Roles in this build</h2>
+          <div class="muted small" data-i18n="rolesSubtitle">TDS -> PRIME -> SUB -> SPLICER -> OWNER (Spec Communications, LLC Louis Garcia)</div>
         </div>
 
         <div class="card">
-          <h2>Live setup</h2>
-          <div class="muted small">Ensure Supabase Auth, Storage, and RLS policies are configured for your roles.</div>
+          <h2 data-i18n="liveSetupTitle">Live setup</h2>
+          <div class="muted small" data-i18n="liveSetupSubtitle">Ensure Supabase Auth, Storage, and RLS policies are configured for your roles.</div>
         </div>
       </div>
     </div>
@@ -65,19 +66,21 @@
         <div class="card sidebar-card">
           <div class="muted small">Active project</div>
           <select id="projectSelect" class="input">
-            <option value="">Select project</option>
+            <option value="" data-i18n="selectProject">Select project</option>
           </select>
           <div id="projectMeta" class="muted small" style="margin-top:8px;"></div>
         </div>
         <nav class="nav">
-          <button class="nav-item active" data-view="viewDashboard">Dashboard</button>
-          <button class="nav-item" data-view="viewNodes">Nodes</button>
-          <button class="nav-item" data-view="viewPhotos">Photos</button>
-          <button class="nav-item" data-view="viewBilling">Billing</button>
-          <button class="nav-item" data-view="viewInvoices">Invoices</button>
-          <button class="nav-item" data-view="viewCatalog">Material Catalog</button>
-          <button class="nav-item" data-view="viewAlerts">Alerts <span id="alertsNavBadge" class="nav-badge"></span></button>
-          <button class="nav-item" data-view="viewAdmin">Admin</button>
+          <button class="nav-item active" data-view="viewDashboard" data-i18n="navDashboard">Dashboard</button>
+          <button class="nav-item" data-view="viewNodes" data-i18n="navNodes">Nodes</button>
+          <button class="nav-item" data-view="viewPhotos" data-i18n="navPhotos">Photos</button>
+          <button class="nav-item" data-view="viewBilling" data-i18n="navBilling">Billing</button>
+          <button class="nav-item" data-view="viewInvoices" data-i18n="navInvoices">Invoices</button>
+          <button class="nav-item" data-view="viewMap" data-i18n="navMap">Live Map</button>
+          <button class="nav-item" data-view="viewCatalog" data-i18n="navCatalog">Material Catalog</button>
+          <button class="nav-item" data-view="viewAlerts"><span data-i18n="navAlerts">Alerts</span> <span id="alertsNavBadge" class="nav-badge"></span></button>
+          <button class="nav-item" data-view="viewAdmin" data-i18n="navAdmin">Admin</button>
+          <button class="nav-item" data-view="viewSettings" data-i18n="navSettings">Settings</button>
         </nav>
       </aside>
 
@@ -87,51 +90,51 @@
             <div class="row" style="justify-content:space-between;">
               <div>
                 <h2 id="jobTitle">Job 731022136</h2>
-                <div id="jobSubtitle" class="muted small">Ruidoso FTTH Rebuild (node-by-node workflow)</div>
+                <div id="jobSubtitle" class="muted small" data-i18n="jobSubtitle">Ruidoso FTTH Rebuild (node-by-node workflow)</div>
               </div>
-              <div class="no-pay-badge">No pay without photos</div>
+              <div class="no-pay-badge" data-i18n="photosOptionalBadge">Photos optional for MVP</div>
             </div>
             <div id="nodeCards" class="node-grid" style="margin-top:12px;"></div>
           </div>
           <div class="grid cols-2">
             <div class="card">
-              <h2>Active node</h2>
+              <h2 data-i18n="activeNodeTitle">Active node</h2>
               <div class="kpi">
                 <div class="tile">
-                  <div class="label">Node</div>
+                  <div class="label" data-i18n="kpiNode">Node</div>
                   <div id="dashNode" class="value">None</div>
                 </div>
                 <div class="tile">
-                  <div class="label">Completion</div>
+                  <div class="label" data-i18n="kpiCompletion">Completion</div>
                   <div id="dashCompletion" class="value">0%</div>
                 </div>
                 <div class="tile">
-                  <div class="label">Units</div>
+                  <div class="label" data-i18n="kpiUnits">Units</div>
                   <div id="dashUnits" class="value">0 / 0</div>
                 </div>
               </div>
               <div style="margin-top:14px;" class="row">
                 <span id="chipStatus" class="chip"><span class="dot warn"></span><span>Waiting</span></span>
                 <span id="chipRole" class="chip"><span class="dot ok"></span><span>Role: ?</span></span>
-                <span id="chipPricing" class="chip"><span class="dot bad"></span><span>Pricing hidden from splicers</span></span>
+                <span id="chipPricing" class="chip"><span class="dot bad"></span><span data-i18n="pricingHidden">Pricing hidden from splicers</span></span>
                 <span id="chipBuildMode" class="chip" style="display:none;"><span class="dot warn"></span><span>BUILD MODE (restrictions disabled)</span></span>
               </div>
               <div class="hr"></div>
               <div id="photoChecklistSummary" class="note"></div>
             </div>
             <div class="card">
-              <h2>Alerts</h2>
+              <h2 data-i18n="alertsTitle">Alerts</h2>
               <div id="alertsFeed"></div>
             </div>
           </div>
           <div class="grid cols-2" style="margin-top:16px;">
             <div class="card">
-              <h2>Allowed quantities</h2>
+              <h2 data-i18n="allowedQuantitiesTitle">Allowed quantities</h2>
               <div id="allowedQuantities"></div>
             </div>
             <div class="card">
-              <h2>Catalog quick search</h2>
-              <input id="catalogSearchQuick" class="input" placeholder="Search Millennium part, MFG SKU, description" />
+              <h2 data-i18n="catalogQuickSearchTitle">Catalog quick search</h2>
+              <input id="catalogSearchQuick" class="input" placeholder="Search Millennium part, MFG SKU, description" data-i18n-placeholder="catalogSearchPlaceholder" />
               <div id="catalogResultsQuick" class="catalog-list" style="margin-top:12px;"></div>
             </div>
           </div>
@@ -139,30 +142,30 @@
 
         <section id="viewNodes" class="view">
           <div class="card">
-            <h1>Node workspace</h1>
-            <div class="muted small">Only one ACTIVE node at a time. Finish splicing before moving to the next node.</div>
+            <h1 data-i18n="nodesTitle">Node workspace</h1>
+            <div class="muted small" data-i18n="nodesSubtitle">Only one ACTIVE node at a time. Finish splicing before moving to the next node.</div>
 
             <div class="row" style="margin-bottom:12px;">
-              <input id="nodeNumber" class="input" placeholder="Enter node number (example: NODE-1001)" />
-              <button id="btnOpenNode" class="btn">Open node</button>
-              <button id="btnNewNode" class="btn secondary">Create node</button>
+              <input id="nodeNumber" class="input" placeholder="Enter node number (example: NODE-1001)" data-i18n-placeholder="nodeNumberPlaceholder" />
+              <button id="btnOpenNode" class="btn" data-i18n="openNode">Open node</button>
+              <button id="btnNewNode" class="btn secondary" data-i18n="createNode">Create node</button>
             </div>
 
             <div class="hr"></div>
 
-            <h2>Splice locations</h2>
-            <p class="muted small">Each location must have: port testing photos + splice completion photo before billing can occur.</p>
+            <h2 data-i18n="spliceLocationsTitle">Splice locations</h2>
+            <p class="muted small" data-i18n="spliceLocationsSubtitle">Photos are optional for billing in this MVP.</p>
 
             <div class="row">
-              <button id="btnAddLocation" class="btn secondary">Add splice location</button>
+              <button id="btnAddLocation" class="btn secondary" data-i18n="addSpliceLocation">Add splice location</button>
             </div>
 
             <div id="locations" style="margin-top:12px;"></div>
 
             <div class="hr"></div>
 
-            <h2>Inventory checklist</h2>
-            <p class="muted small">What was used at this node (with item photo reference). Splicers see items and checklists, not pricing.</p>
+            <h2 data-i18n="inventoryTitle">Inventory checklist</h2>
+            <p class="muted small" data-i18n="inventorySubtitle">What was used at this node. Splicers see items and checklists, not pricing.</p>
             <div id="inventory" style="margin-top:12px;"></div>
           </div>
         </section>
@@ -172,21 +175,21 @@
         <section id="viewPhotos" class="view">
           <div class="grid cols-2">
             <div class="card">
-              <h2>Photo checklist</h2>
-              <div class="no-pay-banner">Photos missing - Cannot bill - No pay</div>
+              <h2 data-i18n="photoChecklistTitle">Photo checklist</h2>
+              <div class="no-pay-banner" data-i18n="photosOptionalBanner">Photos optional for MVP</div>
               <div id="photoChecklist"></div>
             </div>
             <div class="card">
-              <h2>Capture photos</h2>
-              <div class="muted small">Camera-only. GPS required at capture time. No gallery uploads.</div>
+              <h2 data-i18n="capturePhotosTitle">Capture photos</h2>
+              <div class="muted small" data-i18n="capturePhotosSubtitle">Camera-only. GPS required at capture time. No gallery uploads.</div>
               <div class="camera-panel">
                 <video id="cameraStream" autoplay playsinline muted></video>
               </div>
               <div class="row" style="margin-top:12px;">
-                <button id="btnStartCamera" class="btn secondary">Start camera</button>
-                <button id="btnCapturePhoto" class="btn secondary">Capture usage photo</button>
+                <button id="btnStartCamera" class="btn secondary" data-i18n="startCamera">Start camera</button>
+                <button id="btnCapturePhoto" class="btn secondary" data-i18n="captureUsagePhoto">Capture usage photo</button>
               </div>
-              <div id="photoStatus" class="muted small" style="margin-top:10px;">No photo captured</div>
+              <div id="photoStatus" class="muted small" style="margin-top:10px;" data-i18n="photoStatusNone">No photo captured</div>
               <div id="photoPreview" class="photo-preview" style="margin-top:12px;"></div>
               <div class="hr"></div>
               <div id="backfillPanel" class="note backfill-panel" style="display:none;">
@@ -212,17 +215,17 @@
         <section id="viewInvoices" class="view">
           <div class="grid cols-2">
             <div class="card">
-              <h2>Invoice actions</h2>
-              <div class="no-pay-banner">Photos missing - Cannot bill - No pay</div>
-              <div class="muted small">Billing entry is blocked until photos are complete.</div>
+              <h2 data-i18n="invoiceActionsTitle">Invoice actions</h2>
+              <div class="no-pay-banner" data-i18n="invoicesUngatedBanner">Invoices available without proof in MVP</div>
+              <div class="muted small" data-i18n="invoiceActionsSubtitle">Billing entry is available in this MVP.</div>
               <div class="row" style="margin-top:12px;">
-                <button id="btnMarkNodeReady" class="btn">Mark node READY for billing</button>
-                <button id="btnCreateInvoice" class="btn secondary">Create invoice (role-based)</button>
+                <button id="btnMarkNodeReady" class="btn" data-i18n="markNodeReady">Mark node READY for billing</button>
+                <button id="btnCreateInvoice" class="btn secondary" data-i18n="createInvoice">Create invoice (role-based)</button>
               </div>
               <div id="readyNote" class="note" style="margin-top:12px; display:none;"></div>
             </div>
             <div class="card">
-              <h2>Invoices and privacy</h2>
+              <h2 data-i18n="invoicesPrivacyTitle">Invoices and privacy</h2>
               <div class="muted small">
                 This panel shows what <b>you</b> can see based on your role.
                 In Supabase, RLS policies enforce this server-side.
@@ -238,33 +241,53 @@
           <div class="grid cols-2">
             <div class="card">
               <div class="row" style="justify-content:space-between;">
-                <h2>Locations</h2>
+                <h2 data-i18n="billingLocationsTitle">Locations</h2>
                 <span id="billingStatus" class="muted small"></span>
               </div>
               <div id="billingLocationList" class="location-list" style="margin-top:12px;"></div>
             </div>
             <div class="card">
               <div class="row" style="justify-content:space-between;">
-                <h2>Billing</h2>
+                <h2 data-i18n="billingTitle">Billing</h2>
                 <div class="row">
-                  <button id="btnImportUsage" class="btn ghost">Import usage</button>
-                  <button id="btnBillingExportCsv" class="btn ghost">Export CSV</button>
-                  <button id="btnBillingPrint" class="btn ghost">Print</button>
+                  <button id="btnImportUsage" class="btn ghost" data-i18n="importUsage">Import usage</button>
+                  <button id="btnBillingExportCsv" class="btn ghost" data-i18n="exportCsv">Export CSV</button>
+                  <button id="btnBillingPrint" class="btn ghost" data-i18n="print">Print</button>
                 </div>
               </div>
-              <div id="billingDetail" class="muted small" style="margin-top:12px;">Select a location to start billing.</div>
+              <div id="billingDetail" class="muted small" style="margin-top:12px;" data-i18n="billingSelectLocation">Select a location to start billing.</div>
             </div>
+          </div>
+        </section>
+
+        <section id="viewMap" class="view">
+          <div class="card">
+            <div class="row" style="justify-content:space-between;">
+              <div>
+                <h1 data-i18n="mapTitle">Live map</h1>
+                <div class="muted small" data-i18n="mapSubtitle">See the latest crew locations (updates every 10-15 seconds).</div>
+              </div>
+              <div class="row map-controls">
+                <label class="checkbox">
+                  <input type="checkbox" id="mapActiveOnly" checked />
+                  <span data-i18n="mapActiveOnly">Active only (last 10 min)</span>
+                </label>
+                <input id="mapSearch" class="input" placeholder="Search by name" data-i18n-placeholder="mapSearchPlaceholder" />
+              </div>
+            </div>
+            <div id="liveMap" class="map"></div>
+            <div id="mapStatus" class="muted small" style="margin-top:10px;"></div>
           </div>
         </section>
 
         <section id="viewCatalog" class="view">
           <div class="card">
             <div class="row" style="justify-content:space-between;">
-              <h2>Material catalog</h2>
-              <button id="btnCatalogClear" class="btn ghost">Clear</button>
+              <h2 data-i18n="catalogTitle">Material catalog</h2>
+              <button id="btnCatalogClear" class="btn ghost" data-i18n="clear">Clear</button>
             </div>
             <div class="row" style="margin-top:12px;">
-              <input id="catalogSearch" class="input" placeholder="Search Millennium part, MFG SKU, description" />
+              <input id="catalogSearch" class="input" placeholder="Search Millennium part, MFG SKU, description" data-i18n-placeholder="catalogSearchPlaceholder" />
             </div>
             <div id="catalogResults" class="catalog-list" style="margin-top:16px;"></div>
           </div>
@@ -273,7 +296,7 @@
         <section id="viewAlerts" class="view">
           <div class="card">
             <div class="row" style="justify-content:space-between;">
-              <h2>Alerts feed</h2>
+              <h2 data-i18n="alertsFeedTitle">Alerts feed</h2>
               <span id="alertsBadge" class="badge">No alerts</span>
             </div>
             <div id="alertsFeedFull" style="margin-top:12px;"></div>
@@ -282,7 +305,7 @@
 
         <section id="viewAdmin" class="view">
           <div class="card">
-            <h2>Admin notes</h2>
+            <h2 data-i18n="adminNotesTitle">Admin notes</h2>
             <div class="note">
               <div style="font-weight:900;">Next build steps</div>
               <ol class="muted small" style="margin-top:8px;">
@@ -294,16 +317,16 @@
             </div>
           </div>
           <div class="card" style="margin-top:12px;">
-            <h2>User management</h2>
-            <div class="muted small">Create/update profile rows for authenticated users. Auth users must already exist in Supabase.</div>
+            <h2 data-i18n="userManagementTitle">User management</h2>
+            <div class="muted small" data-i18n="userManagementSubtitle">Create/update profile rows for authenticated users. Auth users must already exist in Supabase.</div>
             <div id="adminBuildGate" class="note warning" style="display:none; margin-top:10px;">
               <div style="font-weight:900;">Build mode disabled</div>
               <div class="muted small">Enable BUILD_MODE to manage user profiles.</div>
             </div>
             <div id="adminUsersPanel" style="margin-top:12px;">
               <div class="row" style="flex-wrap:wrap;">
-                <input id="adminUserId" class="input" placeholder="Auth user id (UUID)" />
-                <input id="adminUserEmail" class="input" placeholder="Email or display name" />
+                <input id="adminUserId" class="input" placeholder="Auth user id (UUID)" data-i18n-placeholder="adminUserIdPlaceholder" />
+                <input id="adminUserEmail" class="input" placeholder="Email or display name" data-i18n-placeholder="adminUserEmailPlaceholder" />
                 <select id="adminUserRole" class="input" style="min-width:180px;">
                   <option value="SPLICER">SPLICER</option>
                   <option value="SUB">SUB</option>
@@ -311,14 +334,45 @@
                   <option value="TDS">TDS</option>
                   <option value="OWNER">OWNER</option>
                 </select>
-                <button id="btnAdminCreateUser" class="btn secondary">Create profile</button>
+                <button id="btnAdminCreateUser" class="btn secondary" data-i18n="createProfile">Create profile</button>
               </div>
               <div class="hr"></div>
               <div id="adminUsersList"></div>
             </div>
           </div>
         </section>
+
+        <section id="viewSettings" class="view">
+          <div class="card">
+            <h1 data-i18n="settingsTitle">Settings</h1>
+            <div class="field-stack">
+              <label class="muted small" data-i18n="languageLabel">Language</label>
+              <select id="languageSelect" class="input">
+                <option value="en" data-i18n="languageOptionEnglish">English</option>
+                <option value="es" data-i18n="languageOptionSpanish">Spanish</option>
+              </select>
+              <div class="muted small" data-i18n="languageHelp">Changes apply immediately and sync to your profile.</div>
+              <div class="row">
+                <button id="btnSaveLanguage" class="btn secondary" data-i18n="saveLanguage">Save language</button>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
+    </div>
+
+    <div id="profileSetupModal" class="modal" style="display:none;">
+      <div class="card modal-card">
+        <h2>Choose Language / Elegir idioma</h2>
+        <div class="muted small">Select your preferred language to continue.</div>
+        <div class="field-stack" style="margin-top:12px;">
+          <select id="profileLanguageSelect" class="input">
+            <option value="en">English</option>
+            <option value="es">Español</option>
+          </select>
+          <button id="btnSaveProfileLanguage" class="btn">Save / Guardar</button>
+        </div>
+      </div>
     </div>
 
     <div class="footer">
@@ -335,6 +389,7 @@
   <script src="/.netlify/functions/app-config"></script>
   <script src="./env.generated.js"></script>
   <script src="./env.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./supabaseClient.js"></script>
   <script type="module" src="./app.js"></script>
 </body>

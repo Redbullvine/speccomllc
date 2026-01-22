@@ -25,6 +25,8 @@ const state = {
   billingStatus: null,
   lastGPS: null,
   lastProof: null,
+  lastLocationSentAt: 0,
+  lastLocationSent: null,
   cameraStream: null,
   cameraReady: false,
   cameraInvalidated: false,
@@ -37,6 +39,17 @@ const state = {
   materialCatalog: [],
   projects: [],
   adminProfiles: [],
+  locationWatchId: null,
+  locationPollId: null,
+  map: {
+    instance: null,
+    markers: new Map(),
+    userNames: new Map(),
+  },
+  mapFilters: {
+    activeOnly: true,
+    search: "",
+  },
   realtime: {
     usageChannel: null,
   },
@@ -57,6 +70,463 @@ const state = {
     locationProofRules: [],
   },
 };
+
+const I18N = {
+  en: {
+    brandSubtitle: "Field verification, documentation, and billing control",
+    authTitle: "Sign in to SpecCom",
+    authSubtitle: "This app requires Supabase Auth. Configure SUPABASE_URL and SUPABASE_ANON_KEY to sign in.",
+    emailPlaceholder: "email",
+    passwordPlaceholder: "password",
+    signIn: "Sign in",
+    magicLink: "Send magic link",
+    createUser: "Create user",
+    authConfigNote: "Supabase not configured.",
+    rolesTitle: "Roles in this build",
+    rolesSubtitle: "TDS -> PRIME -> SUB -> SPLICER -> OWNER (Spec Communications, LLC Louis Garcia)",
+    liveSetupTitle: "Live setup",
+    liveSetupSubtitle: "Ensure Supabase Auth, Storage, and RLS policies are configured for your roles.",
+    selectProject: "Select project",
+    navDashboard: "Dashboard",
+    navNodes: "Nodes",
+    navPhotos: "Photos",
+    navBilling: "Billing",
+    navInvoices: "Invoices",
+    navMap: "Live Map",
+    navCatalog: "Material Catalog",
+    navAlerts: "Alerts",
+    navAdmin: "Admin",
+    navSettings: "Settings",
+    jobSubtitle: "Ruidoso FTTH Rebuild (node-by-node workflow)",
+    photosOptionalBadge: "Photos optional for MVP",
+    activeNodeTitle: "Active node",
+    kpiNode: "Node",
+    kpiCompletion: "Completion",
+    kpiUnits: "Units",
+    pricingHidden: "Pricing hidden from splicers",
+    alertsTitle: "Alerts",
+    allowedQuantitiesTitle: "Allowed quantities",
+    catalogQuickSearchTitle: "Catalog quick search",
+    catalogSearchPlaceholder: "Search Millennium part, MFG SKU, description",
+    nodesTitle: "Node workspace",
+    nodesSubtitle: "Only one ACTIVE node at a time. Finish splicing before moving to the next node.",
+    nodeNumberPlaceholder: "Enter node number (example: NODE-1001)",
+    openNode: "Open node",
+    createNode: "Create node",
+    spliceLocationsTitle: "Splice locations",
+    spliceLocationsSubtitle: "Photos are optional for billing in this MVP.",
+    addSpliceLocation: "Add splice location",
+    inventoryTitle: "Inventory checklist",
+    inventorySubtitle: "What was used at this node. Splicers see items and checklists, not pricing.",
+    photoChecklistTitle: "Photo checklist",
+    photosOptionalBanner: "Photos optional for MVP",
+    capturePhotosTitle: "Capture photos",
+    capturePhotosSubtitle: "Camera-only. GPS required at capture time. No gallery uploads.",
+    startCamera: "Start camera",
+    captureUsagePhoto: "Capture usage photo",
+    photoStatusNone: "No photo captured",
+    invoiceActionsTitle: "Invoice actions",
+    invoicesUngatedBanner: "Invoices available without proof in MVP",
+    invoiceActionsSubtitle: "Billing entry is available in this MVP.",
+    markNodeReady: "Mark node READY for billing",
+    createInvoice: "Create invoice (role-based)",
+    invoicesPrivacyTitle: "Invoices and privacy",
+    billingLocationsTitle: "Locations",
+    billingTitle: "Billing",
+    importUsage: "Import usage",
+    exportCsv: "Export CSV",
+    print: "Print",
+    billingSelectLocation: "Select a location to start billing.",
+    mapTitle: "Live map",
+    mapSubtitle: "See the latest crew locations (updates every 10-15 seconds).",
+    mapActiveOnly: "Active only (last 10 min)",
+    mapSearchPlaceholder: "Search by name",
+    catalogTitle: "Material catalog",
+    clear: "Clear",
+    alertsFeedTitle: "Alerts feed",
+    adminNotesTitle: "Admin notes",
+    userManagementTitle: "User management",
+    userManagementSubtitle: "Create/update profile rows for authenticated users. Auth users must already exist in Supabase.",
+    adminUserIdPlaceholder: "Auth user id (UUID)",
+    adminUserEmailPlaceholder: "Email or display name",
+    createProfile: "Create profile",
+    settingsTitle: "Settings",
+    languageLabel: "Language",
+    languageOptionEnglish: "English",
+    languageOptionSpanish: "Spanish",
+    languageHelp: "Changes apply immediately and sync to your profile.",
+    saveLanguage: "Save language",
+    selectProjectNodes: "Select a project to see nodes.",
+    selectProjectLocations: "Select a project to see locations.",
+    startLabel: "Start",
+    continueLabel: "Continue",
+    completeLabel: "Completed",
+    completeAction: "Complete",
+    editLabel: "Edit",
+    deleteLabel: "Delete",
+    deletingLabel: "Deleting...",
+    noProfilesFound: "No profiles found.",
+    noLocationsYet: "No splice locations yet.",
+    openNodePrompt: "Open a node to see splice locations.",
+    noInventoryItems: "No inventory items yet. In Supabase, these come from inventory master + node checklist.",
+    billingStatusLocations: "{count} locations",
+    noLocations: "No locations",
+    billingOpen: "Open billing",
+    proofNotRequired: "Proof: Not required",
+    proofProgress: "Proof: {uploaded}/{required}",
+    ok: "OK",
+    locked: "LOCKED",
+    pricingVisible: "Pricing visible (per role)",
+    pricingHiddenLabel: "Pricing hidden",
+    subInvoicesLabel: "SUB invoices:",
+    tdsInvoicesLabel: "TDS invoices:",
+    visible: "visible",
+    hidden: "hidden",
+    openNodeInvoices: "Open a node to see invoice actions.",
+    billingGateTitle: "Billing status",
+    billingGateBypass: "Invoices are not gated by proof in this MVP.",
+    statusLabel: "Status",
+    eligibleLabel: "ELIGIBLE",
+    notReadyLabel: "NOT READY",
+    nodeLabel: "Node",
+    rateCardLabel: "Rate card",
+    notesLabel: "Notes",
+    workCodeLabel: "Work code",
+    descriptionLabel: "Description",
+    unitLabel: "Unit",
+    qtyLabel: "Qty",
+    rateLabel: "Rate",
+    addLineItemLabel: "Add line item",
+    subtotalLabel: "Subtotal",
+    taxLabel: "Tax",
+    totalLabel: "Total",
+    openNodeAllowedQuantities: "Open a node to see allowed quantities.",
+    openNodePhotoRequirements: "Open a node to see photo requirements.",
+    noNodeSelected: "No node selected.",
+    spliceLocationLabel: "Splice location",
+    noInvoices: "No invoices created yet.",
+    fromLabel: "From",
+    toLabel: "To",
+    amountLabel: "Amount",
+    invoiceNumberLabel: "Invoice #",
+    selectLocationToBill: "Select a location to start billing.",
+    billingNotesPlaceholder: "Notes",
+    translated: "Translated",
+    viewOriginal: "View original",
+    viewTranslation: "View translation",
+    lastSeen: "Last seen: {minutes} min ago",
+    lastSeenJustNow: "Last seen: just now",
+    mapStatusNoData: "No locations available yet.",
+    mapStatusSelfOnly: "Showing only your location.",
+    mapStatusAll: "Showing {count} crew locations.",
+    you: "You",
+    crew: "Crew",
+    signedOut: "Signed out",
+    signedIn: "Signed in",
+    signedInDemo: "Signed in (Demo: {role})",
+    signOut: "Sign out",
+    roleLabel: "Role",
+    pricingHiddenSplicer: "Pricing hidden (splicer view)",
+    pricingProtected: "Pricing protected by role",
+    gpsMissing: "No GPS",
+    gpsMissingBody: "This browser/device doesn't support geolocation.",
+    gpsCaptured: "GPS captured",
+    gpsError: "GPS error",
+    gpsRequired: "GPS is required for payment.",
+    locationSharingOn: "Live location sharing enabled.",
+  },
+  es: {
+    brandSubtitle: "Verificación en campo, documentación y control de facturación",
+    authTitle: "Inicia sesión en SpecCom",
+    authSubtitle: "Esta app requiere Supabase Auth. Configura SUPABASE_URL y SUPABASE_ANON_KEY para iniciar sesión.",
+    emailPlaceholder: "correo",
+    passwordPlaceholder: "contraseña",
+    signIn: "Iniciar sesión",
+    magicLink: "Enviar enlace mágico",
+    createUser: "Crear usuario",
+    authConfigNote: "Supabase no está configurado.",
+    rolesTitle: "Roles en esta versión",
+    rolesSubtitle: "TDS -> PRIME -> SUB -> SPLICER -> OWNER (Spec Communications, LLC Louis Garcia)",
+    liveSetupTitle: "Configuración en vivo",
+    liveSetupSubtitle: "Asegura Supabase Auth, Storage y políticas RLS para tus roles.",
+    selectProject: "Seleccionar proyecto",
+    navDashboard: "Panel",
+    navNodes: "Nodos",
+    navPhotos: "Fotos",
+    navBilling: "Facturación",
+    navInvoices: "Facturas",
+    navMap: "Mapa en vivo",
+    navCatalog: "Catálogo",
+    navAlerts: "Alertas",
+    navAdmin: "Admin",
+    navSettings: "Configuración",
+    jobSubtitle: "Reconstrucción FTTH Ruidoso (flujo por nodo)",
+    photosOptionalBadge: "Fotos opcionales para el MVP",
+    activeNodeTitle: "Nodo activo",
+    kpiNode: "Nodo",
+    kpiCompletion: "Avance",
+    kpiUnits: "Unidades",
+    pricingHidden: "Precios ocultos para empalmadores",
+    alertsTitle: "Alertas",
+    allowedQuantitiesTitle: "Cantidades permitidas",
+    catalogQuickSearchTitle: "Búsqueda rápida del catálogo",
+    catalogSearchPlaceholder: "Buscar parte Millennium, SKU MFG, descripción",
+    nodesTitle: "Espacio de nodos",
+    nodesSubtitle: "Solo un nodo ACTIVO a la vez. Termina el empalme antes de pasar al siguiente.",
+    nodeNumberPlaceholder: "Ingresa número de nodo (ej: NODE-1001)",
+    openNode: "Abrir nodo",
+    createNode: "Crear nodo",
+    spliceLocationsTitle: "Ubicaciones de empalme",
+    spliceLocationsSubtitle: "Las fotos son opcionales para facturar en este MVP.",
+    addSpliceLocation: "Agregar ubicación",
+    inventoryTitle: "Checklist de inventario",
+    inventorySubtitle: "Lo usado en este nodo. Empalmadores ven ítems y checklist, no precios.",
+    photoChecklistTitle: "Checklist de fotos",
+    photosOptionalBanner: "Fotos opcionales para el MVP",
+    capturePhotosTitle: "Capturar fotos",
+    capturePhotosSubtitle: "Solo cámara. GPS requerido al capturar. Sin galería.",
+    startCamera: "Iniciar cámara",
+    captureUsagePhoto: "Capturar foto de uso",
+    photoStatusNone: "No se capturó foto",
+    invoiceActionsTitle: "Acciones de facturación",
+    invoicesUngatedBanner: "Facturas disponibles sin pruebas en el MVP",
+    invoiceActionsSubtitle: "La carga de facturación está disponible en este MVP.",
+    markNodeReady: "Marcar nodo LISTO para facturar",
+    createInvoice: "Crear factura (según rol)",
+    invoicesPrivacyTitle: "Facturas y privacidad",
+    billingLocationsTitle: "Ubicaciones",
+    billingTitle: "Facturación",
+    importUsage: "Importar uso",
+    exportCsv: "Exportar CSV",
+    print: "Imprimir",
+    billingSelectLocation: "Selecciona una ubicación para iniciar facturación.",
+    mapTitle: "Mapa en vivo",
+    mapSubtitle: "Mira las ubicaciones más recientes (actualiza cada 10-15 segundos).",
+    mapActiveOnly: "Solo activos (últimos 10 min)",
+    mapSearchPlaceholder: "Buscar por nombre",
+    catalogTitle: "Catálogo de materiales",
+    clear: "Limpiar",
+    alertsFeedTitle: "Feed de alertas",
+    adminNotesTitle: "Notas de admin",
+    userManagementTitle: "Gestión de usuarios",
+    userManagementSubtitle: "Crea/actualiza perfiles. Los usuarios deben existir en Supabase.",
+    adminUserIdPlaceholder: "ID de usuario auth (UUID)",
+    adminUserEmailPlaceholder: "Correo o nombre",
+    createProfile: "Crear perfil",
+    settingsTitle: "Configuración",
+    languageLabel: "Idioma",
+    languageOptionEnglish: "Inglés",
+    languageOptionSpanish: "Español",
+    languageHelp: "Los cambios aplican al instante y se guardan en tu perfil.",
+    saveLanguage: "Guardar idioma",
+    selectProjectNodes: "Selecciona un proyecto para ver nodos.",
+    selectProjectLocations: "Selecciona un proyecto para ver ubicaciones.",
+    startLabel: "Iniciar",
+    continueLabel: "Continuar",
+    completeLabel: "Completado",
+    completeAction: "Completar",
+    editLabel: "Editar",
+    deleteLabel: "Eliminar",
+    deletingLabel: "Eliminando...",
+    noProfilesFound: "No hay perfiles.",
+    noLocationsYet: "No hay ubicaciones aún.",
+    openNodePrompt: "Abre un nodo para ver ubicaciones.",
+    noInventoryItems: "Aún no hay ítems de inventario. En Supabase vienen del maestro + checklist.",
+    billingStatusLocations: "{count} ubicaciones",
+    noLocations: "Sin ubicaciones",
+    billingOpen: "Abrir facturación",
+    proofNotRequired: "Prueba: No requerida",
+    proofProgress: "Prueba: {uploaded}/{required}",
+    ok: "OK",
+    locked: "BLOQUEADO",
+    pricingVisible: "Precios visibles (según rol)",
+    pricingHiddenLabel: "Precios ocultos",
+    subInvoicesLabel: "Facturas SUB:",
+    tdsInvoicesLabel: "Facturas TDS:",
+    visible: "visible",
+    hidden: "oculto",
+    openNodeInvoices: "Abre un nodo para ver acciones de facturación.",
+    billingGateTitle: "Estado de facturación",
+    billingGateBypass: "Las facturas no se bloquean por pruebas en este MVP.",
+    statusLabel: "Estado",
+    eligibleLabel: "ELEGIBLE",
+    notReadyLabel: "NO LISTO",
+    nodeLabel: "Nodo",
+    rateCardLabel: "Tarifa",
+    notesLabel: "Notas",
+    workCodeLabel: "Código",
+    descriptionLabel: "Descripción",
+    unitLabel: "Unidad",
+    qtyLabel: "Cant.",
+    rateLabel: "Tarifa",
+    addLineItemLabel: "Agregar línea",
+    subtotalLabel: "Subtotal",
+    taxLabel: "Impuesto",
+    totalLabel: "Total",
+    openNodeAllowedQuantities: "Abre un nodo para ver cantidades permitidas.",
+    openNodePhotoRequirements: "Abre un nodo para ver requisitos de fotos.",
+    noNodeSelected: "No hay nodo seleccionado.",
+    spliceLocationLabel: "Ubicación de empalme",
+    noInvoices: "Aún no hay facturas.",
+    fromLabel: "De",
+    toLabel: "Para",
+    amountLabel: "Monto",
+    invoiceNumberLabel: "Factura #",
+    selectLocationToBill: "Selecciona una ubicación para iniciar facturación.",
+    billingNotesPlaceholder: "Notas",
+    translated: "Traducido",
+    viewOriginal: "Ver original",
+    viewTranslation: "Ver traducción",
+    lastSeen: "Última vez: hace {minutes} min",
+    lastSeenJustNow: "Última vez: justo ahora",
+    mapStatusNoData: "Aún no hay ubicaciones disponibles.",
+    mapStatusSelfOnly: "Mostrando solo tu ubicación.",
+    mapStatusAll: "Mostrando {count} ubicaciones del equipo.",
+    you: "Tú",
+    crew: "Equipo",
+    signedOut: "Sesión cerrada",
+    signedIn: "Sesión iniciada",
+    signedInDemo: "Sesión iniciada (Demo: {role})",
+    signOut: "Cerrar sesión",
+    roleLabel: "Rol",
+    pricingHiddenSplicer: "Precios ocultos (vista empalmador)",
+    pricingProtected: "Precios protegidos por rol",
+    gpsMissing: "Sin GPS",
+    gpsMissingBody: "Este navegador/dispositivo no soporta geolocalización.",
+    gpsCaptured: "GPS capturado",
+    gpsError: "Error de GPS",
+    gpsRequired: "El GPS es requerido para el pago.",
+    locationSharingOn: "Compartir ubicación en vivo activado.",
+  },
+};
+
+function normalizeLanguage(value){
+  const lang = String(value || "").toLowerCase();
+  return lang === "es" ? "es" : "en";
+}
+
+function getPreferredLanguage(){
+  const profileLang = window.currentUserProfile?.preferred_language || state.profile?.preferred_language;
+  const stored = localStorage.getItem("preferred_language");
+  return normalizeLanguage(profileLang || stored || "en");
+}
+
+function setPreferredLanguage(lang, { persist = true } = {}){
+  const next = normalizeLanguage(lang);
+  if (persist){
+    localStorage.setItem("preferred_language", next);
+  }
+  if (state.profile){
+    state.profile.preferred_language = next;
+  }
+  window.currentUserProfile = state.profile;
+  applyI18n();
+}
+
+function t(key, vars = {}){
+  const lang = getPreferredLanguage();
+  const dict = I18N[lang] || I18N.en;
+  const template = dict[key] || I18N.en[key] || key;
+  return template.replace(/\{(\w+)\}/g, (_, k) => (vars[k] == null ? "" : String(vars[k])));
+}
+
+function applyI18n(root = document){
+  root.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    if (key) el.textContent = t(key);
+  });
+  root.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-placeholder");
+    if (key) el.setAttribute("placeholder", t(key));
+  });
+}
+
+function renderTranslatedText(sourceText, { valueClass = "muted small" } = {}){
+  const safe = escapeHtml(sourceText || "");
+  return `
+    <div class="translated-text" data-source-text="${safe}">
+      <div class="translated-value ${valueClass}">${safe}</div>
+      <div class="translated-meta" style="display:none;">
+        <span class="muted small" data-translate-label>${t("translated")}</span>
+        <button class="btn link small" data-action="toggleTranslation">${t("viewOriginal")}</button>
+      </div>
+    </div>
+  `;
+}
+
+async function sha256Hex(text){
+  if (!crypto?.subtle) return "";
+  const data = new TextEncoder().encode(text);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function translateTextIfNeeded(sourceText, targetLang){
+  const normalized = String(sourceText || "").trim();
+  const lang = normalizeLanguage(targetLang);
+  if (!normalized || !state.client || isDemo) return normalized;
+  const sourceHash = await sha256Hex(normalized);
+  if (!sourceHash) return normalized;
+  const { data: cached } = await state.client
+    .from("text_translations")
+    .select("translated_text")
+    .eq("target_lang", lang)
+    .eq("source_hash", sourceHash)
+    .maybeSingle();
+  if (cached?.translated_text){
+    return cached.translated_text;
+  }
+
+  try{
+    const res = await fetch("/.netlify/functions/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: normalized, target_lang: lang }),
+    });
+    if (!res.ok) return normalized;
+    const json = await res.json();
+    const translatedText = String(json?.translated_text || "").trim();
+    if (!translatedText) return normalized;
+    await state.client.from("text_translations").insert({
+      source_lang: "auto",
+      target_lang: lang,
+      source_hash: sourceHash,
+      source_text: normalized,
+      translated_text: translatedText,
+    });
+    return translatedText;
+  } catch {
+    return normalized;
+  }
+}
+
+async function hydrateTranslations(root = document){
+  const targetLang = getPreferredLanguage();
+  const blocks = Array.from(root.querySelectorAll(".translated-text"));
+  for (const block of blocks){
+    const sourceText = block.getAttribute("data-source-text") || "";
+    const valueEl = block.querySelector(".translated-value");
+    const metaEl = block.querySelector(".translated-meta");
+    if (!valueEl || !metaEl) continue;
+    const translated = await translateTextIfNeeded(sourceText, targetLang);
+    const same = !translated || translated.trim() === sourceText.trim();
+    if (same){
+      metaEl.style.display = "none";
+      valueEl.textContent = sourceText;
+      block.dataset.translatedText = "";
+      block.dataset.showing = "original";
+      continue;
+    }
+    block.dataset.translatedText = translated;
+    block.dataset.showing = "translated";
+    valueEl.textContent = translated;
+    metaEl.style.display = "";
+    const btn = metaEl.querySelector("[data-action=\"toggleTranslation\"]");
+    if (btn) btn.textContent = t("viewOriginal");
+    const label = metaEl.querySelector("[data-translate-label]");
+    if (label) label.textContent = t("translated");
+  }
+}
 
 function toast(title, body){
   $("toastTitle").textContent = title;
@@ -87,6 +557,7 @@ const SINGLE_PROOF_PHOTO_MODE = String(
   || (window.process && window.process.env && window.process.env.SINGLE_PROOF_PHOTO_MODE)
   || ""
 ).toLowerCase() === "true";
+const MVP_UNGATED = true;
 
 function normalizeTerminalPorts(value){
   const parsed = Number.parseInt(value, 10);
@@ -140,7 +611,7 @@ function hasAllRequiredSlotPhotos(loc){
 
 function getSpliceLocationDefaultName(index){
   const safeIndex = Number.isFinite(index) && index >= 0 ? index : 0;
-  return `Splice location ${safeIndex + 1}`;
+  return `${t("spliceLocationLabel")} ${safeIndex + 1}`;
 }
 
 function getSpliceLocationDisplayName(loc, index){
@@ -149,7 +620,7 @@ function getSpliceLocationDisplayName(loc, index){
   if (Number.isFinite(index)) return getSpliceLocationDefaultName(index);
   const legacy = String(loc?.location_label ?? loc?.name ?? "").trim();
   if (legacy) return legacy;
-  return "Splice location";
+  return t("spliceLocationLabel");
 }
 
 function getSortedSpliceLocations(node){
@@ -228,6 +699,13 @@ function setActiveView(viewId){
   if (viewId === "viewAdmin"){
     loadAdminProfiles();
   }
+  if (viewId === "viewMap"){
+    ensureMap();
+    if (state.map.instance){
+      setTimeout(() => state.map.instance.invalidateSize(), 50);
+    }
+    refreshLocations();
+  }
 }
 
 function startVisibilityWatch(){
@@ -237,6 +715,256 @@ function startVisibilityWatch(){
       state.cameraInvalidated = true;
     }
   });
+}
+
+function distanceMeters(a, b){
+  if (!a || !b) return Number.POSITIVE_INFINITY;
+  const toRad = (v) => (v * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function shouldSendLocation(next){
+  if (!state.lastLocationSent) return true;
+  const elapsed = (Date.now() - state.lastLocationSentAt) / 1000;
+  const dist = distanceMeters(state.lastLocationSent, next);
+  return dist >= 10 || elapsed >= 15;
+}
+
+async function upsertUserLocation(pos){
+  if (!state.client || !state.user || isDemo) return;
+  const payload = {
+    user_id: state.user.id,
+    lat: pos.coords.latitude,
+    lng: pos.coords.longitude,
+    heading: Number.isFinite(pos.coords.heading) ? pos.coords.heading : null,
+    speed: Number.isFinite(pos.coords.speed) ? pos.coords.speed : null,
+    accuracy: Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : null,
+    updated_at: new Date().toISOString(),
+  };
+  const nextPoint = { lat: payload.lat, lng: payload.lng };
+  if (!shouldSendLocation(nextPoint)) return;
+  state.lastLocationSent = nextPoint;
+  state.lastLocationSentAt = Date.now();
+  await state.client.from("user_locations").upsert(payload, { onConflict: "user_id" });
+}
+
+function startLocationWatch(){
+  if (isDemo) return;
+  if (state.locationWatchId != null) return;
+  if (!navigator.geolocation){
+    toast(t("gpsMissing"), t("gpsMissingBody"));
+    return;
+  }
+  state.locationWatchId = navigator.geolocation.watchPosition(
+    async (pos) => {
+      await upsertUserLocation(pos);
+    },
+    () => {
+      toast(t("gpsError"), t("gpsMissingBody"));
+    },
+    { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+  );
+  toast(t("gpsCaptured"), t("locationSharingOn"));
+}
+
+function stopLocationWatch(){
+  if (state.locationWatchId != null){
+    navigator.geolocation.clearWatch(state.locationWatchId);
+    state.locationWatchId = null;
+  }
+}
+
+function startLocationPolling(){
+  if (isDemo) return;
+  if (state.locationPollId != null) return;
+  state.locationPollId = setInterval(() => {
+    refreshLocations();
+  }, 15000);
+}
+
+function stopLocationPolling(){
+  if (state.locationPollId != null){
+    clearInterval(state.locationPollId);
+    state.locationPollId = null;
+  }
+}
+
+function ensureMap(){
+  if (state.map.instance || !window.L) return;
+  const mapEl = $("liveMap");
+  if (!mapEl) return;
+  const map = window.L.map(mapEl).setView([39.5, -98.35], 4);
+  window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(map);
+  state.map.instance = map;
+}
+
+function isLocationAdmin(){
+  const role = getRole();
+  return role === "OWNER";
+}
+
+async function loadLocationNames(userIds){
+  if (!state.client || !userIds.length) return;
+  const { data } = await state.client
+    .from("profiles")
+    .select("id, display_name")
+    .in("id", userIds);
+  (data || []).forEach((row) => {
+    if (row?.id) state.map.userNames.set(row.id, row.display_name || "");
+  });
+}
+
+function formatLastSeen(iso){
+  const ts = iso ? new Date(iso).getTime() : 0;
+  if (!ts) return "";
+  const minutes = Math.max(0, Math.floor((Date.now() - ts) / 60000));
+  if (minutes < 1) return t("lastSeenJustNow");
+  return t("lastSeen", { minutes });
+}
+
+function getLocationDisplayName(userId){
+  if (userId === state.user?.id){
+    return state.profile?.display_name || state.user?.email || t("you");
+  }
+  return state.map.userNames.get(userId) || t("crew");
+}
+
+function shouldShowLocation(row){
+  const activeOnly = state.mapFilters.activeOnly;
+  if (activeOnly){
+    const minutes = row.updated_at ? (Date.now() - new Date(row.updated_at).getTime()) / 60000 : 999;
+    if (minutes > 10) return false;
+  }
+  const search = String(state.mapFilters.search || "").trim().toLowerCase();
+  if (search){
+    const name = getLocationDisplayName(row.user_id).toLowerCase();
+    if (!name.includes(search)) return false;
+  }
+  return true;
+}
+
+function updateMapMarkers(rows){
+  if (!state.map.instance) return;
+  const markers = state.map.markers;
+  const seen = new Set();
+  rows.forEach((row) => {
+    if (!shouldShowLocation(row)) return;
+    const id = row.user_id;
+    if (!id) return;
+    const coords = [row.lat, row.lng];
+    let marker = markers.get(id);
+    if (!marker){
+      marker = window.L.marker(coords);
+      marker.addTo(state.map.instance);
+      markers.set(id, marker);
+    } else {
+      marker.setLatLng(coords);
+    }
+    const name = getLocationDisplayName(id);
+    const lastSeen = formatLastSeen(row.updated_at);
+    marker.bindPopup(`<b>${escapeHtml(name)}</b><br>${escapeHtml(lastSeen)}`);
+    seen.add(id);
+  });
+  markers.forEach((marker, id) => {
+    if (!seen.has(id)){
+      state.map.instance.removeLayer(marker);
+      markers.delete(id);
+    }
+  });
+}
+
+async function refreshLocations(){
+  if (!state.client || !state.user || isDemo) return;
+  ensureMap();
+  const status = $("mapStatus");
+  const query = state.client.from("user_locations").select("user_id, lat, lng, heading, speed, accuracy, updated_at");
+  if (!isLocationAdmin()){
+    query.eq("user_id", state.user.id);
+  }
+  const { data } = await query;
+  const rows = data || [];
+  if (isLocationAdmin()){
+    const ids = rows.map(r => r.user_id).filter(Boolean);
+    await loadLocationNames(ids);
+  }
+  updateMapMarkers(rows);
+  if (status){
+    if (!rows.length){
+      status.textContent = t("mapStatusNoData");
+    } else if (!isLocationAdmin()){
+      status.textContent = t("mapStatusSelfOnly");
+    } else {
+      status.textContent = t("mapStatusAll", { count: rows.length });
+    }
+  }
+}
+
+function showProfileSetupModal(show){
+  const modal = $("profileSetupModal");
+  if (!modal) return;
+  modal.style.display = show ? "flex" : "none";
+}
+
+function syncLanguageControls(){
+  const lang = getPreferredLanguage();
+  const select = $("languageSelect");
+  if (select) select.value = lang;
+  const profileSelect = $("profileLanguageSelect");
+  if (profileSelect) profileSelect.value = lang;
+}
+
+async function savePreferredLanguage(lang, { closeModal = false } = {}){
+  const next = normalizeLanguage(lang);
+  setPreferredLanguage(next);
+  syncLanguageControls();
+  if (!state.user || !state.client || isDemo){
+    if (closeModal) showProfileSetupModal(false);
+    return;
+  }
+  if (state.profile){
+    const { error } = await state.client
+      .from("profiles")
+      .update({ preferred_language: next })
+      .eq("id", state.user.id);
+    if (error){
+      toast("Language save failed", error.message);
+      return;
+    }
+  } else {
+    const { error } = await state.client
+      .from("profiles")
+      .insert({
+        id: state.user.id,
+        display_name: state.user?.email || null,
+        preferred_language: next,
+      });
+    if (error){
+      toast("Profile needed", "Ask an OWNER to create your profile. Language saved locally.");
+    }
+  }
+  await loadProfile();
+  if (closeModal){
+    showProfileSetupModal(!(state.profile && state.profile.preferred_language));
+  }
+}
+
+function refreshLanguageSensitiveUI(){
+  renderNodeCards();
+  renderLocations();
+  renderInventory();
+  renderBillingLocations();
+  renderBillingDetail();
+  renderInvoicePanel();
+  renderAlerts();
+  applyI18n();
+  refreshLocations();
 }
 
 function getRole(){
@@ -253,6 +981,7 @@ function isOwner(){
 }
 
 function isBillingUnlocked(){
+  if (MVP_UNGATED) return true;
   if (isDemo) return true;
   if (BUILD_MODE) return true;
   return Boolean(state.nodeProofStatus?.billing_unlocked);
@@ -334,14 +1063,14 @@ function updateKPI(){
 
 function setRoleUI(){
   const role = getRole();
-  $("chipRole").innerHTML = `<span class="dot ok"></span><span>Role: ${role}</span>`;
+  $("chipRole").innerHTML = `<span class="dot ok"></span><span>${t("roleLabel")}: ${role}</span>`;
 
   // Pricing visibility notice
   const pricingHidden = (role === "SPLICER");
   $("chipPricing").style.display = pricingHidden ? "inline-flex" : "inline-flex";
   $("chipPricing").innerHTML = pricingHidden
-    ? `<span class="dot bad"></span><span>Pricing hidden (splicer view)</span>`
-    : `<span class="dot ok"></span><span>Pricing protected by role</span>`;
+    ? `<span class="dot bad"></span><span>${t("pricingHiddenSplicer")}</span>`
+    : `<span class="dot ok"></span><span>${t("pricingProtected")}</span>`;
 
   const buildChip = $("chipBuildMode");
   if (buildChip){
@@ -362,17 +1091,17 @@ function showAuth(show){
 
 function setWhoami(){
   if (isDemo){
-    $("whoami").textContent = `Signed in (Demo: ${state.demo.role})`;
+    $("whoami").textContent = t("signedInDemo", { role: state.demo.role });
     $("btnSignOut").style.display = "";
     return;
   }
 
   if (state.user){
     const role = state.profile?.role ? ` -> ${state.profile.role}` : "";
-    $("whoami").textContent = `Signed in (${state.user.email}${role})`;
+    $("whoami").textContent = `${t("signedIn")} (${state.user.email}${role})`;
     $("btnSignOut").style.display = "";
   } else {
-    $("whoami").textContent = "Signed out";
+    $("whoami").textContent = t("signedOut");
     $("btnSignOut").style.display = "none";
   }
 }
@@ -471,7 +1200,7 @@ function renderAdminProfiles(){
   }
   const rows = state.adminProfiles || [];
   if (!rows.length){
-    wrap.innerHTML = '<div class="muted small">No profiles found.</div>';
+    wrap.innerHTML = `<div class="muted small">${t("noProfilesFound")}</div>`;
     return;
   }
   wrap.innerHTML = `
@@ -627,7 +1356,7 @@ function renderNodeCards(){
   const wrap = $("nodeCards");
   if (!wrap) return;
   if (!state.projectNodes.length){
-    wrap.innerHTML = '<div class="muted small">Select a project to see nodes.</div>';
+    wrap.innerHTML = `<div class="muted small">${t("selectProjectNodes")}</div>`;
     return;
   }
   const showBuildControls = BUILD_MODE && isOwner();
@@ -637,31 +1366,33 @@ function renderNodeCards(){
     const isActive = status === "ACTIVE";
     const isComplete = status === "COMPLETE";
     const canStart = !activeNode || activeNode.id === node.id || isComplete;
-    const actionLabel = isComplete ? "Completed" : isActive ? "Continue" : "Start";
+    const actionLabel = isComplete ? t("completeLabel") : isActive ? t("continueLabel") : t("startLabel");
     const disabled = !canStart && !isActive;
     const completeDisabled = !isActive && !isComplete;
     const deleting = Boolean(node.isDeleting);
     const buildButtons = showBuildControls
       ? `
-        <button class="btn ghost" data-action="editNode" data-id="${node.id}" ${deleting ? "disabled" : ""}>Edit</button>
-        <button class="btn danger" data-action="deleteNode" data-id="${node.id}" ${deleting ? "disabled" : ""}>${deleting ? "Deleting..." : "Delete"}</button>
+        <button class="btn ghost" data-action="editNode" data-id="${node.id}" ${deleting ? "disabled" : ""}>${t("editLabel")}</button>
+        <button class="btn danger" data-action="deleteNode" data-id="${node.id}" ${deleting ? "disabled" : ""}>${deleting ? t("deletingLabel") : t("deleteLabel")}</button>
       `
       : "";
+    const descriptionHtml = renderTranslatedText(node.description || t("jobSubtitle"));
     return `
       <div class="node-card">
         <div class="node-meta">
           <div class="node-title">${escapeHtml(node.node_number)}</div>
-          <div class="muted small">${escapeHtml(node.description || "Ruidoso FTTH node")}</div>
+          ${descriptionHtml}
         </div>
         <div class="node-status ${status.toLowerCase()}">${status.replace("_", " ")}</div>
         <div class="row">
           <button class="btn ${isActive ? "" : "secondary"}" data-action="openNode" data-id="${node.id}" ${disabled ? "disabled" : ""}>${actionLabel}</button>
-          <button class="btn ghost" data-action="completeNode" data-id="${node.id}" ${completeDisabled ? "disabled" : ""}>Complete</button>
+          <button class="btn ghost" data-action="completeNode" data-id="${node.id}" ${completeDisabled ? "disabled" : ""}>${t("completeAction")}</button>
           ${buildButtons}
         </div>
       </div>
     `;
   }).join("");
+  hydrateTranslations(wrap);
 }
 
 function getActiveProjectNode(){
@@ -1211,13 +1942,13 @@ function renderLocations(){
   wrap.innerHTML = "";
   const node = state.activeNode;
   if (!node){
-    wrap.innerHTML = '<div class="muted small">Open a node to see splice locations.</div>';
+    wrap.innerHTML = `<div class="muted small">${t("openNodePrompt")}</div>`;
     return;
   }
 
   const rows = getSortedSpliceLocations(node);
   if (!rows.length){
-    wrap.innerHTML = '<div class="muted small">No splice locations yet. Click "Add splice location".</div>';
+    wrap.innerHTML = `<div class="muted small">${t("noLocationsYet")} ${t("addSpliceLocation")}.</div>`;
     return;
   }
 
@@ -1921,12 +2652,12 @@ function renderInventory(){
   wrap.innerHTML = "";
   const node = state.activeNode;
   if (!node){
-    wrap.innerHTML = '<div class="muted small">Open a node to see inventory checklist.</div>';
+    wrap.innerHTML = `<div class="muted small">${t("openNodePrompt")}</div>`;
     return;
   }
   const items = node.inventory_checks || [];
   if (!items.length){
-    wrap.innerHTML = '<div class="muted small">No inventory items yet (demo seeds two). In Supabase, these come from inventory master + node checklist.</div>';
+    wrap.innerHTML = `<div class="muted small">${t("noInventoryItems")}</div>`;
     return;
   }
 
@@ -2397,27 +3128,25 @@ function renderInvoicePanel(){
 
   let html = "";
   html += `<div class="row">
-    <span class="chip"><span class="dot ${canSeeAnyPricing ? "ok" : "bad"}"></span><span>${canSeeAnyPricing ? "Pricing visible (per role)" : "Pricing hidden"}</span></span>
-    <span class="chip"><span class="dot ${canSeeSubInvoices ? "ok" : "bad"}"></span><span>SUB invoices: ${canSeeSubInvoices ? "visible" : "hidden"}</span></span>
-    <span class="chip"><span class="dot ${canSeeTdsInvoices ? "ok" : "bad"}"></span><span>TDS invoices: ${canSeeTdsInvoices ? "visible" : "hidden"}</span></span>
+    <span class="chip"><span class="dot ${canSeeAnyPricing ? "ok" : "bad"}"></span><span>${canSeeAnyPricing ? t("pricingVisible") : t("pricingHiddenLabel")}</span></span>
+    <span class="chip"><span class="dot ${canSeeSubInvoices ? "ok" : "bad"}"></span><span>${t("subInvoicesLabel")} ${canSeeSubInvoices ? t("visible") : t("hidden")}</span></span>
+    <span class="chip"><span class="dot ${canSeeTdsInvoices ? "ok" : "bad"}"></span><span>${t("tdsInvoicesLabel")} ${canSeeTdsInvoices ? t("visible") : t("hidden")}</span></span>
   </div>`;
 
   html += `<div class="hr"></div>`;
 
   if (!node){
-    html += `<div class="muted small">Open a node to see invoice actions.</div>`;
+    html += `<div class="muted small">${t("openNodeInvoices")}</div>`;
     wrap.innerHTML = html;
     return;
   }
 
-  const completion = computeNodeCompletion(node);
-  const photos = computeProofStatus(node);
-  const eligible = BUILD_MODE ? true : (completion.pct === 100 && node.ready_for_billing && photos.photosOk);
+  const eligible = true;
 
   html += `<div class="note">
-    <div style="font-weight:900;">Billing gate</div>
-    <div class="muted small">${BUILD_MODE ? "Build mode enabled: proof gates are bypassed." : "Node can be invoiced only when: splice locations complete + inventory checklist complete + photos captured + node marked READY."}</div>
-    <div style="margin-top:8px;">Status: ${eligible ? '<span class="pill-ok">ELIGIBLE</span>' : '<span class="pill-warn">NOT READY</span>'}</div>
+    <div style="font-weight:900;">${t("billingGateTitle")}</div>
+    <div class="muted small">${t("billingGateBypass")}</div>
+    <div style="margin-top:8px;">${t("statusLabel")}: ${eligible ? `<span class="pill-ok">${t("eligibleLabel")}</span>` : `<span class="pill-warn">${t("notReadyLabel")}</span>`}</div>
   </div>`;
 
   html += `<div class="hr"></div>`;
@@ -2425,13 +3154,13 @@ function renderInvoicePanel(){
   if (isDemo){
     const invoices = state.demo.invoices.filter(i => i.node_number === node.node_number);
     if (!invoices.length){
-      html += `<div class="muted small">No invoices created yet.</div>`;
+      html += `<div class="muted small">${t("noInvoices")}</div>`;
     } else {
       html += `<table class="table">
-        <thead><tr><th>From</th><th>To</th><th>Status</th><th>Amount</th></tr></thead><tbody>
+        <thead><tr><th>${t("fromLabel")}</th><th>${t("toLabel")}</th><th>${t("statusLabel")}</th><th>${t("amountLabel")}</th></tr></thead><tbody>
         ${invoices.map(inv => {
           const showAmount = canSeeAnyPricing && ( (inv.from === "SUB" && canSeeSubInvoices) || (inv.to === "SUB" && canSeeSubInvoices) || (inv.to === "TDS" && canSeeTdsInvoices) || (inv.from === "TDS" && canSeeTdsInvoices) );
-          const amt = showAmount ? "$1,234.00 (demo)" : "Hidden";
+          const amt = showAmount ? "$1,234.00 (demo)" : t("hidden");
           return `<tr><td>${inv.from}</td><td>${inv.to}</td><td>${inv.status}</td><td>${amt}</td></tr>`;
         }).join("")}
         </tbody></table>`;
@@ -2464,12 +3193,12 @@ function renderInvoicePanel(){
   }
 
   if (!rows.length){
-    html += `<div class="muted small">No invoices created yet.</div>`;
+    html += `<div class="muted small">${t("noInvoices")}</div>`;
   } else {
     html += `<table class="table">
-      <thead><tr><th>From</th><th>To</th><th>Invoice #</th><th>Status</th><th>Amount</th></tr></thead><tbody>
+      <thead><tr><th>${t("fromLabel")}</th><th>${t("toLabel")}</th><th>${t("invoiceNumberLabel")}</th><th>${t("statusLabel")}</th><th>${t("amountLabel")}</th></tr></thead><tbody>
       ${rows.map(inv => {
-        const amt = (canSeeAnyPricing && inv.amount != null) ? `$${Number(inv.amount).toFixed(2)}` : "Hidden";
+        const amt = (canSeeAnyPricing && inv.amount != null) ? `$${Number(inv.amount).toFixed(2)}` : t("hidden");
         return `<tr><td>${inv.from}</td><td>${inv.to}</td><td>${inv.number}</td><td>${inv.status}</td><td>${amt}</td></tr>`;
       }).join("")}
       </tbody></table>`;
@@ -2484,40 +3213,42 @@ function renderBillingLocations(){
   const status = $("billingStatus");
   if (!wrap || !status) return;
   if (!state.activeProject){
-    wrap.innerHTML = '<div class="muted small">Select a project to see locations.</div>';
+    wrap.innerHTML = `<div class="muted small">${t("selectProjectLocations")}</div>`;
     status.textContent = "";
     return;
   }
   const rows = state.billingLocations || [];
-  status.textContent = rows.length ? `${rows.length} locations` : "No locations";
+  status.textContent = rows.length ? t("billingStatusLocations", { count: rows.length }) : t("noLocations");
   if (!rows.length){
-    wrap.innerHTML = '<div class="muted small">No splice locations yet.</div>';
+    wrap.innerHTML = `<div class="muted small">${t("noLocationsYet")}</div>`;
     return;
   }
   wrap.innerHTML = rows.map((loc) => {
     const required = getLocationRequiredPhotos(loc, state.activeProject?.id);
     const uploaded = loc.photo_count || 0;
     const proofOk = uploaded >= required;
-    const proofLabel = required === 0 ? "Proof: Not required" : `Proof: ${uploaded}/${required}`;
+    const proofLabel = required === 0 ? t("proofNotRequired") : t("proofProgress", { uploaded, required });
     const invoiceStatus = loc.invoice_status || "draft";
     const invoiceLabel = invoiceStatus.toUpperCase();
-    const disabled = !proofOk && !isOwner() && !BUILD_MODE;
+    const disabled = false;
+    const nameHtml = renderTranslatedText(getSpliceLocationDisplayName(loc), { valueClass: "" });
     return `
       <div class="billing-location-card ${disabled ? "disabled" : ""}">
         <div class="row" style="justify-content:space-between;">
           <div>
-            <div style="font-weight:900">${escapeHtml(getSpliceLocationDisplayName(loc))}</div>
+            <div style="font-weight:900">${nameHtml}</div>
             <div class="muted small">${escapeHtml(loc.node_number || "")}</div>
           </div>
-          <span class="status-pill ${proofOk ? "ok" : "warn"}">${proofLabel} ${proofOk ? "OK" : "LOCKED"}</span>
+          <span class="status-pill ${proofOk ? "ok" : "warn"}">${proofLabel} ${proofOk ? t("ok") : t("locked")}</span>
         </div>
         <div class="row" style="justify-content:space-between;">
           <span class="status-pill">${invoiceLabel}</span>
-          <button class="btn secondary" data-action="openBilling" data-id="${loc.id}" ${disabled ? "disabled" : ""}>Open billing</button>
+          <button class="btn secondary" data-action="openBilling" data-id="${loc.id}" ${disabled ? "disabled" : ""}>${t("billingOpen")}</button>
         </div>
       </div>
     `;
   }).join("");
+  hydrateTranslations(wrap);
 }
 
 
@@ -2529,7 +3260,7 @@ function renderBillingDetail(){
   const printBtn = $("btnBillingPrint");
   const importBtn = $("btnImportUsage");
   if (!loc){
-    wrap.innerHTML = '<div class="muted small">Select a location to start billing.</div>';
+    wrap.innerHTML = `<div class="muted small">${t("selectLocationToBill")}</div>`;
     if (exportBtn) exportBtn.disabled = true;
     if (printBtn) printBtn.disabled = true;
     if (importBtn) importBtn.disabled = true;
@@ -2541,7 +3272,7 @@ function renderBillingDetail(){
   const proofRequired = getLocationRequiredPhotos(loc, state.activeProject?.id);
   const proofUploaded = loc.photo_count || 0;
   const proofOk = proofUploaded >= proofRequired;
-  const proofLabel = proofRequired === 0 ? "Not required" : `${proofUploaded}/${proofRequired}`;
+  const proofLabel = proofRequired === 0 ? t("proofNotRequired") : t("proofProgress", { uploaded: proofUploaded, required: proofRequired });
   const totals = computeInvoiceTotals(items);
   const status = invoice?.status || "draft";
   const locked = ["submitted", "paid", "void"].includes(status);
@@ -2550,7 +3281,7 @@ function renderBillingDetail(){
   const rateCard = state.rateCards.find(r => r.id === state.activeRateCardId);
   const overrides = state.ownerOverrides || [];
   const hasOverride = overrides.length > 0;
-  const showOverrideAction = !billingUnlocked && isOwner() && !isDemo;
+  const showOverrideAction = false;
   const buildModeStatusControls = (BUILD_MODE && invoice)
     ? `
       <div class="note" style="margin-top:12px;">
@@ -2570,13 +3301,13 @@ function renderBillingDetail(){
   wrap.innerHTML = `
     <div class="note">
       <div style="font-weight:900;">${escapeHtml(getSpliceLocationDisplayName(loc))}</div>
-      <div class="muted small">Node: ${escapeHtml(loc.node_number || "-")}</div>
-      <div class="muted small">Proof: ${proofLabel} ${proofOk ? "OK" : "LOCKED"}</div>
-      <div class="muted small">Rate card: ${escapeHtml(rateCard?.name || "Default")}</div>
-      <div class="muted small">Status: ${escapeHtml(status.toUpperCase())}</div>
+      <div class="muted small">${t("nodeLabel")}: ${escapeHtml(loc.node_number || "-")}</div>
+      <div class="muted small">${proofLabel} ${proofOk ? t("ok") : t("locked")}</div>
+      <div class="muted small">${t("rateCardLabel")}: ${escapeHtml(rateCard?.name || "Default")}</div>
+      <div class="muted small">${t("statusLabel")}: ${escapeHtml(status.toUpperCase())}</div>
       ${hasOverride ? '<div class="muted small">Override: ACTIVE</div>' : ""}
     </div>
-    ${!billingUnlocked ? `
+    ${(!billingUnlocked && !MVP_UNGATED) ? `
       <div class="note warning" style="margin-top:12px;">
         <div style="font-weight:900;">Billing locked</div>
         <div class="muted small">Proof is incomplete for this node. Owner can apply an override if needed.</div>
@@ -2602,12 +3333,12 @@ function renderBillingDetail(){
     <table class="table billing-table">
       <thead>
         <tr>
-          <th>Work code</th>
-          <th>Description</th>
-          <th>Unit</th>
-          <th>Qty</th>
-          <th>Rate</th>
-          <th>Amount</th>
+          <th>${t("workCodeLabel")}</th>
+          <th>${t("descriptionLabel")}</th>
+          <th>${t("unitLabel")}</th>
+          <th>${t("qtyLabel")}</th>
+          <th>${t("rateLabel")}</th>
+          <th>${t("amountLabel")}</th>
           <th></th>
         </tr>
       </thead>
@@ -2616,17 +3347,17 @@ function renderBillingDetail(){
       </tbody>
     </table>
     <div class="billing-actions">
-      <button id="btnAddLineItem" class="btn secondary" ${editLocked ? "disabled" : ""}>Add line item</button>
+      <button id="btnAddLineItem" class="btn secondary" ${editLocked ? "disabled" : ""}>${t("addLineItemLabel")}</button>
     </div>
     <div class="hr"></div>
     <div class="billing-summary">
-      <div>Subtotal: <b>${formatMoney(totals.subtotal)}</b></div>
-      <div>Tax: <b>${formatMoney(totals.tax)}</b></div>
-      <div>Total: <b>${formatMoney(totals.total)}</b></div>
+      <div>${t("subtotalLabel")}: <b>${formatMoney(totals.subtotal)}</b></div>
+      <div>${t("taxLabel")}: <b>${formatMoney(totals.tax)}</b></div>
+      <div>${t("totalLabel")}: <b>${formatMoney(totals.total)}</b></div>
     </div>
     <div class="hr"></div>
     <div>
-      <div class="muted small">Notes</div>
+      <div class="muted small">${t("notesLabel")}</div>
       <textarea id="billingNotes" class="input" rows="3" style="width:100%;" ${editLocked ? "disabled" : ""}>${escapeHtml(invoice?.notes || "")}</textarea>
     </div>
     <div class="billing-actions">
@@ -3414,7 +4145,7 @@ function renderAllowedQuantities(){
   if (!wrap) return;
   const rows = state.allowedQuantities || [];
   if (!state.activeNode || !rows.length){
-    wrap.innerHTML = '<div class="muted small">Open a node to see allowed quantities.</div>';
+    wrap.innerHTML = `<div class="muted small">${t("openNodeAllowedQuantities")}</div>`;
     return;
   }
   wrap.innerHTML = `
@@ -3509,8 +4240,8 @@ function renderProofChecklist(){
     return;
   }
   if (!node){
-    wrap.innerHTML = '<div class="muted small">Open a node to see photo requirements.</div>';
-    summary.innerHTML = '<div class="muted small">No node selected.</div>';
+    wrap.innerHTML = `<div class="muted small">${t("openNodePhotoRequirements")}</div>`;
+    summary.innerHTML = `<div class="muted small">${t("noNodeSelected")}</div>`;
     renderBackfillPanel();
     return;
   }
@@ -3587,14 +4318,14 @@ function renderBackfillPanel(){
 
 async function captureGPS(){
   if (!navigator.geolocation){
-    toast("No GPS", "This browser/device doesn't support geolocation.");
+    toast(t("gpsMissing"), t("gpsMissingBody"));
     return;
   }
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         state.lastGPS = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy_m: pos.coords.accuracy };
-        toast("GPS captured", `${state.lastGPS.lat.toFixed(6)}, ${state.lastGPS.lng.toFixed(6)} (+/-${Math.round(state.lastGPS.accuracy_m)}m)`);
+        toast(t("gpsCaptured"), `${state.lastGPS.lat.toFixed(6)}, ${state.lastGPS.lng.toFixed(6)} (+/-${Math.round(state.lastGPS.accuracy_m)}m)`);
         if (state.lastProof){
           state.lastProof.gps = { ...state.lastGPS };
           setProofStatus();
@@ -3602,7 +4333,7 @@ async function captureGPS(){
         resolve(state.lastGPS);
       },
       (err) => {
-        toast("GPS error", err.message || "Unable to get location.");
+        toast(t("gpsError"), err.message || t("gpsMissingBody"));
         resolve(null);
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 15000 }
@@ -3668,7 +4399,7 @@ async function captureFrame(){
   }
   const gps = await captureGPS();
   if (!gps){
-    toast("GPS required", "GPS is required for payment.");
+    toast(t("gpsRequired"), t("gpsRequired"));
     return null;
   }
 
@@ -4010,12 +4741,12 @@ async function markNodeReady(){
   if (!node) return;
 
   const c = computeNodeCompletion(node);
-  if (!BUILD_MODE && !(c.locOk && c.invOk)){
+  if (!BUILD_MODE && !MVP_UNGATED && !(c.locOk && c.invOk)){
     toast("Not ready", "Finish all splice locations + inventory checklist first.");
     return;
   }
   const photos = computeProofStatus(node);
-  if (!BUILD_MODE && !photos.photosOk){
+  if (!BUILD_MODE && !MVP_UNGATED && !photos.photosOk){
     toast("Photos required", "Take photos (GPS + photo + timestamp) before marking the node ready.");
     return;
   }
@@ -4035,7 +4766,7 @@ async function markNodeReady(){
   $("readyNote").style.display = "";
   $("readyNote").innerHTML = `
     <div style="font-weight:900;">Node READY</div>
-    <div class="muted small">All required activities are complete for billing. Next: SUB creates invoice to PRIME, then PRIME forwards invoice to TDS/PM.</div>
+    <div class="muted small">Node is ready for billing. Invoices are available in this MVP.</div>
   `;
   renderInvoicePanel();
   updateKPI();
@@ -4052,12 +4783,12 @@ async function createInvoice(){
   }
 
   const completion = computeNodeCompletion(node);
-  if (!BUILD_MODE && !(completion.pct === 100 && node.ready_for_billing)){
+  if (!BUILD_MODE && !MVP_UNGATED && !(completion.pct === 100 && node.ready_for_billing)){
     toast("Blocked", "Invoices are blocked until documentation is complete and node is marked READY.");
     return;
   }
   const photos = computeProofStatus(node);
-  if (!BUILD_MODE && !photos.photosOk){
+  if (!BUILD_MODE && !MVP_UNGATED && !photos.photosOk){
     toast("Blocked", "Photos are required before invoice submission.");
     return;
   }
@@ -4081,11 +4812,6 @@ async function createInvoice(){
     });
     toast("Invoice created", `${role} -> ${to} (demo). Visibility depends on role.`);
     renderInvoicePanel();
-    return;
-  }
-
-  if (!BUILD_MODE && role === "TDS"){
-    toast("Blocked", "TDS can't create invoices in this MVP.");
     return;
   }
 
@@ -4188,11 +4914,16 @@ async function initAuth(){
       renderCatalogResults("catalogResultsQuick", "");
       renderBillingLocations();
       setActiveView("viewDashboard");
+      startLocationWatch();
+      startLocationPolling();
     } else {
       showAuth(true);
       state.activeNode = null;
       state.usageEvents = [];
       clearProof();
+      showProfileSetupModal(false);
+      stopLocationWatch();
+      stopLocationPolling();
       if (state.realtime.usageChannel){
         state.client.removeChannel(state.realtime.usageChannel);
         state.realtime.usageChannel = null;
@@ -4216,6 +4947,8 @@ async function initAuth(){
     renderCatalogResults("catalogResultsQuick", "");
     renderBillingLocations();
     setActiveView("viewDashboard");
+    startLocationWatch();
+    startLocationPolling();
   }
   setWhoami();
   showAuth(!state.user);
@@ -4233,7 +4966,7 @@ async function loadProfile(){
   // Expect a public.profiles row keyed by auth.uid()
   const { data, error } = await state.client
     .from("profiles")
-    .select("role, display_name")
+    .select("role, display_name, preferred_language")
     .eq("id", state.user.id)
     .maybeSingle();
 
@@ -4243,6 +4976,12 @@ async function loadProfile(){
     return;
   }
   state.profile = data || null;
+  window.currentUserProfile = state.profile;
+  if (state.profile?.preferred_language){
+    setPreferredLanguage(state.profile.preferred_language);
+  }
+  syncLanguageControls();
+  showProfileSetupModal(!state.profile || !state.profile.preferred_language);
   setRoleUI();
   renderInvoicePanel();
 }
@@ -4318,7 +5057,7 @@ function wireUI(){
       state.activeNode = null;
       showAuth(true);
       $("btnSignOut").style.display = "none";
-      $("whoami").textContent = "Signed out";
+      $("whoami").textContent = t("signedOut");
       clearProof();
       return;
     }
@@ -4400,6 +5139,40 @@ function wireUI(){
       setActiveProjectById(projectSelect.value);
     });
   }
+  const languageSelect = $("languageSelect");
+  if (languageSelect){
+    languageSelect.addEventListener("change", (e) => {
+      setPreferredLanguage(e.target.value);
+      refreshLanguageSensitiveUI();
+    });
+  }
+  const saveLanguageBtn = $("btnSaveLanguage");
+  if (saveLanguageBtn){
+    saveLanguageBtn.addEventListener("click", () => {
+      savePreferredLanguage($("languageSelect")?.value || "en");
+    });
+  }
+  const profileLanguageBtn = $("btnSaveProfileLanguage");
+  if (profileLanguageBtn){
+    profileLanguageBtn.addEventListener("click", () => {
+      const value = $("profileLanguageSelect")?.value || "en";
+      savePreferredLanguage(value, { closeModal: true });
+    });
+  }
+  const mapActiveOnly = $("mapActiveOnly");
+  if (mapActiveOnly){
+    mapActiveOnly.addEventListener("change", (e) => {
+      state.mapFilters.activeOnly = e.target.checked;
+      refreshLocations();
+    });
+  }
+  const mapSearch = $("mapSearch");
+  if (mapSearch){
+    mapSearch.addEventListener("input", (e) => {
+      state.mapFilters.search = e.target.value;
+      refreshLocations();
+    });
+  }
   $("btnAddLocation").addEventListener("click", () => addSpliceLocation());
 
   const startCameraBtn = $("btnStartCamera");
@@ -4433,8 +5206,30 @@ function wireUI(){
 
   $("btnMarkNodeReady").addEventListener("click", () => markNodeReady());
   $("btnCreateInvoice").addEventListener("click", () => createInvoice());
+
+  document.body.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-action=\"toggleTranslation\"]");
+    if (!btn) return;
+    const block = btn.closest(".translated-text");
+    if (!block) return;
+    const valueEl = block.querySelector(".translated-value");
+    const translated = block.dataset.translatedText || "";
+    const source = block.getAttribute("data-source-text") || "";
+    if (!valueEl) return;
+    if (block.dataset.showing === "translated"){
+      valueEl.textContent = source;
+      block.dataset.showing = "original";
+      btn.textContent = t("viewTranslation");
+    } else {
+      valueEl.textContent = translated || source;
+      block.dataset.showing = "translated";
+      btn.textContent = t("viewOriginal");
+    }
+  });
 }
 
 startVisibilityWatch();
 wireUI();
+applyI18n();
+syncLanguageControls();
 initAuth();
