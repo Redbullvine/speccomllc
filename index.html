@@ -19,6 +19,7 @@
       </div>
       <div class="row">
         <span id="appModeBadge" class="badge">DEMO</span>
+        <span id="demoEnvBadge" class="badge demo" style="display:none;" data-i18n="demoEnvBadge">DEMO ENVIRONMENT</span>
         <span id="whoami" class="badge">Signed out</span>
         <button id="btnSignOut" class="btn secondary" style="display:none;" data-i18n="signOut">Sign out</button>
       </div>
@@ -43,7 +44,9 @@
             <button id="btnSignIn" class="btn" data-i18n="signIn">Sign in</button>
             <button id="btnMagicLink" class="btn secondary" data-i18n="magicLink">Send magic link</button>
             <button id="btnSignUp" class="btn secondary" data-i18n="createUser">Create user</button>
+            <button id="btnDemoLogin" class="btn ghost" data-i18n="demoLogin">Demo login</button>
           </div>
+          <div id="demoLoginNote" class="muted small" style="margin-top:8px;" data-i18n="demoLoginNote">Demo session (read-only)</div>
           <div id="authConfigNote" class="muted small" style="display:none; margin-top:8px;" data-i18n="authConfigNote">Supabase not configured.</div>
         </div>
       </div>

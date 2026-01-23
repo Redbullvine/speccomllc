@@ -213,6 +213,10 @@ const I18N = {
     noneLabel: "None",
     codesPlaceholder: "Enter codes separated by commas",
     descriptionPlaceholder: "Brief description (max 400 chars)",
+    demoEnvBadge: "DEMO ENVIRONMENT",
+    demoLogin: "Demo login",
+    demoLoginNote: "Demo session (read-only)",
+    availableInProduction: "Available in Production",
     noInvoices: "No invoices created yet.",
     fromLabel: "From",
     toLabel: "To",
@@ -385,6 +389,10 @@ const I18N = {
     noneLabel: "Ninguno",
     codesPlaceholder: "Ingresa códigos separados por comas",
     descriptionPlaceholder: "Descripción breve (máx 400 caracteres)",
+    demoEnvBadge: "ENTORNO DEMO",
+    demoLogin: "Acceso demo",
+    demoLoginNote: "Sesión demo (solo lectura)",
+    availableInProduction: "Disponible en Producción",
     noInvoices: "Aún no hay facturas.",
     fromLabel: "De",
     toLabel: "Para",
@@ -607,6 +615,18 @@ const SINGLE_PROOF_PHOTO_MODE = String(
 ).toLowerCase() === "true";
 const MVP_UNGATED = true;
 
+function getRuntimeEnv(){
+  return window.__ENV__ || window.__ENV || window.ENV || {};
+}
+
+function getDemoCredentials(){
+  const env = getRuntimeEnv();
+  return {
+    email: String(env.DEMO_ADMIN_EMAIL || "demo_admin@speccom.llc").trim(),
+    password: String(env.DEMO_PASSWORD || "DemoOnly-2026!").trim(),
+  };
+}
+
 function normalizeTerminalPorts(value){
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return DEFAULT_TERMINAL_PORTS;
@@ -799,7 +819,7 @@ function setEnvWarning(){
 }
 
 function setAuthButtonsDisabled(disabled){
-  const ids = ["btnSignIn", "btnMagicLink", "btnSignUp"];
+  const ids = ["btnSignIn", "btnMagicLink", "btnSignUp", "btnDemoLogin"];
   ids.forEach((id) => {
     const el = $(id);
     if (el) el.disabled = disabled;
@@ -1082,6 +1102,10 @@ function getRole(){
   return state.profile?.role || state.demo.role;
 }
 
+function isDemoUser(){
+  return Boolean(state.profile?.is_demo);
+}
+
 function isBillingManager(){
   const role = getRole();
   return role === "OWNER" || role === "PRIME" || role === "TDS";
@@ -1193,6 +1217,7 @@ function setRoleUI(){
 
   updateAlertsBadge();
   renderAlerts();
+  applyDemoRestrictions();
 }
 
 function showAuth(show){
@@ -1215,6 +1240,37 @@ function setWhoami(){
     $("whoami").textContent = t("signedOut");
     $("btnSignOut").style.display = "none";
   }
+  setDemoBadge();
+}
+
+function setDemoBadge(){
+  const badge = $("demoEnvBadge");
+  if (!badge) return;
+  badge.textContent = t("demoEnvBadge");
+  badge.style.display = isDemoUser() ? "inline-flex" : "none";
+}
+
+function applyDemoLock(el){
+  if (!el) return;
+  el.disabled = true;
+  el.title = t("availableInProduction");
+  el.setAttribute("aria-disabled", "true");
+}
+
+function applyDemoRestrictions(root = document){
+  if (!isDemoUser()) return;
+  [
+    "#btnCreateInvoice",
+    "#btnMarkNodeReady",
+    "#btnBillingExportCsv",
+    "#btnBillingPrint",
+    "#btnImportUsage",
+    "#btnBillingSave",
+    "#btnBillingReady",
+    "#btnAddLineItem",
+    "#btnAdminCreateUser",
+    "#btnDemoLogin",
+  ].forEach((selector) => applyDemoLock(root.querySelector(selector)));
 }
 
 function ensureDemoSeed(){
@@ -1263,7 +1319,7 @@ async function loadProjects(){
   }
   const { data, error } = await state.client
     .from("projects")
-    .select("id, name, location, job_number")
+    .select("id, name, location, job_number, is_demo")
     .order("name");
   if (error){
     toast("Projects load error", error.message);
@@ -1354,6 +1410,10 @@ function renderAdminProfiles(){
 }
 
 async function createAdminProfile(){
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
   if (!BUILD_MODE || !isOwner()){
     toast("Not allowed", "Owner role required.");
     return;
@@ -1387,6 +1447,10 @@ async function createAdminProfile(){
 }
 
 async function updateAdminProfile(userId){
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
   if (!BUILD_MODE || !isOwner()){
     toast("Not allowed", "Owner role required.");
     return;
@@ -1413,6 +1477,10 @@ async function updateAdminProfile(userId){
 }
 
 async function deleteAdminProfile(userId){
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
   if (!BUILD_MODE || !isOwner()){
     toast("Not allowed", "Owner role required.");
     return;
@@ -1481,10 +1549,11 @@ function renderNodeCards(){
     const disabled = !canStart && !isActive;
     const completeDisabled = !isActive && !isComplete;
     const deleting = Boolean(node.isDeleting);
+    const demoAttrs = isDemoUser() ? `disabled title="${t("availableInProduction")}"` : "";
     const buildButtons = showBuildControls
       ? `
         <button class="btn ghost" data-action="editNode" data-id="${node.id}" ${deleting ? "disabled" : ""}>${t("editLabel")}</button>
-        <button class="btn danger" data-action="deleteNode" data-id="${node.id}" ${deleting ? "disabled" : ""}>${deleting ? t("deletingLabel") : t("deleteLabel")}</button>
+        <button class="btn danger" data-action="deleteNode" data-id="${node.id}" ${deleting ? "disabled" : ""} ${demoAttrs}>${deleting ? t("deletingLabel") : t("deleteLabel")}</button>
       `
       : "";
     const descriptionHtml = renderTranslatedText(node.description || t("jobSubtitle"));
@@ -1639,6 +1708,10 @@ async function editNodeMeta(nodeId){
 }
 
 async function deleteNode(nodeId){
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
   if (!BUILD_MODE || !isOwner()){
     toast("Not allowed", "Owner role required.");
     return;
@@ -2105,11 +2178,12 @@ function renderLocations(){
     const done = SINGLE_PROOF_PHOTO_MODE
       ? ""
       : (r.completed ? '<span class="pill-ok">COMPLETE</span>' : '<span class="pill-warn">INCOMPLETE</span>');
+    const demoAttrs = isDemoUser() ? `disabled title="${t("availableInProduction")}"` : "";
     const editNameBtn = r.isEditingName
       ? ""
       : `<button class="btn ghost small" data-action="editName" data-id="${r.id}" ${billingLocked || disableActions ? "disabled" : ""}>Edit name</button>`;
     const deleteBtn = canDelete && !r.isEditingPorts
-      ? `<button class="btn danger small" data-action="deleteLocation" data-id="${r.id}" ${disableActions ? "disabled" : ""}>${r.isDeleting ? "Deleting..." : "Delete location"}</button>`
+      ? `<button class="btn danger small" data-action="deleteLocation" data-id="${r.id}" ${disableActions ? "disabled" : ""} ${demoAttrs}>${r.isDeleting ? "Deleting..." : "Delete location"}</button>`
       : "";
 
     const card = document.createElement("div");
@@ -2408,6 +2482,8 @@ function renderSpliceSlotCard(loc, slotKey, isRequired){
   const badge = isRequired ? "" : '<span class="slot-badge">Extra</span>';
   const timestamp = photo?.taken_at ? new Date(photo.taken_at).toLocaleString() : "";
   const locked = isLocationBillingLocked(loc.id);
+  const demoLocked = isDemoUser();
+  const demoAttrs = demoLocked ? `disabled title="${t("availableInProduction")}"` : "";
   const thumbUrl = photo?.previewUrl || "";
   const thumb = thumbUrl
     ? `<img class="photo-thumb" src="${thumbUrl}" alt="${escapeHtml(label)} photo" data-action="openSlotPhoto" data-url="${thumbUrl}"/>`
@@ -2444,8 +2520,8 @@ function renderSpliceSlotCard(loc, slotKey, isRequired){
       ${thumb}
       <div class="slot-meta">${timestamp || "Timestamp pending"}</div>
       <div class="row" style="justify-content:flex-end; width:100%;">
-        ${locked ? "" : `<button type="button" class="btn ghost small" data-action="retakeSlotPhoto" data-input-id="${inputId}">Upload / Retake</button>`}
-        ${locked ? "" : `<button type="button" class="btn ghost small" data-action="removeSlotPhoto" data-location-id="${loc.id}" data-slot-key="${slotKey}">Remove</button>`}
+        ${locked ? "" : `<button type="button" class="btn ghost small" data-action="retakeSlotPhoto" data-input-id="${inputId}" ${demoAttrs}>Upload / Retake</button>`}
+        ${locked ? "" : `<button type="button" class="btn ghost small" data-action="removeSlotPhoto" data-location-id="${loc.id}" data-slot-key="${slotKey}" ${demoAttrs}>Remove</button>`}
       </div>
     </div>
   `;
@@ -2618,6 +2694,10 @@ function ensureDeleteSpliceModal(){
 }
 
 function openDeleteSpliceLocationModal(locationId){
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
   const node = state.activeNode;
   if (!node) return;
   const canDelete = BUILD_MODE ? true : getRole() === "OWNER";
@@ -2643,6 +2723,10 @@ function closeDeleteSpliceModal(){
 }
 
 async function deleteSpliceLocation(locationId, options = {}){
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return false;
+  }
   const node = state.activeNode;
   if (!node) return false;
   const loc = node.splice_locations.find(l => l.id === locationId);
@@ -2813,6 +2897,10 @@ async function handleSpliceSlotPhotoUpload(locationId, slotKey, file){
 }
 
 async function deleteSpliceSlotPhoto(locationId, slotKey){
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
   const node = state.activeNode;
   if (!node) return;
   const loc = node.splice_locations.find(l => l.id === locationId);
@@ -3622,6 +3710,7 @@ function renderBillingDetail(){
   if (exportBtn) exportBtn.disabled = !canExport;
   if (printBtn) printBtn.disabled = !canExport;
   if (importBtn) importBtn.disabled = editLocked;
+  applyDemoRestrictions(wrap);
 }
 
 function renderBillingItemRow(item, idx, canEditRates, locked){
@@ -3752,6 +3841,10 @@ async function ensureBillingInvoice(){
     await loadInvoiceItems(data.id);
     return;
   }
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
   const invoiceNumber = await generateInvoiceNumber();
   const { data: created, error: createErr } = await state.client
     .from("invoices")
@@ -3805,6 +3898,10 @@ async function saveBillingInvoice(){
     toast("No invoice", "Select a location first.");
     return;
   }
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
   if (!isBillingUnlocked()){
     toast("Billing locked", "Proof is incomplete for this node.");
     return;
@@ -3840,6 +3937,7 @@ async function saveBillingInvoice(){
 }
 
 async function upsertInvoiceItems(invoiceId, items){
+  if (isDemoUser()) return;
   if (isDemo) return;
   const payload = (items || []).map((item, idx) => ({
     invoice_id: invoiceId,
@@ -3881,6 +3979,10 @@ async function markInvoiceReady(){
     toast("No invoice", "Select a location first.");
     return;
   }
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
   if (!isBillingUnlocked()){
     toast("Billing locked", "Proof is incomplete for this node.");
     return;
@@ -3912,6 +4014,10 @@ async function markInvoiceReady(){
 async function updateInvoiceStatus(){
   if (!BUILD_MODE || !isOwner()){
     toast("Not allowed", "Owner role required.");
+    return;
+  }
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
     return;
   }
   const invoice = state.billingInvoice;
@@ -4001,6 +4107,10 @@ async function generateInvoiceNumber(){
 }
 
 function exportInvoiceCsv(){
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
   const invoice = state.billingInvoice;
   const loc = state.billingLocation;
   if (!invoice || !loc) return;
@@ -4052,6 +4162,10 @@ function downloadFile(filename, content, type){
 }
 
 function printInvoice(){
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
   const invoice = state.billingInvoice;
   const loc = state.billingLocation;
   if (!invoice || !loc) return;
@@ -4114,6 +4228,10 @@ function printInvoice(){
 }
 
 async function importUsageToInvoice(){
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
   const invoice = state.billingInvoice;
   if (!invoice){
     toast("No invoice", "Select a location first.");
@@ -4961,6 +5079,10 @@ async function createNode(nodeNumber){
 async function markNodeReady(){
   const node = state.activeNode;
   if (!node) return;
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
 
   const c = computeNodeCompletion(node);
   if (!BUILD_MODE && !MVP_UNGATED && !(c.locOk && c.invOk)){
@@ -4997,6 +5119,10 @@ async function markNodeReady(){
 async function createInvoice(){
   const node = state.activeNode;
   if (!node) return;
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
 
   const role = getRole();
   if (role === "SPLICER"){
@@ -5077,6 +5203,10 @@ async function initAuth(){
     return;
   }
   setAuthButtonsDisabled(false);
+
+  if (window.location.pathname.endsWith("/demo-login")){
+    await demoLogin();
+  }
 
   // Demo: choose role via prompt for now
   if (isDemo){
@@ -5188,7 +5318,7 @@ async function loadProfile(){
   // Expect a public.profiles row keyed by auth.uid()
   const { data, error } = await state.client
     .from("profiles")
-    .select("role, display_name, preferred_language")
+    .select("role, display_name, preferred_language, is_demo")
     .eq("id", state.user.id)
     .maybeSingle();
 
@@ -5205,7 +5335,28 @@ async function loadProfile(){
   syncLanguageControls();
   showProfileSetupModal(!state.profile || !state.profile.preferred_language);
   setRoleUI();
+  setDemoBadge();
+  applyDemoRestrictions();
   renderInvoicePanel();
+}
+
+async function demoLogin(){
+  if (isDemo) return;
+  if (!state.client) return;
+  const creds = getDemoCredentials();
+  if (!creds.password){
+    toast("Demo login unavailable", "Set DEMO_PASSWORD to enable demo login.");
+    return;
+  }
+  const { error } = await state.client.auth.signInWithPassword({
+    email: creds.email,
+    password: creds.password,
+  });
+  if (error){
+    toast("Demo login failed", error.message);
+  } else {
+    toast("Demo session", t("demoLoginNote"));
+  }
 }
 
 function wireUI(){
@@ -5326,6 +5477,13 @@ function wireUI(){
     if (error) toast("Invite failed", error.message);
     else toast("Invite sent", "Magic link sent. User is created on first login.");
   });
+
+  const demoLoginBtn = $("btnDemoLogin");
+  if (demoLoginBtn){
+    demoLoginBtn.addEventListener("click", async () => {
+      await demoLogin();
+    });
+  }
 
   const catalogSearch = $("catalogSearch");
   if (catalogSearch){
