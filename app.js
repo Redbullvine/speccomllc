@@ -227,7 +227,8 @@ const I18N = {
     lastSeenJustNow: "Last seen: just now",
     mapStatusNoData: "No locations available yet.",
     mapStatusSelfOnly: "Showing only your location.",
-    mapStatusAll: "Showing {count} crew locations.",
+    mapStatusAll: "Showing crew locations.",
+    mapStatusSignin: "Sign in to view crew locations.",
     you: "You",
     crew: "Crew",
     signedOut: "Signed out",
@@ -398,7 +399,8 @@ const I18N = {
     lastSeenJustNow: "Última vez: justo ahora",
     mapStatusNoData: "Aún no hay ubicaciones disponibles.",
     mapStatusSelfOnly: "Mostrando solo tu ubicación.",
-    mapStatusAll: "Mostrando {count} ubicaciones del equipo.",
+    mapStatusAll: "Mostrando ubicaciones del equipo.",
+    mapStatusSignin: "Inicia sesión para ver ubicaciones del equipo.",
     you: "Tú",
     crew: "Equipo",
     signedOut: "Sesión cerrada",
@@ -922,11 +924,6 @@ function ensureMap(){
   state.map.instance = map;
 }
 
-function isLocationAdmin(){
-  const role = getRole();
-  return role === "OWNER";
-}
-
 async function loadLocationNames(userIds){
   if (!state.client || !userIds.length) return;
   const { data } = await state.client
@@ -998,27 +995,24 @@ function updateMapMarkers(rows){
 }
 
 async function refreshLocations(){
-  if (!state.client || !state.user || isDemo) return;
-  ensureMap();
   const status = $("mapStatus");
-  const query = state.client.from("user_locations").select("user_id, lat, lng, heading, speed, accuracy, updated_at");
-  if (!isLocationAdmin()){
-    query.eq("user_id", state.user.id);
+  if (!state.client || isDemo) return;
+  if (!state.user){
+    if (status) status.textContent = t("mapStatusSignin");
+    return;
   }
+  ensureMap();
+  const query = state.client.from("user_locations").select("user_id, lat, lng, heading, speed, accuracy, updated_at");
   const { data } = await query;
   const rows = data || [];
-  if (isLocationAdmin()){
-    const ids = rows.map(r => r.user_id).filter(Boolean);
-    await loadLocationNames(ids);
-  }
+  const ids = rows.map(r => r.user_id).filter(Boolean);
+  await loadLocationNames(ids);
   updateMapMarkers(rows);
   if (status){
     if (!rows.length){
       status.textContent = t("mapStatusNoData");
-    } else if (!isLocationAdmin()){
-      status.textContent = t("mapStatusSelfOnly");
     } else {
-      status.textContent = t("mapStatusAll", { count: rows.length });
+      status.textContent = t("mapStatusAll");
     }
   }
 }
