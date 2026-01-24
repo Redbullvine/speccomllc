@@ -74,6 +74,7 @@ const state = {
   demo: {
     roles: ["ADMIN", "OWNER", "PRIME", "TDS", "SUB", "SPLICER", "TECHNICIAN"],
     role: "SPLICER",
+    seeded: false,
     nodes: {},
     nodesList: [],
     invoices: [],
@@ -86,6 +87,7 @@ const state = {
     rateCards: [],
     rateCardItems: [],
     locationProofRules: [],
+    workOrders: [],
   },
 };
 
@@ -1705,7 +1707,13 @@ async function loadAssignedWorkOrders(){
     renderTechnicianWorkOrders();
     return;
   }
-  if (!state.client || !state.user || isDemo){
+  if (isDemo){
+    ensureDemoSeed();
+    state.workOrders.assigned = state.demo.workOrders || [];
+    renderTechnicianWorkOrders();
+    return;
+  }
+  if (!state.client || !state.user){
     state.workOrders.assigned = [];
     renderTechnicianWorkOrders();
     return;
@@ -2555,7 +2563,57 @@ function applyDemoRestrictions(root = document){
 }
 
 function ensureDemoSeed(){
-  return;
+  if (!isDemo) return;
+  if (state.demo.seeded) return;
+  const projectId = state.demo.project?.id || "demo-project-1";
+  const today = new Date();
+  const todayStart = new Date(today);
+  todayStart.setHours(9, 0, 0, 0);
+  const todayEnd = new Date(todayStart.getTime() + 60 * 60 * 1000);
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(todayStart.getDate() + 1);
+  const tomorrowEnd = new Date(tomorrowStart.getTime() + 90 * 60 * 1000);
+
+  state.demo.project = state.demo.project || {
+    id: projectId,
+    name: "SpecCom Demo",
+    location: "Ruidoso, NM",
+    job_number: "DEMO-001",
+    is_demo: true,
+  };
+
+  state.demo.workOrders = [
+    {
+      id: "demo-wo-trouble",
+      project_id: projectId,
+      type: "TROUBLE_TICKET",
+      status: "ASSIGNED",
+      scheduled_start: todayStart.toISOString(),
+      scheduled_end: todayEnd.toISOString(),
+      address: "201 Pine Ridge Ln",
+      customer_label: "Trouble ticket: Fiber drop",
+      notes: "No signal reported. Check ONT and splice enclosure.",
+      priority: 2,
+      sla_due_at: todayEnd.toISOString(),
+      assigned_to_user_id: "demo-tech",
+    },
+    {
+      id: "demo-wo-service",
+      project_id: projectId,
+      type: "MAINTENANCE",
+      status: "ASSIGNED",
+      scheduled_start: tomorrowStart.toISOString(),
+      scheduled_end: tomorrowEnd.toISOString(),
+      address: "418 Cedar Park Ave",
+      customer_label: "Service order: Site audit",
+      notes: "Verify enclosure condition and capture photos.",
+      priority: 3,
+      sla_due_at: tomorrowEnd.toISOString(),
+      assigned_to_user_id: "demo-tech",
+    },
+  ];
+
+  state.demo.seeded = true;
 }
 
 function renderProjects(){
