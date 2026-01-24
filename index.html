@@ -80,7 +80,7 @@
             <div class="row" style="justify-content:space-between;">
               <div>
                 <h2 id="jobTitle">Job 731022136</h2>
-                <div id="jobSubtitle" class="muted small" data-i18n="jobSubtitle">Ruidoso FTTH Rebuild (node-by-node workflow)</div>
+                <div id="jobSubtitle" class="muted small" data-i18n="jobSubtitle">Ruidoso FTTH Rebuild (site-by-site workflow)</div>
               </div>
               <div class="no-pay-badge" data-i18n="photosOptionalBadge">Photos optional for MVP</div>
             </div>
@@ -88,10 +88,10 @@
           </div>
           <div class="grid cols-2">
             <div class="card">
-              <h2 data-i18n="activeNodeTitle">Active node</h2>
+              <h2 data-i18n="activeNodeTitle">Active site</h2>
               <div class="kpi">
                 <div class="tile">
-                  <div class="label" data-i18n="kpiNode">Node</div>
+                  <div class="label" data-i18n="kpiNode">Site</div>
                   <div id="dashNode" class="value">None</div>
                 </div>
                 <div class="tile">
@@ -181,13 +181,13 @@
 
         <section id="viewNodes" class="view">
           <div class="card">
-            <h1 data-i18n="nodesTitle">Node workspace</h1>
-            <div class="muted small" data-i18n="nodesSubtitle">Only one ACTIVE node at a time. Finish splicing before moving to the next node.</div>
+            <h1 data-i18n="nodesTitle">Site workspace</h1>
+            <div class="muted small" data-i18n="nodesSubtitle">Only one ACTIVE site at a time. Finish splicing before moving to the next site.</div>
 
             <div class="row" style="margin-bottom:12px;">
-              <input id="nodeNumber" class="input" placeholder="Enter node number (example: NODE-1001)" data-i18n-placeholder="nodeNumberPlaceholder" />
-              <button id="btnOpenNode" class="btn" data-i18n="openNode">Open node</button>
-              <button id="btnNewNode" class="btn secondary" data-i18n="createNode">Create node</button>
+              <input id="nodeNumber" class="input" placeholder="Enter site number (example: SITE-1001)" data-i18n-placeholder="nodeNumberPlaceholder" />
+              <button id="btnOpenNode" class="btn" data-i18n="openNode">Open site</button>
+              <button id="btnNewNode" class="btn secondary" data-i18n="createNode">Create site</button>
             </div>
 
             <div class="hr"></div>
@@ -204,7 +204,7 @@
             <div class="hr"></div>
 
             <h2 data-i18n="inventoryTitle">Inventory checklist</h2>
-            <p class="muted small" data-i18n="inventorySubtitle">What was used at this node. Splicers see items and checklists, not pricing.</p>
+            <p class="muted small" data-i18n="inventorySubtitle">What was used at this site. Splicers see items and checklists, not pricing.</p>
             <div id="inventory" style="margin-top:12px;"></div>
           </div>
         </section>
@@ -233,7 +233,7 @@
               <div class="hr"></div>
               <div id="backfillPanel" class="note backfill-panel" style="display:none;">
                 <div style="font-weight:900;">Owner backfill</div>
-                <div class="muted small">Upload from device when backfill is enabled for this node.</div>
+                <div class="muted small">Upload from device when backfill is enabled for this site.</div>
                 <div class="row" style="flex-wrap:wrap; margin-top:8px;">
                   <select id="backfillLocationSelect" class="input" style="min-width:220px; flex:1 1 auto;"></select>
                 </div>
@@ -258,7 +258,7 @@
               <div class="no-pay-banner" data-i18n="invoicesUngatedBanner">Invoices available without proof in MVP</div>
               <div class="muted small" data-i18n="invoiceActionsSubtitle">Billing entry is available in this MVP.</div>
               <div class="row" style="margin-top:12px;">
-                <button id="btnMarkNodeReady" class="btn" data-i18n="markNodeReady">Mark node READY for billing</button>
+                <button id="btnMarkNodeReady" class="btn" data-i18n="markNodeReady">Mark site READY for billing</button>
                 <button id="btnCreateInvoice" class="btn secondary" data-i18n="createInvoice">Create invoice (role-based)</button>
               </div>
               <div id="readyNote" class="note" style="margin-top:12px; display:none;"></div>
@@ -387,7 +387,7 @@
                 <li>Wire Supabase keys in Netlify env vars.</li>
                 <li>Run the SQL schema + RLS in Supabase.</li>
                 <li>Enable Storage bucket for photos (private).</li>
-                <li>Add real node sheets import and Millennium part lookup.</li>
+                <li>Add real site sheets import and Millennium part lookup.</li>
               </ol>
             </div>
           </div>

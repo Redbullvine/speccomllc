@@ -111,7 +111,7 @@ const I18N = {
     navDashboard: "Dashboard",
     navTechnician: "Technician",
     navDispatch: "Dispatch",
-    navNodes: "Nodes",
+    navNodes: "Sites",
     navPhotos: "Photos",
     navBilling: "Billing",
     navLabor: "Labor",
@@ -168,10 +168,10 @@ const I18N = {
     laborTechLabel: "Technician",
     laborDateLabel: "Work date",
     laborPaidHoursLabel: "Paid hours",
-    jobSubtitle: "Ruidoso FTTH Rebuild (node-by-node workflow)",
+    jobSubtitle: "Ruidoso FTTH Rebuild (site-by-site workflow)",
     photosOptionalBadge: "Photos optional for MVP",
-    activeNodeTitle: "Active node",
-    kpiNode: "Node",
+    activeNodeTitle: "Active site",
+    kpiNode: "Site",
     kpiCompletion: "Completion",
     kpiUnits: "Units",
     pricingHidden: "Pricing hidden from splicers",
@@ -179,16 +179,16 @@ const I18N = {
     allowedQuantitiesTitle: "Allowed quantities",
     catalogQuickSearchTitle: "Catalog quick search",
     catalogSearchPlaceholder: "Search Millennium part, MFG SKU, description",
-    nodesTitle: "Node workspace",
-    nodesSubtitle: "Only one ACTIVE node at a time. Finish splicing before moving to the next node.",
-    nodeNumberPlaceholder: "Enter node number (example: NODE-1001)",
-    openNode: "Open node",
-    createNode: "Create node",
+    nodesTitle: "Site workspace",
+    nodesSubtitle: "Only one ACTIVE site at a time. Finish splicing before moving to the next site.",
+    nodeNumberPlaceholder: "Enter site number (example: SITE-1001)",
+    openNode: "Open site",
+    createNode: "Create site",
     spliceLocationsTitle: "Splice locations",
     spliceLocationsSubtitle: "Photos are optional for billing in this MVP.",
     addSpliceLocation: "Add splice location",
     inventoryTitle: "Inventory checklist",
-    inventorySubtitle: "What was used at this node. Splicers see items and checklists, not pricing.",
+    inventorySubtitle: "What was used at this site. Splicers see items and checklists, not pricing.",
     photoChecklistTitle: "Photo checklist",
     photosOptionalBanner: "Photos optional for MVP",
     capturePhotosTitle: "Capture photos",
@@ -199,7 +199,7 @@ const I18N = {
     invoiceActionsTitle: "Invoice actions",
     invoicesUngatedBanner: "Invoices available without proof in MVP",
     invoiceActionsSubtitle: "Billing entry is available in this MVP.",
-    markNodeReady: "Mark node READY for billing",
+    markNodeReady: "Mark site READY for billing",
     createInvoice: "Create invoice (role-based)",
     invoicesPrivacyTitle: "Invoices and privacy",
     billingLocationsTitle: "Locations",
@@ -227,7 +227,7 @@ const I18N = {
     languageOptionSpanish: "Spanish",
     languageHelp: "Changes apply immediately and sync to your profile.",
     saveLanguage: "Save language",
-    selectProjectNodes: "Select a project to see nodes.",
+    selectProjectNodes: "Select a project to see sites.",
     selectProjectLocations: "Select a project to see locations.",
     startLabel: "Start",
     continueLabel: "Continue",
@@ -238,8 +238,8 @@ const I18N = {
     deletingLabel: "Deleting...",
     noProfilesFound: "No profiles found.",
     noLocationsYet: "No splice locations yet.",
-    openNodePrompt: "Open a node to see splice locations.",
-    noInventoryItems: "No inventory items yet. In Supabase, these come from inventory master + node checklist.",
+    openNodePrompt: "Open a site to see splice locations.",
+    noInventoryItems: "No inventory items yet. In Supabase, these come from inventory master + site checklist.",
     billingStatusLocations: "{count} locations",
     noLocations: "No locations",
     billingOpen: "Open billing",
@@ -253,13 +253,13 @@ const I18N = {
     tdsInvoicesLabel: "TDS invoices:",
     visible: "visible",
     hidden: "hidden",
-    openNodeInvoices: "Open a node to see invoice actions.",
+    openNodeInvoices: "Open a site to see invoice actions.",
     billingGateTitle: "Billing status",
     billingGateBypass: "Invoices are not gated by proof in this MVP.",
     statusLabel: "Status",
     eligibleLabel: "ELIGIBLE",
     notReadyLabel: "NOT READY",
-    nodeLabel: "Node",
+    nodeLabel: "Site",
     rateCardLabel: "Rate card",
     notesLabel: "Notes",
     workCodeLabel: "Work code",
@@ -271,9 +271,9 @@ const I18N = {
     subtotalLabel: "Subtotal",
     taxLabel: "Tax",
     totalLabel: "Total",
-    openNodeAllowedQuantities: "Open a node to see allowed quantities.",
-    openNodePhotoRequirements: "Open a node to see photo requirements.",
-    noNodeSelected: "No node selected.",
+    openNodeAllowedQuantities: "Open a site to see allowed quantities.",
+    openNodePhotoRequirements: "Open a site to see photo requirements.",
+    noNodeSelected: "No site selected.",
     spliceLocationLabel: "Splice location",
     codesUsedTitle: "Codes used",
     briefDescriptionTitle: "Brief description",
@@ -337,7 +337,7 @@ const I18N = {
     navDashboard: "Panel",
     navTechnician: "Tecnico",
     navDispatch: "Despacho",
-    navNodes: "Nodos",
+    navNodes: "Sitios",
     navPhotos: "Fotos",
     navBilling: "Facturación",
     navLabor: "Mano de obra",
@@ -394,10 +394,10 @@ const I18N = {
     laborTechLabel: "Tecnico",
     laborDateLabel: "Fecha",
     laborPaidHoursLabel: "Horas pagadas",
-    jobSubtitle: "Reconstrucción FTTH Ruidoso (flujo por nodo)",
+    jobSubtitle: "Reconstrucción FTTH Ruidoso (flujo por sitio)",
     photosOptionalBadge: "Fotos opcionales para el MVP",
-    activeNodeTitle: "Nodo activo",
-    kpiNode: "Nodo",
+    activeNodeTitle: "Sitio activo",
+    kpiNode: "Sitio",
     kpiCompletion: "Avance",
     kpiUnits: "Unidades",
     pricingHidden: "Precios ocultos para empalmadores",
@@ -405,16 +405,16 @@ const I18N = {
     allowedQuantitiesTitle: "Cantidades permitidas",
     catalogQuickSearchTitle: "Búsqueda rápida del catálogo",
     catalogSearchPlaceholder: "Buscar parte Millennium, SKU MFG, descripción",
-    nodesTitle: "Espacio de nodos",
-    nodesSubtitle: "Solo un nodo ACTIVO a la vez. Termina el empalme antes de pasar al siguiente.",
-    nodeNumberPlaceholder: "Ingresa número de nodo (ej: NODE-1001)",
-    openNode: "Abrir nodo",
-    createNode: "Crear nodo",
+    nodesTitle: "Espacio de sitios",
+    nodesSubtitle: "Solo un sitio ACTIVO a la vez. Termina el empalme antes de pasar al siguiente.",
+    nodeNumberPlaceholder: "Ingresa número de sitio (ej: SITE-1001)",
+    openNode: "Abrir sitio",
+    createNode: "Crear sitio",
     spliceLocationsTitle: "Ubicaciones de empalme",
     spliceLocationsSubtitle: "Las fotos son opcionales para facturar en este MVP.",
     addSpliceLocation: "Agregar ubicación",
     inventoryTitle: "Checklist de inventario",
-    inventorySubtitle: "Lo usado en este nodo. Empalmadores ven ítems y checklist, no precios.",
+    inventorySubtitle: "Lo usado en este sitio. Empalmadores ven ítems y checklist, no precios.",
     photoChecklistTitle: "Checklist de fotos",
     photosOptionalBanner: "Fotos opcionales para el MVP",
     capturePhotosTitle: "Capturar fotos",
@@ -425,7 +425,7 @@ const I18N = {
     invoiceActionsTitle: "Acciones de facturación",
     invoicesUngatedBanner: "Facturas disponibles sin pruebas en el MVP",
     invoiceActionsSubtitle: "La carga de facturación está disponible en este MVP.",
-    markNodeReady: "Marcar nodo LISTO para facturar",
+    markNodeReady: "Marcar sitio LISTO para facturar",
     createInvoice: "Crear factura (según rol)",
     invoicesPrivacyTitle: "Facturas y privacidad",
     billingLocationsTitle: "Ubicaciones",
@@ -453,7 +453,7 @@ const I18N = {
     languageOptionSpanish: "Español",
     languageHelp: "Los cambios aplican al instante y se guardan en tu perfil.",
     saveLanguage: "Guardar idioma",
-    selectProjectNodes: "Selecciona un proyecto para ver nodos.",
+    selectProjectNodes: "Selecciona un proyecto para ver sitios.",
     selectProjectLocations: "Selecciona un proyecto para ver ubicaciones.",
     startLabel: "Iniciar",
     continueLabel: "Continuar",
@@ -464,8 +464,8 @@ const I18N = {
     deletingLabel: "Eliminando...",
     noProfilesFound: "No hay perfiles.",
     noLocationsYet: "No hay ubicaciones aún.",
-    openNodePrompt: "Abre un nodo para ver ubicaciones.",
-    noInventoryItems: "Aún no hay ítems de inventario. En Supabase vienen del maestro + checklist.",
+    openNodePrompt: "Abre un sitio para ver ubicaciones.",
+    noInventoryItems: "Aún no hay ítems de inventario. En Supabase vienen del maestro + checklist del sitio.",
     billingStatusLocations: "{count} ubicaciones",
     noLocations: "Sin ubicaciones",
     billingOpen: "Abrir facturación",
@@ -479,13 +479,13 @@ const I18N = {
     tdsInvoicesLabel: "Facturas TDS:",
     visible: "visible",
     hidden: "oculto",
-    openNodeInvoices: "Abre un nodo para ver acciones de facturación.",
+    openNodeInvoices: "Abre un sitio para ver acciones de facturación.",
     billingGateTitle: "Estado de facturación",
     billingGateBypass: "Las facturas no se bloquean por pruebas en este MVP.",
     statusLabel: "Estado",
     eligibleLabel: "ELEGIBLE",
     notReadyLabel: "NO LISTO",
-    nodeLabel: "Nodo",
+    nodeLabel: "Sitio",
     rateCardLabel: "Tarifa",
     notesLabel: "Notas",
     workCodeLabel: "Código",
@@ -497,9 +497,9 @@ const I18N = {
     subtotalLabel: "Subtotal",
     taxLabel: "Impuesto",
     totalLabel: "Total",
-    openNodeAllowedQuantities: "Abre un nodo para ver cantidades permitidas.",
-    openNodePhotoRequirements: "Abre un nodo para ver requisitos de fotos.",
-    noNodeSelected: "No hay nodo seleccionado.",
+    openNodeAllowedQuantities: "Abre un sitio para ver cantidades permitidas.",
+    openNodePhotoRequirements: "Abre un sitio para ver requisitos de fotos.",
+    noNodeSelected: "No hay sitio seleccionado.",
     spliceLocationLabel: "Ubicación de empalme",
     codesUsedTitle: "Códigos usados",
     briefDescriptionTitle: "Descripción breve",
@@ -2805,7 +2805,7 @@ async function loadProjectNodes(projectId){
     .eq("project_id", projectId)
     .order("node_number");
   if (error){
-    toast("Nodes load error", error.message);
+    toast("Sites load error", error.message);
     return;
   }
   state.projectNodes = data || [];
@@ -2863,12 +2863,12 @@ function getActiveProjectNode(){
 async function startNode(nodeId){
   const node = state.projectNodes.find(n => n.id === nodeId);
   if (!node){
-    toast("Node missing", "Node not found.");
+    toast("Site missing", "Site not found.");
     return;
   }
   const active = getActiveProjectNode();
   if (active && active.id !== nodeId && active.status !== "COMPLETE"){
-    toast("Active node in progress", `Finish ${active.node_number} before starting another node.`);
+    toast("Active site in progress", `Finish ${active.node_number} before starting another site.`);
     return;
   }
   if (isDemo){
@@ -2898,17 +2898,17 @@ async function startNode(nodeId){
 async function completeNode(nodeId){
   const node = state.projectNodes.find(n => n.id === nodeId);
   if (!node){
-    toast("Node missing", "Node not found.");
+    toast("Site missing", "Site not found.");
     return;
   }
   const role = getRole();
   const canComplete = BUILD_MODE ? (role === "OWNER" || role === "PRIME") : (role === "PRIME" || role === "OWNER");
   if (!canComplete){
-    toast("Not allowed", "Only PRIME/OWNER can complete a node.");
+    toast("Not allowed", "Only PRIME/OWNER can complete a site.");
     return;
   }
   if (!state.activeNode || state.activeNode.node_number !== node.node_number){
-    toast("Open node", "Open the node before marking it complete.");
+    toast("Open site", "Open the site before marking it complete.");
     return;
   }
   const photos = computeProofStatus(state.activeNode);
@@ -2942,12 +2942,12 @@ async function editNodeMeta(nodeId){
   }
   const node = state.projectNodes.find(n => n.id === nodeId);
   if (!node){
-    toast("Node missing", "Node not found.");
+    toast("Site missing", "Site not found.");
     return;
   }
-  const nextNumber = prompt("Edit node number", node.node_number || "");
+  const nextNumber = prompt("Edit site number", node.node_number || "");
   if (nextNumber === null) return;
-  const nextDesc = prompt("Edit node description", node.description || "");
+  const nextDesc = prompt("Edit site description", node.description || "");
   if (nextDesc === null) return;
   const trimmedNumber = String(nextNumber).trim() || node.node_number;
   const trimmedDesc = String(nextDesc).trim();
@@ -2999,10 +2999,10 @@ async function deleteNode(nodeId){
   }
   const node = state.projectNodes.find(n => n.id === nodeId);
   if (!node){
-    toast("Node missing", "Node not found.");
+    toast("Site missing", "Site not found.");
     return;
   }
-  if (!confirm("Delete node?\nThis will remove the node and all related data. This cannot be undone.")) return;
+  if (!confirm("Delete site?\nThis will remove the site and all related data. This cannot be undone.")) return;
   const typed = prompt("Type DELETE to confirm.");
   if (typed !== "DELETE"){
     toast("Delete canceled", "Type DELETE to confirm.");
@@ -3026,7 +3026,7 @@ async function deleteNode(nodeId){
     renderProofChecklist();
     updateKPI();
     renderBillingDetail();
-    toast("Deleted", "Node deleted.");
+    toast("Deleted", "Site deleted.");
     return;
   }
 
@@ -3052,7 +3052,7 @@ async function deleteNode(nodeId){
   renderProofChecklist();
   updateKPI();
   renderBillingDetail();
-  toast("Deleted", "Node deleted.");
+  toast("Deleted", "Site deleted.");
 }
 
 async function loadUnitTypes(){
@@ -4409,7 +4409,7 @@ async function handleBackfillPhotoUpload(photoType, file){
   const node = state.activeNode;
   const projectId = state.activeProject?.id || null;
   if (!node){
-    toast("Open a node", "Select or open a node first.");
+    toast("Open a site", "Select or open a site first.");
     return;
   }
   if (!isOwner()){
@@ -4417,7 +4417,7 @@ async function handleBackfillPhotoUpload(photoType, file){
     return;
   }
   if (!state.nodeProofStatus?.backfill_allowed){
-    toast("Backfill locked", "Backfill is not enabled for this node.");
+    toast("Backfill locked", "Backfill is not enabled for this site.");
     return;
   }
   if (!file){
@@ -4900,7 +4900,7 @@ function renderBillingDetail(){
     ${(!billingUnlocked && !MVP_UNGATED) ? `
       <div class="note warning" style="margin-top:12px;">
         <div style="font-weight:900;">Billing locked</div>
-        <div class="muted small">Proof is incomplete for this node. Owner can apply an override if needed.</div>
+        <div class="muted small">Proof is incomplete for this site. Owner can apply an override if needed.</div>
         ${showOverrideAction ? '<button id="btnOwnerOverride" class="btn secondary" style="margin-top:10px;">Owner override</button>' : ""}
       </div>
     ` : ""}
@@ -5194,7 +5194,7 @@ async function saveBillingInvoice(){
     return;
   }
   if (!isBillingUnlocked()){
-    toast("Billing locked", "Proof is incomplete for this node.");
+    toast("Billing locked", "Proof is incomplete for this site.");
     return;
   }
   const totals = computeInvoiceTotals(state.billingItems);
@@ -5275,7 +5275,7 @@ async function markInvoiceReady(){
     return;
   }
   if (!isBillingUnlocked()){
-    toast("Billing locked", "Proof is incomplete for this node.");
+    toast("Billing locked", "Proof is incomplete for this site.");
     return;
   }
   if (!hasBillableItems(state.billingItems)){
@@ -5530,7 +5530,7 @@ async function importUsageToInvoice(){
   }
   const nodeId = state.billingLocation?.node_id;
   if (!nodeId){
-    toast("No node", "Node data unavailable for this location.");
+    toast("No site", "Site data unavailable for this location.");
     return;
   }
   if (isDemo){
@@ -5746,7 +5746,7 @@ function renderAlerts(){
           <div class="alert-card">
             <div class="row" style="justify-content:space-between;">
               <div>
-                <div style="font-weight:900">Node ${escapeHtml(nodeLabel)}</div>
+                <div style="font-weight:900">Site ${escapeHtml(nodeLabel)}</div>
                 <div class="muted small">${escapeHtml(unitCode)} ${escapeHtml(unitDesc)}</div>
               </div>
               <span class="chip"><span class="dot warn"></span><span>${escapeHtml(alert.severity || "warning")}</span></span>
@@ -6117,21 +6117,21 @@ async function openNode(nodeNumber){
 
   const n = (nodeNumber || "").trim();
   if (!n){
-    toast("Node number needed", "Enter a node number (example: NODE-1001).");
+    toast("Site number needed", "Enter a site number (example: SITE-1001).");
     return;
   }
   clearProof();
 
   if (isDemo){
     if (!state.demo.nodes[n]){
-      toast("Not found", "That node doesn't exist in demo. Click Create node to add it.");
+      toast("Not found", "That site doesn't exist in demo. Click Create site to add it.");
       return;
     }
 
     const nodeMeta = (state.demo.nodesList || []).find(x => x.node_number === n);
     const activeMeta = (state.demo.nodesList || []).find(x => x.status === "ACTIVE");
     if (nodeMeta && activeMeta && activeMeta.node_number !== n && activeMeta.status !== "COMPLETE"){
-      toast("Active node in progress", `Finish ${activeMeta.node_number} before starting another node.`);
+      toast("Active site in progress", `Finish ${activeMeta.node_number} before starting another site.`);
       return;
     }
     if (nodeMeta && nodeMeta.status !== "COMPLETE"){
@@ -6166,7 +6166,7 @@ async function openNode(nodeNumber){
     if (role === "PRIME" && state.activeNode.units_allowed > 0){
       const ratio = state.activeNode.units_used / state.activeNode.units_allowed;
       if (ratio >= 0.9){
-        toast("Prime alert", "Units are close to the allowed threshold for this node.");
+        toast("Prime alert", "Units are close to the allowed threshold for this site.");
       }
     }
     return;
@@ -6183,17 +6183,17 @@ async function openNode(nodeNumber){
 
   const { data: nodeRow, error: nodeErr } = await nodeQuery.maybeSingle();
   if (nodeErr){
-    toast("Node error", nodeErr.message);
+    toast("Site error", nodeErr.message);
     return;
   }
   if (!nodeRow){
-    toast("Not found", "That node doesn't exist. Click Create node to add it.");
+    toast("Not found", "That site doesn't exist. Click Create site to add it.");
     return;
   }
 
   const activeNodeMeta = state.projectNodes.find(n => n.status === "ACTIVE");
   if (activeNodeMeta && activeNodeMeta.node_number !== nodeRow.node_number){
-    toast("Active node in progress", `Finish ${activeNodeMeta.node_number} before starting another node.`);
+    toast("Active site in progress", `Finish ${activeNodeMeta.node_number} before starting another site.`);
     return;
   }
 
@@ -6203,7 +6203,7 @@ async function openNode(nodeNumber){
       .update({ status: "ACTIVE", started_at: new Date().toISOString() })
       .eq("id", nodeRow.id);
     if (statusErr){
-      toast("Node start failed", statusErr.message);
+      toast("Site start failed", statusErr.message);
       return;
     }
     nodeRow.status = "ACTIVE";
@@ -6313,18 +6313,18 @@ async function createNode(nodeNumber){
   ensureDemoSeed();
   const n = (nodeNumber || "").trim();
   if (!n){
-    toast("Node number needed", "Enter a node number then click Create node.");
+    toast("Site number needed", "Enter a site number then click Create site.");
     return;
   }
   if (isDemo){
     if (state.demo.nodes[n]){
-      toast("Already exists", "That node already exists.");
+      toast("Already exists", "That site already exists.");
       return;
     }
     const newNode = {
       id: `demo-${Date.now()}`,
       node_number: n,
-      description: "New node",
+      description: "New site",
       status: "NOT_STARTED",
       project_id: state.activeProject?.id || state.demo.project?.id,
       units_allowed: 120,
@@ -6345,7 +6345,7 @@ async function createNode(nodeNumber){
       project_id: newNode.project_id,
     });
     renderNodeCards();
-    toast("Node created", `Created node ${n}. Now click Open node.`);
+    toast("Site created", `Created site ${n}. Now click Open site.`);
     return;
   }
 
@@ -6364,7 +6364,7 @@ async function createNode(nodeNumber){
     return;
   }
   await loadProjectNodes(state.activeProject?.id || null);
-  toast("Node created", `Created node ${n}. Now click Open node.`);
+  toast("Site created", `Created site ${n}. Now click Open site.`);
 }
 
 async function markNodeReady(){
@@ -6376,7 +6376,7 @@ async function markNodeReady(){
   }
   const role = getRole();
   if (role === "SPLICER" || role === "TECHNICIAN"){
-    toast("Not allowed", "Only billing roles can mark nodes ready.");
+    toast("Not allowed", "Only billing roles can mark sites ready.");
     return;
   }
 
@@ -6387,7 +6387,7 @@ async function markNodeReady(){
   }
   const photos = computeProofStatus(node);
   if (!BUILD_MODE && !MVP_UNGATED && !photos.photosOk){
-    toast("Photos required", "Take photos (GPS + photo + timestamp) before marking the node ready.");
+    toast("Photos required", "Take photos (GPS + photo + timestamp) before marking the site ready.");
     return;
   }
   if (isDemo){
@@ -6405,8 +6405,8 @@ async function markNodeReady(){
   }
   $("readyNote").style.display = "";
   $("readyNote").innerHTML = `
-    <div style="font-weight:900;">Node READY</div>
-    <div class="muted small">Node is ready for billing. Invoices are available in this MVP.</div>
+    <div style="font-weight:900;">Site READY</div>
+    <div class="muted small">Site is ready for billing. Invoices are available in this MVP.</div>
   `;
   renderInvoicePanel();
   updateKPI();
@@ -6428,7 +6428,7 @@ async function createInvoice(){
 
   const completion = computeNodeCompletion(node);
   if (!BUILD_MODE && !MVP_UNGATED && !(completion.pct === 100 && node.ready_for_billing)){
-    toast("Blocked", "Invoices are blocked until documentation is complete and node is marked READY.");
+    toast("Blocked", "Invoices are blocked until documentation is complete and site is marked READY.");
     return;
   }
   const photos = computeProofStatus(node);
