@@ -96,17 +96,17 @@ const I18N = {
   en: {
     brandSubtitle: "Field verification, documentation, and billing control",
     authTitle: "Sign in to SpecCom",
-    authSubtitle: "This app requires Supabase Auth. Configure SUPABASE_URL and SUPABASE_ANON_KEY to sign in.",
+    authSubtitle: "Welcome back.",
     emailPlaceholder: "email",
     passwordPlaceholder: "password",
     signIn: "Sign in",
-    magicLink: "Send magic link",
-    createUser: "Create user",
-    authConfigNote: "Supabase not configured.",
-    rolesTitle: "Roles in this build",
-    rolesSubtitle: "ADMIN -> OWNER -> PRIME -> TDS -> SUB -> SPLICER -> TECHNICIAN (Spec Communications, LLC Louis Garcia)",
-    liveSetupTitle: "Live setup",
-    liveSetupSubtitle: "Ensure Supabase Auth, Storage, and RLS policies are configured for your roles.",
+    magicLink: "Reset password",
+    createUser: "Create account",
+    authConfigNote: "Sign-in unavailable.",
+    rolesTitle: "",
+    rolesSubtitle: "",
+    liveSetupTitle: "",
+    liveSetupSubtitle: "",
     selectProject: "Select project",
     navDashboard: "Dashboard",
     navTechnician: "Technician",
@@ -322,17 +322,17 @@ const I18N = {
   es: {
     brandSubtitle: "Verificación en campo, documentación y control de facturación",
     authTitle: "Inicia sesión en SpecCom",
-    authSubtitle: "Esta app requiere Supabase Auth. Configura SUPABASE_URL y SUPABASE_ANON_KEY para iniciar sesión.",
+    authSubtitle: "Bienvenido de nuevo.",
     emailPlaceholder: "correo",
     passwordPlaceholder: "contraseña",
     signIn: "Iniciar sesión",
-    magicLink: "Enviar enlace mágico",
-    createUser: "Crear usuario",
-    authConfigNote: "Supabase no está configurado.",
-    rolesTitle: "Roles en esta versión",
-    rolesSubtitle: "ADMIN -> OWNER -> PRIME -> TDS -> SUB -> SPLICER -> TECHNICIAN (Spec Communications, LLC Louis Garcia)",
-    liveSetupTitle: "Configuración en vivo",
-    liveSetupSubtitle: "Asegura Supabase Auth, Storage y políticas RLS para tus roles.",
+    magicLink: "Restablecer contraseña",
+    createUser: "Crear cuenta",
+    authConfigNote: "Inicio de sesión no disponible.",
+    rolesTitle: "",
+    rolesSubtitle: "",
+    liveSetupTitle: "",
+    liveSetupSubtitle: "",
     selectProject: "Seleccionar proyecto",
     navDashboard: "Panel",
     navTechnician: "Tecnico",
@@ -931,7 +931,7 @@ function setEnvWarning(){
   if (appMode === "real" && !hasSupabaseConfig){
     banner.style.display = "";
     banner.classList.add("warning-banner");
-    banner.textContent = "LIVE mode requires SUPABASE_URL and SUPABASE_ANON_KEY. Set Netlify env vars before using the app.";
+    banner.textContent = "Live mode configuration is required before using the app.";
   } else {
     banner.style.display = "none";
     banner.textContent = "";

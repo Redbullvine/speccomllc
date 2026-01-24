@@ -32,7 +32,6 @@
       <div class="auth-wrap">
         <div class="card auth-card">
           <h1 data-i18n="authTitle">Sign in to SpecCom</h1>
-          <p class="muted" data-i18n="authSubtitle">This app requires Supabase Auth. Configure SUPABASE_URL and SUPABASE_ANON_KEY to sign in.</p>
 
           <div class="hr"></div>
 
@@ -42,24 +41,9 @@
           </div>
           <div class="row" style="margin-top:12px;">
             <button id="btnSignIn" class="btn" data-i18n="signIn">Sign in</button>
-            <button id="btnMagicLink" class="btn secondary" data-i18n="magicLink">Send magic link</button>
-            <button id="btnSignUp" class="btn secondary" data-i18n="createUser">Create user</button>
+            <button id="btnSignUp" class="btn secondary" data-i18n="createUser">Create account</button>
             <button id="btnDemoLogin" class="btn ghost" data-i18n="demoLogin">Demo login</button>
           </div>
-          <div id="demoLoginNote" class="muted small" style="margin-top:8px;" data-i18n="demoLoginNote">Demo session (read-only)</div>
-          <div id="authConfigNote" class="muted small" style="display:none; margin-top:8px;" data-i18n="authConfigNote">Supabase not configured.</div>
-        </div>
-      </div>
-
-      <div class="grid cols-2">
-        <div class="card">
-          <h2 data-i18n="rolesTitle">Roles in this build</h2>
-          <div class="muted small" data-i18n="rolesSubtitle">ADMIN -> OWNER -> PRIME -> TDS -> SUB -> SPLICER -> TECHNICIAN (Spec Communications, LLC Louis Garcia)</div>
-        </div>
-
-        <div class="card">
-          <h2 data-i18n="liveSetupTitle">Live setup</h2>
-          <div class="muted small" data-i18n="liveSetupSubtitle">Ensure Supabase Auth, Storage, and RLS policies are configured for your roles.</div>
         </div>
       </div>
     </div>
