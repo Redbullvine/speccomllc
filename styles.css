@@ -647,6 +647,51 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
   border-color: rgba(245,158,11,.7);
   color: #fcd34d;
 }
+.tech-log{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.tech-log .event-row{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background: rgba(255,255,255,.02);
+}
+.tech-log .event-title{
+  font-weight:700;
+}
+.tech-log .event-meta{
+  color: var(--muted);
+  font-size:12px;
+}
+.wo-card{
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:12px;
+  background: rgba(255,255,255,.02);
+  margin-bottom:10px;
+}
+.wo-header{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+}
+.status-pill{
+  padding:4px 10px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  border:1px solid var(--line);
+}
+.status-pill.ok{color:#34d399; border-color:rgba(52,211,153,.45);}
+.status-pill.warn{color:#fbbf24; border-color:rgba(251,191,36,.45);}
+.status-pill.bad{color:#f87171; border-color:rgba(248,113,113,.45);}
 @media (max-width: 700px){
   .container{padding:20px 16px 28px}
   .topbar{flex-direction:column; align-items:flex-start}

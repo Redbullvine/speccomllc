@@ -46,6 +46,22 @@ const state = {
     markers: new Map(),
     userNames: new Map(),
   },
+  technician: {
+    timesheet: null,
+    events: [],
+    activeEvent: null,
+    summary: null,
+    locationTrail: [],
+  },
+  workOrders: {
+    assigned: [],
+    dispatch: [],
+    technicians: [],
+    editing: null,
+  },
+  labor: {
+    rows: [],
+  },
   mapFilters: {
     activeOnly: true,
     search: "",
@@ -55,7 +71,7 @@ const state = {
     usageChannel: null,
   },
   demo: {
-    roles: ["TDS", "PRIME", "SUB", "SPLICER", "OWNER"],
+    roles: ["TDS", "PRIME", "SUB", "SPLICER", "TECHNICIAN", "OWNER"],
     role: "SPLICER",
     nodes: {},
     nodesList: [],
@@ -72,6 +88,9 @@ const state = {
   },
 };
 
+const WORK_ORDER_TYPES = ["INSTALL", "TROUBLE_TICKET", "MAINTENANCE", "SURVEY"];
+const WORK_ORDER_STATUSES = ["NEW", "ASSIGNED", "EN_ROUTE", "ON_SITE", "IN_PROGRESS", "BLOCKED", "COMPLETE", "CANCELED"];
+
 const I18N = {
   en: {
     brandSubtitle: "Field verification, documentation, and billing control",
@@ -84,20 +103,70 @@ const I18N = {
     createUser: "Create user",
     authConfigNote: "Supabase not configured.",
     rolesTitle: "Roles in this build",
-    rolesSubtitle: "TDS -> PRIME -> SUB -> SPLICER -> OWNER (Spec Communications, LLC Louis Garcia)",
+    rolesSubtitle: "TDS -> PRIME -> SUB -> SPLICER -> TECHNICIAN -> OWNER (Spec Communications, LLC Louis Garcia)",
     liveSetupTitle: "Live setup",
     liveSetupSubtitle: "Ensure Supabase Auth, Storage, and RLS policies are configured for your roles.",
     selectProject: "Select project",
     navDashboard: "Dashboard",
+    navTechnician: "Technician",
+    navDispatch: "Dispatch",
     navNodes: "Nodes",
     navPhotos: "Photos",
     navBilling: "Billing",
+    navLabor: "Labor",
     navInvoices: "Invoices",
     navMap: "Live Map",
     navCatalog: "Material Catalog",
     navAlerts: "Alerts",
     navAdmin: "Admin",
     navSettings: "Settings",
+    techClockTitle: "Time tracking",
+    techClockIn: "Clock In",
+    techClockOut: "Clock Out",
+    techJobStateLabel: "Current state",
+    techStartJob: "Start Job",
+    techPauseJob: "Pause Job",
+    techLunch: "Lunch",
+    techBreak: "Break",
+    techTruckInspection: "Truck Inspection",
+    techEndJob: "End Job",
+    techSummaryTitle: "Daily summary",
+    techSummaryTotal: "Total worked",
+    techSummaryPaid: "Paid time",
+    techSummaryUnpaid: "Unpaid time",
+    techSummaryInspections: "Inspections",
+    techLocationTrailTitle: "Location trail",
+    techNoTimesheet: "Clock in to start tracking today.",
+    techClockedInAt: "Clocked in at {time}",
+    techClockedOutAt: "Clocked out at {time}",
+    techNoEvents: "No events yet.",
+    techNoTrail: "Location trail is empty.",
+    techStateIdle: "Idle",
+    techStateOffClock: "Off clock",
+    techWorkOrdersTitle: "Work orders",
+    techWorkOrdersSubtitle: "Assigned installs and trouble tickets",
+    techTodayTitle: "Today",
+    techTomorrowTitle: "Tomorrow",
+    woNoOrders: "No work orders.",
+    woActionEnRoute: "En Route",
+    woActionOnSite: "On Site",
+    woActionStart: "Start",
+    woActionBlocked: "Blocked",
+    woActionComplete: "Complete",
+    dispatchTitle: "Dispatch",
+    dispatchCreate: "Create work order",
+    dispatchImportCsv: "Import CSV",
+    dispatchStatusAll: "All statuses",
+    dispatchAssignAll: "All",
+    dispatchAssignAssigned: "Assigned",
+    dispatchAssignUnassigned: "Unassigned",
+    dispatchModalTitle: "Work order",
+    laborTitle: "Labor",
+    laborNoProject: "Select a project to view labor.",
+    laborNoRows: "No technician labor logged yet.",
+    laborTechLabel: "Technician",
+    laborDateLabel: "Work date",
+    laborPaidHoursLabel: "Paid hours",
     jobSubtitle: "Ruidoso FTTH Rebuild (node-by-node workflow)",
     photosOptionalBadge: "Photos optional for MVP",
     activeNodeTitle: "Active node",
@@ -260,20 +329,70 @@ const I18N = {
     createUser: "Crear usuario",
     authConfigNote: "Supabase no está configurado.",
     rolesTitle: "Roles en esta versión",
-    rolesSubtitle: "TDS -> PRIME -> SUB -> SPLICER -> OWNER (Spec Communications, LLC Louis Garcia)",
+    rolesSubtitle: "TDS -> PRIME -> SUB -> SPLICER -> TECHNICIAN -> OWNER (Spec Communications, LLC Louis Garcia)",
     liveSetupTitle: "Configuración en vivo",
     liveSetupSubtitle: "Asegura Supabase Auth, Storage y políticas RLS para tus roles.",
     selectProject: "Seleccionar proyecto",
     navDashboard: "Panel",
+    navTechnician: "Tecnico",
+    navDispatch: "Despacho",
     navNodes: "Nodos",
     navPhotos: "Fotos",
     navBilling: "Facturación",
+    navLabor: "Mano de obra",
     navInvoices: "Facturas",
     navMap: "Mapa en vivo",
     navCatalog: "Catálogo",
     navAlerts: "Alertas",
     navAdmin: "Admin",
     navSettings: "Configuración",
+    techClockTitle: "Registro de tiempo",
+    techClockIn: "Entrada",
+    techClockOut: "Salida",
+    techJobStateLabel: "Estado actual",
+    techStartJob: "Iniciar trabajo",
+    techPauseJob: "Pausar trabajo",
+    techLunch: "Almuerzo",
+    techBreak: "Pausa",
+    techTruckInspection: "Inspeccion de camion",
+    techEndJob: "Finalizar trabajo",
+    techSummaryTitle: "Resumen diario",
+    techSummaryTotal: "Total trabajado",
+    techSummaryPaid: "Tiempo pagado",
+    techSummaryUnpaid: "Tiempo no pagado",
+    techSummaryInspections: "Inspecciones",
+    techLocationTrailTitle: "Ruta de ubicacion",
+    techNoTimesheet: "Marca entrada para iniciar el dia.",
+    techClockedInAt: "Entrada a las {time}",
+    techClockedOutAt: "Salida a las {time}",
+    techNoEvents: "Sin eventos todavia.",
+    techNoTrail: "Sin ruta de ubicacion.",
+    techStateIdle: "En espera",
+    techStateOffClock: "Fuera de turno",
+    techWorkOrdersTitle: "Ordenes de trabajo",
+    techWorkOrdersSubtitle: "Instalaciones y tickets asignados",
+    techTodayTitle: "Hoy",
+    techTomorrowTitle: "Mañana",
+    woNoOrders: "Sin ordenes.",
+    woActionEnRoute: "En ruta",
+    woActionOnSite: "En sitio",
+    woActionStart: "Iniciar",
+    woActionBlocked: "Bloqueado",
+    woActionComplete: "Completar",
+    dispatchTitle: "Despacho",
+    dispatchCreate: "Crear orden",
+    dispatchImportCsv: "Importar CSV",
+    dispatchStatusAll: "Todos",
+    dispatchAssignAll: "Todos",
+    dispatchAssignAssigned: "Asignadas",
+    dispatchAssignUnassigned: "Sin asignar",
+    dispatchModalTitle: "Orden de trabajo",
+    laborTitle: "Mano de obra",
+    laborNoProject: "Selecciona un proyecto para ver mano de obra.",
+    laborNoRows: "No hay horas registradas.",
+    laborTechLabel: "Tecnico",
+    laborDateLabel: "Fecha",
+    laborPaidHoursLabel: "Horas pagadas",
     jobSubtitle: "Reconstrucción FTTH Ruidoso (flujo por nodo)",
     photosOptionalBadge: "Fotos opcionales para el MVP",
     activeNodeTitle: "Nodo activo",
@@ -838,6 +957,16 @@ function setActiveView(viewId){
   if (viewId === "viewAdmin"){
     loadAdminProfiles();
   }
+  if (viewId === "viewTechnician"){
+    loadTechnicianTimesheet();
+  }
+  if (viewId === "viewDispatch"){
+    loadDispatchTechnicians();
+    loadDispatchWorkOrders();
+  }
+  if (viewId === "viewLabor"){
+    loadLaborRows();
+  }
   if (viewId === "viewMap"){
     ensureMap();
     if (state.map.instance){
@@ -886,6 +1015,7 @@ async function upsertUserLocation(pos){
     updated_at: new Date().toISOString(),
   };
   const nextPoint = { lat: payload.lat, lng: payload.lng };
+  recordTechnicianTrail(pos);
   if (!shouldSendLocation(nextPoint)) return;
   state.lastLocationSent = nextPoint;
   state.lastLocationSentAt = Date.now();
@@ -1094,6 +1224,11 @@ function refreshLanguageSensitiveUI(){
   renderBillingDetail();
   renderInvoicePanel();
   renderAlerts();
+  renderTechnicianDashboard();
+  renderLaborTable();
+  renderTechnicianWorkOrders();
+  renderDispatchTable();
+  syncDispatchStatusFilter();
   applyI18n();
   refreshLocations();
 }
@@ -1113,6 +1248,35 @@ function isBillingManager(){
 
 function isOwner(){
   return getRole() === "OWNER";
+}
+
+function isTechnician(){
+  return getRole() === "TECHNICIAN";
+}
+
+function canViewLabor(){
+  const role = getRole();
+  return role === "OWNER" || role === "PRIME";
+}
+
+function canViewDispatch(){
+  const role = getRole();
+  return role === "OWNER" || role === "PRIME";
+}
+
+function getDefaultView(){
+  return isTechnician() ? "viewTechnician" : "viewDashboard";
+}
+
+function isViewAllowed(viewId){
+  const role = getRole();
+  if (role === "TECHNICIAN"){
+    return ["viewTechnician", "viewMap", "viewSettings"].includes(viewId);
+  }
+  if (viewId === "viewTechnician") return false;
+  if (viewId === "viewLabor") return canViewLabor();
+  if (viewId === "viewDispatch") return canViewDispatch();
+  return true;
 }
 
 function isBillingUnlocked(){
@@ -1196,12 +1360,43 @@ function updateKPI(){
   }
 }
 
+function setRoleBasedVisibility(){
+  const role = getRole();
+  const isTech = role === "TECHNICIAN";
+  const allowedViews = isTech
+    ? new Set(["viewTechnician", "viewMap", "viewSettings"])
+    : new Set(["viewDashboard", "viewNodes", "viewPhotos", "viewBilling", "viewInvoices", "viewMap", "viewCatalog", "viewAlerts", "viewAdmin", "viewSettings", "viewLabor", "viewDispatch"]);
+
+  document.querySelectorAll(".nav-item").forEach((btn) => {
+    const viewId = btn.dataset.view;
+    let visible = allowedViews.has(viewId);
+    if (!isTech && viewId === "viewLabor") visible = canViewLabor();
+    if (!isTech && viewId === "viewDispatch") visible = canViewDispatch();
+    if (!isTech && viewId === "viewTechnician") visible = false;
+    btn.style.display = visible ? "" : "none";
+  });
+
+  document.querySelectorAll(".view").forEach((view) => {
+    const viewId = view.id;
+    let visible = allowedViews.has(viewId);
+    if (!isTech && viewId === "viewLabor") visible = canViewLabor();
+    if (!isTech && viewId === "viewDispatch") visible = canViewDispatch();
+    if (!isTech && viewId === "viewTechnician") visible = false;
+    view.style.display = visible ? "" : "none";
+  });
+
+  const activeView = document.querySelector(".view.active");
+  if (activeView && !isViewAllowed(activeView.id)){
+    setActiveView(getDefaultView());
+  }
+}
+
 function setRoleUI(){
   const role = getRole();
   $("chipRole").innerHTML = `<span class="dot ok"></span><span>${t("roleLabel")}: ${role}</span>`;
 
   // Pricing visibility notice
-  const pricingHidden = (role === "SPLICER");
+  const pricingHidden = (role === "SPLICER" || role === "TECHNICIAN");
   $("chipPricing").style.display = pricingHidden ? "inline-flex" : "inline-flex";
   $("chipPricing").innerHTML = pricingHidden
     ? `<span class="dot bad"></span><span>${t("pricingHiddenSplicer")}</span>`
@@ -1218,6 +1413,1041 @@ function setRoleUI(){
   updateAlertsBadge();
   renderAlerts();
   applyDemoRestrictions();
+  setRoleBasedVisibility();
+  renderTechnicianDashboard();
+  renderTechnicianWorkOrders();
+  renderDispatchTable();
+}
+
+function getLocalDateISO(){
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatTimeShort(value){
+  if (!value) return "-";
+  const date = new Date(value);
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatDurationMinutes(totalMinutes){
+  const minutes = Number(totalMinutes || 0);
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return `${hours}h ${String(remainder).padStart(2, "0")}m`;
+}
+
+function formatEventLabel(eventType){
+  switch (eventType){
+    case "START_JOB":
+      return t("techStartJob");
+    case "PAUSE_JOB":
+      return t("techPauseJob");
+    case "LUNCH":
+      return t("techLunch");
+    case "BREAK_15":
+      return t("techBreak");
+    case "TRUCK_INSPECTION":
+      return t("techTruckInspection");
+    case "END_JOB":
+      return t("techEndJob");
+    default:
+      return eventType || "";
+  }
+}
+
+function computeTechnicianSummary(events){
+  let paidMinutes = 0;
+  let unpaidMinutes = 0;
+  let inspections = 0;
+  (events || []).forEach((event) => {
+    if (!event.started_at || !event.ended_at) return;
+    const minutes = Number(event.duration_minutes || 0);
+    if (event.event_type === "TRUCK_INSPECTION"){
+      paidMinutes += minutes;
+      inspections += 1;
+      return;
+    }
+    if (event.event_type === "START_JOB"){
+      paidMinutes += minutes;
+      return;
+    }
+    if (event.event_type === "LUNCH" || event.event_type === "BREAK_15" || event.event_type === "PAUSE_JOB"){
+      unpaidMinutes += minutes;
+    }
+  });
+  return {
+    paidMinutes,
+    unpaidMinutes,
+    totalMinutes: paidMinutes,
+    inspections,
+  };
+}
+
+function renderTechnicianDashboard(){
+  const logWrap = $("techEventLog");
+  if (!logWrap) return;
+  const timesheet = state.technician.timesheet;
+  const events = state.technician.events || [];
+  const activeEvent = state.technician.activeEvent;
+
+  const clockStatus = $("techClockStatus");
+  const jobState = $("techJobState");
+  const summaryEl = $("techSummary");
+  const trailEl = $("techLocationTrail");
+
+  if (clockStatus){
+    if (!timesheet){
+      clockStatus.textContent = t("techNoTimesheet");
+    } else {
+      const projectName = state.projects.find(p => p.id === timesheet.project_id)?.name || "Project";
+      const clockInText = t("techClockedInAt", { time: formatTimeShort(timesheet.clock_in_at) });
+      const clockOutText = timesheet.clock_out_at ? t("techClockedOutAt", { time: formatTimeShort(timesheet.clock_out_at) }) : "";
+      clockStatus.textContent = `${clockInText}${clockOutText ? ` • ${clockOutText}` : ""} • ${projectName}`;
+    }
+  }
+
+  if (jobState){
+    if (activeEvent){
+      jobState.innerHTML = `<span class="dot ok"></span><span>${formatEventLabel(activeEvent.event_type)}</span>`;
+    } else if (timesheet && !timesheet.clock_out_at){
+      jobState.innerHTML = `<span class="dot warn"></span><span>${t("techStateIdle")}</span>`;
+    } else {
+      jobState.innerHTML = `<span class="dot bad"></span><span>${t("techStateOffClock")}</span>`;
+    }
+  }
+
+  if (summaryEl){
+    const summary = computeTechnicianSummary(events);
+    state.technician.summary = summary;
+    summaryEl.innerHTML = `
+      <div class="kpi">
+        <div class="tile">
+          <div class="label">${t("techSummaryTotal")}</div>
+          <div class="value">${formatDurationMinutes(summary.totalMinutes)}</div>
+        </div>
+        <div class="tile">
+          <div class="label">${t("techSummaryPaid")}</div>
+          <div class="value">${formatDurationMinutes(summary.paidMinutes)}</div>
+        </div>
+        <div class="tile">
+          <div class="label">${t("techSummaryUnpaid")}</div>
+          <div class="value">${formatDurationMinutes(summary.unpaidMinutes)}</div>
+        </div>
+        <div class="tile">
+          <div class="label">${t("techSummaryInspections")}</div>
+          <div class="value">${summary.inspections}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (trailEl){
+    const trail = state.technician.locationTrail || [];
+    if (!trail.length){
+      trailEl.textContent = t("techNoTrail");
+    } else {
+      trailEl.innerHTML = trail.slice(-10).map(point => {
+        const time = formatTimeShort(point.at);
+        return `<div>${time} • ${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}</div>`;
+      }).join("");
+    }
+  }
+
+  if (events.length){
+    logWrap.innerHTML = events.map((event) => {
+      const title = formatEventLabel(event.event_type);
+      const start = event.started_at ? formatTimeShort(event.started_at) : "Pending";
+      const end = event.ended_at ? formatTimeShort(event.ended_at) : (event.started_at ? "Active" : "Pending");
+      const duration = Number(event.duration_minutes || 0);
+      const durationLabel = duration ? `${duration} min` : "";
+      return `
+        <div class="event-row">
+          <div>
+            <div class="event-title">${title}</div>
+            <div class="event-meta">${start}${end ? ` → ${end}` : ""}</div>
+          </div>
+          <div class="event-meta">${durationLabel}</div>
+        </div>
+      `;
+    }).join("");
+  } else {
+    logWrap.innerHTML = `<div class="muted small">${t("techNoEvents")}</div>`;
+  }
+
+  const clockInBtn = $("btnTechClockIn");
+  const clockOutBtn = $("btnTechClockOut");
+  const eventButtons = [
+    $("btnTechStartJob"),
+    $("btnTechPauseJob"),
+    $("btnTechLunch"),
+    $("btnTechBreak"),
+    $("btnTechTruckInspection"),
+    $("btnTechEndJob"),
+  ].filter(Boolean);
+
+  const hasOpenTimesheet = Boolean(timesheet && !timesheet.clock_out_at);
+  const activeJob = Boolean(activeEvent && activeEvent.event_type === "START_JOB");
+  if (clockInBtn) clockInBtn.disabled = !state.activeProject || hasOpenTimesheet;
+  if (clockOutBtn) clockOutBtn.disabled = !hasOpenTimesheet || activeJob;
+  eventButtons.forEach((btn) => {
+    btn.disabled = !hasOpenTimesheet;
+  });
+}
+
+function recordTechnicianTrail(pos){
+  if (!isTechnician()) return;
+  const lat = pos.coords.latitude;
+  const lng = pos.coords.longitude;
+  state.technician.locationTrail.push({ lat, lng, at: new Date().toISOString() });
+  if (state.technician.locationTrail.length > 50){
+    state.technician.locationTrail.shift();
+  }
+  renderTechnicianDashboard();
+}
+
+function startOfDay(date){
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function endOfDay(date){
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+}
+
+function isSameDay(a, b){
+  if (!a || !b) return false;
+  return a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate();
+}
+
+function statusPillClass(status){
+  if (status === "COMPLETE") return "ok";
+  if (status === "BLOCKED" || status === "CANCELED") return "bad";
+  return "warn";
+}
+
+function renderWorkOrderCard(order, { showActions = false } = {}){
+  const scheduled = order.scheduled_start ? new Date(order.scheduled_start) : null;
+  const end = order.scheduled_end ? new Date(order.scheduled_end) : null;
+  const timeLabel = scheduled
+    ? `${scheduled.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${end ? ` - ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}`
+    : "Unscheduled";
+  const statusClass = statusPillClass(order.status);
+  const isClosed = order.status === "COMPLETE" || order.status === "CANCELED";
+  const buttons = showActions ? `
+    <div class="row" style="margin-top:10px; flex-wrap:wrap;">
+      <button class="btn ghost" data-action="woEnRoute" data-id="${order.id}" ${isClosed ? "disabled" : ""}>${t("woActionEnRoute")}</button>
+      <button class="btn ghost" data-action="woOnSite" data-id="${order.id}" ${isClosed ? "disabled" : ""}>${t("woActionOnSite")}</button>
+      <button class="btn" data-action="woStart" data-id="${order.id}" ${isClosed ? "disabled" : ""}>${t("woActionStart")}</button>
+      <button class="btn secondary" data-action="woBlocked" data-id="${order.id}" ${isClosed ? "disabled" : ""}>${t("woActionBlocked")}</button>
+      <button class="btn danger" data-action="woComplete" data-id="${order.id}" ${isClosed ? "disabled" : ""}>${t("woActionComplete")}</button>
+    </div>
+  ` : "";
+  return `
+    <div class="wo-card">
+      <div class="wo-header">
+        <div>
+          <div style="font-weight:800;">${escapeHtml(order.customer_label || "Work order")}</div>
+          <div class="muted small">${escapeHtml(order.address || "")}</div>
+          <div class="muted small">${timeLabel}</div>
+        </div>
+        <div class="status-pill ${statusClass}">${escapeHtml(order.status || "")}</div>
+      </div>
+      ${order.notes ? `<div class="muted small" style="margin-top:6px;">${escapeHtml(order.notes)}</div>` : ""}
+      ${buttons}
+    </div>
+  `;
+}
+
+function renderTechnicianWorkOrders(){
+  const todayWrap = $("techWorkOrdersToday");
+  const tomorrowWrap = $("techWorkOrdersTomorrow");
+  if (!todayWrap || !tomorrowWrap) return;
+  const orders = state.workOrders.assigned || [];
+  if (!orders.length){
+    todayWrap.innerHTML = `<div class="muted small">${t("woNoOrders")}</div>`;
+    tomorrowWrap.innerHTML = `<div class="muted small">${t("woNoOrders")}</div>`;
+    return;
+  }
+  const today = startOfDay(new Date());
+  const tomorrow = startOfDay(new Date(Date.now() + 24 * 60 * 60 * 1000));
+  const todayOrders = [];
+  const tomorrowOrders = [];
+  orders.forEach((order) => {
+    if (!order.scheduled_start){
+      todayOrders.push(order);
+      return;
+    }
+    const dt = new Date(order.scheduled_start);
+    if (isSameDay(dt, today)) todayOrders.push(order);
+    else if (isSameDay(dt, tomorrow)) tomorrowOrders.push(order);
+  });
+  todayWrap.innerHTML = todayOrders.length
+    ? todayOrders.map(order => renderWorkOrderCard(order, { showActions: true })).join("")
+    : `<div class="muted small">${t("woNoOrders")}</div>`;
+  tomorrowWrap.innerHTML = tomorrowOrders.length
+    ? tomorrowOrders.map(order => renderWorkOrderCard(order, { showActions: true })).join("")
+    : `<div class="muted small">${t("woNoOrders")}</div>`;
+}
+
+async function loadAssignedWorkOrders(){
+  if (!isTechnician()){
+    state.workOrders.assigned = [];
+    renderTechnicianWorkOrders();
+    return;
+  }
+  if (!state.client || !state.user || isDemo){
+    state.workOrders.assigned = [];
+    renderTechnicianWorkOrders();
+    return;
+  }
+  const todayStart = startOfDay(new Date());
+  const tomorrowEnd = endOfDay(new Date(Date.now() + 24 * 60 * 60 * 1000));
+  const { data, error } = await state.client
+    .from("work_orders")
+    .select("id, project_id, type, status, scheduled_start, scheduled_end, address, customer_label, notes, priority, sla_due_at, assigned_to_user_id")
+    .eq("assigned_to_user_id", state.user.id)
+    .or(`scheduled_start.is.null,and(scheduled_start.gte.${todayStart.toISOString()},scheduled_start.lte.${tomorrowEnd.toISOString()})`)
+    .order("scheduled_start", { ascending: true, nullsFirst: true })
+    .order("priority", { ascending: true });
+  if (error){
+    toast("Work orders load error", error.message);
+    return;
+  }
+  state.workOrders.assigned = data || [];
+  renderTechnicianWorkOrders();
+}
+
+async function insertWorkOrderEvent(workOrderId, eventType, payload = {}){
+  if (!state.client || !state.user || isDemo) return;
+  await state.client
+    .from("work_order_events")
+    .insert({
+      work_order_id: workOrderId,
+      actor_user_id: state.user.id,
+      event_type: eventType,
+      payload,
+    });
+}
+
+async function updateWorkOrderStatus(workOrderId, nextStatus){
+  if (!state.client || !state.user) return;
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
+  const current = (state.workOrders.assigned || []).find(r => r.id === workOrderId)
+    || (state.workOrders.dispatch || []).find(r => r.id === workOrderId);
+  const { error } = await state.client
+    .from("work_orders")
+    .update({ status: nextStatus })
+    .eq("id", workOrderId);
+  if (error){
+    toast("Status update failed", error.message);
+    return;
+  }
+  await insertWorkOrderEvent(workOrderId, "STATUS_CHANGE", { from: current?.status || null, to: nextStatus });
+  await loadAssignedWorkOrders();
+  await loadDispatchWorkOrders();
+}
+
+async function startWorkOrder(workOrderId){
+  if (!state.client || !state.user) return;
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
+  const { error } = await state.client.rpc("fn_start_work_order", { work_order_id: workOrderId });
+  if (error){
+    toast("Start failed", error.message);
+    return;
+  }
+  await loadAssignedWorkOrders();
+  await loadDispatchWorkOrders();
+}
+
+async function completeWorkOrder(workOrderId, notes = null){
+  if (!state.client || !state.user) return;
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
+  const { error } = await state.client.rpc("fn_complete_work_order", { work_order_id: workOrderId, notes });
+  if (error){
+    toast("Complete failed", error.message);
+    return;
+  }
+  await loadAssignedWorkOrders();
+  await loadDispatchWorkOrders();
+}
+
+async function loadDispatchTechnicians(){
+  const select = $("dispatchAssignUser");
+  if (!canViewDispatch() || !state.activeProject || !state.client || isDemo){
+    state.workOrders.technicians = [];
+    if (select) select.innerHTML = `<option value="">Unassigned</option>`;
+    return;
+  }
+  const { data, error } = await state.client
+    .from("project_members")
+    .select("user_id, role")
+    .eq("project_id", state.activeProject.id)
+    .eq("role", "TECHNICIAN");
+  if (error){
+    toast("Technicians load error", error.message);
+    return;
+  }
+  const ids = (data || []).map(r => r.user_id);
+  let profiles = [];
+  if (ids.length){
+    const { data: profileRows } = await state.client
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", ids);
+    profiles = profileRows || [];
+  }
+  const nameById = new Map(profiles.map(p => [p.id, p.display_name || p.id]));
+  state.workOrders.technicians = ids.map(id => ({ id, name: nameById.get(id) || id }));
+  if (select){
+    select.innerHTML = `<option value="">Unassigned</option>` + state.workOrders.technicians
+      .map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`)
+      .join("");
+  }
+}
+
+function syncDispatchStatusFilter(){
+  const statusSelect = $("dispatchStatusFilter");
+  if (!statusSelect) return;
+  const current = statusSelect.value;
+  statusSelect.innerHTML = `<option value="">${t("dispatchStatusAll")}</option>` + WORK_ORDER_STATUSES
+    .map(status => `<option value="${status}">${status}</option>`)
+    .join("");
+  if (current){
+    statusSelect.value = current;
+  }
+}
+
+async function loadDispatchWorkOrders(){
+  const wrap = $("dispatchTable");
+  if (!wrap) return;
+  if (!canViewDispatch()){
+    state.workOrders.dispatch = [];
+    renderDispatchTable();
+    return;
+  }
+  if (!state.activeProject || !state.client || isDemo){
+    state.workOrders.dispatch = [];
+    renderDispatchTable();
+    return;
+  }
+  let query = state.client
+    .from("work_orders")
+    .select("id, project_id, type, status, scheduled_start, scheduled_end, address, customer_label, notes, priority, assigned_to_user_id, external_source, external_id, sla_due_at, contact_phone, lat, lng, created_at, updated_at")
+    .eq("project_id", state.activeProject.id);
+
+  const dateValue = $("dispatchDateFilter")?.value || "";
+  if (dateValue){
+    const target = new Date(`${dateValue}T00:00:00`);
+    const start = startOfDay(target).toISOString();
+    const end = endOfDay(target).toISOString();
+    query = query.gte("scheduled_start", start).lte("scheduled_start", end);
+  }
+  const statusValue = $("dispatchStatusFilter")?.value || "";
+  if (statusValue){
+    query = query.eq("status", statusValue);
+  }
+  const assignValue = $("dispatchAssignFilter")?.value || "all";
+  if (assignValue === "assigned"){
+    query = query.not("assigned_to_user_id", "is", null);
+  } else if (assignValue === "unassigned"){
+    query = query.is("assigned_to_user_id", null);
+  }
+
+  const { data, error } = await query
+    .order("scheduled_start", { ascending: true, nullsFirst: true })
+    .order("priority", { ascending: true });
+  if (error){
+    toast("Dispatch load error", error.message);
+    return;
+  }
+  state.workOrders.dispatch = data || [];
+  renderDispatchTable();
+}
+
+function renderDispatchTable(){
+  const wrap = $("dispatchTable");
+  if (!wrap) return;
+  if (!state.activeProject){
+    wrap.innerHTML = `<div class="muted small">${t("laborNoProject")}</div>`;
+    return;
+  }
+  if (!canViewDispatch()){
+    wrap.innerHTML = `<div class="muted small">Dispatch is limited to OWNER / PRIME.</div>`;
+    return;
+  }
+  const rows = state.workOrders.dispatch || [];
+  if (!rows.length){
+    wrap.innerHTML = `<div class="muted small">${t("woNoOrders")}</div>`;
+    return;
+  }
+  const techOptions = state.workOrders.technicians || [];
+  wrap.innerHTML = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Scheduled</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Customer</th>
+          <th>Address</th>
+          <th>Priority</th>
+          <th>Assigned</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => {
+          const scheduled = row.scheduled_start ? new Date(row.scheduled_start).toLocaleString() : "Unscheduled";
+          const statusClass = statusPillClass(row.status);
+          const assignedName = techOptions.find(t => t.id === row.assigned_to_user_id)?.name || "";
+          return `
+            <tr>
+              <td>${escapeHtml(scheduled)}</td>
+              <td>${escapeHtml(row.type || "")}</td>
+              <td><span class="status-pill ${statusClass}">${escapeHtml(row.status || "")}</span></td>
+              <td>${escapeHtml(row.customer_label || "")}</td>
+              <td>${escapeHtml(row.address || "")}</td>
+              <td>${escapeHtml(String(row.priority ?? ""))}</td>
+              <td>
+                <select class="input compact" data-action="assignWorkOrder" data-id="${row.id}">
+                  <option value="">Unassigned</option>
+                  ${techOptions.map(t => `
+                    <option value="${t.id}" ${t.id === row.assigned_to_user_id ? "selected" : ""}>${escapeHtml(t.name)}</option>
+                  `).join("")}
+                </select>
+                ${assignedName ? `<div class="muted small">${escapeHtml(assignedName)}</div>` : ""}
+              </td>
+              <td><button class="btn ghost" data-action="editWorkOrder" data-id="${row.id}">Edit</button></td>
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function openDispatchModal(order = null){
+  const modal = $("dispatchModal");
+  if (!modal) return;
+  state.workOrders.editing = order ? order.id : null;
+  $("dispatchType").value = order?.type || "INSTALL";
+  $("dispatchStatus").value = order?.status || "NEW";
+  $("dispatchScheduledStart").value = order?.scheduled_start ? order.scheduled_start.slice(0, 16) : "";
+  $("dispatchScheduledEnd").value = order?.scheduled_end ? order.scheduled_end.slice(0, 16) : "";
+  $("dispatchCustomerLabel").value = order?.customer_label || "";
+  $("dispatchAddress").value = order?.address || "";
+  $("dispatchLat").value = Number.isFinite(order?.lat) ? String(order.lat) : "";
+  $("dispatchLng").value = Number.isFinite(order?.lng) ? String(order.lng) : "";
+  $("dispatchContactPhone").value = order?.contact_phone || "";
+  $("dispatchPriority").value = Number.isFinite(order?.priority) ? String(order.priority) : "3";
+  $("dispatchSlaDueAt").value = order?.sla_due_at ? order.sla_due_at.slice(0, 16) : "";
+  $("dispatchNotes").value = order?.notes || "";
+  $("dispatchAssignUser").value = order?.assigned_to_user_id || "";
+  modal.style.display = "flex";
+}
+
+function closeDispatchModal(){
+  const modal = $("dispatchModal");
+  if (modal) modal.style.display = "none";
+  state.workOrders.editing = null;
+}
+
+async function saveDispatchWorkOrder(){
+  if (!state.client || !state.user || !state.activeProject) return;
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
+  const payload = {
+    project_id: state.activeProject.id,
+    type: $("dispatchType").value,
+    status: $("dispatchStatus").value,
+    scheduled_start: $("dispatchScheduledStart").value ? new Date($("dispatchScheduledStart").value).toISOString() : null,
+    scheduled_end: $("dispatchScheduledEnd").value ? new Date($("dispatchScheduledEnd").value).toISOString() : null,
+    customer_label: $("dispatchCustomerLabel").value.trim() || null,
+    address: $("dispatchAddress").value.trim() || null,
+    lat: Number.isFinite(Number($("dispatchLat").value)) ? Number($("dispatchLat").value) : null,
+    lng: Number.isFinite(Number($("dispatchLng").value)) ? Number($("dispatchLng").value) : null,
+    contact_phone: $("dispatchContactPhone").value.trim() || null,
+    priority: Number.isFinite(Number($("dispatchPriority").value)) ? Number($("dispatchPriority").value) : 3,
+    sla_due_at: $("dispatchSlaDueAt").value ? new Date($("dispatchSlaDueAt").value).toISOString() : null,
+    notes: $("dispatchNotes").value.trim() || null,
+    updated_at: new Date().toISOString(),
+  };
+  const assignedUserId = $("dispatchAssignUser").value || null;
+  const previous = state.workOrders.dispatch.find(r => r.id === state.workOrders.editing);
+  const previousAssigned = previous?.assigned_to_user_id || null;
+  let workOrderId = state.workOrders.editing;
+  if (!workOrderId){
+    payload.created_by = state.user.id;
+    const { data, error } = await state.client
+      .from("work_orders")
+      .insert(payload)
+      .select("id")
+      .maybeSingle();
+    if (error){
+      toast("Create failed", error.message);
+      return;
+    }
+    workOrderId = data?.id || null;
+    if (workOrderId){
+      await insertWorkOrderEvent(workOrderId, "CREATED", payload);
+    }
+  } else {
+    const { error } = await state.client
+      .from("work_orders")
+      .update(payload)
+      .eq("id", workOrderId);
+    if (error){
+      toast("Update failed", error.message);
+      return;
+    }
+    await insertWorkOrderEvent(workOrderId, "UPDATED", payload);
+  }
+
+  if (workOrderId && assignedUserId && assignedUserId !== previousAssigned){
+    const { error } = await state.client.rpc("fn_assign_work_order", {
+      work_order_id: workOrderId,
+      technician_user_id: assignedUserId,
+    });
+    if (error){
+      toast("Assign failed", error.message);
+    }
+  } else if (workOrderId && !assignedUserId && previousAssigned){
+    await state.client
+      .from("work_orders")
+      .update({ assigned_to_user_id: null })
+      .eq("id", workOrderId);
+  }
+
+  closeDispatchModal();
+  await loadDispatchWorkOrders();
+}
+
+function parseCsv(text){
+  const rows = [];
+  let row = [];
+  let value = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i += 1){
+    const char = text[i];
+    const next = text[i + 1];
+    if (char === "\""){
+      if (inQuotes && next === "\""){
+        value += "\"";
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (char === "," && !inQuotes){
+      row.push(value);
+      value = "";
+      continue;
+    }
+    if ((char === "\n" || char === "\r") && !inQuotes){
+      if (value.length || row.length){
+        row.push(value);
+        rows.push(row);
+        row = [];
+        value = "";
+      }
+      continue;
+    }
+    value += char;
+  }
+  if (value.length || row.length){
+    row.push(value);
+    rows.push(row);
+  }
+  return rows;
+}
+
+async function resolveUserIdByEmail(email){
+  if (!email || !state.client) return null;
+  const { data } = await state.client
+    .from("profiles")
+    .select("id, display_name")
+    .ilike("display_name", email)
+    .limit(1)
+    .maybeSingle();
+  return data?.id || null;
+}
+
+async function importDispatchCsv(file){
+  if (!file || !state.client || !state.activeProject) return;
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
+  const text = await file.text();
+  const rows = parseCsv(text);
+  if (!rows.length) return;
+  const headers = rows[0].map((h, idx) => {
+    const trimmed = String(h || "").trim();
+    return idx === 0 ? trimmed.replace(/^\uFEFF/, "") : trimmed;
+  });
+  const index = (name) => headers.indexOf(name);
+  const required = ["external_id", "type"];
+  const missing = required.filter(name => index(name) === -1);
+  if (missing.length){
+    toast("CSV error", `Missing headers: ${missing.join(", ")}`);
+    return;
+  }
+  const dataRows = rows.slice(1).filter(r => r.length && r.some(cell => String(cell || "").trim().length));
+  const payloads = [];
+  const assignments = [];
+  dataRows.forEach((row) => {
+    const externalId = String(row[index("external_id")] || "").trim();
+    if (!externalId) return;
+    const typeValue = String(row[index("type")] || "").trim().toUpperCase();
+    const type = WORK_ORDER_TYPES.includes(typeValue) ? typeValue : "INSTALL";
+    const scheduledStart = row[index("scheduled_start")] ? new Date(row[index("scheduled_start")]).toISOString() : null;
+    const scheduledEnd = row[index("scheduled_end")] ? new Date(row[index("scheduled_end")]).toISOString() : null;
+    const priority = Number(row[index("priority")] || 3);
+    const payload = {
+      project_id: state.activeProject.id,
+      external_source: "CSV",
+      external_id: externalId,
+      type,
+      status: "NEW",
+      scheduled_start: scheduledStart,
+      scheduled_end: scheduledEnd,
+      address: String(row[index("address")] || "").trim() || null,
+      lat: Number.isFinite(Number(row[index("lat")])) ? Number(row[index("lat")]) : null,
+      lng: Number.isFinite(Number(row[index("lng")])) ? Number(row[index("lng")]) : null,
+      customer_label: String(row[index("customer_label")] || "").trim() || null,
+      notes: String(row[index("notes")] || "").trim() || null,
+      priority: Number.isFinite(priority) ? priority : 3,
+      sla_due_at: row[index("sla_due_at")] ? new Date(row[index("sla_due_at")]).toISOString() : null,
+      created_by: state.user?.id || null,
+      updated_at: new Date().toISOString(),
+    };
+    payloads.push(payload);
+    const assignEmail = String(row[index("assigned_to_email")] || "").trim();
+    if (assignEmail){
+      assignments.push({ external_id: externalId, email: assignEmail });
+    }
+  });
+  if (!payloads.length){
+    toast("CSV error", "No valid rows.");
+    return;
+  }
+
+  const externalIds = payloads.map(p => p.external_id);
+  const { data: existingRows } = await state.client
+    .from("work_orders")
+    .select("id, external_id")
+    .eq("project_id", state.activeProject.id)
+    .eq("external_source", "CSV")
+    .in("external_id", externalIds);
+  const existingMap = new Map((existingRows || []).map(r => [r.external_id, r.id]));
+
+  const { error } = await state.client
+    .from("work_orders")
+    .upsert(payloads, { onConflict: "project_id,external_source,external_id" });
+  if (error){
+    toast("Import failed", error.message);
+    return;
+  }
+
+  const { data: allRows } = await state.client
+    .from("work_orders")
+    .select("id, external_id")
+    .eq("project_id", state.activeProject.id)
+    .eq("external_source", "CSV")
+    .in("external_id", externalIds);
+  const idMap = new Map((allRows || []).map(r => [r.external_id, r.id]));
+
+  for (const payload of payloads){
+    const workOrderId = idMap.get(payload.external_id);
+    if (!workOrderId) continue;
+    const wasExisting = existingMap.has(payload.external_id);
+    await insertWorkOrderEvent(workOrderId, wasExisting ? "UPDATED" : "CREATED", payload);
+  }
+
+  for (const assignment of assignments){
+    const workOrderId = idMap.get(assignment.external_id);
+    if (!workOrderId) continue;
+    const userId = await resolveUserIdByEmail(assignment.email);
+    if (!userId) continue;
+    await state.client.rpc("fn_assign_work_order", {
+      work_order_id: workOrderId,
+      technician_user_id: userId,
+    });
+  }
+
+  await loadDispatchWorkOrders();
+  toast("Import complete", `Imported ${payloads.length} work orders.`);
+}
+
+async function loadTechnicianTimesheet(){
+  if (!isTechnician()){
+    state.technician.timesheet = null;
+    state.technician.events = [];
+    state.technician.activeEvent = null;
+    renderTechnicianDashboard();
+    return;
+  }
+  if (!state.client || !state.user || isDemo){
+    state.technician.timesheet = null;
+    state.technician.events = [];
+    state.technician.activeEvent = null;
+    renderTechnicianDashboard();
+    return;
+  }
+  const workDate = getLocalDateISO();
+  const { data, error } = await state.client
+    .from("technician_timesheets")
+    .select("id, user_id, project_id, work_date, clock_in_at, clock_out_at, total_minutes_worked, created_at")
+    .eq("user_id", state.user.id)
+    .eq("work_date", workDate)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error){
+    toast("Timesheet load error", error.message);
+    return;
+  }
+  state.technician.timesheet = data?.[0] || null;
+  await loadTechnicianEvents();
+  await loadAssignedWorkOrders();
+}
+
+async function loadTechnicianEvents(){
+  if (!state.client || !state.user || isDemo || !state.technician.timesheet){
+    state.technician.events = [];
+    state.technician.activeEvent = null;
+    renderTechnicianDashboard();
+    return;
+  }
+  const { data, error } = await state.client
+    .from("technician_time_events")
+    .select("id, event_type, started_at, ended_at, duration_minutes, created_at")
+    .eq("timesheet_id", state.technician.timesheet.id)
+    .order("created_at", { ascending: true });
+  if (error){
+    toast("Event load error", error.message);
+    return;
+  }
+  state.technician.events = data || [];
+  state.technician.activeEvent = state.technician.events.find(e => e.started_at && !e.ended_at) || null;
+  renderTechnicianDashboard();
+}
+
+async function startTechnicianTimesheet(){
+  if (!state.activeProject){
+    toast("Project required", "Select a project before clocking in.");
+    return;
+  }
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
+  if (!state.client || !state.user) return;
+  const { data, error } = await state.client.rpc("fn_start_timesheet", {
+    user_id: state.user.id,
+    project_id: state.activeProject.id,
+  });
+  if (error){
+    toast("Clock in failed", error.message);
+    return;
+  }
+  state.technician.timesheet = data || null;
+  await loadTechnicianEvents();
+  renderTechnicianDashboard();
+}
+
+async function logTechnicianEvent(eventType){
+  if (!state.technician.timesheet){
+    toast("Clock in required", t("techNoTimesheet"));
+    return;
+  }
+  if (state.technician.timesheet.clock_out_at){
+    toast("Clocked out", "Clock back in before logging events.");
+    return;
+  }
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
+  const { error } = await state.client.rpc("fn_log_time_event", {
+    timesheet_id: state.technician.timesheet.id,
+    event_type: eventType,
+  });
+  if (error){
+    toast("Event failed", error.message);
+    return;
+  }
+  await loadTechnicianEvents();
+}
+
+async function endTechnicianTimesheet(){
+  if (!state.technician.timesheet) return;
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
+  const activeEvent = state.technician.activeEvent;
+  if (activeEvent && activeEvent.event_type === "START_JOB"){
+    toast("Active job", "End the job before clocking out.");
+    return;
+  }
+  const { data, error } = await state.client.rpc("fn_end_timesheet", {
+    timesheet_id: state.technician.timesheet.id,
+  });
+  if (error){
+    toast("Clock out failed", error.message);
+    return;
+  }
+  state.technician.timesheet = data || state.technician.timesheet;
+  await loadTechnicianEvents();
+  renderTechnicianDashboard();
+}
+
+async function loadLaborRows(){
+  const wrap = $("laborTable");
+  if (!wrap) return;
+  if (!canViewLabor()){
+    state.labor.rows = [];
+    renderLaborTable();
+    return;
+  }
+  if (!state.activeProject){
+    state.labor.rows = [];
+    renderLaborTable();
+    return;
+  }
+  if (isDemo){
+    state.labor.rows = [];
+    renderLaborTable();
+    return;
+  }
+  const { data, error } = await state.client
+    .from("technician_timesheets")
+    .select("id, user_id, work_date, total_minutes_worked, clock_in_at, clock_out_at, created_at")
+    .eq("project_id", state.activeProject.id)
+    .order("work_date", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error){
+    toast("Labor load error", error.message);
+    return;
+  }
+  const rows = data || [];
+  const userIds = [...new Set(rows.map(r => r.user_id).filter(Boolean))];
+  let nameById = new Map();
+  if (userIds.length){
+    const { data: profiles, error: profileError } = await state.client
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", userIds);
+    if (!profileError){
+      nameById = new Map((profiles || []).map(p => [p.id, p.display_name || p.id]));
+    }
+  }
+
+  const pendingIds = rows.filter(r => r.total_minutes_worked == null).map(r => r.id);
+  const paidByTimesheet = new Map();
+  if (pendingIds.length){
+    const { data: events } = await state.client
+      .from("technician_time_events")
+      .select("timesheet_id, event_type, duration_minutes, started_at, ended_at")
+      .in("timesheet_id", pendingIds);
+    const bySheet = new Map();
+    (events || []).forEach((event) => {
+      if (!bySheet.has(event.timesheet_id)) bySheet.set(event.timesheet_id, []);
+      bySheet.get(event.timesheet_id).push(event);
+    });
+    bySheet.forEach((evs, id) => {
+      const summary = computeTechnicianSummary(evs);
+      paidByTimesheet.set(id, summary.paidMinutes);
+    });
+  }
+
+  state.labor.rows = rows.map((row) => {
+    const paidMinutes = Number(row.total_minutes_worked ?? paidByTimesheet.get(row.id) ?? 0);
+    return {
+      id: row.id,
+      user_id: row.user_id,
+      name: nameById.get(row.user_id) || row.user_id,
+      work_date: row.work_date,
+      paid_minutes: paidMinutes,
+      clock_in_at: row.clock_in_at,
+      clock_out_at: row.clock_out_at,
+    };
+  });
+  renderLaborTable();
+}
+
+function renderLaborTable(){
+  const wrap = $("laborTable");
+  if (!wrap) return;
+  if (!state.activeProject){
+    wrap.innerHTML = `<div class="muted small">${t("laborNoProject")}</div>`;
+    return;
+  }
+  const rows = state.labor.rows || [];
+  if (!rows.length){
+    wrap.innerHTML = `<div class="muted small">${t("laborNoRows")}</div>`;
+    return;
+  }
+  wrap.innerHTML = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>${t("laborTechLabel")}</th>
+          <th>${t("laborDateLabel")}</th>
+          <th>${t("laborPaidHoursLabel")}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => {
+          const hours = (Number(row.paid_minutes || 0) / 60).toFixed(2);
+          return `
+            <tr>
+              <td>${escapeHtml(row.name || "")}</td>
+              <td>${escapeHtml(row.work_date || "")}</td>
+              <td>${hours}</td>
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function exportLaborCsv(){
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
+  const rows = state.labor.rows || [];
+  if (!rows.length) return;
+  const header = [t("laborTechLabel"), t("laborDateLabel"), t("laborPaidHoursLabel")];
+  const csvRows = rows.map((row) => ([
+    row.name || "",
+    row.work_date || "",
+    (Number(row.paid_minutes || 0) / 60).toFixed(2),
+  ]));
+  const csv = [header.map(escapeCsv).join(",")]
+    .concat(csvRows.map(r => r.map(escapeCsv).join(",")))
+    .join("\n");
+  const projectLabel = state.activeProject?.job_number || state.activeProject?.name || "project";
+  downloadFile(`labor-${projectLabel}.csv`, csv, "text/csv");
 }
 
 function showAuth(show){
@@ -1270,6 +2500,18 @@ function applyDemoRestrictions(root = document){
     "#btnAddLineItem",
     "#btnAdminCreateUser",
     "#btnDemoLogin",
+    "#btnTechClockIn",
+    "#btnTechClockOut",
+    "#btnTechStartJob",
+    "#btnTechPauseJob",
+    "#btnTechLunch",
+    "#btnTechBreak",
+    "#btnTechTruckInspection",
+    "#btnTechEndJob",
+    "#btnLaborExportCsv",
+    "#btnDispatchCreate",
+    "#btnDispatchImportCsv",
+    "#btnDispatchSave",
   ].forEach((selector) => applyDemoLock(root.querySelector(selector)));
 }
 
@@ -2110,6 +3352,16 @@ function setActiveProjectById(id){
   state.billingInvoice = null;
   state.billingItems = [];
   renderBillingDetail();
+  if (isTechnician()){
+    loadTechnicianTimesheet();
+  }
+  if (canViewLabor()){
+    loadLaborRows();
+  }
+  if (canViewDispatch()){
+    loadDispatchTechnicians();
+    loadDispatchWorkOrders();
+  }
 }
 
 function canSeedDemo(){
@@ -3423,7 +4675,7 @@ function renderInvoicePanel(){
 
   const canSeeSubInvoices = (role === "PRIME" || role === "SUB" || role === "OWNER");
   const canSeeTdsInvoices = (role === "TDS" || role === "PRIME" || role === "OWNER");
-  const canSeeAnyPricing = (role !== "SPLICER");
+  const canSeeAnyPricing = (role !== "SPLICER" && role !== "TECHNICIAN");
 
   let html = "";
   html += `<div class="row">
@@ -5083,6 +6335,11 @@ async function markNodeReady(){
     toast("Demo restriction", t("availableInProduction"));
     return;
   }
+  const role = getRole();
+  if (role === "SPLICER" || role === "TECHNICIAN"){
+    toast("Not allowed", "Only billing roles can mark nodes ready.");
+    return;
+  }
 
   const c = computeNodeCompletion(node);
   if (!BUILD_MODE && !MVP_UNGATED && !(c.locOk && c.invOk)){
@@ -5125,8 +6382,8 @@ async function createInvoice(){
   }
 
   const role = getRole();
-  if (role === "SPLICER"){
-    toast("Nope", "Splicers can't create invoices.");
+  if (role === "SPLICER" || role === "TECHNICIAN"){
+    toast("Nope", "Splicers and technicians can't create invoices.");
     return;
   }
 
@@ -5212,7 +6469,7 @@ async function initAuth(){
   if (isDemo){
     ensureDemoSeed();
     showAuth(false);
-    const pick = prompt("Demo mode: choose a role (TDS, PRIME, SUB, SPLICER, OWNER)", state.demo.role) || state.demo.role;
+    const pick = prompt("Demo mode: choose a role (TDS, PRIME, SUB, SPLICER, TECHNICIAN, OWNER)", state.demo.role) || state.demo.role;
     const role = state.demo.roles.includes(pick.toUpperCase()) ? pick.toUpperCase() : state.demo.role;
     state.demo.role = role;
     await loadProjects();
@@ -5236,7 +6493,9 @@ async function initAuth(){
     setProofStatus();
     renderCatalogResults("catalogResults", "");
     renderCatalogResults("catalogResultsQuick", "");
-    setActiveView("viewDashboard");
+    loadTechnicianTimesheet();
+    loadLaborRows();
+    setActiveView(getDefaultView());
     return;
   }
 
@@ -5260,12 +6519,18 @@ async function initAuth(){
       await loadLocationProofRequirements(state.activeProject?.id || null);
       await loadBillingLocations(state.activeProject?.id || null);
       await loadMaterialCatalog();
+      if (canViewDispatch()){
+        await loadDispatchTechnicians();
+        await loadDispatchWorkOrders();
+      }
       await loadAlerts();
       renderAlerts();
       renderCatalogResults("catalogResults", "");
       renderCatalogResults("catalogResultsQuick", "");
       renderBillingLocations();
-      setActiveView("viewDashboard");
+      loadTechnicianTimesheet();
+      loadLaborRows();
+      setActiveView(getDefaultView());
       startLocationWatch();
       startLocationPolling();
     } else {
@@ -5293,12 +6558,18 @@ async function initAuth(){
     await loadLocationProofRequirements(state.activeProject?.id || null);
     await loadBillingLocations(state.activeProject?.id || null);
     await loadMaterialCatalog();
+    if (canViewDispatch()){
+      await loadDispatchTechnicians();
+      await loadDispatchWorkOrders();
+    }
     await loadAlerts();
     renderAlerts();
     renderCatalogResults("catalogResults", "");
     renderCatalogResults("catalogResultsQuick", "");
     renderBillingLocations();
-    setActiveView("viewDashboard");
+    loadTechnicianTimesheet();
+    loadLaborRows();
+    setActiveView(getDefaultView());
     startLocationWatch();
     startLocationPolling();
   }
@@ -5363,6 +6634,7 @@ function wireUI(){
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.addEventListener("click", () => setActiveView(btn.dataset.view));
   });
+  syncDispatchStatusFilter();
 
   const nodeCards = $("nodeCards");
   if (nodeCards){
@@ -5422,6 +6694,134 @@ function wireUI(){
   const printBtn = $("btnBillingPrint");
   if (printBtn){
     printBtn.addEventListener("click", () => printInvoice());
+  }
+  const laborExportBtn = $("btnLaborExportCsv");
+  if (laborExportBtn){
+    laborExportBtn.addEventListener("click", () => exportLaborCsv());
+  }
+
+  const techClockInBtn = $("btnTechClockIn");
+  if (techClockInBtn){
+    techClockInBtn.addEventListener("click", () => startTechnicianTimesheet());
+  }
+  const techClockOutBtn = $("btnTechClockOut");
+  if (techClockOutBtn){
+    techClockOutBtn.addEventListener("click", () => endTechnicianTimesheet());
+  }
+  const techStartBtn = $("btnTechStartJob");
+  if (techStartBtn){
+    techStartBtn.addEventListener("click", () => logTechnicianEvent("START_JOB"));
+  }
+  const techPauseBtn = $("btnTechPauseJob");
+  if (techPauseBtn){
+    techPauseBtn.addEventListener("click", () => logTechnicianEvent("PAUSE_JOB"));
+  }
+  const techLunchBtn = $("btnTechLunch");
+  if (techLunchBtn){
+    techLunchBtn.addEventListener("click", () => logTechnicianEvent("LUNCH"));
+  }
+  const techBreakBtn = $("btnTechBreak");
+  if (techBreakBtn){
+    techBreakBtn.addEventListener("click", () => logTechnicianEvent("BREAK_15"));
+  }
+  const techInspectBtn = $("btnTechTruckInspection");
+  if (techInspectBtn){
+    techInspectBtn.addEventListener("click", () => logTechnicianEvent("TRUCK_INSPECTION"));
+  }
+  const techEndBtn = $("btnTechEndJob");
+  if (techEndBtn){
+    techEndBtn.addEventListener("click", () => logTechnicianEvent("END_JOB"));
+  }
+
+  const techOrdersToday = $("techWorkOrdersToday");
+  if (techOrdersToday){
+    techOrdersToday.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      const id = btn.dataset.id;
+      const action = btn.dataset.action;
+      if (!id || !action) return;
+      if (action === "woEnRoute") updateWorkOrderStatus(id, "EN_ROUTE");
+      else if (action === "woOnSite") updateWorkOrderStatus(id, "ON_SITE");
+      else if (action === "woStart") startWorkOrder(id);
+      else if (action === "woBlocked") updateWorkOrderStatus(id, "BLOCKED");
+      else if (action === "woComplete") completeWorkOrder(id);
+    });
+  }
+  const techOrdersTomorrow = $("techWorkOrdersTomorrow");
+  if (techOrdersTomorrow){
+    techOrdersTomorrow.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      const id = btn.dataset.id;
+      const action = btn.dataset.action;
+      if (!id || !action) return;
+      if (action === "woEnRoute") updateWorkOrderStatus(id, "EN_ROUTE");
+      else if (action === "woOnSite") updateWorkOrderStatus(id, "ON_SITE");
+      else if (action === "woStart") startWorkOrder(id);
+      else if (action === "woBlocked") updateWorkOrderStatus(id, "BLOCKED");
+      else if (action === "woComplete") completeWorkOrder(id);
+    });
+  }
+
+  const dispatchCreateBtn = $("btnDispatchCreate");
+  if (dispatchCreateBtn){
+    dispatchCreateBtn.addEventListener("click", () => openDispatchModal());
+  }
+  const dispatchCancelBtn = $("btnDispatchCancel");
+  if (dispatchCancelBtn){
+    dispatchCancelBtn.addEventListener("click", () => closeDispatchModal());
+  }
+  const dispatchSaveBtn = $("btnDispatchSave");
+  if (dispatchSaveBtn){
+    dispatchSaveBtn.addEventListener("click", () => saveDispatchWorkOrder());
+  }
+  const dispatchImportBtn = $("btnDispatchImportCsv");
+  const dispatchCsvInput = $("dispatchCsvInput");
+  if (dispatchImportBtn && dispatchCsvInput){
+    dispatchImportBtn.addEventListener("click", () => dispatchCsvInput.click());
+    dispatchCsvInput.addEventListener("change", () => {
+      if (dispatchCsvInput.files?.length){
+        importDispatchCsv(dispatchCsvInput.files[0]);
+        dispatchCsvInput.value = "";
+      }
+    });
+  }
+  const dispatchDateFilter = $("dispatchDateFilter");
+  if (dispatchDateFilter){
+    dispatchDateFilter.addEventListener("change", () => loadDispatchWorkOrders());
+  }
+  const dispatchStatusFilter = $("dispatchStatusFilter");
+  if (dispatchStatusFilter){
+    dispatchStatusFilter.addEventListener("change", () => loadDispatchWorkOrders());
+  }
+  const dispatchAssignFilter = $("dispatchAssignFilter");
+  if (dispatchAssignFilter){
+    dispatchAssignFilter.addEventListener("change", () => loadDispatchWorkOrders());
+  }
+  const dispatchTable = $("dispatchTable");
+  if (dispatchTable){
+    dispatchTable.addEventListener("change", (e) => {
+      const select = e.target.closest("select");
+      if (!select) return;
+      if (select.dataset.action !== "assignWorkOrder") return;
+      const id = select.dataset.id;
+      const userId = select.value || null;
+      if (!id) return;
+      if (!userId){
+        state.client.from("work_orders").update({ assigned_to_user_id: null }).eq("id", id);
+        return;
+      }
+      state.client.rpc("fn_assign_work_order", { work_order_id: id, technician_user_id: userId });
+    });
+    dispatchTable.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      if (btn.dataset.action !== "editWorkOrder") return;
+      const id = btn.dataset.id;
+      const row = (state.workOrders.dispatch || []).find(r => r.id === id);
+      if (row) openDispatchModal(row);
+    });
   }
 
   $("btnSignOut").addEventListener("click", async () => {

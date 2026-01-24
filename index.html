@@ -54,7 +54,7 @@
       <div class="grid cols-2">
         <div class="card">
           <h2 data-i18n="rolesTitle">Roles in this build</h2>
-          <div class="muted small" data-i18n="rolesSubtitle">TDS -> PRIME -> SUB -> SPLICER -> OWNER (Spec Communications, LLC Louis Garcia)</div>
+          <div class="muted small" data-i18n="rolesSubtitle">TDS -> PRIME -> SUB -> SPLICER -> TECHNICIAN -> OWNER (Spec Communications, LLC Louis Garcia)</div>
         </div>
 
         <div class="card">
@@ -75,9 +75,12 @@
         </div>
         <nav class="nav">
           <button class="nav-item active" data-view="viewDashboard" data-i18n="navDashboard">Dashboard</button>
+          <button class="nav-item" data-view="viewTechnician" data-i18n="navTechnician">Technician</button>
+          <button class="nav-item" data-view="viewDispatch" data-i18n="navDispatch">Dispatch</button>
           <button class="nav-item" data-view="viewNodes" data-i18n="navNodes">Nodes</button>
           <button class="nav-item" data-view="viewPhotos" data-i18n="navPhotos">Photos</button>
           <button class="nav-item" data-view="viewBilling" data-i18n="navBilling">Billing</button>
+          <button class="nav-item" data-view="viewLabor" data-i18n="navLabor">Labor</button>
           <button class="nav-item" data-view="viewInvoices" data-i18n="navInvoices">Invoices</button>
           <button class="nav-item" data-view="viewMap" data-i18n="navMap">Live Map</button>
           <button class="nav-item" data-view="viewCatalog" data-i18n="navCatalog">Material Catalog</button>
@@ -139,6 +142,55 @@
               <h2 data-i18n="catalogQuickSearchTitle">Catalog quick search</h2>
               <input id="catalogSearchQuick" class="input" placeholder="Search Millennium part, MFG SKU, description" data-i18n-placeholder="catalogSearchPlaceholder" />
               <div id="catalogResultsQuick" class="catalog-list" style="margin-top:12px;"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="viewTechnician" class="view">
+          <div class="grid cols-2">
+            <div class="card">
+              <h2 data-i18n="techClockTitle">Time tracking</h2>
+              <div id="techClockStatus" class="muted small" style="margin-top:6px;"></div>
+              <div class="row" style="margin-top:12px;">
+                <button id="btnTechClockIn" class="btn" data-i18n="techClockIn">Clock In</button>
+                <button id="btnTechClockOut" class="btn secondary" data-i18n="techClockOut">Clock Out</button>
+              </div>
+              <div class="hr"></div>
+              <div class="muted small" data-i18n="techJobStateLabel">Current state</div>
+              <div id="techJobState" class="chip" style="margin-top:8px;"></div>
+              <div class="row" style="flex-wrap:wrap; margin-top:12px;">
+                <button id="btnTechStartJob" class="btn" data-i18n="techStartJob">Start Job</button>
+                <button id="btnTechPauseJob" class="btn secondary" data-i18n="techPauseJob">Pause Job</button>
+                <button id="btnTechLunch" class="btn ghost" data-i18n="techLunch">Lunch</button>
+                <button id="btnTechBreak" class="btn ghost" data-i18n="techBreak">Break</button>
+                <button id="btnTechTruckInspection" class="btn ghost" data-i18n="techTruckInspection">Truck Inspection</button>
+                <button id="btnTechEndJob" class="btn danger" data-i18n="techEndJob">End Job</button>
+              </div>
+              <div class="hr"></div>
+              <div id="techEventLog" class="tech-log"></div>
+            </div>
+            <div class="card">
+              <h2 data-i18n="techSummaryTitle">Daily summary</h2>
+              <div id="techSummary" style="margin-top:12px;"></div>
+              <div class="hr"></div>
+              <h3 data-i18n="techLocationTrailTitle">Location trail</h3>
+              <div id="techLocationTrail" class="muted small" style="margin-top:8px;"></div>
+            </div>
+          </div>
+          <div class="card" style="margin-top:12px;">
+            <div class="row" style="justify-content:space-between;">
+              <h2 data-i18n="techWorkOrdersTitle">Work orders</h2>
+              <div class="muted small" data-i18n="techWorkOrdersSubtitle">Assigned installs and trouble tickets</div>
+            </div>
+            <div class="grid cols-2" style="margin-top:12px;">
+              <div>
+                <h3 data-i18n="techTodayTitle">Today</h3>
+                <div id="techWorkOrdersToday" style="margin-top:10px;"></div>
+              </div>
+              <div>
+                <h3 data-i18n="techTomorrowTitle">Tomorrow</h3>
+                <div id="techWorkOrdersTomorrow" style="margin-top:10px;"></div>
+              </div>
             </div>
           </div>
         </section>
@@ -263,6 +315,41 @@
           </div>
         </section>
 
+        <section id="viewDispatch" class="view">
+          <div class="card">
+            <div class="row" style="justify-content:space-between; align-items:center;">
+              <h2 data-i18n="dispatchTitle">Dispatch</h2>
+              <div class="row" style="flex-wrap:wrap;">
+                <button id="btnDispatchCreate" class="btn" data-i18n="dispatchCreate">Create work order</button>
+                <button id="btnDispatchImportCsv" class="btn ghost" data-i18n="dispatchImportCsv">Import CSV</button>
+                <input id="dispatchCsvInput" type="file" accept=".csv,text/csv" style="display:none;" />
+              </div>
+            </div>
+            <div class="row" style="flex-wrap:wrap; margin-top:12px;">
+              <input id="dispatchDateFilter" class="input" type="date" />
+              <select id="dispatchStatusFilter" class="input">
+                <option value="" data-i18n="dispatchStatusAll">All statuses</option>
+              </select>
+              <select id="dispatchAssignFilter" class="input">
+                <option value="all" data-i18n="dispatchAssignAll">All</option>
+                <option value="assigned" data-i18n="dispatchAssignAssigned">Assigned</option>
+                <option value="unassigned" data-i18n="dispatchAssignUnassigned">Unassigned</option>
+              </select>
+            </div>
+            <div id="dispatchTable" style="margin-top:12px;"></div>
+          </div>
+        </section>
+
+        <section id="viewLabor" class="view">
+          <div class="card">
+            <div class="row" style="justify-content:space-between;">
+              <h2 data-i18n="laborTitle">Labor</h2>
+              <button id="btnLaborExportCsv" class="btn ghost" data-i18n="exportCsv">Export CSV</button>
+            </div>
+            <div id="laborTable" style="margin-top:12px;"></div>
+          </div>
+        </section>
+
         <section id="viewMap" class="view">
           <div class="card">
             <div class="row" style="justify-content:space-between;">
@@ -335,6 +422,7 @@
                   <option value="SUB">SUB</option>
                   <option value="PRIME">PRIME</option>
                   <option value="TDS">TDS</option>
+                  <option value="TECHNICIAN">TECHNICIAN</option>
                   <option value="OWNER">OWNER</option>
                 </select>
                 <button id="btnAdminCreateUser" class="btn secondary" data-i18n="createProfile">Create profile</button>
@@ -374,6 +462,49 @@
             <option value="es">Español</option>
           </select>
           <button id="btnSaveProfileLanguage" class="btn">Save / Guardar</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="dispatchModal" class="modal" style="display:none;">
+      <div class="card modal-card" style="max-width:720px;">
+        <h2 data-i18n="dispatchModalTitle">Work order</h2>
+        <div class="field-stack" style="margin-top:12px;">
+          <select id="dispatchType" class="input">
+            <option value="INSTALL">INSTALL</option>
+            <option value="TROUBLE_TICKET">TROUBLE_TICKET</option>
+            <option value="MAINTENANCE">MAINTENANCE</option>
+            <option value="SURVEY">SURVEY</option>
+          </select>
+          <select id="dispatchStatus" class="input">
+            <option value="NEW">NEW</option>
+            <option value="ASSIGNED">ASSIGNED</option>
+            <option value="EN_ROUTE">EN_ROUTE</option>
+            <option value="ON_SITE">ON_SITE</option>
+            <option value="IN_PROGRESS">IN_PROGRESS</option>
+            <option value="BLOCKED">BLOCKED</option>
+            <option value="COMPLETE">COMPLETE</option>
+            <option value="CANCELED">CANCELED</option>
+          </select>
+          <input id="dispatchScheduledStart" class="input" type="datetime-local" />
+          <input id="dispatchScheduledEnd" class="input" type="datetime-local" />
+          <input id="dispatchCustomerLabel" class="input" placeholder="Customer name" />
+          <input id="dispatchAddress" class="input" placeholder="Address" />
+          <div class="row">
+            <input id="dispatchLat" class="input" placeholder="Lat" />
+            <input id="dispatchLng" class="input" placeholder="Lng" />
+          </div>
+          <input id="dispatchContactPhone" class="input" placeholder="Contact phone" />
+          <input id="dispatchPriority" class="input" type="number" min="1" max="5" placeholder="Priority (1-5)" />
+          <input id="dispatchSlaDueAt" class="input" type="datetime-local" />
+          <textarea id="dispatchNotes" class="input" rows="3" placeholder="Notes"></textarea>
+          <select id="dispatchAssignUser" class="input">
+            <option value="">Unassigned</option>
+          </select>
+        </div>
+        <div class="row" style="margin-top:12px; justify-content:flex-end;">
+          <button id="btnDispatchCancel" class="btn ghost" data-i18n="cancelLabel">Cancel</button>
+          <button id="btnDispatchSave" class="btn" data-i18n="saveLabel">Save</button>
         </div>
       </div>
     </div>
