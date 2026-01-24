@@ -3,7 +3,7 @@
 do $$
 begin
   if not exists (select 1 from pg_type where typname = 'app_role') then
-    create type app_role as enum ('TDS','PRIME','SUB','SPLICER','TECHNICIAN','OWNER');
+    create type app_role as enum ('ADMIN','OWNER','PRIME','TDS','SUB','SPLICER','TECHNICIAN');
   else
     alter type app_role add value if not exists 'TECHNICIAN';
   end if;
@@ -267,12 +267,12 @@ to authenticated
 using (
   exists (
     select 1 from public.profiles p
-    where p.id = auth.uid() and p.role in ('OWNER','PRIME')
+    where p.id = auth.uid() and public.is_privileged_role(p.role)
   )
   and exists (
     select 1 from public.project_members pm
     where pm.project_id = project_id and pm.user_id = auth.uid()
-      and pm.role in ('OWNER','PRIME','TDS')
+      and public.is_privileged_role(pm.role)
   )
 );
 
@@ -309,7 +309,7 @@ using (
     join public.project_members pm on pm.project_id = t.project_id and pm.user_id = auth.uid()
     join public.profiles p on p.id = auth.uid()
     where t.id = timesheet_id
-      and p.role in ('OWNER','PRIME')
-      and pm.role in ('OWNER','PRIME','TDS')
+      and public.is_privileged_role(p.role)
+      and public.is_privileged_role(pm.role)
   )
 );

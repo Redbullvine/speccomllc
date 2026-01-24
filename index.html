@@ -54,7 +54,7 @@
       <div class="grid cols-2">
         <div class="card">
           <h2 data-i18n="rolesTitle">Roles in this build</h2>
-          <div class="muted small" data-i18n="rolesSubtitle">TDS -> PRIME -> SUB -> SPLICER -> TECHNICIAN -> OWNER (Spec Communications, LLC Louis Garcia)</div>
+          <div class="muted small" data-i18n="rolesSubtitle">ADMIN -> OWNER -> PRIME -> TDS -> SUB -> SPLICER -> TECHNICIAN (Spec Communications, LLC Louis Garcia)</div>
         </div>
 
         <div class="card">
@@ -336,6 +336,7 @@
                 <option value="unassigned" data-i18n="dispatchAssignUnassigned">Unassigned</option>
               </select>
             </div>
+            <div id="dispatchImportWarnings" class="note warning" style="display:none; margin-top:12px;"></div>
             <div id="dispatchTable" style="margin-top:12px;"></div>
           </div>
         </section>
@@ -418,6 +419,7 @@
                 <input id="adminUserId" class="input" placeholder="Auth user id (UUID)" data-i18n-placeholder="adminUserIdPlaceholder" />
                 <input id="adminUserEmail" class="input" placeholder="Email or display name" data-i18n-placeholder="adminUserEmailPlaceholder" />
                 <select id="adminUserRole" class="input" style="min-width:180px;">
+                  <option value="ADMIN">ADMIN</option>
                   <option value="SPLICER">SPLICER</option>
                   <option value="SUB">SUB</option>
                   <option value="PRIME">PRIME</option>

@@ -58,6 +58,7 @@ const state = {
     dispatch: [],
     technicians: [],
     editing: null,
+    importWarnings: [],
   },
   labor: {
     rows: [],
@@ -71,7 +72,7 @@ const state = {
     usageChannel: null,
   },
   demo: {
-    roles: ["TDS", "PRIME", "SUB", "SPLICER", "TECHNICIAN", "OWNER"],
+    roles: ["ADMIN", "OWNER", "PRIME", "TDS", "SUB", "SPLICER", "TECHNICIAN"],
     role: "SPLICER",
     nodes: {},
     nodesList: [],
@@ -103,7 +104,7 @@ const I18N = {
     createUser: "Create user",
     authConfigNote: "Supabase not configured.",
     rolesTitle: "Roles in this build",
-    rolesSubtitle: "TDS -> PRIME -> SUB -> SPLICER -> TECHNICIAN -> OWNER (Spec Communications, LLC Louis Garcia)",
+    rolesSubtitle: "ADMIN -> OWNER -> PRIME -> TDS -> SUB -> SPLICER -> TECHNICIAN (Spec Communications, LLC Louis Garcia)",
     liveSetupTitle: "Live setup",
     liveSetupSubtitle: "Ensure Supabase Auth, Storage, and RLS policies are configured for your roles.",
     selectProject: "Select project",
@@ -329,7 +330,7 @@ const I18N = {
     createUser: "Crear usuario",
     authConfigNote: "Supabase no está configurado.",
     rolesTitle: "Roles en esta versión",
-    rolesSubtitle: "TDS -> PRIME -> SUB -> SPLICER -> TECHNICIAN -> OWNER (Spec Communications, LLC Louis Garcia)",
+    rolesSubtitle: "ADMIN -> OWNER -> PRIME -> TDS -> SUB -> SPLICER -> TECHNICIAN (Spec Communications, LLC Louis Garcia)",
     liveSetupTitle: "Configuración en vivo",
     liveSetupSubtitle: "Asegura Supabase Auth, Storage y políticas RLS para tus roles.",
     selectProject: "Seleccionar proyecto",
@@ -1228,6 +1229,7 @@ function refreshLanguageSensitiveUI(){
   renderLaborTable();
   renderTechnicianWorkOrders();
   renderDispatchTable();
+  renderDispatchWarnings();
   syncDispatchStatusFilter();
   applyI18n();
   refreshLocations();
@@ -1243,11 +1245,15 @@ function isDemoUser(){
 
 function isBillingManager(){
   const role = getRole();
-  return role === "OWNER" || role === "PRIME" || role === "TDS";
+  return isPrivilegedRole(role) || role === "TDS";
 }
 
 function isOwner(){
   return getRole() === "OWNER";
+}
+
+function isPrivilegedRole(role = getRole()){
+  return role === "ADMIN" || role === "OWNER" || role === "PRIME";
 }
 
 function isTechnician(){
@@ -1255,13 +1261,11 @@ function isTechnician(){
 }
 
 function canViewLabor(){
-  const role = getRole();
-  return role === "OWNER" || role === "PRIME";
+  return isPrivilegedRole();
 }
 
 function canViewDispatch(){
-  const role = getRole();
-  return role === "OWNER" || role === "PRIME";
+  return isPrivilegedRole();
 }
 
 function getDefaultView(){
@@ -1417,6 +1421,7 @@ function setRoleUI(){
   renderTechnicianDashboard();
   renderTechnicianWorkOrders();
   renderDispatchTable();
+  renderDispatchWarnings();
 }
 
 function getLocalDateISO(){
@@ -1876,6 +1881,7 @@ async function loadDispatchWorkOrders(){
   }
   state.workOrders.dispatch = data || [];
   renderDispatchTable();
+  renderDispatchWarnings();
 }
 
 function renderDispatchTable(){
@@ -1886,7 +1892,7 @@ function renderDispatchTable(){
     return;
   }
   if (!canViewDispatch()){
-    wrap.innerHTML = `<div class="muted small">Dispatch is limited to OWNER / PRIME.</div>`;
+    wrap.innerHTML = `<div class="muted small">Dispatch is limited to privileged roles.</div>`;
     return;
   }
   const rows = state.workOrders.dispatch || [];
@@ -1937,6 +1943,24 @@ function renderDispatchTable(){
         }).join("")}
       </tbody>
     </table>
+  `;
+}
+
+function renderDispatchWarnings(){
+  const wrap = $("dispatchImportWarnings");
+  if (!wrap) return;
+  const warnings = state.workOrders.importWarnings || [];
+  if (!warnings.length){
+    wrap.style.display = "none";
+    wrap.innerHTML = "";
+    return;
+  }
+  wrap.style.display = "";
+  wrap.innerHTML = `
+    <div style="font-weight:900;">Import warnings</div>
+    <ul class="muted small" style="margin-top:6px;">
+      ${warnings.map(w => `<li>${escapeHtml(w)}</li>`).join("")}
+    </ul>
   `;
 }
 
@@ -2078,15 +2102,11 @@ function parseCsv(text){
   return rows;
 }
 
-async function resolveUserIdByEmail(email){
-  if (!email || !state.client) return null;
-  const { data } = await state.client
-    .from("profiles")
-    .select("id, display_name")
-    .ilike("display_name", email)
-    .limit(1)
-    .maybeSingle();
-  return data?.id || null;
+async function resolveUserIdByIdentifier(identifier){
+  if (!identifier || !state.client) return null;
+  const { data, error } = await state.client.rpc("fn_resolve_user_id", { identifier });
+  if (error) return null;
+  return data || null;
 }
 
 async function importDispatchCsv(file){
@@ -2095,6 +2115,8 @@ async function importDispatchCsv(file){
     toast("Demo restriction", t("availableInProduction"));
     return;
   }
+  state.workOrders.importWarnings = [];
+  renderDispatchWarnings();
   const text = await file.text();
   const rows = parseCsv(text);
   if (!rows.length) return;
@@ -2112,7 +2134,7 @@ async function importDispatchCsv(file){
   const dataRows = rows.slice(1).filter(r => r.length && r.some(cell => String(cell || "").trim().length));
   const payloads = [];
   const assignments = [];
-  dataRows.forEach((row) => {
+  dataRows.forEach((row, rowIndex) => {
     const externalId = String(row[index("external_id")] || "").trim();
     if (!externalId) return;
     const typeValue = String(row[index("type")] || "").trim().toUpperCase();
@@ -2140,8 +2162,14 @@ async function importDispatchCsv(file){
     };
     payloads.push(payload);
     const assignEmail = String(row[index("assigned_to_email")] || "").trim();
-    if (assignEmail){
-      assignments.push({ external_id: externalId, email: assignEmail });
+    const assignEmployeeId = String(row[index("assigned_to_employee_id")] || "").trim();
+    if (assignEmail || assignEmployeeId){
+      assignments.push({
+        external_id: externalId,
+        email: assignEmail,
+        employee_id: assignEmployeeId,
+        row_number: rowIndex + 2,
+      });
     }
   });
   if (!payloads.length){
@@ -2181,11 +2209,16 @@ async function importDispatchCsv(file){
     await insertWorkOrderEvent(workOrderId, wasExisting ? "UPDATED" : "CREATED", payload);
   }
 
+  const warnings = [];
   for (const assignment of assignments){
     const workOrderId = idMap.get(assignment.external_id);
     if (!workOrderId) continue;
-    const userId = await resolveUserIdByEmail(assignment.email);
-    if (!userId) continue;
+    const identifier = assignment.employee_id || assignment.email;
+    const userId = await resolveUserIdByIdentifier(identifier);
+    if (!userId){
+      warnings.push(`Row ${assignment.row_number}: no match for ${identifier}`);
+      continue;
+    }
     await state.client.rpc("fn_assign_work_order", {
       work_order_id: workOrderId,
       technician_user_id: userId,
@@ -2193,7 +2226,13 @@ async function importDispatchCsv(file){
   }
 
   await loadDispatchWorkOrders();
-  toast("Import complete", `Imported ${payloads.length} work orders.`);
+  state.workOrders.importWarnings = warnings;
+  renderDispatchWarnings();
+  if (warnings.length){
+    toast("Import complete", `Imported ${payloads.length} work orders. ${warnings.length} warnings.`);
+  } else {
+    toast("Import complete", `Imported ${payloads.length} work orders.`);
+  }
 }
 
 async function loadTechnicianTimesheet(){
@@ -6469,7 +6508,7 @@ async function initAuth(){
   if (isDemo){
     ensureDemoSeed();
     showAuth(false);
-    const pick = prompt("Demo mode: choose a role (TDS, PRIME, SUB, SPLICER, TECHNICIAN, OWNER)", state.demo.role) || state.demo.role;
+    const pick = prompt("Demo mode: choose a role (ADMIN, OWNER, PRIME, TDS, SUB, SPLICER, TECHNICIAN)", state.demo.role) || state.demo.role;
     const role = state.demo.roles.includes(pick.toUpperCase()) ? pick.toUpperCase() : state.demo.role;
     state.demo.role = role;
     await loadProjects();

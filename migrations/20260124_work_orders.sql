@@ -90,14 +90,29 @@ begin
     if new.project_id <> old.project_id
       or new.external_source is distinct from old.external_source
       or new.external_id is distinct from old.external_id
-      or new.assigned_to_user_id is distinct from old.assigned_to_user_id then
+      or new.assigned_to_user_id is distinct from old.assigned_to_user_id
+      or new.scheduled_start is distinct from old.scheduled_start
+      or new.scheduled_end is distinct from old.scheduled_end
+      or new.address is distinct from old.address
+      or new.lat is distinct from old.lat
+      or new.lng is distinct from old.lng then
       raise exception 'Technicians cannot change assignment or external fields';
     end if;
     if new.status is distinct from old.status then
       if new.status not in ('EN_ROUTE','ON_SITE','IN_PROGRESS','BLOCKED','COMPLETE') then
         raise exception 'Status not allowed';
       end if;
-      if old.status in ('NEW','CANCELED','COMPLETE') then
+      if old.status = 'ASSIGNED' and new.status not in ('EN_ROUTE','ON_SITE','IN_PROGRESS','BLOCKED') then
+        raise exception 'Status transition not allowed';
+      elsif old.status = 'EN_ROUTE' and new.status not in ('ON_SITE','IN_PROGRESS','BLOCKED') then
+        raise exception 'Status transition not allowed';
+      elsif old.status = 'ON_SITE' and new.status not in ('IN_PROGRESS','BLOCKED') then
+        raise exception 'Status transition not allowed';
+      elsif old.status = 'IN_PROGRESS' and new.status not in ('BLOCKED','COMPLETE') then
+        raise exception 'Status transition not allowed';
+      elsif old.status = 'BLOCKED' and new.status not in ('IN_PROGRESS','COMPLETE') then
+        raise exception 'Status transition not allowed';
+      elsif old.status in ('NEW','CANCELED','COMPLETE') then
         raise exception 'Status transition not allowed';
       end if;
     end if;
@@ -119,7 +134,7 @@ to authenticated
 using (
   exists (
     select 1 from public.profiles p
-    where p.id = auth.uid() and p.role in ('OWNER','PRIME')
+    where p.id = auth.uid() and public.is_privileged_role(p.role)
   )
   and exists (
     select 1 from public.project_members pm
@@ -134,7 +149,7 @@ to authenticated
 with check (
   exists (
     select 1 from public.profiles p
-    where p.id = auth.uid() and p.role in ('OWNER','PRIME')
+    where p.id = auth.uid() and public.is_privileged_role(p.role)
   )
   and exists (
     select 1 from public.project_members pm
@@ -149,7 +164,7 @@ to authenticated
 using (
   exists (
     select 1 from public.profiles p
-    where p.id = auth.uid() and p.role in ('OWNER','PRIME')
+    where p.id = auth.uid() and public.is_privileged_role(p.role)
   )
   and exists (
     select 1 from public.project_members pm
@@ -159,7 +174,7 @@ using (
 with check (
   exists (
     select 1 from public.profiles p
-    where p.id = auth.uid() and p.role in ('OWNER','PRIME')
+    where p.id = auth.uid() and public.is_privileged_role(p.role)
   )
 );
 
@@ -170,7 +185,7 @@ to authenticated
 using (
   exists (
     select 1 from public.profiles p
-    where p.id = auth.uid() and p.role in ('OWNER','PRIME')
+    where p.id = auth.uid() and public.is_privileged_role(p.role)
   )
   and exists (
     select 1 from public.project_members pm
@@ -207,7 +222,7 @@ using (
     join public.profiles p on p.id = auth.uid()
     where wo.id = work_order_id
       and pm.user_id = auth.uid()
-      and p.role in ('OWNER','PRIME')
+      and public.is_privileged_role(p.role)
   )
 );
 
@@ -234,7 +249,7 @@ with check (
     join public.profiles p on p.id = auth.uid()
     where wo.id = work_order_id
       and pm.user_id = auth.uid()
-      and p.role in ('OWNER','PRIME')
+      and public.is_privileged_role(p.role)
   )
 );
 
@@ -265,7 +280,7 @@ begin
   end if;
   if not exists (
     select 1 from public.profiles p
-    where p.id = auth.uid() and p.role in ('OWNER','PRIME')
+    where p.id = auth.uid() and public.is_privileged_role(p.role)
   ) then
     raise exception 'not allowed';
   end if;
