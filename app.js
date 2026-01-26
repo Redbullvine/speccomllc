@@ -4940,7 +4940,7 @@ function renderBillingDetail(){
             <option value="sent" ${status === "sent" ? "selected" : ""}>Sent</option>
             <option value="paid" ${status === "paid" ? "selected" : ""}>Paid</option>
           </select>
-          <button id="btnBuildInvoiceStatus" class="btn secondary">Update status</button>
+          <button id="btnBuildInvoiceStatus" class="btn secondary" data-action="buildInvoiceStatus">Update status</button>
         </div>
       </div>
     `
@@ -4959,7 +4959,7 @@ function renderBillingDetail(){
       <div class="note warning" style="margin-top:12px;">
         <div style="font-weight:900;">Billing locked</div>
         <div class="muted small">Proof is incomplete for this site. Owner can apply an override if needed.</div>
-        ${showOverrideAction ? '<button id="btnOwnerOverride" class="btn secondary" style="margin-top:10px;">Owner override</button>' : ""}
+        ${showOverrideAction ? '<button id="btnOwnerOverride" class="btn secondary" data-action="ownerOverride" style="margin-top:10px;">Owner override</button>' : ""}
       </div>
     ` : ""}
     ${buildModeStatusControls}
@@ -4973,7 +4973,7 @@ function renderBillingDetail(){
             <option value="BACKFILL_ALLOWED">Allow backfill uploads</option>
           </select>
           <input id="ownerOverrideReason" class="input" placeholder="Reason (required)" style="min-width:220px; flex:1 1 auto;" />
-          <button id="btnApplyOwnerOverride" class="btn">Apply</button>
+          <button id="btnApplyOwnerOverride" class="btn" data-action="applyOwnerOverride">Apply</button>
         </div>
       </div>
     ` : ""}
@@ -4995,7 +4995,7 @@ function renderBillingDetail(){
       </tbody>
     </table>
     <div class="billing-actions">
-      <button id="btnAddLineItem" class="btn secondary" ${editLocked ? "disabled" : ""}>${t("addLineItemLabel")}</button>
+      <button id="btnAddLineItem" class="btn secondary" data-action="addLineItem" ${editLocked ? "disabled" : ""}>${t("addLineItemLabel")}</button>
     </div>
     <div class="hr"></div>
     <div class="billing-summary">
@@ -5009,51 +5009,10 @@ function renderBillingDetail(){
       <textarea id="billingNotes" class="input" rows="3" style="width:100%;" ${editLocked ? "disabled" : ""}>${escapeHtml(invoice?.notes || "")}</textarea>
     </div>
     <div class="billing-actions">
-      <button id="btnBillingSave" class="btn" ${editLocked ? "disabled" : ""}>Save</button>
-      <button id="btnBillingReady" class="btn secondary" ${editLocked || !hasBillableItems(items) ? "disabled" : ""}>Ready to submit</button>
+      <button id="btnBillingSave" class="btn" data-action="billingSave" ${editLocked ? "disabled" : ""}>Save</button>
+      <button id="btnBillingReady" class="btn secondary" data-action="billingReady" ${editLocked || !hasBillableItems(items) ? "disabled" : ""}>Ready to submit</button>
     </div>
   `;
-
-  wrap.querySelectorAll("[data-action='removeLine']").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const idx = Number.parseInt(btn.dataset.index, 10);
-      removeBillingItem(idx);
-    });
-  });
-  wrap.querySelectorAll("[data-action='codeChange']").forEach((el) => {
-    el.addEventListener("change", () => handleBillingItemChange(el.dataset.index, "work_code_id", el.value));
-  });
-  wrap.querySelectorAll("[data-action='qtyChange']").forEach((el) => {
-    el.addEventListener("input", () => handleBillingItemChange(el.dataset.index, "qty", el.value));
-  });
-  wrap.querySelectorAll("[data-action='rateChange']").forEach((el) => {
-    el.addEventListener("input", () => handleBillingItemChange(el.dataset.index, "rate", el.value));
-  });
-
-  const addBtn = wrap.querySelector("#btnAddLineItem");
-  if (addBtn) addBtn.addEventListener("click", () => addBillingItem());
-  const saveBtn = wrap.querySelector("#btnBillingSave");
-  if (saveBtn) saveBtn.addEventListener("click", () => saveBillingInvoice());
-  const readyBtn = wrap.querySelector("#btnBillingReady");
-  if (readyBtn) readyBtn.addEventListener("click", () => markInvoiceReady());
-  const buildStatusBtn = wrap.querySelector("#btnBuildInvoiceStatus");
-  if (buildStatusBtn) buildStatusBtn.addEventListener("click", () => updateInvoiceStatus());
-
-  const overrideBtn = wrap.querySelector("#btnOwnerOverride");
-  if (overrideBtn){
-    overrideBtn.addEventListener("click", () => {
-      const panel = wrap.querySelector("#ownerOverridePanel");
-      if (panel) panel.style.display = "";
-    });
-  }
-  const applyOverrideBtn = wrap.querySelector("#btnApplyOwnerOverride");
-  if (applyOverrideBtn){
-    applyOverrideBtn.addEventListener("click", () => {
-      const type = wrap.querySelector("#ownerOverrideType")?.value || "";
-      const reason = wrap.querySelector("#ownerOverrideReason")?.value || "";
-      createOwnerOverride(type, reason);
-    });
-  }
 
   const canExport = BUILD_MODE || ["ready", "submitted", "paid"].includes(status);
   if (exportBtn) exportBtn.disabled = !canExport;
@@ -6753,13 +6712,60 @@ function wireUI(){
     });
   }
 
-  const billingList = $("billingLocationList");
-  if (billingList){
-    billingList.addEventListener("click", (e) => {
+  const billingView = $("viewBilling");
+  if (billingView){
+    billingView.addEventListener("click", async (e) => {
       const btn = e.target.closest("button");
       if (!btn) return;
-      if (btn.dataset.action === "openBilling"){
+      const action = btn.dataset.action;
+      if (!action) return;
+      if (action === "openBilling"){
         openBillingLocation(btn.dataset.id);
+        return;
+      }
+      if (action === "buildInvoiceStatus"){
+        await updateInvoiceStatus();
+        return;
+      }
+      if (action === "ownerOverride"){
+        const panel = $("ownerOverridePanel");
+        if (panel){
+          const isHidden = panel.style.display === "none";
+          panel.style.display = isHidden ? "" : "none";
+          if (isHidden){
+            const nodeId = state.billingLocation?.node_id;
+            if (nodeId) await loadOwnerOverrides(nodeId);
+          }
+        }
+        return;
+      }
+      if (action === "applyOwnerOverride"){
+        const overrideType = $("ownerOverrideType")?.value || "";
+        const reason = $("ownerOverrideReason")?.value || "";
+        if (!String(reason).trim()){
+          toast("Reason required", "Provide a reason for the override.");
+          return;
+        }
+        await createOwnerOverride(overrideType, reason);
+        const panel = $("ownerOverridePanel");
+        if (panel) panel.style.display = "none";
+        renderBillingDetail();
+        return;
+      }
+      if (action === "addLineItem"){
+        addBillingItem();
+        return;
+      }
+      if (action === "billingSave"){
+        await saveBillingInvoice();
+        return;
+      }
+      if (action === "billingReady"){
+        if (!hasBillableItems(state.billingItems)){
+          toast("Missing items", "Add at least one line item with qty.");
+          return;
+        }
+        await markInvoiceReady();
       }
     });
   }
