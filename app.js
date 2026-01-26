@@ -1403,10 +1403,13 @@ function setRoleUI(){
 
   // Pricing visibility notice
   const pricingHidden = (role === "SPLICER" || role === "TECHNICIAN");
-  $("chipPricing").style.display = pricingHidden ? "inline-flex" : "inline-flex";
-  $("chipPricing").innerHTML = pricingHidden
-    ? `<span class="dot bad"></span><span>${t("pricingHiddenSplicer")}</span>`
-    : `<span class="dot ok"></span><span>${t("pricingProtected")}</span>`;
+  const pricingChip = $("chipPricing");
+  if (pricingChip){
+    pricingChip.style.display = "none";
+    pricingChip.innerHTML = pricingHidden
+      ? `<span class="dot bad"></span><span>${t("pricingHiddenSplicer")}</span>`
+      : `<span class="dot ok"></span><span>${t("pricingProtected")}</span>`;
+  }
 
   const buildChip = $("chipBuildMode");
   if (buildChip){
