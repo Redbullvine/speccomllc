@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SpecCom | Field Verification</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div class="container">
-    <div class="topbar">
+  <header class="topbar">
+    <div class="topbar-inner">
       <div class="brand">
         <span class="brand-mark">GT</span>
         <div>
@@ -17,16 +18,31 @@
           <div class="muted small" data-i18n="brandSubtitle">Field verification, documentation, and billing control</div>
         </div>
       </div>
-      <div class="row">
+      <div class="row topbar-actions">
         <span id="appModeBadge" class="badge">DEMO</span>
         <span id="demoEnvBadge" class="badge demo" style="display:none;" data-i18n="demoEnvBadge">DEMO ENVIRONMENT</span>
         <span id="whoami" class="badge">Signed out</span>
-        <button id="btnSignOut" class="btn secondary" style="display:none;" data-i18n="signOut">Sign out</button>
+        <button id="btnSignOut" class="btn secondary" style="display:none;" data-action="signOut" data-i18n="signOut">Sign out</button>
       </div>
     </div>
-
+  </header>
+  <div class="page container">
     <div class="spacer"></div>
     <div id="envWarning" class="note" style="display:none;"></div>
+
+    <section class="hero">
+      <div class="hero-card">
+        <div class="hero-left">
+          <h1>Field verification that keeps fiber builds moving</h1>
+          <p class="muted">SpecCom unifies dispatch, site checks, and billing signals so crews stay on schedule and managers see the truth on one clean dashboard.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#viewAuth">Sign in</a>
+            <a class="btn btn-secondary" href="#viewAuth">Create account</a>
+          </div>
+        </div>
+        <div class="hero-right" aria-hidden="true"></div>
+      </div>
+    </section>
 
     <div id="viewAuth" class="stack">
       <div class="auth-wrap">
@@ -40,9 +56,9 @@
             <input id="password" class="input" placeholder="password" type="password" data-i18n-placeholder="passwordPlaceholder" />
           </div>
           <div class="row" style="margin-top:12px;">
-            <button id="btnSignIn" class="btn" data-i18n="signIn">Sign in</button>
-            <button id="btnSignUp" class="btn secondary" data-i18n="createUser">Create account</button>
-            <button id="btnDemoLogin" class="btn ghost" data-i18n="demoLogin">Demo login</button>
+            <button id="btnSignIn" class="btn" data-action="signIn" data-i18n="signIn">Sign in</button>
+            <button id="btnSignUp" class="btn secondary" data-action="signUp" data-i18n="createUser">Create account</button>
+            <button id="btnDemoLogin" class="btn ghost" data-action="demoLogin" data-i18n="demoLogin">Demo login</button>
           </div>
         </div>
       </div>
@@ -136,19 +152,19 @@
               <h2 data-i18n="techClockTitle">Time tracking</h2>
               <div id="techClockStatus" class="muted small" style="margin-top:6px;"></div>
               <div class="row" style="margin-top:12px;">
-                <button id="btnTechClockIn" class="btn" data-i18n="techClockIn">Clock In</button>
-                <button id="btnTechClockOut" class="btn secondary" data-i18n="techClockOut">Clock Out</button>
+                <button id="btnTechClockIn" class="btn" data-action="techClockIn" data-i18n="techClockIn">Clock In</button>
+                <button id="btnTechClockOut" class="btn secondary" data-action="techClockOut" data-i18n="techClockOut">Clock Out</button>
               </div>
               <div class="hr"></div>
               <div class="muted small" data-i18n="techJobStateLabel">Current state</div>
               <div id="techJobState" class="chip" style="margin-top:8px;"></div>
               <div class="row" style="flex-wrap:wrap; margin-top:12px;">
-                <button id="btnTechStartJob" class="btn" data-i18n="techStartJob">Start Job</button>
-                <button id="btnTechPauseJob" class="btn secondary" data-i18n="techPauseJob">Pause Job</button>
-                <button id="btnTechLunch" class="btn ghost" data-i18n="techLunch">Lunch</button>
-                <button id="btnTechBreak" class="btn ghost" data-i18n="techBreak">Break</button>
-                <button id="btnTechTruckInspection" class="btn ghost" data-i18n="techTruckInspection">Truck Inspection</button>
-                <button id="btnTechEndJob" class="btn danger" data-i18n="techEndJob">End Job</button>
+                <button id="btnTechStartJob" class="btn" data-action="techStartJob" data-i18n="techStartJob">Start Job</button>
+                <button id="btnTechPauseJob" class="btn secondary" data-action="techPauseJob" data-i18n="techPauseJob">Pause Job</button>
+                <button id="btnTechLunch" class="btn ghost" data-action="techLunch" data-i18n="techLunch">Lunch</button>
+                <button id="btnTechBreak" class="btn ghost" data-action="techBreak" data-i18n="techBreak">Break</button>
+                <button id="btnTechTruckInspection" class="btn ghost" data-action="techTruckInspection" data-i18n="techTruckInspection">Truck Inspection</button>
+                <button id="btnTechEndJob" class="btn danger" data-action="techEndJob" data-i18n="techEndJob">End Job</button>
               </div>
               <div class="hr"></div>
               <div id="techEventLog" class="tech-log"></div>
@@ -186,8 +202,8 @@
 
             <div class="row" style="margin-bottom:12px;">
               <input id="nodeNumber" class="input" placeholder="Enter site number (example: SITE-1001)" data-i18n-placeholder="nodeNumberPlaceholder" />
-              <button id="btnOpenNode" class="btn" data-i18n="openNode">Open site</button>
-              <button id="btnNewNode" class="btn secondary" data-i18n="createNode">Create site</button>
+              <button id="btnOpenNode" class="btn" data-action="openNodeInput" data-i18n="openNode">Open site</button>
+              <button id="btnNewNode" class="btn secondary" data-action="createNodeInput" data-i18n="createNode">Create site</button>
             </div>
 
             <div class="hr"></div>
@@ -196,7 +212,7 @@
             <p class="muted small" data-i18n="spliceLocationsSubtitle">Photos are optional for billing in this MVP.</p>
 
             <div class="row">
-              <button id="btnAddLocation" class="btn secondary" data-i18n="addSpliceLocation">Add splice location</button>
+              <button id="btnAddLocation" class="btn secondary" data-action="addSpliceLocation" data-i18n="addSpliceLocation">Add splice location</button>
             </div>
 
             <div id="locations" style="margin-top:12px;"></div>
@@ -225,8 +241,8 @@
                 <video id="cameraStream" autoplay playsinline muted></video>
               </div>
               <div class="row" style="margin-top:12px;">
-                <button id="btnStartCamera" class="btn secondary" data-i18n="startCamera">Start camera</button>
-                <button id="btnCapturePhoto" class="btn secondary" data-i18n="captureUsagePhoto">Capture usage photo</button>
+                <button id="btnStartCamera" class="btn secondary" data-action="startCamera" data-i18n="startCamera">Start camera</button>
+                <button id="btnCapturePhoto" class="btn secondary" data-action="captureUsagePhoto" data-i18n="captureUsagePhoto">Capture usage photo</button>
               </div>
               <div id="photoStatus" class="muted small" style="margin-top:10px;" data-i18n="photoStatusNone">No photo captured</div>
               <div id="photoPreview" class="photo-preview" style="margin-top:12px;"></div>
@@ -258,8 +274,8 @@
               <div class="no-pay-banner" data-i18n="invoicesUngatedBanner">Invoices available without proof in MVP</div>
               <div class="muted small" data-i18n="invoiceActionsSubtitle">Billing entry is available in this MVP.</div>
               <div class="row" style="margin-top:12px;">
-                <button id="btnMarkNodeReady" class="btn" data-i18n="markNodeReady">Mark site READY for billing</button>
-                <button id="btnCreateInvoice" class="btn secondary" data-i18n="createInvoice">Create invoice (role-based)</button>
+                <button id="btnMarkNodeReady" class="btn" data-action="markNodeReady" data-i18n="markNodeReady">Mark site READY for billing</button>
+                <button id="btnCreateInvoice" class="btn secondary" data-action="createInvoice" data-i18n="createInvoice">Create invoice (role-based)</button>
               </div>
               <div id="readyNote" class="note" style="margin-top:12px; display:none;"></div>
             </div>
@@ -289,9 +305,9 @@
               <div class="row" style="justify-content:space-between;">
                 <h2 data-i18n="billingTitle">Billing</h2>
                 <div class="row">
-                  <button id="btnImportUsage" class="btn ghost" data-i18n="importUsage">Import usage</button>
-                  <button id="btnBillingExportCsv" class="btn ghost" data-i18n="exportCsv">Export CSV</button>
-                  <button id="btnBillingPrint" class="btn ghost" data-i18n="print">Print</button>
+                  <button id="btnImportUsage" class="btn ghost" data-action="importUsage" data-i18n="importUsage">Import usage</button>
+                  <button id="btnBillingExportCsv" class="btn ghost" data-action="billingExportCsv" data-i18n="exportCsv">Export CSV</button>
+                  <button id="btnBillingPrint" class="btn ghost" data-action="billingPrint" data-i18n="print">Print</button>
                 </div>
               </div>
               <div id="billingDetail" class="muted small" style="margin-top:12px;" data-i18n="billingSelectLocation">Select a location to start billing.</div>
@@ -304,8 +320,8 @@
             <div class="row" style="justify-content:space-between; align-items:center;">
               <h2 data-i18n="dispatchTitle">Dispatch</h2>
               <div class="row" style="flex-wrap:wrap;">
-                <button id="btnDispatchCreate" class="btn" data-i18n="dispatchCreate">Create work order</button>
-                <button id="btnDispatchImportCsv" class="btn ghost" data-i18n="dispatchImportCsv">Import CSV</button>
+                <button id="btnDispatchCreate" class="btn" data-action="dispatchCreate" data-i18n="dispatchCreate">Create work order</button>
+                <button id="btnDispatchImportCsv" class="btn ghost" data-action="dispatchImportCsv" data-i18n="dispatchImportCsv">Import CSV</button>
                 <input id="dispatchCsvInput" type="file" accept=".csv,text/csv" style="display:none;" />
               </div>
             </div>
@@ -329,7 +345,7 @@
           <div class="card">
             <div class="row" style="justify-content:space-between;">
               <h2 data-i18n="laborTitle">Labor</h2>
-              <button id="btnLaborExportCsv" class="btn ghost" data-i18n="exportCsv">Export CSV</button>
+              <button id="btnLaborExportCsv" class="btn ghost" data-action="laborExportCsv" data-i18n="exportCsv">Export CSV</button>
             </div>
             <div id="laborTable" style="margin-top:12px;"></div>
           </div>
@@ -359,7 +375,7 @@
           <div class="card">
             <div class="row" style="justify-content:space-between;">
               <h2 data-i18n="catalogTitle">Material catalog</h2>
-              <button id="btnCatalogClear" class="btn ghost" data-i18n="clear">Clear</button>
+              <button id="btnCatalogClear" class="btn ghost" data-action="catalogClear" data-i18n="clear">Clear</button>
             </div>
             <div class="row" style="margin-top:12px;">
               <input id="catalogSearch" class="input" placeholder="Search Millennium part, MFG SKU, description" data-i18n-placeholder="catalogSearchPlaceholder" />
@@ -411,7 +427,7 @@
                   <option value="TECHNICIAN">TECHNICIAN</option>
                   <option value="OWNER">OWNER</option>
                 </select>
-                <button id="btnAdminCreateUser" class="btn secondary" data-i18n="createProfile">Create profile</button>
+                <button id="btnAdminCreateUser" class="btn secondary" data-action="adminCreateUser" data-i18n="createProfile">Create profile</button>
               </div>
               <div class="hr"></div>
               <div id="adminUsersList"></div>
@@ -430,7 +446,7 @@
               </select>
               <div class="muted small" data-i18n="languageHelp">Changes apply immediately and sync to your profile.</div>
               <div class="row">
-                <button id="btnSaveLanguage" class="btn secondary" data-i18n="saveLanguage">Save language</button>
+                <button id="btnSaveLanguage" class="btn secondary" data-action="saveLanguage" data-i18n="saveLanguage">Save language</button>
               </div>
             </div>
           </div>
@@ -447,7 +463,7 @@
             <option value="en">English</option>
             <option value="es">Español</option>
           </select>
-          <button id="btnSaveProfileLanguage" class="btn">Save / Guardar</button>
+          <button id="btnSaveProfileLanguage" class="btn" data-action="saveProfileLanguage">Save / Guardar</button>
         </div>
       </div>
     </div>
@@ -489,8 +505,8 @@
           </select>
         </div>
         <div class="row" style="margin-top:12px; justify-content:flex-end;">
-          <button id="btnDispatchCancel" class="btn ghost" data-i18n="cancelLabel">Cancel</button>
-          <button id="btnDispatchSave" class="btn" data-i18n="saveLabel">Save</button>
+          <button id="btnDispatchCancel" class="btn ghost" data-action="dispatchCancel" data-i18n="cancelLabel">Cancel</button>
+          <button id="btnDispatchSave" class="btn" data-action="dispatchSave" data-i18n="saveLabel">Save</button>
         </div>
       </div>
     </div>

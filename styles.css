@@ -1,23 +1,26 @@
 :root{
-  --bg:#071426;
-  --bg-2:#0b1d33;
-  --panel:#0b1d33;
-  --panel-2:#123457;
-  --muted:#a9b8d0;
-  --text:#eaf2ff;
-  --brand:#d4af37;
-  --brand-2:#f5d76e;
-  --ok:#22c55e;
+  --bg:#f6f7f9;
+  --surface:#ffffff;
+  --text:#111827;
+  --muted:#6b7280;
+  --border:#e5e7eb;
+  --shadow:0 10px 30px rgba(0,0,0,0.08);
+  --radius-lg:24px;
+  --radius-md:14px;
+  --primary:#2f6feb;
+  --primary-hover:#275bd1;
+  --focus:rgba(47,111,235,0.25);
+  --ok:#16a34a;
   --warn:#f59e0b;
   --bad:#ef4444;
-  --line:rgba(255,255,255,0.08);
-  --shadow: 0 16px 34px rgba(3,10,20,.55);
-  --radius:16px;
-  --pad:18px;
-  --max:1120px;
+  --max:1100px;
+  --line:var(--border);
+  --radius:var(--radius-md);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
+
+
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
@@ -712,4 +715,238 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
   .map{
     height:320px;
   }
+}
+
+
+/* Telecom theme overrides */
+body{
+  margin:0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Manrope", "Segoe UI", system-ui, -apple-system, sans-serif;
+  line-height:1.6;
+}
+
+a{color:inherit; text-decoration:none;}
+
+.page{
+  max-width:1100px;
+  margin:0 auto;
+  padding:24px 16px;
+}
+.container{max-width:1100px; margin:0 auto; padding:24px 16px;}
+
+.topbar{
+  background: var(--primary);
+  color:#fff;
+  position:sticky;
+  top:0;
+  z-index:10;
+  width:100%;
+  padding:0;
+  border:none;
+  border-radius:0;
+  box-shadow: 0 10px 24px rgba(15,23,42,0.2);
+}
+.topbar-inner{
+  max-width:1100px;
+  margin:0 auto;
+  padding:14px 16px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+}
+.topbar .muted{color: rgba(255,255,255,0.8)}
+.topbar .badge{
+  background: rgba(255,255,255,0.18);
+  border:1px solid rgba(255,255,255,0.35);
+  color:#fff;
+}
+.topbar .badge.demo{border-color: rgba(255,255,255,0.55); color:#fff;}
+.topbar .btn.secondary{
+  border-color: rgba(255,255,255,0.55);
+  color:#fff;
+  background: rgba(255,255,255,0.14);
+}
+.brand-mark{
+  background: rgba(255,255,255,0.18);
+  border:1px solid rgba(255,255,255,0.5);
+  color:#fff;
+}
+
+.hero{
+  margin-top:10px;
+}
+.hero-card{
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  overflow:hidden;
+  display:grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  min-height:320px;
+  border:1px solid rgba(229,231,235,0.7);
+}
+.hero-left{padding:44px 44px;}
+.hero-left h1{font-size:32px; margin-bottom:12px;}
+.hero-actions{display:flex; gap:12px; flex-wrap:wrap; margin-top:18px;}
+.hero-right{
+  background:
+    radial-gradient(120% 140% at 20% 20%, rgba(47,111,235,0.25), transparent 60%),
+    linear-gradient(120deg, rgba(47,111,235,0.18), rgba(17,24,39,0.05));
+}
+@media (max-width: 900px){
+  .hero-card{grid-template-columns:1fr;}
+  .hero-right{min-height:180px;}
+  .hero-left{padding:28px;}
+}
+
+.card{
+  border:1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 20px rgba(17,24,39,0.06);
+  padding:18px;
+}
+
+.btn,
+.btn.btn-primary,
+.btn-primary{
+  border:1px solid var(--primary);
+  background: var(--primary);
+  color:#fff;
+  font-weight:700;
+  height:46px;
+  padding:0 20px;
+  border-radius: var(--radius-md);
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease, border-color .12s ease;
+}
+.btn:hover,
+.btn-primary:hover{background: var(--primary-hover); border-color: var(--primary-hover);}
+.btn:focus-visible{outline:none; box-shadow: 0 0 0 4px var(--focus);}
+.btn.secondary,
+.btn.btn-secondary,
+.btn-secondary{
+  background: #fff;
+  color: var(--text);
+  border:1px solid var(--border);
+}
+.btn.secondary:hover,
+.btn-secondary:hover{border-color: var(--primary); color: var(--primary);} 
+.btn.ghost{
+  background: transparent;
+  border:1px solid transparent;
+  color: var(--muted);
+}
+.btn.ghost:hover{background: rgba(47,111,235,0.08); color: var(--primary);}
+.btn.danger{
+  background: #fee2e2;
+  border:1px solid #fecaca;
+  color:#b91c1c;
+}
+
+.input, select{
+  background: #fff;
+  border:1px solid var(--border);
+  color: var(--text);
+  padding:10px 12px;
+  border-radius: var(--radius-md);
+  min-width:220px;
+  flex:1 1 220px;
+}
+.input:focus, select:focus{
+  outline:none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+.badge{
+  border:1px solid var(--border);
+  background: #fff;
+  color: var(--muted);
+}
+
+.note{
+  border:1px solid var(--border);
+  background: #f8fafc;
+}
+.note.warning{
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+.warning-banner{
+  border:1px dashed #fcd34d;
+  background:#fffbeb;
+  color:#b45309;
+}
+
+.nav-item{
+  border:1px solid var(--border);
+  background:#fff;
+  color: var(--text);
+  border-radius: var(--radius-md);
+}
+.nav-item:hover{border-color: var(--primary);}
+.nav-item.active{
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #1e3a8a;
+}
+.nav-badge{
+  background: #eef2ff;
+  border:1px solid #c7d2fe;
+  color:#1e3a8a;
+}
+
+.table{width:100%; border-collapse: collapse; font-size:14px;}
+.table th, .table td{padding:10px 8px; border-bottom:1px solid var(--border); vertical-align: top;}
+.table th{color: var(--muted); font-weight:700; text-align:left;}
+.table tbody tr:nth-child(even){background:#f9fafb;}
+.table tbody tr:hover{background:#eef2ff;}
+
+.catalog-card,
+.alert-card,
+.node-card,
+.billing-location-card,
+.photo-preview,
+.camera-panel,
+.kpi .tile,
+.tech-log .event-row,
+.wo-card,
+.photo-slot{
+  background: var(--surface);
+  border:1px solid var(--border);
+  box-shadow: 0 6px 16px rgba(15,23,42,0.05);
+}
+
+.chip{
+  background:#fff;
+  border:1px solid var(--border);
+  color: var(--muted);
+}
+
+.no-pay-banner,
+.no-pay-badge{
+  background:#eef2ff;
+  border:1px solid #c7d2fe;
+  color:#1e3a8a;
+}
+
+.map{border:1px solid var(--border);}
+
+.footer{
+  border-top:1px solid var(--border);
+  color: var(--muted);
+}
+.footer b{color: var(--text)}
+
+@media (max-width: 700px){
+  .topbar-inner{flex-direction:column; align-items:flex-start;}
+  .badge{width:100%; justify-content:center;}
 }
