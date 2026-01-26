@@ -576,9 +576,14 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
   cursor:pointer;
   transition: border-color .12s ease, transform .12s ease;
 }
+.photo-slot{
+  transition: border-color .12s ease, transform .12s ease, box-shadow .12s ease;
+}
 .photo-slot:hover{
-  border-color: rgba(212,175,55,.7);
+  border-color: #c7d2fe;
   transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(16, 24, 40, 0.06),
+    0 10px 24px rgba(16, 24, 40, 0.12);
 }
 .photo-slot.extra{
   border-style: solid;
@@ -803,10 +808,11 @@ a{color:inherit; text-decoration:none;}
 }
 
 .card{
-  border:1px solid var(--border);
-  background: var(--surface);
+  border:1px solid #dbe1ea;
+  background: #fcfdff;
   border-radius: var(--radius-md);
-  box-shadow: 0 8px 20px rgba(17,24,39,0.06);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04),
+    0 6px 16px rgba(16, 24, 40, 0.08);
   padding:18px;
 }
 
@@ -920,9 +926,10 @@ a{color:inherit; text-decoration:none;}
 .tech-log .event-row,
 .wo-card,
 .photo-slot{
-  background: var(--surface);
-  border:1px solid var(--border);
-  box-shadow: 0 6px 16px rgba(15,23,42,0.05);
+  background: #fcfdff;
+  border:1px solid #dbe1ea;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04),
+    0 6px 16px rgba(16, 24, 40, 0.08);
 }
 
 .chip{
