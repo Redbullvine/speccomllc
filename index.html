@@ -59,25 +59,12 @@
           </select>
           <div id="projectMeta" class="muted small" style="margin-top:8px;"></div>
         </div>
-        <nav class="nav">
-          <button class="nav-item active" data-view="viewDashboard" data-i18n="navDashboard">Dashboard</button>
-          <button class="nav-item" data-view="viewTechnician" data-i18n="navTechnician">Technician</button>
-          <button class="nav-item" data-view="viewDispatch" data-i18n="navDispatch">Dispatch</button>
-          <button class="nav-item" data-view="viewNodes" data-i18n="navNodes">Nodes</button>
-          <button class="nav-item" data-view="viewPhotos" data-i18n="navPhotos">Photos</button>
-          <button class="nav-item" data-view="viewBilling" data-i18n="navBilling">Billing</button>
-          <button class="nav-item" data-view="viewLabor" data-i18n="navLabor">Labor</button>
-          <button class="nav-item" data-view="viewInvoices" data-i18n="navInvoices">Invoices</button>
-          <button class="nav-item" data-view="viewMap" data-i18n="navMap">Live Map</button>
-          <button class="nav-item" data-view="viewCatalog" data-i18n="navCatalog">Material Catalog</button>
-          <button class="nav-item" data-view="viewAlerts"><span data-i18n="navAlerts">Alerts</span> <span id="alertsNavBadge" class="nav-badge"></span></button>
-          <button class="nav-item" data-view="viewAdmin" data-i18n="navAdmin">Admin</button>
-          <button class="nav-item" data-view="viewSettings" data-i18n="navSettings">Settings</button>
-        </nav>
+        <div class="muted small" data-i18n="siteListTitle" style="margin-top:12px;">Sites</div>
+        <div id="siteList" class="site-list" style="margin-top:8px;"></div>
       </aside>
 
       <main class="content">
-        <section id="viewDashboard" class="view active">
+        <section id="viewDashboard" class="view">
           <div class="card job-card">
             <div class="row" style="justify-content:space-between;">
               <div>
@@ -337,23 +324,77 @@
           </div>
         </section>
 
-        <section id="viewMap" class="view">
+        <section id="viewMap" class="view active">
           <div class="card">
-            <div class="row" style="justify-content:space-between;">
+            <div class="row" style="justify-content:space-between; align-items:center;">
               <div>
-                <h1 data-i18n="mapTitle">Live map</h1>
-                <div class="muted small" data-i18n="mapSubtitle">See the latest crew locations (updates every 10-15 seconds).</div>
+                <h1 data-i18n="mapTitle">Sites map</h1>
+                <div class="muted small" data-i18n="mapSubtitle">Drop a pin to create a site and add documentation.</div>
               </div>
               <div class="row map-controls">
-                <label class="checkbox">
-                  <input type="checkbox" id="mapActiveOnly" checked />
-                  <span data-i18n="mapActiveOnly">Active only (last 10 min)</span>
-                </label>
-                <input id="mapSearch" class="input" placeholder="Search by name" data-i18n-placeholder="mapSearchPlaceholder" />
+                <button id="btnDropPin" class="btn" data-action="dropPin" data-i18n="dropPin">Drop Pin</button>
               </div>
             </div>
-            <div id="liveMap" class="map"></div>
-            <div id="mapStatus" class="muted small" style="margin-top:10px;"></div>
+            <div class="map-layout">
+              <div>
+                <div id="liveMap" class="map"></div>
+                <div id="mapStatus" class="muted small" style="margin-top:10px;"></div>
+              </div>
+              <div class="site-panel-shell">
+                <div class="site-panel-card">
+                  <div class="row" style="justify-content:space-between; align-items:center;">
+                    <div>
+                      <div class="site-panel-title" data-i18n="sitePanelTitle">Site panel</div>
+                      <div id="sitePanelSubtitle" class="muted small" data-i18n="noSiteSelected">No site selected.</div>
+                    </div>
+                    <button id="btnCloseSitePanel" class="btn ghost small" data-action="closeSitePanel" data-i18n="closeLabel">Close</button>
+                  </div>
+                  <div class="hr"></div>
+
+                  <div class="panel-section">
+                    <div class="section-title" data-i18n="mediaTitle">Media</div>
+                    <div class="muted small" data-i18n="mediaSubtitle">Add images from camera or gallery.</div>
+                    <div class="row" style="margin-top:8px;">
+                      <label class="btn secondary file-btn">
+                        <span data-i18n="addMedia">Add media</span>
+                        <input id="siteMediaInput" type="file" accept="image/*" capture="environment" />
+                      </label>
+                    </div>
+                    <div id="siteMediaGallery" class="media-gallery" style="margin-top:10px;"></div>
+                  </div>
+
+                  <div class="panel-section">
+                    <div class="section-title" data-i18n="codesTitle">Codes</div>
+                    <div class="muted small" data-i18n="codesSubtitle">Add one or more codes for this site.</div>
+                    <div class="row" style="margin-top:8px;">
+                      <input id="siteCodesInput" class="input" placeholder="Add codes (comma separated)" data-i18n-placeholder="codesPlaceholder" />
+                      <button id="btnSaveCodes" class="btn secondary" data-action="saveCodes" data-i18n="saveLabel">Save</button>
+                    </div>
+                    <div id="siteCodesList" class="code-list" style="margin-top:8px;"></div>
+                  </div>
+
+                  <div class="panel-section">
+                    <div class="section-title" data-i18n="entriesTitle">Entries</div>
+                    <div class="muted small" data-i18n="entriesSubtitle">Add neutral line entries with optional quantity.</div>
+                    <div class="row" style="margin-top:8px;">
+                      <input id="siteEntryDescription" class="input" placeholder="Entry description" data-i18n-placeholder="entryDescriptionPlaceholder" />
+                      <input id="siteEntryQuantity" class="input" type="number" step="0.01" placeholder="Qty (optional)" data-i18n-placeholder="entryQuantityPlaceholder" />
+                      <button id="btnAddEntry" class="btn secondary" data-action="addEntry" data-i18n="addEntry">Add</button>
+                    </div>
+                    <div id="siteEntriesList" class="entry-list" style="margin-top:8px;"></div>
+                  </div>
+
+                  <div class="panel-section">
+                    <div class="section-title" data-i18n="notesTitle">Notes</div>
+                    <div class="muted small" data-i18n="notesSubtitle">Optional notes for this site.</div>
+                    <textarea id="siteNotesInput" class="input" rows="3" placeholder="Add notes" data-i18n-placeholder="notesPlaceholder"></textarea>
+                    <div class="row" style="margin-top:8px;">
+                      <button id="btnSaveNotes" class="btn secondary" data-action="saveNotes" data-i18n="saveLabel">Save</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 

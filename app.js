@@ -9,7 +9,13 @@ const state = {
   profile: null, // {role, display_name}
   activeProject: null,
   activeNode: null,
+  activeSite: null,
   projectNodes: [],
+  projectSites: [],
+  siteMedia: [],
+  siteCodes: [],
+  siteEntries: [],
+  pendingSites: [],
   billingLocations: [],
   billingLocation: null,
   billingInvoice: null,
@@ -77,6 +83,10 @@ const state = {
     seeded: false,
     nodes: {},
     nodesList: [],
+    sites: [],
+    siteMedia: [],
+    siteCodes: [],
+    siteEntries: [],
     invoices: [],
     usageEvents: [],
     unitTypes: [],
@@ -118,7 +128,7 @@ const I18N = {
     navBilling: "Billing",
     navLabor: "Labor",
     navInvoices: "Invoices",
-    navMap: "Live Map",
+      navMap: "Sites map",
     navCatalog: "Material Catalog",
     navAlerts: "Alerts",
     navAdmin: "Admin",
@@ -210,10 +220,39 @@ const I18N = {
     exportCsv: "Export CSV",
     print: "Print",
     billingSelectLocation: "Select a location to start billing.",
-    mapTitle: "Live map",
-    mapSubtitle: "See the latest crew locations (updates every 10-15 seconds).",
-    mapActiveOnly: "Active only (last 10 min)",
-    mapSearchPlaceholder: "Search by name",
+      mapTitle: "Sites map",
+      mapSubtitle: "Drop a pin to create a site and add documentation.",
+      mapActiveOnly: "Active only (last 10 min)",
+      mapSearchPlaceholder: "Search by name",
+      dropPin: "Drop Pin",
+      siteListTitle: "Sites",
+      sitePanelTitle: "Site panel",
+      noSiteSelected: "No site selected.",
+      siteStatusPending: "Pending sync",
+      mapStatusNoProject: "Select a project to view sites.",
+      mapStatusNoSites: "No sites yet. Drop a pin to add one.",
+      mapStatusSites: "{count} sites",
+      pinMissingGps: "GPS unavailable",
+      pinMissingGpsBody: "Location access is required to drop a pin.",
+      pinAccuracyWarnTitle: "Low accuracy",
+      pinAccuracyWarnBody: "Accuracy is low. Pin saved anyway.",
+      pinDroppedTitle: "Pin saved",
+      pinDroppedBody: "Site created from GPS pin.",
+      pinQueuedTitle: "Pin queued",
+      pinQueuedBody: "Offline pin saved. Sync will run when online.",
+      mediaTitle: "Media",
+      mediaSubtitle: "Add images from camera or gallery.",
+      addMedia: "Add media",
+      codesTitle: "Codes",
+      codesSubtitle: "Add one or more codes for this site.",
+      entriesTitle: "Entries",
+      entriesSubtitle: "Add neutral line entries with optional quantity.",
+      addEntry: "Add",
+      notesTitle: "Notes",
+      notesSubtitle: "Optional notes for this site.",
+      entryDescriptionPlaceholder: "Entry description",
+      entryQuantityPlaceholder: "Qty (optional)",
+      notesPlaceholder: "Add notes",
     catalogTitle: "Material catalog",
     clear: "Clear",
     alertsFeedTitle: "Alerts feed",
@@ -304,7 +343,7 @@ const I18N = {
     mapStatusNoData: "No locations available yet.",
     mapStatusSelfOnly: "Showing only your location.",
     mapStatusAll: "Showing crew locations.",
-    mapStatusSignin: "Sign in to view crew locations.",
+      mapStatusSignin: "Sign in to view sites.",
     you: "You",
     crew: "Crew",
     signedOut: "Signed out",
@@ -344,7 +383,7 @@ const I18N = {
     navBilling: "Facturación",
     navLabor: "Mano de obra",
     navInvoices: "Facturas",
-    navMap: "Mapa en vivo",
+      navMap: "Mapa de sitios",
     navCatalog: "Catálogo",
     navAlerts: "Alertas",
     navAdmin: "Admin",
@@ -436,10 +475,39 @@ const I18N = {
     exportCsv: "Exportar CSV",
     print: "Imprimir",
     billingSelectLocation: "Selecciona una ubicación para iniciar facturación.",
-    mapTitle: "Mapa en vivo",
-    mapSubtitle: "Mira las ubicaciones más recientes (actualiza cada 10-15 segundos).",
-    mapActiveOnly: "Solo activos (últimos 10 min)",
-    mapSearchPlaceholder: "Buscar por nombre",
+      mapTitle: "Mapa de sitios",
+      mapSubtitle: "Coloca un pin para crear un sitio y agregar documentación.",
+      mapActiveOnly: "Solo activos (últimos 10 min)",
+      mapSearchPlaceholder: "Buscar por nombre",
+      dropPin: "Colocar pin",
+      siteListTitle: "Sitios",
+      sitePanelTitle: "Panel del sitio",
+      noSiteSelected: "Ningún sitio seleccionado.",
+      siteStatusPending: "Sincronización pendiente",
+      mapStatusNoProject: "Selecciona un proyecto para ver sitios.",
+      mapStatusNoSites: "Aún no hay sitios. Coloca un pin para agregar uno.",
+      mapStatusSites: "{count} sitios",
+      pinMissingGps: "GPS no disponible",
+      pinMissingGpsBody: "Se requiere ubicación para colocar un pin.",
+      pinAccuracyWarnTitle: "Precisión baja",
+      pinAccuracyWarnBody: "La precisión es baja. El pin se guardó.",
+      pinDroppedTitle: "Pin guardado",
+      pinDroppedBody: "Sitio creado desde un pin GPS.",
+      pinQueuedTitle: "Pin en cola",
+      pinQueuedBody: "Pin sin conexión guardado. Se sincronizará al estar en línea.",
+      mediaTitle: "Media",
+      mediaSubtitle: "Agrega imágenes desde cámara o galería.",
+      addMedia: "Agregar media",
+      codesTitle: "Códigos",
+      codesSubtitle: "Agrega uno o más códigos para este sitio.",
+      entriesTitle: "Entradas",
+      entriesSubtitle: "Agrega entradas neutrales con cantidad opcional.",
+      addEntry: "Agregar",
+      notesTitle: "Notas",
+      notesSubtitle: "Notas opcionales para este sitio.",
+      entryDescriptionPlaceholder: "Descripción de entrada",
+      entryQuantityPlaceholder: "Cant. (opcional)",
+      notesPlaceholder: "Agregar notas",
     catalogTitle: "Catálogo de materiales",
     clear: "Limpiar",
     alertsFeedTitle: "Feed de alertas",
@@ -530,7 +598,7 @@ const I18N = {
     mapStatusNoData: "Aún no hay ubicaciones disponibles.",
     mapStatusSelfOnly: "Mostrando solo tu ubicación.",
     mapStatusAll: "Mostrando ubicaciones del equipo.",
-    mapStatusSignin: "Inicia sesión para ver ubicaciones del equipo.",
+      mapStatusSignin: "Inicia sesión para ver sitios.",
     you: "Tú",
     crew: "Equipo",
     signedOut: "Sesión cerrada",
@@ -1088,55 +1156,37 @@ async function loadLocationNames(userIds){
   });
 }
 
-function formatLastSeen(iso){
-  const ts = iso ? new Date(iso).getTime() : 0;
-  if (!ts) return "";
-  const minutes = Math.max(0, Math.floor((Date.now() - ts) / 60000));
-  if (minutes < 1) return t("lastSeenJustNow");
-  return t("lastSeen", { minutes });
-}
-
-function getLocationDisplayName(userId){
-  if (userId === state.user?.id){
-    return state.profile?.display_name || state.user?.email || t("you");
-  }
-  return state.map.userNames.get(userId) || t("crew");
-}
-
-function shouldShowLocation(row){
-  const activeOnly = state.mapFilters.activeOnly;
-  if (activeOnly){
-    const minutes = row.updated_at ? (Date.now() - new Date(row.updated_at).getTime()) / 60000 : 999;
-    if (minutes > 10) return false;
-  }
-  const search = String(state.mapFilters.search || "").trim().toLowerCase();
-  if (search){
-    const name = getLocationDisplayName(row.user_id).toLowerCase();
-    if (!name.includes(search)) return false;
-  }
-  return true;
-}
-
 function updateMapMarkers(rows){
   if (!state.map.instance) return;
   const markers = state.map.markers;
   const seen = new Set();
   rows.forEach((row) => {
-    if (!shouldShowLocation(row)) return;
-    const id = row.user_id;
+    if (row.gps_lat == null || row.gps_lng == null) return;
+    const id = row.id;
     if (!id) return;
-    const coords = [row.lat, row.lng];
+    const coords = [row.gps_lat, row.gps_lng];
     let marker = markers.get(id);
+    const color = row.is_pending ? "#f59e0b" : "#2f6feb";
     if (!marker){
-      marker = window.L.marker(coords);
+      marker = window.L.circleMarker(coords, {
+        radius: 8,
+        color,
+        fillColor: color,
+        fillOpacity: 0.9,
+        weight: 2,
+      });
       marker.addTo(state.map.instance);
+      marker.on("click", () => setActiveSite(id));
       markers.set(id, marker);
     } else {
       marker.setLatLng(coords);
+      if (marker.setStyle){
+        marker.setStyle({ color, fillColor: color });
+      }
     }
-    const name = getLocationDisplayName(id);
-    const lastSeen = formatLastSeen(row.updated_at);
-    marker.bindPopup(`<b>${escapeHtml(name)}</b><br>${escapeHtml(lastSeen)}`);
+    const time = row.created_at ? new Date(row.created_at).toLocaleTimeString() : "-";
+    const pendingLabel = row.is_pending ? ` • ${t("siteStatusPending")}` : "";
+    marker.bindPopup(`<b>${escapeHtml(row.name || "Site")}</b>${pendingLabel}<br>${escapeHtml(time)}`);
     seen.add(id);
   });
   markers.forEach((marker, id) => {
@@ -1149,23 +1199,22 @@ function updateMapMarkers(rows){
 
 async function refreshLocations(){
   const status = $("mapStatus");
-  if (!state.client || isDemo) return;
+  if (!state.client && !isDemo) return;
   if (!state.user){
     if (status) status.textContent = t("mapStatusSignin");
     return;
   }
   ensureMap();
-  const query = state.client.from("user_locations").select("user_id, lat, lng, heading, speed, accuracy, updated_at");
-  const { data } = await query;
-  const rows = data || [];
-  const ids = rows.map(r => r.user_id).filter(Boolean);
-  await loadLocationNames(ids);
+  await loadProjectSites(state.activeProject?.id || null);
+  const rows = getVisibleSites();
   updateMapMarkers(rows);
   if (status){
-    if (!rows.length){
-      status.textContent = t("mapStatusNoData");
+    if (!state.activeProject){
+      status.textContent = t("mapStatusNoProject");
+    } else if (!rows.length){
+      status.textContent = t("mapStatusNoSites");
     } else {
-      status.textContent = t("mapStatusAll");
+      status.textContent = t("mapStatusSites", { count: rows.length });
     }
   }
 }
@@ -1271,7 +1320,7 @@ function canViewDispatch(){
 }
 
 function getDefaultView(){
-  return isTechnician() ? "viewTechnician" : "viewDashboard";
+  return "viewMap";
 }
 
 function isViewAllowed(viewId){
@@ -1399,7 +1448,10 @@ function setRoleBasedVisibility(){
 
 function setRoleUI(){
   const role = getRole();
-  $("chipRole").innerHTML = `<span class="dot ok"></span><span>${t("roleLabel")}: ${role}</span>`;
+  const roleChip = $("chipRole");
+  if (roleChip){
+    roleChip.innerHTML = `<span class="dot ok"></span><span>${t("roleLabel")}: ${role}</span>`;
+  }
 
   // Pricing visibility notice
   const pricingHidden = (role === "SPLICER" || role === "TECHNICIAN");
@@ -2616,6 +2668,22 @@ function ensureDemoSeed(){
     },
   ];
 
+  state.demo.sites = [
+    {
+      id: "demo-site-1",
+      project_id: projectId,
+      name: "Site 1",
+      notes: "Demo site notes.",
+      gps_lat: 33.3946,
+      gps_lng: -105.6731,
+      gps_accuracy_m: 8,
+      created_at: new Date().toISOString(),
+    },
+  ];
+  state.demo.siteMedia = [];
+  state.demo.siteCodes = [];
+  state.demo.siteEntries = [];
+
   state.demo.seeded = true;
 }
 
@@ -2871,6 +2939,546 @@ async function loadProjectNodes(projectId){
   }
   state.projectNodes = data || [];
   renderNodeCards();
+}
+
+const PENDING_SITES_KEY = "pending_sites";
+
+function loadPendingSitesFromStorage(){
+  try{
+    const raw = localStorage.getItem(PENDING_SITES_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePendingSitesToStorage(list){
+  try{
+    localStorage.setItem(PENDING_SITES_KEY, JSON.stringify(list || []));
+  } catch {}
+}
+
+function getPendingSitesForProject(projectId){
+  if (!projectId) return [];
+  return (state.pendingSites || []).filter((site) => site.project_id === projectId).map((site) => ({
+    ...site,
+    is_pending: true,
+  }));
+}
+
+function getVisibleSites(){
+  const pending = getPendingSitesForProject(state.activeProject?.id || null);
+  const live = (state.projectSites || []).map((site) => ({ ...site, is_pending: false }));
+  return live.concat(pending);
+}
+
+async function loadProjectSites(projectId){
+  if (isDemo){
+    state.projectSites = (state.demo.sites || []).filter(s => !projectId || s.project_id === projectId);
+    state.pendingSites = loadPendingSitesFromStorage();
+    renderSiteList();
+    return;
+  }
+  if (!projectId){
+    state.projectSites = [];
+    state.pendingSites = loadPendingSitesFromStorage();
+    renderSiteList();
+    return;
+  }
+  const { data, error } = await state.client
+    .from("sites")
+    .select("id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: true });
+  if (error){
+    toast("Sites load error", error.message);
+    return;
+  }
+  state.projectSites = data || [];
+  state.pendingSites = loadPendingSitesFromStorage();
+  const visibleIds = new Set(getVisibleSites().map((site) => site.id));
+  if (state.activeSite && !visibleIds.has(state.activeSite.id)){
+    closeSitePanel();
+  }
+  renderSiteList();
+  if (state.map.instance){
+    updateMapMarkers(getVisibleSites());
+  }
+}
+
+function getNextSiteName(){
+  const sites = getVisibleSites();
+  const numbers = sites
+    .map((site) => {
+      const match = String(site.name || "").match(/site\s+(\d+)/i);
+      return match ? Number(match[1]) : null;
+    })
+    .filter((val) => Number.isFinite(val));
+  const next = numbers.length ? Math.max(...numbers) + 1 : 1;
+  if (!Number.isFinite(next)) return `Site ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
+  return `Site ${next}`;
+}
+
+function renderSiteList(){
+  const wrap = $("siteList");
+  if (!wrap) return;
+  if (!state.activeProject){
+    wrap.innerHTML = `<div class="muted small">${t("mapStatusNoProject")}</div>`;
+    return;
+  }
+  const rows = getVisibleSites();
+  if (!rows.length){
+    wrap.innerHTML = `<div class="muted small">${t("mapStatusNoSites")}</div>`;
+    return;
+  }
+  wrap.innerHTML = rows.map((site) => {
+    const isActive = state.activeSite?.id === site.id;
+    const status = site.is_pending ? ` <span class="muted small">(${t("siteStatusPending")})</span>` : "";
+    return `
+      <button class="btn ${isActive ? "" : "secondary"} small" data-site-id="${site.id}">
+        <span>${escapeHtml(site.name || "Site")}${status}</span>
+      </button>
+    `;
+  }).join("");
+}
+
+async function setActiveSite(siteId){
+  const site = getVisibleSites().find((row) => row.id === siteId) || null;
+  state.activeSite = site;
+  state.siteMedia = [];
+  state.siteCodes = [];
+  state.siteEntries = [];
+  renderSiteList();
+  renderSitePanel();
+  if (!site || site.is_pending) return;
+  await Promise.all([
+    loadSiteMedia(site.id),
+    loadSiteCodes(site.id),
+    loadSiteEntries(site.id),
+  ]);
+  renderSitePanel();
+}
+
+function closeSitePanel(){
+  state.activeSite = null;
+  state.siteMedia = [];
+  state.siteCodes = [];
+  state.siteEntries = [];
+  renderSiteList();
+  renderSitePanel();
+}
+
+function renderSitePanel(){
+  const subtitle = $("sitePanelSubtitle");
+  const mediaGallery = $("siteMediaGallery");
+  const codesList = $("siteCodesList");
+  const entriesList = $("siteEntriesList");
+  const notesInput = $("siteNotesInput");
+  const codesInput = $("siteCodesInput");
+  const entryDesc = $("siteEntryDescription");
+  const entryQty = $("siteEntryQuantity");
+  const mediaInput = $("siteMediaInput");
+  const saveCodesBtn = $("btnSaveCodes");
+  const addEntryBtn = $("btnAddEntry");
+  const saveNotesBtn = $("btnSaveNotes");
+
+  const site = state.activeSite;
+  const isPending = Boolean(site?.is_pending);
+  const disabled = !site || isPending;
+  if (subtitle){
+    if (!site){
+      subtitle.textContent = t("noSiteSelected");
+    } else {
+      const when = site.created_at ? new Date(site.created_at).toLocaleString() : "-";
+      const pendingLabel = site.is_pending ? ` • ${t("siteStatusPending")}` : "";
+      subtitle.textContent = `${site.name || "Site"} • ${when}${pendingLabel}`;
+    }
+  }
+
+  if (mediaInput) mediaInput.disabled = disabled;
+  if (codesInput) codesInput.disabled = disabled;
+  if (entryDesc) entryDesc.disabled = disabled;
+  if (entryQty) entryQty.disabled = disabled;
+  if (notesInput) notesInput.disabled = disabled;
+  if (saveCodesBtn) saveCodesBtn.disabled = disabled;
+  if (addEntryBtn) addEntryBtn.disabled = disabled;
+  if (saveNotesBtn) saveNotesBtn.disabled = disabled;
+
+  if (codesInput) codesInput.value = (state.siteCodes || []).map((row) => row.code).join(", ");
+  if (notesInput) notesInput.value = site?.notes || "";
+
+  if (mediaGallery){
+    if (!site){
+      mediaGallery.innerHTML = `<div class="muted small">${t("noSiteSelected")}</div>`;
+    } else if (!(state.siteMedia || []).length){
+      mediaGallery.innerHTML = `<div class="muted small">${t("mediaSubtitle")}</div>`;
+    } else {
+      mediaGallery.innerHTML = state.siteMedia.map((item) => `
+        <div class="media-card">
+          ${item.previewUrl ? `<img src="${item.previewUrl}" alt="media" />` : ""}
+          <div class="media-meta">${escapeHtml(new Date(item.created_at).toLocaleString())}</div>
+        </div>
+      `).join("");
+    }
+  }
+
+  if (codesList){
+    codesList.innerHTML = (state.siteCodes || []).length
+      ? (state.siteCodes || []).map((row) => `<span class="code-chip">${escapeHtml(row.code)}</span>`).join("")
+      : `<div class="muted small">${t("codesSubtitle")}</div>`;
+  }
+
+  if (entriesList){
+    if (!(state.siteEntries || []).length){
+      entriesList.innerHTML = `<div class="muted small">${t("entriesSubtitle")}</div>`;
+    } else {
+      entriesList.innerHTML = (state.siteEntries || []).map((row) => {
+        const qty = row.quantity == null ? "-" : row.quantity;
+        return `
+          <div class="entry-row">
+            <div>${escapeHtml(row.description || "")}</div>
+            <div class="muted">Qty: ${escapeHtml(qty)}</div>
+          </div>
+        `;
+      }).join("");
+    }
+  }
+}
+
+async function loadSiteMedia(siteId){
+  if (isDemo){
+    state.siteMedia = (state.demo.siteMedia || []).filter((row) => row.site_id === siteId);
+    return;
+  }
+  const { data, error } = await state.client
+    .from("site_media")
+    .select("id, site_id, media_path, gps_lat, gps_lng, gps_accuracy_m, created_at")
+    .eq("site_id", siteId)
+    .order("created_at", { ascending: false });
+  if (error){
+    toast("Media load error", error.message);
+    state.siteMedia = [];
+    return;
+  }
+  const rows = data || [];
+  const withUrls = [];
+  for (const row of rows){
+    const previewUrl = row.media_path ? await getPublicOrSignedUrl("proof-photos", row.media_path) : "";
+    withUrls.push({ ...row, previewUrl });
+  }
+  state.siteMedia = withUrls;
+}
+
+async function loadSiteCodes(siteId){
+  if (isDemo){
+    state.siteCodes = (state.demo.siteCodes || []).filter((row) => row.site_id === siteId);
+    return;
+  }
+  const { data, error } = await state.client
+    .from("site_codes")
+    .select("id, site_id, code, created_at")
+    .eq("site_id", siteId)
+    .order("created_at", { ascending: true });
+  if (error){
+    toast("Codes load error", error.message);
+    state.siteCodes = [];
+    return;
+  }
+  state.siteCodes = data || [];
+}
+
+async function loadSiteEntries(siteId){
+  if (isDemo){
+    state.siteEntries = (state.demo.siteEntries || []).filter((row) => row.site_id === siteId);
+    return;
+  }
+  const { data, error } = await state.client
+    .from("site_entries")
+    .select("id, site_id, description, quantity, created_at")
+    .eq("site_id", siteId)
+    .order("created_at", { ascending: false });
+  if (error){
+    toast("Entries load error", error.message);
+    state.siteEntries = [];
+    return;
+  }
+  state.siteEntries = data || [];
+}
+
+async function saveSiteNotes(){
+  const site = state.activeSite;
+  if (!site || site.is_pending) return;
+  const notes = $("siteNotesInput")?.value || "";
+  if (isDemo){
+    const demoSite = (state.demo.sites || []).find((row) => row.id === site.id);
+    if (demoSite) demoSite.notes = notes;
+    state.activeSite.notes = notes;
+    renderSitePanel();
+    return;
+  }
+  const { error } = await state.client
+    .from("sites")
+    .update({ notes })
+    .eq("id", site.id);
+  if (error){
+    toast("Notes save error", error.message);
+    return;
+  }
+  const match = (state.projectSites || []).find((row) => row.id === site.id);
+  if (match) match.notes = notes;
+  state.activeSite = match || { ...site, notes };
+  renderSitePanel();
+}
+
+function parseCodes(raw){
+  const list = String(raw || "")
+    .split(",")
+    .map((code) => code.trim())
+    .filter(Boolean);
+  return Array.from(new Set(list));
+}
+
+async function saveSiteCodes(){
+  const site = state.activeSite;
+  if (!site || site.is_pending) return;
+  const raw = $("siteCodesInput")?.value || "";
+  const codes = parseCodes(raw);
+  if (isDemo){
+    state.demo.siteCodes = (state.demo.siteCodes || []).filter((row) => row.site_id !== site.id);
+    state.demo.siteCodes.push(...codes.map((code) => ({
+      id: `demo-code-${Date.now()}-${code}`,
+      site_id: site.id,
+      code,
+      created_at: new Date().toISOString(),
+    })));
+    state.siteCodes = state.demo.siteCodes.filter((row) => row.site_id === site.id);
+    renderSitePanel();
+    return;
+  }
+  await state.client.from("site_codes").delete().eq("site_id", site.id);
+  if (codes.length){
+    const payload = codes.map((code) => ({ site_id: site.id, code }));
+    const { error } = await state.client.from("site_codes").insert(payload);
+    if (error){
+      toast("Codes save error", error.message);
+      return;
+    }
+  }
+  await loadSiteCodes(site.id);
+  renderSitePanel();
+}
+
+async function addSiteEntry(){
+  const site = state.activeSite;
+  if (!site || site.is_pending) return;
+  const desc = $("siteEntryDescription")?.value.trim();
+  const qtyRaw = $("siteEntryQuantity")?.value;
+  if (!desc){
+    toast("Entry required", "Add a description for the entry.");
+    return;
+  }
+  const quantity = qtyRaw === "" ? null : Number(qtyRaw);
+  if (qtyRaw !== "" && !Number.isFinite(quantity)){
+    toast("Quantity invalid", "Enter a valid quantity or leave it blank.");
+    return;
+  }
+  if (isDemo){
+    const row = {
+      id: `demo-entry-${Date.now()}`,
+      site_id: site.id,
+      description: desc,
+      quantity,
+      created_at: new Date().toISOString(),
+    };
+    state.demo.siteEntries = state.demo.siteEntries || [];
+    state.demo.siteEntries.unshift(row);
+    state.siteEntries = state.demo.siteEntries.filter((item) => item.site_id === site.id);
+    renderSitePanel();
+  } else {
+    const { error } = await state.client
+      .from("site_entries")
+      .insert({ site_id: site.id, description: desc, quantity });
+    if (error){
+      toast("Entry save error", error.message);
+      return;
+    }
+    await loadSiteEntries(site.id);
+    renderSitePanel();
+  }
+  const descInput = $("siteEntryDescription");
+  const qtyInput = $("siteEntryQuantity");
+  if (descInput) descInput.value = "";
+  if (qtyInput) qtyInput.value = "";
+}
+
+function getCurrentGps({ enableHighAccuracy = true, timeout = 12000, maximumAge = 0 } = {}){
+  return new Promise((resolve) => {
+    if (!navigator.geolocation){
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        resolve({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : null,
+        });
+      },
+      () => resolve(null),
+      { enableHighAccuracy, timeout, maximumAge }
+    );
+  });
+}
+
+async function addSiteMedia(file){
+  const site = state.activeSite;
+  if (!site || site.is_pending || !file) return;
+  const capturedAt = new Date().toISOString();
+  const gps = await getCurrentGps();
+  const fallbackGps = (site.gps_lat != null && site.gps_lng != null)
+    ? { lat: site.gps_lat, lng: site.gps_lng, accuracy: site.gps_accuracy_m || null }
+    : null;
+  const finalGps = gps || fallbackGps;
+
+  if (isDemo){
+    state.demo.siteMedia = state.demo.siteMedia || [];
+    state.demo.siteMedia.unshift({
+      id: `demo-media-${Date.now()}`,
+      site_id: site.id,
+      media_path: "demo-only",
+      created_at: capturedAt,
+      gps_lat: finalGps?.lat ?? null,
+      gps_lng: finalGps?.lng ?? null,
+      gps_accuracy_m: finalGps?.accuracy ?? null,
+      previewUrl: URL.createObjectURL(file),
+    });
+    state.siteMedia = state.demo.siteMedia.filter((row) => row.site_id === site.id);
+    renderSitePanel();
+    return;
+  }
+  const uploadPath = await uploadProofPhoto(file, site.id, "site-media");
+  if (!uploadPath) return;
+  const { error } = await state.client
+    .from("site_media")
+    .insert({
+      site_id: site.id,
+      media_path: uploadPath,
+      gps_lat: finalGps?.lat ?? null,
+      gps_lng: finalGps?.lng ?? null,
+      gps_accuracy_m: finalGps?.accuracy ?? null,
+      created_at: capturedAt,
+    });
+  if (error){
+    toast("Media save error", error.message);
+    return;
+  }
+  await loadSiteMedia(site.id);
+  renderSitePanel();
+}
+
+async function dropPin(){
+  if (!state.activeProject){
+    toast("Project required", "Select a project to drop a pin.");
+    return;
+  }
+  const gps = await getCurrentGps();
+  if (!gps){
+    toast(t("pinMissingGps"), t("pinMissingGpsBody"));
+    return;
+  }
+  if (gps.accuracy != null && gps.accuracy > 50){
+    toast(t("pinAccuracyWarnTitle"), t("pinAccuracyWarnBody"));
+  }
+  await createSiteFromPin(gps);
+}
+
+async function createSiteFromPin(gps){
+  ensureMap();
+  if (state.map.instance){
+    state.map.instance.setView([gps.lat, gps.lng], 17);
+  }
+  const siteName = getNextSiteName();
+  const payload = {
+    project_id: state.activeProject?.id || null,
+    name: siteName,
+    gps_lat: gps.lat,
+    gps_lng: gps.lng,
+    gps_accuracy_m: gps.accuracy,
+    created_at: new Date().toISOString(),
+  };
+  if (isDemo){
+    const demoSite = { id: `demo-site-${Date.now()}`, ...payload };
+    state.demo.sites = state.demo.sites || [];
+    state.demo.sites.push(demoSite);
+    state.projectSites = state.demo.sites.filter((row) => row.project_id === payload.project_id);
+    renderSiteList();
+    updateMapMarkers(getVisibleSites());
+    await setActiveSite(demoSite.id);
+    toast(t("pinDroppedTitle"), t("pinDroppedBody"));
+    return;
+  }
+
+  if (!navigator.onLine || !state.client){
+    const pending = {
+      id: `pending-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      ...payload,
+    };
+    state.pendingSites = loadPendingSitesFromStorage();
+    state.pendingSites.push(pending);
+    savePendingSitesToStorage(state.pendingSites);
+    renderSiteList();
+    updateMapMarkers(getVisibleSites());
+    await setActiveSite(pending.id);
+    toast(t("pinQueuedTitle"), t("pinQueuedBody"));
+    return;
+  }
+
+  const { data, error } = await state.client
+    .from("sites")
+    .insert(payload)
+    .select("id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at")
+    .single();
+  if (error){
+    toast("Pin save error", error.message);
+    return;
+  }
+  state.projectSites = (state.projectSites || []).concat(data);
+  renderSiteList();
+  updateMapMarkers(getVisibleSites());
+  await setActiveSite(data.id);
+  toast(t("pinDroppedTitle"), t("pinDroppedBody"));
+}
+
+async function syncPendingSites(){
+  if (isDemo || !state.client || !navigator.onLine) return;
+  const pending = loadPendingSitesFromStorage();
+  if (!pending.length) return;
+  const remaining = [];
+  for (const site of pending){
+    const { id, is_pending, ...payload } = site;
+    const { data, error } = await state.client
+      .from("sites")
+      .insert(payload)
+      .select("id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at")
+      .single();
+    if (error || !data){
+      remaining.push(site);
+      continue;
+    }
+    if (state.activeSite?.id === site.id){
+      state.activeSite = data;
+    }
+    if (data.project_id === state.activeProject?.id){
+      state.projectSites = (state.projectSites || []).concat(data);
+    }
+  }
+  state.pendingSites = remaining;
+  savePendingSitesToStorage(remaining);
+  renderSiteList();
+  updateMapMarkers(getVisibleSites());
+  renderSitePanel();
 }
 
 function renderNodeCards(){
@@ -3445,6 +4053,9 @@ function setActiveProjectById(id){
   state.activeProject = next;
   renderProjects();
   loadProjectNodes(state.activeProject?.id || null);
+  loadProjectSites(state.activeProject?.id || null);
+  state.activeSite = null;
+  renderSitePanel();
   loadRateCards(state.activeProject?.id || null);
   loadLocationProofRequirements(state.activeProject?.id || null);
   loadBillingLocations(state.activeProject?.id || null);
@@ -6519,26 +7130,28 @@ async function initAuth(){
     return;
   }
   setAuthButtonsDisabled(false);
+  window.addEventListener("online", () => syncPendingSites());
 
   if (window.location.pathname.endsWith("/demo-login")){
     await demoLogin();
   }
 
   // Demo: choose role via prompt for now
-  if (isDemo){
-    ensureDemoSeed();
-    showAuth(false);
-    const pick = prompt("Demo mode: choose a role (ADMIN, OWNER, PRIME, TDS, SUB, SPLICER, TECHNICIAN)", state.demo.role) || state.demo.role;
-    const role = state.demo.roles.includes(pick.toUpperCase()) ? pick.toUpperCase() : state.demo.role;
-    state.demo.role = role;
-    await loadProjects();
-    await loadProjectNodes(state.activeProject?.id || null);
-    await loadUnitTypes();
-    await loadWorkCodes();
-    await loadRateCards(state.activeProject?.id || null);
-    await loadLocationProofRequirements(state.activeProject?.id || null);
-    await loadBillingLocations(state.activeProject?.id || null);
-    await loadMaterialCatalog();
+    if (isDemo){
+      ensureDemoSeed();
+      showAuth(false);
+      const pick = prompt("Demo mode: choose a role (ADMIN, OWNER, PRIME, TDS, SUB, SPLICER, TECHNICIAN)", state.demo.role) || state.demo.role;
+      const role = state.demo.roles.includes(pick.toUpperCase()) ? pick.toUpperCase() : state.demo.role;
+      state.demo.role = role;
+      await loadProjects();
+      await loadProjectNodes(state.activeProject?.id || null);
+      await loadProjectSites(state.activeProject?.id || null);
+      await loadUnitTypes();
+      await loadWorkCodes();
+      await loadRateCards(state.activeProject?.id || null);
+      await loadLocationProofRequirements(state.activeProject?.id || null);
+      await loadBillingLocations(state.activeProject?.id || null);
+      await loadMaterialCatalog();
     setWhoami();
     setRoleUI();
     renderLocations();
@@ -6550,13 +7163,13 @@ async function initAuth(){
     renderBillingLocations();
     updateKPI();
     setProofStatus();
-    renderCatalogResults("catalogResults", "");
-    renderCatalogResults("catalogResultsQuick", "");
-    loadTechnicianTimesheet();
-    loadLaborRows();
-    setActiveView(getDefaultView());
-    return;
-  }
+      renderCatalogResults("catalogResults", "");
+      renderCatalogResults("catalogResultsQuick", "");
+      loadTechnicianTimesheet();
+      loadLaborRows();
+      setActiveView(getDefaultView());
+      return;
+    }
 
   // Supabase session
   const { data } = await state.client.auth.getSession();
@@ -6568,16 +7181,17 @@ async function initAuth(){
     state.user = session?.user || null;
     await loadProfile();
     setWhoami();
-    if (state.user) {
-      showAuth(false);
-      await loadProjects();
-      await loadProjectNodes(state.activeProject?.id || null);
-      await loadUnitTypes();
-      await loadWorkCodes();
-      await loadRateCards(state.activeProject?.id || null);
-      await loadLocationProofRequirements(state.activeProject?.id || null);
-      await loadBillingLocations(state.activeProject?.id || null);
-      await loadMaterialCatalog();
+      if (state.user) {
+        showAuth(false);
+        await loadProjects();
+        await loadProjectNodes(state.activeProject?.id || null);
+        await loadProjectSites(state.activeProject?.id || null);
+        await loadUnitTypes();
+        await loadWorkCodes();
+        await loadRateCards(state.activeProject?.id || null);
+        await loadLocationProofRequirements(state.activeProject?.id || null);
+        await loadBillingLocations(state.activeProject?.id || null);
+        await loadMaterialCatalog();
       if (canViewDispatch()){
         await loadDispatchTechnicians();
         await loadDispatchWorkOrders();
@@ -6585,18 +7199,18 @@ async function initAuth(){
       await loadAlerts();
       renderAlerts();
       renderCatalogResults("catalogResults", "");
-      renderCatalogResults("catalogResultsQuick", "");
-      renderBillingLocations();
-      loadTechnicianTimesheet();
-      loadLaborRows();
-      setActiveView(getDefaultView());
-      startLocationWatch();
-      startLocationPolling();
-    } else {
-      showAuth(true);
-      state.activeNode = null;
-      state.usageEvents = [];
-      clearProof();
+        renderCatalogResults("catalogResultsQuick", "");
+        renderBillingLocations();
+        loadTechnicianTimesheet();
+        loadLaborRows();
+        setActiveView(getDefaultView());
+        startLocationPolling();
+        syncPendingSites();
+      } else {
+        showAuth(true);
+        state.activeNode = null;
+        state.usageEvents = [];
+        clearProof();
       showProfileSetupModal(false);
       stopLocationWatch();
       stopLocationPolling();
@@ -6607,16 +7221,17 @@ async function initAuth(){
     }
   });
 
-  await loadProfile();
-  if (state.user){
-    await loadProjects();
-    await loadProjectNodes(state.activeProject?.id || null);
-    await loadUnitTypes();
-    await loadWorkCodes();
-    await loadRateCards(state.activeProject?.id || null);
-    await loadLocationProofRequirements(state.activeProject?.id || null);
-    await loadBillingLocations(state.activeProject?.id || null);
-    await loadMaterialCatalog();
+    await loadProfile();
+    if (state.user){
+      await loadProjects();
+      await loadProjectNodes(state.activeProject?.id || null);
+      await loadProjectSites(state.activeProject?.id || null);
+      await loadUnitTypes();
+      await loadWorkCodes();
+      await loadRateCards(state.activeProject?.id || null);
+      await loadLocationProofRequirements(state.activeProject?.id || null);
+      await loadBillingLocations(state.activeProject?.id || null);
+      await loadMaterialCatalog();
     if (canViewDispatch()){
       await loadDispatchTechnicians();
       await loadDispatchWorkOrders();
@@ -6624,14 +7239,14 @@ async function initAuth(){
     await loadAlerts();
     renderAlerts();
     renderCatalogResults("catalogResults", "");
-    renderCatalogResults("catalogResultsQuick", "");
-    renderBillingLocations();
-    loadTechnicianTimesheet();
-    loadLaborRows();
-    setActiveView(getDefaultView());
-    startLocationWatch();
-    startLocationPolling();
-  }
+      renderCatalogResults("catalogResultsQuick", "");
+      renderBillingLocations();
+      loadTechnicianTimesheet();
+      loadLaborRows();
+      setActiveView(getDefaultView());
+      startLocationPolling();
+      syncPendingSites();
+    }
   setWhoami();
   showAuth(!state.user);
   setProofStatus();
@@ -7011,8 +7626,14 @@ function wireUI(){
     });
   }
 
-  $("btnOpenNode").addEventListener("click", () => openNode($("nodeNumber").value));
-  $("btnNewNode").addEventListener("click", () => createNode($("nodeNumber").value));
+  const btnOpenNode = $("btnOpenNode");
+  if (btnOpenNode){
+    btnOpenNode.addEventListener("click", () => openNode($("nodeNumber").value));
+  }
+  const btnNewNode = $("btnNewNode");
+  if (btnNewNode){
+    btnNewNode.addEventListener("click", () => createNode($("nodeNumber").value));
+  }
 
   const btnAdminCreate = $("btnAdminCreateUser");
   if (btnAdminCreate){
@@ -7059,7 +7680,46 @@ function wireUI(){
       refreshLocations();
     });
   }
-  $("btnAddLocation").addEventListener("click", () => addSpliceLocation());
+  const dropPinBtn = $("btnDropPin");
+  if (dropPinBtn){
+    dropPinBtn.addEventListener("click", () => dropPin());
+  }
+  const siteList = $("siteList");
+  if (siteList){
+    siteList.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-site-id]");
+      if (!btn) return;
+      setActiveSite(btn.dataset.siteId);
+    });
+  }
+  const closePanelBtn = $("btnCloseSitePanel");
+  if (closePanelBtn){
+    closePanelBtn.addEventListener("click", () => closeSitePanel());
+  }
+  const siteMediaInput = $("siteMediaInput");
+  if (siteMediaInput){
+    siteMediaInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0] || null;
+      await addSiteMedia(file);
+      e.target.value = "";
+    });
+  }
+  const saveCodesBtn = $("btnSaveCodes");
+  if (saveCodesBtn){
+    saveCodesBtn.addEventListener("click", () => saveSiteCodes());
+  }
+  const addEntryBtn = $("btnAddEntry");
+  if (addEntryBtn){
+    addEntryBtn.addEventListener("click", () => addSiteEntry());
+  }
+  const saveNotesBtn = $("btnSaveNotes");
+  if (saveNotesBtn){
+    saveNotesBtn.addEventListener("click", () => saveSiteNotes());
+  }
+  const btnAddLocation = $("btnAddLocation");
+  if (btnAddLocation){
+    btnAddLocation.addEventListener("click", () => addSpliceLocation());
+  }
 
   const startCameraBtn = $("btnStartCamera");
   if (startCameraBtn){
@@ -7090,8 +7750,14 @@ function wireUI(){
     });
   }
 
-  $("btnMarkNodeReady").addEventListener("click", () => markNodeReady());
-  $("btnCreateInvoice").addEventListener("click", () => createInvoice());
+  const btnMarkNodeReady = $("btnMarkNodeReady");
+  if (btnMarkNodeReady){
+    btnMarkNodeReady.addEventListener("click", () => markNodeReady());
+  }
+  const btnCreateInvoice = $("btnCreateInvoice");
+  if (btnCreateInvoice){
+    btnCreateInvoice.addEventListener("click", () => createInvoice());
+  }
 
   document.body.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-action=\"toggleTranslation\"]");
