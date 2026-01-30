@@ -2718,6 +2718,114 @@ function renderProjects(){
     setText("jobTitle", "Job -");
     setText("jobSubtitle", "Project");
   }
+  const createBtn = $("btnCreateProject");
+  if (createBtn){
+    createBtn.style.display = isPrivilegedRole() ? "" : "none";
+  }
+  renderProjectInfo();
+}
+
+function renderProjectInfo(){
+  const wrap = $("projectInfoBody");
+  if (!wrap) return;
+  const project = state.activeProject;
+  if (!project){
+    wrap.innerHTML = `<div class="muted small">Select a project to see details.</div>`;
+    return;
+  }
+  const name = escapeHtml(project.name || "Project");
+  const description = project.description ? escapeHtml(project.description) : "";
+  const createdAt = project.created_at ? new Date(project.created_at).toLocaleDateString() : "";
+  const createdBy = project.created_by || project.created_by_id || "";
+  const createdByLabel = createdBy
+    ? (createdBy === state.user?.id ? "You" : String(createdBy).slice(0, 8))
+    : "";
+  wrap.innerHTML = `
+    <div class="project-info-row"><span class="project-info-label">Name</span><span class="project-info-value">${name}</span></div>
+    ${description ? `<div class="project-info-row"><span class="project-info-label">Description</span><span class="project-info-value">${description}</span></div>` : ""}
+    ${createdAt ? `<div class="project-info-row"><span class="project-info-label">Created</span><span class="project-info-value">${createdAt}</span></div>` : ""}
+    ${createdByLabel ? `<div class="project-info-row"><span class="project-info-label">Created by</span><span class="project-info-value">${createdByLabel}</span></div>` : ""}
+  `;
+}
+
+function openCreateProjectModal(){
+  const modal = $("createProjectModal");
+  if (!modal) return;
+  const name = $("createProjectName");
+  const desc = $("createProjectDescription");
+  if (name) name.value = "";
+  if (desc) desc.value = "";
+  modal.style.display = "";
+}
+
+function closeCreateProjectModal(){
+  const modal = $("createProjectModal");
+  if (!modal) return;
+  modal.style.display = "none";
+}
+
+async function createProject(){
+  if (!isPrivilegedRole()){
+    toast("Not allowed", "Admin or owner role required.");
+    return;
+  }
+  const name = $("createProjectName")?.value.trim();
+  const description = $("createProjectDescription")?.value.trim() || null;
+  if (!name){
+    toast("Project name required", "Enter a project name.");
+    return;
+  }
+  if (isDemo){
+    const project = {
+      id: `demo-project-${Date.now()}`,
+      name,
+      description,
+      created_at: new Date().toISOString(),
+      created_by: state.user?.id || "demo-user",
+      is_demo: true,
+    };
+    state.demo.project = project;
+    state.projects = (state.projects || []).concat(project);
+    state.activeProject = project;
+    renderProjects();
+    closeCreateProjectModal();
+    toast("Project created", "Project created.");
+    return;
+  }
+  if (!state.client){
+    toast("Project error", "Client not ready.");
+    return;
+  }
+  const payload = {
+    name,
+    description,
+    created_by: state.user?.id || null,
+  };
+  const selectFields = "id, name, description, created_at, created_by, location, job_number, is_demo";
+  let { data, error } = await state.client
+    .from("projects")
+    .insert(payload)
+    .select(selectFields)
+    .single();
+  if (error && /description|created_by/i.test(error.message || "")){
+    const retry = await state.client
+      .from("projects")
+      .insert({ name })
+      .select("id, name, created_at, location, job_number, is_demo")
+      .single();
+    data = retry.data;
+    error = retry.error;
+  }
+  if (error){
+    toast("Project create failed", error.message || "Unable to create project.");
+    return;
+  }
+  state.projects = (state.projects || []).concat(data).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+  state.activeProject = data;
+  renderProjects();
+  setActiveProjectById(data.id);
+  closeCreateProjectModal();
+  toast("Project created", "Project created.");
 }
 
 async function loadProjects(){
@@ -2729,7 +2837,7 @@ async function loadProjects(){
   }
   const { data, error } = await state.client
     .from("projects")
-    .select("id, name, location, job_number, is_demo")
+    .select("id, name, description, created_at, created_by, location, job_number, is_demo")
     .order("name");
   if (error){
     toast("Projects load error", error.message);
@@ -7645,6 +7753,18 @@ function wireUI(){
     projectSelect.addEventListener("change", () => {
       setActiveProjectById(projectSelect.value);
     });
+  }
+  const createProjectBtn = $("btnCreateProject");
+  if (createProjectBtn){
+    createProjectBtn.addEventListener("click", () => openCreateProjectModal());
+  }
+  const createProjectCancelBtn = $("btnCreateProjectCancel");
+  if (createProjectCancelBtn){
+    createProjectCancelBtn.addEventListener("click", () => closeCreateProjectModal());
+  }
+  const createProjectSaveBtn = $("btnCreateProjectSave");
+  if (createProjectSaveBtn){
+    createProjectSaveBtn.addEventListener("click", () => createProject());
   }
   const languageSelect = $("languageSelect");
   if (languageSelect){

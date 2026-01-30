@@ -810,6 +810,28 @@ a{color:inherit; text-decoration:none;}
     0 4px 12px rgba(16, 24, 40, 0.06);
   padding:18px;
 }
+.project-info-body{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.project-info-row{
+  display:flex;
+  gap:10px;
+  align-items:baseline;
+  justify-content:space-between;
+}
+.project-info-label{
+  color: var(--muted);
+  font-size:12px;
+  flex:0 0 90px;
+}
+.project-info-value{
+  color: var(--text);
+  font-size:12px;
+  text-align:left;
+  flex:1;
+}
 
 .btn,
 .btn.btn-primary,

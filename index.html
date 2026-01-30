@@ -58,6 +58,13 @@
             <option value="" data-i18n="selectProject">Select project</option>
           </select>
           <div id="projectMeta" class="muted small" style="margin-top:8px;"></div>
+          <div class="row" style="margin-top:10px; justify-content:flex-end;">
+            <button id="btnCreateProject" class="btn small secondary" style="display:none;">Create project</button>
+          </div>
+        </div>
+        <div class="card" style="margin-top:12px;">
+          <div class="muted small">Project info</div>
+          <div id="projectInfoBody" class="project-info-body" style="margin-top:8px;"></div>
         </div>
         <div class="muted small" data-i18n="siteListTitle" style="margin-top:12px;">Sites</div>
         <div id="siteList" class="site-list" style="margin-top:8px;"></div>
@@ -491,6 +498,20 @@
             <option value="es">Español</option>
           </select>
           <button id="btnSaveProfileLanguage" class="btn" data-action="saveProfileLanguage">Save / Guardar</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="createProjectModal" class="modal" style="display:none;">
+      <div class="card modal-card">
+        <h2>Create project</h2>
+        <div class="field-stack" style="margin-top:12px;">
+          <input id="createProjectName" class="input" placeholder="Project name" />
+          <textarea id="createProjectDescription" class="input" rows="3" placeholder="Description (optional)"></textarea>
+        </div>
+        <div class="row" style="margin-top:12px; justify-content:flex-end;">
+          <button id="btnCreateProjectCancel" class="btn ghost">Cancel</button>
+          <button id="btnCreateProjectSave" class="btn">Create</button>
         </div>
       </div>
     </div>

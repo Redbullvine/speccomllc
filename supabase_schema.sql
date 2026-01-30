@@ -78,7 +78,10 @@ create table if not exists public.projects (
   name text unique not null,
   job_number text,
   location text,
-  created_at timestamptz not null default now()
+  description text,
+  created_by uuid references auth.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 alter table public.projects
@@ -100,7 +103,7 @@ with check (
   exists (
     select 1 from public.profiles p
     where p.id = auth.uid()
-      and p.role in ('OWNER','PRIME','TDS')
+      and p.role in ('OWNER','PRIME','ADMIN','TDS')
   )
 );
 
@@ -111,7 +114,7 @@ using (
   exists (
     select 1 from public.profiles p
     where p.id = auth.uid()
-      and p.role in ('OWNER','PRIME','TDS')
+      and p.role in ('OWNER','PRIME','ADMIN','TDS')
   )
 );
 
