@@ -45,6 +45,12 @@ const state = {
   materialCatalog: [],
   projects: [],
   messages: [],
+  dpr: {
+    reportId: null,
+    projectId: null,
+    reportDate: null,
+    metrics: null,
+  },
   adminProfiles: [],
   locationWatchId: null,
   locationPollId: null,
@@ -100,6 +106,7 @@ const state = {
     locationProofRules: [],
     workOrders: [],
     messages: [],
+    dprReports: [],
   },
 };
 
@@ -132,8 +139,22 @@ const I18N = {
     messagePlaceholder: "Write a message...",
     sendMessage: "Send",
     menuTitle: "Menu",
+    menuNavTitle: "Navigation",
     menuSettingsTitle: "Settings",
     menuAboutTitle: "About",
+    dailyReportTitle: "Daily Report",
+    dprProjectLabel: "Project",
+    dprDateLabel: "Report date",
+    dprRefresh: "Generate / Refresh",
+    dprCommentsLabel: "Comments / Needs Addressed",
+    dprCommentsPlaceholder: "Anything needs addressed?",
+    dprReadOnlyNote: "Read-only access. Ask an OWNER, ADMIN, or PRIME to update.",
+    dprNoProject: "Select a project to view the report.",
+    dprNoMetrics: "Generate a report to see metrics.",
+    dprMetricSites: "Sites created today",
+    dprMetricSplice: "Splice locations created today",
+    dprMetricWorkOrders: "Work orders completed today",
+    dprMetricBlocked: "Blocked items today",
     aboutCopy: "SpecCom was built by two longtime friends, Danny and Luis, who have spent years working in the field and dealing with the same challenges every splicing crew faces - scattered photos, missed documentation, and billing delays. We did not want another bloated system. We just wanted a simple way to organize our work, prove it was done right, and get paid faster. So we built SpecCom.",
     messagesScopeProject: "Project: {name}",
     messagesScopeGlobal: "Global messages",
@@ -406,8 +427,22 @@ const I18N = {
     messagePlaceholder: "Escribe un mensaje...",
     sendMessage: "Enviar",
     menuTitle: "Menu",
+    menuNavTitle: "Navegacion",
     menuSettingsTitle: "Configuracion",
     menuAboutTitle: "Acerca de",
+    dailyReportTitle: "Reporte diario",
+    dprProjectLabel: "Proyecto",
+    dprDateLabel: "Fecha del reporte",
+    dprRefresh: "Generar / Actualizar",
+    dprCommentsLabel: "Comentarios / Pendientes",
+    dprCommentsPlaceholder: "Algo que necesita atencion?",
+    dprReadOnlyNote: "Solo lectura. Pide a OWNER, ADMIN o PRIME que actualice.",
+    dprNoProject: "Selecciona un proyecto para ver el reporte.",
+    dprNoMetrics: "Genera un reporte para ver metricas.",
+    dprMetricSites: "Sitios creados hoy",
+    dprMetricSplice: "Ubicaciones de empalme creadas hoy",
+    dprMetricWorkOrders: "Ordenes completadas hoy",
+    dprMetricBlocked: "Bloqueos hoy",
     aboutCopy: "SpecCom fue creado por dos amigos de toda la vida, Danny y Luis, que han pasado anos trabajando en el campo y enfrentando los mismos problemas que cada cuadrilla de empalme tiene - fotos dispersas, documentacion perdida y retrasos en facturacion. No queriamos otro sistema pesado. Solo queriamos una forma simple de organizar el trabajo, probar que se hizo bien y cobrar mas rapido. Por eso construimos SpecCom.",
     messagesScopeProject: "Proyecto: {name}",
     messagesScopeGlobal: "Mensajes globales",
@@ -660,6 +695,10 @@ const I18N = {
 function normalizeLanguage(value){
   const lang = String(value || "").toLowerCase();
   return lang === "es" ? "es" : "en";
+}
+
+function getTodayDate(){
+  return new Date().toISOString().slice(0, 10);
 }
 
 function getPreferredLanguage(){
@@ -1085,6 +1124,11 @@ function setActiveView(viewId){
     }
     refreshLocations();
   }
+  if (viewId === "viewDailyReport"){
+    syncDprProjectSelection();
+    renderDprProjectOptions();
+    loadDailyProgressReport();
+  }
 }
 
 function startVisibilityWatch(){
@@ -1333,6 +1377,8 @@ function refreshLanguageSensitiveUI(){
   syncDispatchStatusFilter();
   renderProjectsList();
   renderMessages();
+  renderDprMetrics();
+  renderDprProjectOptions();
   applyI18n();
   refreshLocations();
 }
@@ -1377,7 +1423,7 @@ function getDefaultView(){
 function isViewAllowed(viewId){
   const role = getRole();
   if (role === "TECHNICIAN"){
-    return ["viewTechnician", "viewMap", "viewSettings"].includes(viewId);
+    return ["viewTechnician", "viewMap", "viewSettings", "viewDailyReport"].includes(viewId);
   }
   if (viewId === "viewTechnician") return false;
   if (viewId === "viewLabor") return canViewLabor();
@@ -1470,8 +1516,8 @@ function setRoleBasedVisibility(){
   const role = getRole();
   const isTech = role === "TECHNICIAN";
   const allowedViews = isTech
-    ? new Set(["viewTechnician", "viewMap", "viewSettings"])
-    : new Set(["viewDashboard", "viewNodes", "viewPhotos", "viewBilling", "viewInvoices", "viewMap", "viewCatalog", "viewAlerts", "viewAdmin", "viewSettings", "viewLabor", "viewDispatch"]);
+    ? new Set(["viewTechnician", "viewMap", "viewSettings", "viewDailyReport"])
+    : new Set(["viewDashboard", "viewNodes", "viewPhotos", "viewBilling", "viewInvoices", "viewMap", "viewCatalog", "viewAlerts", "viewAdmin", "viewSettings", "viewLabor", "viewDispatch", "viewDailyReport"]);
 
   document.querySelectorAll(".nav-item").forEach((btn) => {
     const viewId = btn.dataset.view;
@@ -1530,6 +1576,7 @@ function setRoleUI(){
   renderTechnicianWorkOrders();
   renderDispatchTable();
   renderDispatchWarnings();
+  setDprEditState();
 }
 
 function getLocalDateISO(){
@@ -2735,10 +2782,16 @@ function ensureDemoSeed(){
 function renderProjects(){
   const summary = $("projectSummary");
   const meta = $("projectMeta");
+  const currentCard = $("currentProjectCard");
+  const infoCard = $("projectInfoCard");
+  const hasProject = Boolean(state.activeProject);
+  if (currentCard) currentCard.style.display = hasProject ? "" : "none";
+  if (infoCard) infoCard.style.display = hasProject ? "" : "none";
   if (summary){
     summary.textContent = state.activeProject
       ? (state.activeProject.job_number ? `${state.activeProject.name} (Job ${state.activeProject.job_number})` : (state.activeProject.name || "Project"))
-      : t("projectSummaryNone");
+      : "";
+    summary.style.display = hasProject ? "" : "none";
   }
   if (state.activeProject){
     if (meta){
@@ -2755,6 +2808,8 @@ function renderProjects(){
   }
   renderProjectInfo();
   renderProjectsList();
+  syncDprProjectSelection();
+  renderDprProjectOptions();
 }
 
 function renderProjectInfo(){
@@ -2762,7 +2817,7 @@ function renderProjectInfo(){
   if (!wrap) return;
   const project = state.activeProject;
   if (!project){
-    wrap.innerHTML = `<div class="muted small">Select a project to see details.</div>`;
+    wrap.innerHTML = "";
     return;
   }
   const name = escapeHtml(project.name || "Project");
@@ -2928,6 +2983,217 @@ async function createProject(){
   closeProjectsModal();
   refreshLocations();
   toast("Project created", "Project created.");
+}
+
+function getDprDefaultMetrics(){
+  return {
+    sites_created_today: 0,
+    splice_locations_created_today: 0,
+    work_orders_completed_today: 0,
+    blocked_items_today: 0,
+  };
+}
+
+function syncDprProjectSelection(){
+  if (!state.dpr.projectId && state.activeProject?.id){
+    state.dpr.projectId = state.activeProject.id;
+  }
+  const select = $("dprProjectSelect");
+  if (select) select.value = state.dpr.projectId || "";
+}
+
+function renderDprProjectOptions(){
+  const select = $("dprProjectSelect");
+  if (!select) return;
+  select.innerHTML = "";
+  const opt = document.createElement("option");
+  opt.value = "";
+  opt.textContent = t("selectProject");
+  select.appendChild(opt);
+  state.projects.forEach((project) => {
+    const option = document.createElement("option");
+    option.value = project.id;
+    option.textContent = project.job_number ? `${project.name} (Job ${project.job_number})` : (project.name || "Project");
+    select.appendChild(option);
+  });
+  select.value = state.dpr.projectId || "";
+}
+
+function renderDprMetrics(){
+  const wrap = $("dprMetrics");
+  if (!wrap) return;
+  if (!state.dpr.metrics){
+    wrap.innerHTML = `<div class="muted small">${t("dprNoMetrics")}</div>`;
+    return;
+  }
+  const metrics = { ...getDprDefaultMetrics(), ...state.dpr.metrics };
+  wrap.innerHTML = `
+    <div class="dpr-metric-row"><span>${t("dprMetricSites")}</span><span>${metrics.sites_created_today}</span></div>
+    <div class="dpr-metric-row"><span>${t("dprMetricSplice")}</span><span>${metrics.splice_locations_created_today}</span></div>
+    <div class="dpr-metric-row"><span>${t("dprMetricWorkOrders")}</span><span>${metrics.work_orders_completed_today}</span></div>
+    <div class="dpr-metric-row"><span>${t("dprMetricBlocked")}</span><span>${metrics.blocked_items_today}</span></div>
+  `;
+}
+
+function setDprEditState(){
+  const canEdit = isPrivilegedRole();
+  const refreshBtn = $("btnDprRefresh");
+  const saveBtn = $("btnDprSave");
+  const comments = $("dprComments");
+  const hasProject = Boolean(state.dpr.projectId);
+  if (refreshBtn) refreshBtn.disabled = !canEdit || !hasProject;
+  if (saveBtn) saveBtn.disabled = !canEdit || !hasProject || !state.dpr.reportId;
+  if (comments) comments.disabled = !canEdit || !hasProject;
+  const note = $("dprNote");
+  if (note){
+    if (!state.dpr.projectId){
+      note.textContent = t("dprNoProject");
+      return;
+    }
+    note.textContent = canEdit ? "" : t("dprReadOnlyNote");
+  }
+}
+
+async function loadDailyProgressReport(){
+  const select = $("dprProjectSelect");
+  const dateInput = $("dprDate");
+  if (select) state.dpr.projectId = select.value || null;
+  if (dateInput) state.dpr.reportDate = dateInput.value || getTodayDate();
+  const projectId = state.dpr.projectId;
+  if (!projectId){
+    state.dpr.reportId = null;
+    state.dpr.metrics = null;
+    if ($("dprComments")) $("dprComments").value = "";
+    renderDprMetrics();
+    setDprEditState();
+    return;
+  }
+  if (isDemo){
+    const list = state.demo.dprReports || [];
+    const row = list.find((r) => r.project_id === projectId && r.report_date === state.dpr.reportDate) || null;
+    state.dpr.reportId = row?.id || null;
+    state.dpr.metrics = row?.metrics || null;
+    if ($("dprComments")) $("dprComments").value = row?.comments || "";
+    renderDprMetrics();
+    setDprEditState();
+    return;
+  }
+  if (!state.client){
+    renderDprMetrics();
+    setDprEditState();
+    return;
+  }
+  const { data, error } = await state.client
+    .from("daily_progress_reports")
+    .select("id, project_id, report_date, metrics, comments")
+    .eq("project_id", projectId)
+    .eq("report_date", state.dpr.reportDate)
+    .maybeSingle();
+  if (error){
+    toast("Daily report load error", error.message);
+    return;
+  }
+  state.dpr.reportId = data?.id || null;
+  state.dpr.metrics = data?.metrics || null;
+  if ($("dprComments")) $("dprComments").value = data?.comments || "";
+  renderDprMetrics();
+  setDprEditState();
+}
+
+async function generateDailyProgressReport(){
+  if (!isPrivilegedRole()){
+    toast("Not allowed", "OWNER, ADMIN, or PRIME required.");
+    return;
+  }
+  const projectId = state.dpr.projectId;
+  if (!projectId){
+    toast("Project required", t("dprNoProject"));
+    return;
+  }
+  const dateInput = $("dprDate");
+  if (dateInput) state.dpr.reportDate = dateInput.value || getTodayDate();
+  const comments = $("dprComments")?.value || null;
+  if (isDemo){
+    const metrics = getDprDefaultMetrics();
+    const row = {
+      id: `demo-dpr-${Date.now()}`,
+      project_id: projectId,
+      report_date: state.dpr.reportDate,
+      metrics,
+      comments,
+    };
+    state.demo.dprReports = state.demo.dprReports || [];
+    const existingIndex = state.demo.dprReports.findIndex((r) => r.project_id === projectId && r.report_date === state.dpr.reportDate);
+    if (existingIndex >= 0){
+      state.demo.dprReports[existingIndex] = { ...state.demo.dprReports[existingIndex], metrics, comments };
+      state.dpr.reportId = state.demo.dprReports[existingIndex].id;
+    } else {
+      state.demo.dprReports.unshift(row);
+      state.dpr.reportId = row.id;
+    }
+    state.dpr.metrics = metrics;
+    renderDprMetrics();
+    setDprEditState();
+    toast("Daily report", "Report saved.");
+    return;
+  }
+  if (!state.client){
+    toast("Daily report error", "Client not ready.");
+    return;
+  }
+  const { data, error } = await state.client
+    .rpc("fn_upsert_daily_progress_report", {
+      p_project_id: projectId,
+      p_date: state.dpr.reportDate,
+      p_comments: comments,
+    });
+  if (error){
+    toast("Daily report error", error.message);
+    return;
+  }
+  state.dpr.reportId = data;
+  const { data: metricsData, error: metricsError } = await state.client
+    .rpc("fn_build_dpr_metrics", { p_project_id: projectId, p_date: state.dpr.reportDate });
+  if (metricsError){
+    toast("Metrics error", metricsError.message);
+    return;
+  }
+  state.dpr.metrics = metricsData || getDprDefaultMetrics();
+  renderDprMetrics();
+  setDprEditState();
+  toast("Daily report", "Report saved.");
+}
+
+async function saveDailyProgressComments(){
+  if (!isPrivilegedRole()){
+    toast("Not allowed", "OWNER, ADMIN, or PRIME required.");
+    return;
+  }
+  if (!state.dpr.reportId){
+    toast("Generate report", "Generate the report before saving comments.");
+    return;
+  }
+  const comments = $("dprComments")?.value || null;
+  if (isDemo){
+    const list = state.demo.dprReports || [];
+    const row = list.find((r) => r.id === state.dpr.reportId);
+    if (row) row.comments = comments;
+    toast("Daily report", "Comments saved.");
+    return;
+  }
+  if (!state.client){
+    toast("Daily report error", "Client not ready.");
+    return;
+  }
+  const { error } = await state.client
+    .from("daily_progress_reports")
+    .update({ comments })
+    .eq("id", state.dpr.reportId);
+  if (error){
+    toast("Save failed", error.message);
+    return;
+  }
+  toast("Daily report", "Comments saved.");
 }
 
 const MESSAGE_READ_KEY = "messages_last_read_";
@@ -8052,6 +8318,14 @@ function wireUI(){
   if (menuCloseBtn){
     menuCloseBtn.addEventListener("click", () => closeMenuModal());
   }
+  document.querySelectorAll(".menu-link").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const viewId = btn.dataset.view;
+      if (!viewId) return;
+      setActiveView(viewId);
+      closeMenuModal();
+    });
+  });
   document.querySelectorAll("#menuModal .segmented-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const lang = btn.getAttribute("data-lang") || "en";
@@ -8068,6 +8342,24 @@ function wireUI(){
   const createProjectSaveBtn = $("btnCreateProjectSave");
   if (createProjectSaveBtn){
     createProjectSaveBtn.addEventListener("click", () => createProject());
+  }
+  const dprProjectSelect = $("dprProjectSelect");
+  if (dprProjectSelect){
+    dprProjectSelect.addEventListener("change", () => loadDailyProgressReport());
+  }
+  const dprDate = $("dprDate");
+  if (dprDate){
+    if (!dprDate.value) dprDate.value = getTodayDate();
+    state.dpr.reportDate = dprDate.value;
+    dprDate.addEventListener("change", () => loadDailyProgressReport());
+  }
+  const dprRefreshBtn = $("btnDprRefresh");
+  if (dprRefreshBtn){
+    dprRefreshBtn.addEventListener("click", () => generateDailyProgressReport());
+  }
+  const dprSaveBtn = $("btnDprSave");
+  if (dprSaveBtn){
+    dprSaveBtn.addEventListener("click", () => saveDailyProgressComments());
   }
   const languageSelect = $("languageSelect");
   if (languageSelect){

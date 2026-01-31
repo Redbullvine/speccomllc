@@ -59,7 +59,7 @@
 
     <div id="viewApp" class="app-shell" style="display:none;">
       <aside class="sidebar">
-        <div class="card sidebar-card">
+        <div id="currentProjectCard" class="card sidebar-card">
           <div class="muted small" data-i18n="currentProjectLabel">Current project</div>
           <div id="projectSummary" class="project-summary" data-i18n="projectSummaryNone">No project selected</div>
           <div id="projectMeta" class="muted small" style="margin-top:8px;"></div>
@@ -67,7 +67,7 @@
             <button id="btnOpenProjects" class="btn small secondary" type="button" data-i18n="projectsNav">Projects</button>
           </div>
         </div>
-        <div class="card" style="margin-top:12px;">
+        <div id="projectInfoCard" class="card" style="margin-top:12px;">
           <div class="muted small">Project info</div>
           <div id="projectInfoBody" class="project-info-body" style="margin-top:8px;"></div>
         </div>
@@ -490,6 +490,29 @@
             </div>
           </div>
         </section>
+        <section id="viewDailyReport" class="view">
+          <div class="card">
+            <h1 data-i18n="dailyReportTitle">Daily Report</h1>
+            <div class="field-stack">
+              <label class="muted small" data-i18n="dprProjectLabel">Project</label>
+              <select id="dprProjectSelect" class="input">
+                <option value="" data-i18n="selectProject">Select project</option>
+              </select>
+              <label class="muted small" data-i18n="dprDateLabel">Report date</label>
+              <input id="dprDate" class="input" type="date" />
+              <div class="row">
+                <button id="btnDprRefresh" class="btn secondary" type="button" data-i18n="dprRefresh">Generate / Refresh</button>
+              </div>
+              <div id="dprMetrics" class="dpr-metrics"></div>
+              <label class="muted small" data-i18n="dprCommentsLabel">Comments / Needs Addressed</label>
+              <textarea id="dprComments" class="input" rows="4" data-i18n-placeholder="dprCommentsPlaceholder" placeholder="Anything needs addressed?"></textarea>
+              <div class="row">
+                <button id="btnDprSave" class="btn" type="button" data-i18n="saveLabel">Save</button>
+              </div>
+              <div id="dprNote" class="muted small"></div>
+            </div>
+          </div>
+        </section>
       </main>
     </div>
 
@@ -558,6 +581,10 @@
         <div class="modal-header">
           <h2 data-i18n="menuTitle">Menu</h2>
           <button id="btnMenuClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
+        </div>
+        <div class="menu-section">
+          <div class="menu-title" data-i18n="menuNavTitle">Navigation</div>
+          <button class="menu-link" type="button" data-view="viewDailyReport" data-i18n="dailyReportTitle">Daily Report</button>
         </div>
         <div class="menu-section">
           <div class="menu-title" data-i18n="menuSettingsTitle">Settings</div>

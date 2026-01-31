@@ -1207,10 +1207,43 @@ a{color:inherit; text-decoration:none;}
 .menu-title{
   font-weight:900;
 }
+.menu-link{
+  margin-top:8px;
+  width:100%;
+  text-align:left;
+  border:1px solid rgba(27,59,90,.5);
+  background: rgba(7,26,43,.5);
+  color:var(--text);
+  padding:8px 10px;
+  border-radius:12px;
+  font-weight:800;
+  cursor:pointer;
+}
+.menu-link:focus-visible{
+  outline:3px solid rgba(212,175,55,.35);
+  outline-offset:2px;
+}
 .menu-footer{
   margin-top:16px;
   display:flex;
   justify-content:flex-end;
+}
+.dpr-metrics{
+  border:1px solid rgba(27,59,90,.5);
+  background: rgba(7,26,43,.5);
+  border-radius:12px;
+  padding:10px 12px;
+  display:grid;
+  gap:8px;
+}
+.dpr-metric-row{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  font-weight:800;
+}
+.dpr-metric-row span:last-child{
+  color:var(--muted);
 }
 @media (max-width: 700px){
   .topbar-actions{

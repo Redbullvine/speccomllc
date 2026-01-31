@@ -166,6 +166,178 @@ on public.messages for delete
 to authenticated
 using (sender_id = auth.uid());
 
+-- 1d) Daily progress reports
+create table if not exists public.daily_progress_reports (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  report_date date not null,
+  created_by uuid not null references public.profiles(id),
+  metrics jsonb not null default '{}'::jsonb,
+  comments text null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (project_id, report_date)
+);
+
+create index if not exists daily_progress_reports_project_date_idx
+  on public.daily_progress_reports(project_id, report_date desc);
+
+create index if not exists daily_progress_reports_created_by_idx
+  on public.daily_progress_reports(created_by);
+
+create or replace function public.set_daily_progress_reports_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_daily_progress_reports_updated_at on public.daily_progress_reports;
+create trigger trg_daily_progress_reports_updated_at
+before update on public.daily_progress_reports
+for each row execute function public.set_daily_progress_reports_updated_at();
+
+alter table public.daily_progress_reports enable row level security;
+
+drop policy if exists "dpr_select_project_members" on public.daily_progress_reports;
+create policy "dpr_select_project_members"
+on public.daily_progress_reports for select
+to authenticated
+using (public.has_project_access(project_id));
+
+drop policy if exists "dpr_write_privileged" on public.daily_progress_reports;
+create policy "dpr_write_privileged"
+on public.daily_progress_reports for insert
+to authenticated
+with check (
+  exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid() and public.is_privileged_role(p.role)
+  )
+  and public.has_project_access(project_id)
+);
+
+drop policy if exists "dpr_update_privileged" on public.daily_progress_reports;
+create policy "dpr_update_privileged"
+on public.daily_progress_reports for update
+to authenticated
+using (
+  exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid() and public.is_privileged_role(p.role)
+  )
+  and public.has_project_access(project_id)
+)
+with check (
+  exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid() and public.is_privileged_role(p.role)
+  )
+  and public.has_project_access(project_id)
+);
+
+create or replace function public.fn_build_dpr_metrics(p_project_id uuid, p_date date)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  sites_count int := 0;
+  splice_count int := 0;
+  work_orders_count int := 0;
+  blocked_count int := 0;
+begin
+  if not public.has_project_access(p_project_id) then
+    raise exception 'Access denied';
+  end if;
+
+  select count(*) into sites_count
+  from public.sites s
+  where s.project_id = p_project_id
+    and s.created_at::date = p_date;
+
+  select count(*) into splice_count
+  from public.splice_locations sl
+  join public.nodes n on n.id = sl.node_id
+  where n.project_id = p_project_id
+    and sl.created_at::date = p_date;
+
+  select count(*) into work_orders_count
+  from public.work_orders wo
+  where wo.project_id = p_project_id
+    and wo.status = 'COMPLETE'
+    and wo.updated_at::date = p_date;
+
+  select count(*) into blocked_count
+  from public.work_orders wo
+  where wo.project_id = p_project_id
+    and wo.status = 'BLOCKED'
+    and wo.updated_at::date = p_date;
+
+  return jsonb_build_object(
+    'sites_created_today', sites_count,
+    'splice_locations_created_today', splice_count,
+    'work_orders_completed_today', work_orders_count,
+    'blocked_items_today', blocked_count
+  );
+end;
+$$;
+
+create or replace function public.fn_upsert_daily_progress_report(
+  p_project_id uuid,
+  p_date date,
+  p_comments text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  metrics jsonb;
+  report_id uuid;
+  can_write boolean := false;
+begin
+  select exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid() and public.is_privileged_role(p.role)
+  ) and public.has_project_access(p_project_id)
+  into can_write;
+
+  if not can_write then
+    raise exception 'Not authorized';
+  end if;
+
+  metrics := public.fn_build_dpr_metrics(p_project_id, p_date);
+
+  insert into public.daily_progress_reports (
+    project_id,
+    report_date,
+    created_by,
+    metrics,
+    comments
+  ) values (
+    p_project_id,
+    p_date,
+    auth.uid(),
+    metrics,
+    p_comments
+  )
+  on conflict (project_id, report_date)
+  do update set
+    metrics = excluded.metrics,
+    comments = excluded.comments,
+    updated_at = now()
+  returning id into report_id;
+
+  return report_id;
+end;
+$$;
+
 -- 2) Nodes
 create table if not exists public.nodes (
   id uuid primary key default gen_random_uuid(),
