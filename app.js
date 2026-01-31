@@ -44,6 +44,7 @@ const state = {
   alerts: [],
   materialCatalog: [],
   projects: [],
+  messages: [],
   adminProfiles: [],
   locationWatchId: null,
   locationPollId: null,
@@ -98,6 +99,7 @@ const state = {
     rateCardItems: [],
     locationProofRules: [],
     workOrders: [],
+    messages: [],
   },
 };
 
@@ -120,6 +122,25 @@ const I18N = {
     liveSetupTitle: "",
     liveSetupSubtitle: "",
     selectProject: "Select project",
+    projectsNav: "Projects",
+    messagesNav: "Messages",
+    currentProjectLabel: "Current project",
+    projectSummaryNone: "No project selected",
+    projectsEmpty: "No projects assigned yet. Create one to get started.",
+    createProject: "Create project",
+    messagesEmpty: "No messages yet.",
+    messagePlaceholder: "Write a message...",
+    sendMessage: "Send",
+    menuTitle: "Menu",
+    menuSettingsTitle: "Settings",
+    menuAboutTitle: "About",
+    aboutCopy: "SpecCom was built by two longtime friends, Danny and Luis, who have spent years working in the field and dealing with the same challenges every splicing crew faces - scattered photos, missed documentation, and billing delays. We did not want another bloated system. We just wanted a simple way to organize our work, prove it was done right, and get paid faster. So we built SpecCom.",
+    messagesScopeProject: "Project: {name}",
+    messagesScopeGlobal: "Global messages",
+    messagesScopeNone: "No project selected. Global messages only.",
+    messageSenderYou: "You",
+    messageSenderUnknown: "User",
+    globalLabel: "Global",
     navDashboard: "Dashboard",
     navTechnician: "Technician",
     navDispatch: "Dispatch",
@@ -375,6 +396,25 @@ const I18N = {
     liveSetupTitle: "",
     liveSetupSubtitle: "",
     selectProject: "Seleccionar proyecto",
+    projectsNav: "Proyectos",
+    messagesNav: "Mensajes",
+    currentProjectLabel: "Proyecto actual",
+    projectSummaryNone: "Sin proyecto seleccionado",
+    projectsEmpty: "Aun no hay proyectos asignados. Crea uno para comenzar.",
+    createProject: "Crear proyecto",
+    messagesEmpty: "Aun no hay mensajes.",
+    messagePlaceholder: "Escribe un mensaje...",
+    sendMessage: "Enviar",
+    menuTitle: "Menu",
+    menuSettingsTitle: "Configuracion",
+    menuAboutTitle: "Acerca de",
+    aboutCopy: "SpecCom fue creado por dos amigos de toda la vida, Danny y Luis, que han pasado anos trabajando en el campo y enfrentando los mismos problemas que cada cuadrilla de empalme tiene - fotos dispersas, documentacion perdida y retrasos en facturacion. No queriamos otro sistema pesado. Solo queriamos una forma simple de organizar el trabajo, probar que se hizo bien y cobrar mas rapido. Por eso construimos SpecCom.",
+    messagesScopeProject: "Proyecto: {name}",
+    messagesScopeGlobal: "Mensajes globales",
+    messagesScopeNone: "Sin proyecto seleccionado. Solo mensajes globales.",
+    messageSenderYou: "Tu",
+    messageSenderUnknown: "Usuario",
+    globalLabel: "Global",
     navDashboard: "Panel",
     navTechnician: "Tecnico",
     navDispatch: "Despacho",
@@ -1231,6 +1271,15 @@ function syncLanguageControls(){
   if (select) select.value = lang;
   const profileSelect = $("profileLanguageSelect");
   if (profileSelect) profileSelect.value = lang;
+  syncMenuLanguageToggle();
+}
+
+function syncMenuLanguageToggle(){
+  const lang = getPreferredLanguage();
+  document.querySelectorAll("#menuModal .segmented-btn").forEach((btn) => {
+    const btnLang = btn.getAttribute("data-lang");
+    btn.classList.toggle("active", btnLang === lang);
+  });
 }
 
 async function savePreferredLanguage(lang, { closeModal = false } = {}){
@@ -1282,6 +1331,8 @@ function refreshLanguageSensitiveUI(){
   renderDispatchTable();
   renderDispatchWarnings();
   syncDispatchStatusFilter();
+  renderProjectsList();
+  renderMessages();
   applyI18n();
   refreshLocations();
 }
@@ -2558,20 +2609,14 @@ function showAuth(show){
 }
 
 function setWhoami(){
-  if (isDemo){
-    $("whoami").textContent = t("signedInDemo", { role: state.demo.role });
-    $("btnSignOut").style.display = "";
-    return;
-  }
-
-  if (state.user){
-    const role = state.profile?.role ? ` -> ${state.profile.role}` : "";
-    $("whoami").textContent = `${t("signedIn")} (${state.user.email}${role})`;
-    $("btnSignOut").style.display = "";
-  } else {
-    $("whoami").textContent = t("signedOut");
-    $("btnSignOut").style.display = "none";
-  }
+  const authed = isDemo || Boolean(state.user);
+  const signOutBtn = $("btnSignOut");
+  if (signOutBtn) signOutBtn.style.display = authed ? "" : "none";
+  ["btnMessages", "btnProjects", "btnMenu", "btnOpenProjects"].forEach((id) => {
+    const el = $(id);
+    if (el) el.style.display = authed ? "" : "none";
+  });
+  updateMessagesBadge();
   setDemoBadge();
 }
 
@@ -2688,24 +2733,14 @@ function ensureDemoSeed(){
 }
 
 function renderProjects(){
-  const select = $("projectSelect");
+  const summary = $("projectSummary");
   const meta = $("projectMeta");
-  if (!select) return;
-  select.innerHTML = "";
-  const opt = document.createElement("option");
-  opt.value = "";
-  opt.textContent = "Select project";
-  select.appendChild(opt);
-
-  state.projects.forEach((p) => {
-    const o = document.createElement("option");
-    o.value = p.id;
-    o.textContent = p.job_number ? `${p.name} (Job ${p.job_number})` : p.name;
-    select.appendChild(o);
-  });
-
+  if (summary){
+    summary.textContent = state.activeProject
+      ? (state.activeProject.job_number ? `${state.activeProject.name} (Job ${state.activeProject.job_number})` : (state.activeProject.name || "Project"))
+      : t("projectSummaryNone");
+  }
   if (state.activeProject){
-    select.value = state.activeProject.id;
     if (meta){
       const job = state.activeProject.job_number ? `Job ${state.activeProject.job_number}` : "Job -";
       const loc = state.activeProject.location ? ` | ${state.activeProject.location}` : "";
@@ -2718,11 +2753,8 @@ function renderProjects(){
     setText("jobTitle", "Job -");
     setText("jobSubtitle", "Project");
   }
-  const createBtn = $("btnCreateProject");
-  if (createBtn){
-    createBtn.style.display = isPrivilegedRole() ? "" : "none";
-  }
   renderProjectInfo();
+  renderProjectsList();
 }
 
 function renderProjectInfo(){
@@ -2748,6 +2780,76 @@ function renderProjectInfo(){
   `;
 }
 
+function renderProjectsList(){
+  const list = $("projectsList");
+  if (!list) return;
+  list.innerHTML = "";
+  const empty = $("projectsEmpty");
+  if (empty) empty.style.display = state.projects.length ? "none" : "";
+  state.projects.forEach((project) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "project-row";
+    row.dataset.projectId = project.id;
+    if (state.activeProject?.id === project.id){
+      row.classList.add("active");
+    }
+    const title = project.job_number ? `${project.name} (Job ${project.job_number})` : (project.name || "Project");
+    const meta = project.location ? project.location : (project.description || "");
+    row.innerHTML = `
+      <div class="project-row-title">${escapeHtml(title)}</div>
+      ${meta ? `<div class="project-row-meta">${escapeHtml(meta)}</div>` : ""}
+    `;
+    row.addEventListener("click", () => {
+      setActiveProjectById(project.id);
+      closeProjectsModal();
+    });
+    list.appendChild(row);
+  });
+}
+
+function openProjectsModal(){
+  const modal = $("projectsModal");
+  if (!modal) return;
+  renderProjectsList();
+  modal.style.display = "";
+}
+
+function closeProjectsModal(){
+  const modal = $("projectsModal");
+  if (!modal) return;
+  modal.style.display = "none";
+}
+
+function openMessagesModal(){
+  const modal = $("messagesModal");
+  if (!modal) return;
+  loadMessages().then(() => {
+    renderMessages();
+    markMessagesRead();
+    modal.style.display = "";
+  });
+}
+
+function closeMessagesModal(){
+  const modal = $("messagesModal");
+  if (!modal) return;
+  modal.style.display = "none";
+}
+
+function openMenuModal(){
+  const modal = $("menuModal");
+  if (!modal) return;
+  syncMenuLanguageToggle();
+  modal.style.display = "";
+}
+
+function closeMenuModal(){
+  const modal = $("menuModal");
+  if (!modal) return;
+  modal.style.display = "none";
+}
+
 function openCreateProjectModal(){
   const modal = $("createProjectModal");
   if (!modal) return;
@@ -2765,10 +2867,6 @@ function closeCreateProjectModal(){
 }
 
 async function createProject(){
-  if (!isPrivilegedRole()){
-    toast("Not allowed", "Admin or owner role required.");
-    return;
-  }
   const name = $("createProjectName")?.value.trim();
   const description = $("createProjectDescription")?.value.trim() || null;
   if (!name){
@@ -2789,6 +2887,8 @@ async function createProject(){
     state.activeProject = project;
     renderProjects();
     closeCreateProjectModal();
+    closeProjectsModal();
+    refreshLocations();
     toast("Project created", "Project created.");
     return;
   }
@@ -2825,7 +2925,170 @@ async function createProject(){
   renderProjects();
   setActiveProjectById(data.id);
   closeCreateProjectModal();
+  closeProjectsModal();
+  refreshLocations();
   toast("Project created", "Project created.");
+}
+
+const MESSAGE_READ_KEY = "messages_last_read_";
+
+function getMessageReadKey(projectId){
+  return `${MESSAGE_READ_KEY}${projectId || "global"}`;
+}
+
+function getLastMessageReadAt(projectId){
+  const raw = localStorage.getItem(getMessageReadKey(projectId));
+  const parsed = raw ? Date.parse(raw) : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function setLastMessageReadAt(projectId, iso){
+  try{
+    localStorage.setItem(getMessageReadKey(projectId), iso);
+  } catch {}
+}
+
+function countUnreadMessages(){
+  const lastRead = getLastMessageReadAt(state.activeProject?.id || null);
+  return (state.messages || []).filter((msg) => {
+    const stamp = Date.parse(msg.created_at || "");
+    return Number.isFinite(stamp) && stamp > lastRead;
+  }).length;
+}
+
+function updateMessagesBadge(){
+  const badge = $("messagesBadge");
+  if (!badge) return;
+  const count = countUnreadMessages();
+  if (count > 0){
+    badge.textContent = String(count);
+    badge.style.display = "inline-flex";
+  } else {
+    badge.textContent = "0";
+    badge.style.display = "none";
+  }
+}
+
+function markMessagesRead(){
+  const latest = state.messages?.[0]?.created_at;
+  if (!latest) return;
+  setLastMessageReadAt(state.activeProject?.id || null, latest);
+  updateMessagesBadge();
+}
+
+async function loadMessages(){
+  if (isDemo){
+    const projectId = state.activeProject?.id || null;
+    state.messages = (state.demo.messages || []).filter((msg) => msg.project_id === projectId || msg.project_id == null);
+    updateMessagesBadge();
+    return;
+  }
+  if (!state.client || !state.user){
+    state.messages = [];
+    updateMessagesBadge();
+    return;
+  }
+  let query = state.client
+    .from("messages")
+    .select("id, project_id, sender_id, message_text, created_at")
+    .order("created_at", { ascending: false });
+  if (state.activeProject?.id){
+    query = query.or(`project_id.eq.${state.activeProject.id},project_id.is.null`);
+  } else {
+    query = query.is("project_id", null);
+  }
+  const { data, error } = await query;
+  if (error){
+    toast("Messages load error", error.message);
+    return;
+  }
+  state.messages = data || [];
+  updateMessagesBadge();
+  const modal = $("messagesModal");
+  if (modal && modal.style.display !== "none"){
+    renderMessages();
+  }
+}
+
+function renderMessages(){
+  const list = $("messagesList");
+  const empty = $("messagesEmpty");
+  const scope = $("messagesScope");
+  if (!list) return;
+  if (scope){
+    if (!state.activeProject){
+      scope.textContent = t("messagesScopeNone");
+    } else {
+      scope.textContent = t("messagesScopeProject", { name: state.activeProject.name || "Project" });
+    }
+  }
+  if (!state.messages?.length){
+    list.innerHTML = "";
+    if (empty) empty.style.display = "";
+    return;
+  }
+  if (empty) empty.style.display = "none";
+  list.innerHTML = state.messages.map((msg) => {
+    const sender = msg.sender_id === state.user?.id
+      ? t("messageSenderYou")
+      : (msg.sender_id ? String(msg.sender_id).slice(0, 8) : t("messageSenderUnknown"));
+    const time = msg.created_at ? new Date(msg.created_at).toLocaleString() : "";
+    const scopeLabel = msg.project_id ? "" : t("globalLabel");
+    const body = escapeHtml(msg.message_text || "").replace(/\n/g, "<br>");
+    const metaParts = [scopeLabel, sender, time].filter(Boolean);
+    return `
+      <div class="message-card">
+        <div class="message-meta">${escapeHtml(metaParts.join(" | "))}</div>
+        <div>${body}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function sendMessage(){
+  const input = $("messageInput");
+  const text = input?.value.trim();
+  if (!text){
+    toast("Message required", "Write a message.");
+    return;
+  }
+  if (isDemo){
+    const projectId = state.activeProject?.id || null;
+    const row = {
+      id: `demo-message-${Date.now()}`,
+      project_id: projectId,
+      sender_id: state.user?.id || "demo-user",
+      message_text: text,
+      created_at: new Date().toISOString(),
+    };
+    state.demo.messages = state.demo.messages || [];
+    state.demo.messages.unshift(row);
+    input.value = "";
+    await loadMessages();
+    renderMessages();
+    markMessagesRead();
+    return;
+  }
+  if (!state.client || !state.user){
+    toast("Messages unavailable", "Sign in to send messages.");
+    return;
+  }
+  const payload = {
+    project_id: state.activeProject?.id || null,
+    sender_id: state.user.id,
+    message_text: text,
+  };
+  const { error } = await state.client
+    .from("messages")
+    .insert(payload);
+  if (error){
+    toast("Send failed", error.message);
+    return;
+  }
+  input.value = "";
+  await loadMessages();
+  renderMessages();
+  markMessagesRead();
 }
 
 async function loadProjects(){
@@ -2833,6 +3096,7 @@ async function loadProjects(){
     state.projects = state.demo.project ? [state.demo.project] : [];
     state.activeProject = state.projects[0] || null;
     renderProjects();
+    loadMessages();
     return;
   }
   const { data, error } = await state.client
@@ -2849,6 +3113,7 @@ async function loadProjects(){
     state.activeProject = match || null;
   }
   renderProjects();
+  loadMessages();
 }
 
 async function loadAdminProfiles(){
@@ -4162,6 +4427,7 @@ function setActiveProjectById(id){
   renderProjects();
   loadProjectNodes(state.activeProject?.id || null);
   loadProjectSites(state.activeProject?.id || null);
+  loadMessages();
   state.activeSite = null;
   renderSitePanel();
   loadRateCards(state.activeProject?.id || null);
@@ -7658,8 +7924,7 @@ function wireUI(){
       // reset
       state.activeNode = null;
       showAuth(true);
-      $("btnSignOut").style.display = "none";
-      $("whoami").textContent = t("signedOut");
+      setWhoami();
       clearProof();
       return;
     }
@@ -7748,16 +8013,54 @@ function wireUI(){
     btnAdminCreate.addEventListener("click", () => createAdminProfile());
   }
 
-  const projectSelect = $("projectSelect");
-  if (projectSelect){
-    projectSelect.addEventListener("change", () => {
-      setActiveProjectById(projectSelect.value);
+  const projectsBtn = $("btnProjects");
+  if (projectsBtn){
+    projectsBtn.addEventListener("click", () => openProjectsModal());
+  }
+  const projectsOpenBtn = $("btnOpenProjects");
+  if (projectsOpenBtn){
+    projectsOpenBtn.addEventListener("click", () => openProjectsModal());
+  }
+  const projectsCloseBtn = $("btnProjectsClose");
+  if (projectsCloseBtn){
+    projectsCloseBtn.addEventListener("click", () => closeProjectsModal());
+  }
+  const projectsCreateBtn = $("btnProjectsCreate");
+  if (projectsCreateBtn){
+    projectsCreateBtn.addEventListener("click", () => {
+      closeProjectsModal();
+      openCreateProjectModal();
     });
   }
-  const createProjectBtn = $("btnCreateProject");
-  if (createProjectBtn){
-    createProjectBtn.addEventListener("click", () => openCreateProjectModal());
+  const messagesBtn = $("btnMessages");
+  if (messagesBtn){
+    messagesBtn.addEventListener("click", () => openMessagesModal());
   }
+  const messagesCloseBtn = $("btnMessagesClose");
+  if (messagesCloseBtn){
+    messagesCloseBtn.addEventListener("click", () => closeMessagesModal());
+  }
+  const sendMessageBtn = $("btnSendMessage");
+  if (sendMessageBtn){
+    sendMessageBtn.addEventListener("click", () => sendMessage());
+  }
+  const menuBtn = $("btnMenu");
+  if (menuBtn){
+    menuBtn.addEventListener("click", () => openMenuModal());
+  }
+  const menuCloseBtn = $("btnMenuClose");
+  if (menuCloseBtn){
+    menuCloseBtn.addEventListener("click", () => closeMenuModal());
+  }
+  document.querySelectorAll("#menuModal .segmented-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const lang = btn.getAttribute("data-lang") || "en";
+      savePreferredLanguage(lang);
+      refreshLanguageSensitiveUI();
+      syncMenuLanguageToggle();
+    });
+  });
+
   const createProjectCancelBtn = $("btnCreateProjectCancel");
   if (createProjectCancelBtn){
     createProjectCancelBtn.addEventListener("click", () => closeCreateProjectModal());

@@ -19,10 +19,17 @@
         </div>
       </div>
       <div class="row topbar-actions">
-        <span id="appModeBadge" class="badge">DEMO</span>
-        <span id="demoEnvBadge" class="badge demo" style="display:none;" data-i18n="demoEnvBadge">DEMO ENVIRONMENT</span>
-        <span id="whoami" class="badge">Signed out</span>
-        <button id="btnSignOut" class="btn secondary" style="display:none;" data-action="signOut" data-i18n="signOut">Sign out</button>
+        <button id="btnMessages" class="topbar-btn" type="button" data-i18n="messagesNav">Messages
+          <span id="messagesBadge" class="alert-badge" style="display:none;">0</span>
+        </button>
+        <button id="btnProjects" class="topbar-btn" type="button" data-i18n="projectsNav">Projects</button>
+        <button id="btnMenu" class="icon-btn" type="button" aria-label="Menu">
+          <span class="hamburger">
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+        </button>
       </div>
     </div>
   </header>
@@ -53,13 +60,11 @@
     <div id="viewApp" class="app-shell" style="display:none;">
       <aside class="sidebar">
         <div class="card sidebar-card">
-          <div class="muted small">Active project</div>
-          <select id="projectSelect" class="input">
-            <option value="" data-i18n="selectProject">Select project</option>
-          </select>
+          <div class="muted small" data-i18n="currentProjectLabel">Current project</div>
+          <div id="projectSummary" class="project-summary" data-i18n="projectSummaryNone">No project selected</div>
           <div id="projectMeta" class="muted small" style="margin-top:8px;"></div>
           <div class="row" style="margin-top:10px; justify-content:flex-end;">
-            <button id="btnCreateProject" class="btn small secondary" style="display:none;">Create project</button>
+            <button id="btnOpenProjects" class="btn small secondary" type="button" data-i18n="projectsNav">Projects</button>
           </div>
         </div>
         <div class="card" style="margin-top:12px;">
@@ -512,6 +517,61 @@
         <div class="row" style="margin-top:12px; justify-content:flex-end;">
           <button id="btnCreateProjectCancel" class="btn ghost">Cancel</button>
           <button id="btnCreateProjectSave" class="btn">Create</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="projectsModal" class="modal" style="display:none;">
+      <div class="card modal-card">
+        <div class="modal-header">
+          <h2 data-i18n="projectsNav">Projects</h2>
+          <button id="btnProjectsClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
+        </div>
+        <div id="projectsList" class="project-list" style="margin-top:10px;"></div>
+        <div id="projectsEmpty" class="note" style="display:none; margin-top:10px;" data-i18n="projectsEmpty">No projects assigned yet. Create one to get started.</div>
+        <div class="row" style="margin-top:12px; justify-content:flex-end;">
+          <button id="btnProjectsCreate" class="btn" type="button" data-i18n="createProject">Create project</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="messagesModal" class="modal" style="display:none;">
+      <div class="card modal-card">
+        <div class="modal-header">
+          <h2 data-i18n="messagesNav">Messages</h2>
+          <button id="btnMessagesClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
+        </div>
+        <div id="messagesScope" class="muted small" style="margin-top:4px;"></div>
+        <div id="messagesList" class="messages-list" style="margin-top:10px;"></div>
+        <div id="messagesEmpty" class="muted small" style="margin-top:10px; display:none;" data-i18n="messagesEmpty">No messages yet.</div>
+        <div class="field-stack" style="margin-top:12px;">
+          <textarea id="messageInput" class="input" rows="3" data-i18n-placeholder="messagePlaceholder" placeholder="Write a message..."></textarea>
+          <div class="row" style="justify-content:flex-end;">
+            <button id="btnSendMessage" class="btn" type="button" data-i18n="sendMessage">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="menuModal" class="modal" style="display:none;">
+      <div class="card modal-card">
+        <div class="modal-header">
+          <h2 data-i18n="menuTitle">Menu</h2>
+          <button id="btnMenuClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
+        </div>
+        <div class="menu-section">
+          <div class="menu-title" data-i18n="menuSettingsTitle">Settings</div>
+          <div class="segmented">
+            <button class="segmented-btn" type="button" data-lang="en" data-i18n="languageOptionEnglish">English</button>
+            <button class="segmented-btn" type="button" data-lang="es" data-i18n="languageOptionSpanish">Spanish</button>
+          </div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-title" data-i18n="menuAboutTitle">About</div>
+          <p class="muted small" id="aboutCopy" data-i18n="aboutCopy">SpecCom was built by two longtime friends, Danny and Luis, who have spent years working in the field and dealing with the same challenges every splicing crew faces - scattered photos, missed documentation, and billing delays. We did not want another bloated system. We just wanted a simple way to organize our work, prove it was done right, and get paid faster. So we built SpecCom.</p>
+        </div>
+        <div class="menu-footer">
+          <button id="btnSignOut" class="btn secondary" type="button" style="display:none;" data-action="signOut" data-i18n="signOut">Sign out</button>
         </div>
       </div>
     </div>
