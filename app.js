@@ -2951,34 +2951,21 @@ async function createProject(){
     toast("Project error", "Client not ready.");
     return;
   }
-  const payload = {
-    name,
-    description,
-    created_by: state.user?.id || null,
-  };
-  const selectFields = "id, name, description, created_at, created_by, location, job_number, is_demo";
-  let { data, error } = await state.client
-    .from("projects")
-    .insert(payload)
-    .select(selectFields)
-    .single();
-  if (error && /description|created_by/i.test(error.message || "")){
-    const retry = await state.client
-      .from("projects")
-      .insert({ name })
-      .select("id, name, created_at, location, job_number, is_demo")
-      .single();
-    data = retry.data;
-    error = retry.error;
-  }
+
+  const { data: projectId, error } = await state.client
+    .rpc("fn_create_project", { p_clarity_id: name, p_description: description });
   if (error){
-    toast("Project create failed", error.message || "Unable to create project.");
+    toast("Could not create project. Please try again.");
     return;
   }
-  state.projects = (state.projects || []).concat(data).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
-  state.activeProject = data;
-  renderProjects();
-  setActiveProjectById(data.id);
+  await loadProjects();
+  const newProjectId = typeof projectId === "string" ? projectId : (projectId?.id || null);
+  if (newProjectId){
+    setActiveProjectById(newProjectId);
+  } else {
+    const match = state.projects.find(p => p.name === name);
+    if (match) setActiveProjectById(match.id);
+  }
   closeCreateProjectModal();
   closeProjectsModal();
   refreshLocations();
