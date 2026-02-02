@@ -853,11 +853,31 @@ async function hydrateTranslations(root = document){
   }
 }
 
-function toast(title, body){
+const DEBUG = Boolean(window.DEBUG);
+
+function debugLog(label, payload){
+  if (!DEBUG) return;
+  try{
+    console.error(label, payload);
+  } catch {}
+}
+
+function getErrorMessage(error){
+  if (!error) return "Unknown error";
+  return error.message || error.hint || error.details || String(error);
+}
+
+function isRpc404(error){
+  return error?.status === 404 || String(error?.message || "").includes("404");
+}
+
+function toast(title, body, variant){
   $("toastTitle").textContent = title;
   $("toastBody").textContent = body;
-  $("toast").classList.add("show");
-  setTimeout(() => $("toast").classList.remove("show"), 4200);
+  const toastEl = $("toast");
+  toastEl.classList.toggle("error", variant === "error");
+  toastEl.classList.add("show");
+  setTimeout(() => toastEl.classList.remove("show"), 4200);
 }
 
 function nowISO(){ return new Date().toISOString(); }
@@ -2952,11 +2972,27 @@ async function createProject(){
     return;
   }
 
-  const { data: projectId, error } = await state.client
-    .rpc("fn_create_project", { p_clarity_id: name, p_description: description });
+  const orgId = state.profile?.org_id || null;
+  let { data: projectId, error } = await state.client
+    .rpc("fn_create_project", { p_name: name, p_description: description ?? null, p_org_id: orgId });
   if (error){
-    toast("Could not create project. Please try again.");
-    return;
+    debugLog("[createProject] rpc error", error);
+    if (isRpc404(error)){
+      const fallback = await state.client
+        .from("projects")
+        .insert({ name, description: description ?? null, org_id: orgId })
+        .select("id")
+        .single();
+      if (fallback.error){
+        debugLog("[createProject] fallback error", fallback.error);
+        toast("Create project failed", getErrorMessage(fallback.error), "error");
+        return;
+      }
+      projectId = fallback.data?.id || null;
+    } else {
+      toast("Create project failed", getErrorMessage(error), "error");
+      return;
+    }
   }
   await loadProjects();
   const newProjectId = typeof projectId === "string" ? projectId : (projectId?.id || null);
@@ -4026,11 +4062,13 @@ async function createSiteFromPin(gps){
     state.map.instance.setView([gps.lat, gps.lng], 17);
   }
   const siteName = getNextSiteName();
+  const latNum = Number(gps.lat);
+  const lngNum = Number(gps.lng);
   const payload = {
     project_id: state.activeProject?.id || null,
     name: siteName,
-    gps_lat: gps.lat,
-    gps_lng: gps.lng,
+    gps_lat: latNum,
+    gps_lng: lngNum,
     gps_accuracy_m: gps.accuracy,
     created_at: new Date().toISOString(),
   };
@@ -4061,19 +4099,35 @@ async function createSiteFromPin(gps){
     return;
   }
 
-  const { data, error } = await state.client
-    .from("sites")
-    .insert(payload)
-    .select("id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at")
-    .single();
+  let { data: siteId, error } = await state.client
+    .rpc("fn_create_site_pin", {
+      p_project_id: state.activeProject?.id || null,
+      p_lat: latNum,
+      p_lng: lngNum,
+    });
   if (error){
-    toast("Pin save error", error.message);
-    return;
+    debugLog("[dropPin] rpc error", error);
+    if (isRpc404(error)){
+      const fallback = await state.client
+        .from("sites")
+        .insert({ ...payload, created_by: state.user?.id || null })
+        .select("id")
+        .single();
+      if (fallback.error){
+        debugLog("[dropPin] fallback error", fallback.error);
+        toast("Pin save error", getErrorMessage(fallback.error), "error");
+        return;
+      }
+      siteId = fallback.data?.id || null;
+    } else {
+      toast("Pin save error", getErrorMessage(error), "error");
+      return;
+    }
   }
-  state.projectSites = (state.projectSites || []).concat(data);
-  renderSiteList();
-  updateMapMarkers(getVisibleSites());
-  await setActiveSite(data.id);
+  await loadProjectSites(state.activeProject?.id || null);
+  if (siteId){
+    await setActiveSite(siteId);
+  }
   toast(t("pinDroppedTitle"), t("pinDroppedBody"));
 }
 
