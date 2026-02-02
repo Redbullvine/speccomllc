@@ -81,6 +81,10 @@ const state = {
     search: "",
   },
   storageUrlCache: new Map(),
+  storageAvailable: true,
+  storageWarningShown: false,
+  messagesEnabled: true,
+  messagesDisabledReason: null,
   realtime: {
     usageChannel: null,
   },
@@ -701,16 +705,89 @@ function getTodayDate(){
   return new Date().toISOString().slice(0, 10);
 }
 
+function handleStorageFailure(){
+  if (!state.storageAvailable) return;
+  state.storageAvailable = false;
+  showStorageBlockedWarning();
+}
+
+function safeLocalStorageGet(key){
+  if (!state.storageAvailable) return null;
+  try{
+    return localStorage.getItem(key);
+  } catch {
+    handleStorageFailure();
+    return null;
+  }
+}
+
+function safeLocalStorageSet(key, value){
+  if (!state.storageAvailable) return false;
+  try{
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    handleStorageFailure();
+    return false;
+  }
+}
+
+function safeLocalStorageRemove(key){
+  if (!state.storageAvailable) return false;
+  try{
+    localStorage.removeItem(key);
+    return true;
+  } catch {
+    handleStorageFailure();
+    return false;
+  }
+}
+
+function storageOk(){
+  try{
+    localStorage.setItem("__t", "1");
+    localStorage.removeItem("__t");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function ensureStorageAvailable(){
+  if (state.storageAvailable) return true;
+  showStorageBlockedWarning();
+  return false;
+}
+
+function showStorageBlockedWarning(){
+  if (state.storageWarningShown) return;
+  state.storageWarningShown = true;
+  const message = "Private browsing / tracking prevention is blocking storage. Please use a normal browser window for SpecCom.";
+  const banner = $("storageWarning");
+  if (banner){
+    banner.style.display = "";
+    banner.classList.add("warning-banner");
+    banner.textContent = message;
+  }
+  const note = $("authConfigNote");
+  if (note){
+    note.textContent = "Private browsing / tracking prevention is blocking storage. Use a normal browser window.";
+    note.style.display = "";
+  }
+  toast("Storage blocked", message, "error");
+  setAuthButtonsDisabled(true);
+}
+
 function getPreferredLanguage(){
   const profileLang = window.currentUserProfile?.preferred_language || state.profile?.preferred_language;
-  const stored = localStorage.getItem("preferred_language");
+  const stored = safeLocalStorageGet("preferred_language");
   return normalizeLanguage(profileLang || stored || "en");
 }
 
 function setPreferredLanguage(lang, { persist = true } = {}){
   const next = normalizeLanguage(lang);
   if (persist){
-    localStorage.setItem("preferred_language", next);
+    safeLocalStorageSet("preferred_language", next);
   }
   if (state.profile){
     state.profile.preferred_language = next;
@@ -878,6 +955,12 @@ function toast(title, body, variant){
   toastEl.classList.toggle("error", variant === "error");
   toastEl.classList.add("show");
   setTimeout(() => toastEl.classList.remove("show"), 4200);
+}
+
+function reportErrorToast(title, error){
+  const message = error?.message || (typeof error === "string" ? error : JSON.stringify(error)) || "Unknown error";
+  toast(title, message, "error");
+  console.error(error);
 }
 
 function nowISO(){ return new Date().toISOString(); }
@@ -1199,6 +1282,7 @@ async function upsertUserLocation(pos){
 
 function startLocationWatch(){
   if (isDemo) return;
+  if (!state.storageAvailable) return;
   if (state.locationWatchId != null) return;
   if (!navigator.geolocation){
     toast(t("gpsMissing"), t("gpsMissingBody"));
@@ -1225,6 +1309,7 @@ function stopLocationWatch(){
 
 function startLocationPolling(){
   if (isDemo) return;
+  if (!state.storageAvailable) return;
   if (state.locationPollId != null) return;
   state.locationPollId = setInterval(() => {
     refreshLocations();
@@ -2679,10 +2764,12 @@ function setWhoami(){
   const authed = isDemo || Boolean(state.user);
   const signOutBtn = $("btnSignOut");
   if (signOutBtn) signOutBtn.style.display = authed ? "" : "none";
-  ["btnMessages", "btnProjects", "btnMenu", "btnOpenProjects"].forEach((id) => {
+  ["btnProjects", "btnMenu", "btnOpenProjects"].forEach((id) => {
     const el = $(id);
     if (el) el.style.display = authed ? "" : "none";
   });
+  const messagesBtn = $("btnMessages");
+  if (messagesBtn) messagesBtn.style.display = authed && state.messagesEnabled ? "" : "none";
   updateMessagesBadge();
   setDemoBadge();
 }
@@ -2897,9 +2984,14 @@ function closeProjectsModal(){
 }
 
 function openMessagesModal(){
+  if (!state.messagesEnabled){
+    toast("Messages", "Messages module not installed yet.", "error");
+    return;
+  }
   const modal = $("messagesModal");
   if (!modal) return;
   loadMessages().then(() => {
+    if (!state.messagesEnabled) return;
     renderMessages();
     markMessagesRead();
     modal.style.display = "";
@@ -2985,12 +3077,12 @@ async function createProject(){
         .single();
       if (fallback.error){
         debugLog("[createProject] fallback error", fallback.error);
-        toast("Create project failed", getErrorMessage(fallback.error), "error");
+        reportErrorToast("Create project failed", fallback.error);
         return;
       }
       projectId = fallback.data?.id || null;
     } else {
-      toast("Create project failed", getErrorMessage(error), "error");
+      reportErrorToast("Create project failed", error);
       return;
     }
   }
@@ -3221,20 +3313,30 @@ async function saveDailyProgressComments(){
 
 const MESSAGE_READ_KEY = "messages_last_read_";
 
+function disableMessagesModule(reason = "missing_table"){
+  if (!state.messagesEnabled) return;
+  state.messagesEnabled = false;
+  state.messagesDisabledReason = reason;
+  const messagesBtn = $("btnMessages");
+  if (messagesBtn) messagesBtn.style.display = "none";
+  const badge = $("messagesBadge");
+  if (badge) badge.style.display = "none";
+  const modal = $("messagesModal");
+  if (modal) modal.style.display = "none";
+}
+
 function getMessageReadKey(projectId){
   return `${MESSAGE_READ_KEY}${projectId || "global"}`;
 }
 
 function getLastMessageReadAt(projectId){
-  const raw = localStorage.getItem(getMessageReadKey(projectId));
+  const raw = safeLocalStorageGet(getMessageReadKey(projectId));
   const parsed = raw ? Date.parse(raw) : 0;
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function setLastMessageReadAt(projectId, iso){
-  try{
-    localStorage.setItem(getMessageReadKey(projectId), iso);
-  } catch {}
+  safeLocalStorageSet(getMessageReadKey(projectId), iso);
 }
 
 function countUnreadMessages(){
@@ -3248,6 +3350,11 @@ function countUnreadMessages(){
 function updateMessagesBadge(){
   const badge = $("messagesBadge");
   if (!badge) return;
+  if (!state.messagesEnabled){
+    badge.textContent = "0";
+    badge.style.display = "none";
+    return;
+  }
   const count = countUnreadMessages();
   if (count > 0){
     badge.textContent = String(count);
@@ -3266,6 +3373,8 @@ function markMessagesRead(){
 }
 
 async function loadMessages(){
+  if (!state.messagesEnabled) return;
+  if (!state.storageAvailable && !isDemo) return;
   if (isDemo){
     const projectId = state.activeProject?.id || null;
     state.messages = (state.demo.messages || []).filter((msg) => msg.project_id === projectId || msg.project_id == null);
@@ -3288,6 +3397,12 @@ async function loadMessages(){
   }
   const { data, error } = await query;
   if (error){
+    const errorMessage = String(error.message || "").toLowerCase();
+    if (errorMessage.includes("public.messages") && errorMessage.includes("schema cache")){
+      disableMessagesModule("missing_table");
+      toast("Messages", "Messages module not installed yet.", "error");
+      return;
+    }
     toast("Messages load error", error.message);
     return;
   }
@@ -3304,6 +3419,11 @@ function renderMessages(){
   const empty = $("messagesEmpty");
   const scope = $("messagesScope");
   if (!list) return;
+  if (!state.messagesEnabled){
+    list.innerHTML = "";
+    if (empty) empty.style.display = "";
+    return;
+  }
   if (scope){
     if (!state.activeProject){
       scope.textContent = t("messagesScopeNone");
@@ -3335,6 +3455,10 @@ function renderMessages(){
 }
 
 async function sendMessage(){
+  if (!state.messagesEnabled){
+    toast("Messages", "Messages module not installed yet.", "error");
+    return;
+  }
   const input = $("messageInput");
   const text = input?.value.trim();
   if (!text){
@@ -3606,9 +3730,10 @@ async function loadProjectNodes(projectId){
 const PENDING_SITES_KEY = "pending_sites";
 
 function loadPendingSitesFromStorage(){
+  const raw = safeLocalStorageGet(PENDING_SITES_KEY);
+  if (!raw) return [];
   try{
-    const raw = localStorage.getItem(PENDING_SITES_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
+    const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
@@ -3616,9 +3741,7 @@ function loadPendingSitesFromStorage(){
 }
 
 function savePendingSitesToStorage(list){
-  try{
-    localStorage.setItem(PENDING_SITES_KEY, JSON.stringify(list || []));
-  } catch {}
+  safeLocalStorageSet(PENDING_SITES_KEY, JSON.stringify(list || []));
 }
 
 function getPendingSitesForProject(projectId){
@@ -4115,12 +4238,12 @@ async function createSiteFromPin(gps){
         .single();
       if (fallback.error){
         debugLog("[dropPin] fallback error", fallback.error);
-        toast("Pin save error", getErrorMessage(fallback.error), "error");
+        reportErrorToast("Pin save error", fallback.error);
         return;
       }
       siteId = fallback.data?.id || null;
     } else {
-      toast("Pin save error", getErrorMessage(error), "error");
+      reportErrorToast("Pin save error", error);
       return;
     }
   }
@@ -4132,7 +4255,7 @@ async function createSiteFromPin(gps){
 }
 
 async function syncPendingSites(){
-  if (isDemo || !state.client || !navigator.onLine) return;
+  if (isDemo || !state.client || !navigator.onLine || !state.storageAvailable) return;
   const pending = loadPendingSitesFromStorage();
   if (!pending.length) return;
   const remaining = [];
@@ -7797,6 +7920,14 @@ async function initAuth(){
   setAppModeUI();
   setEnvWarning();
 
+  state.storageAvailable = storageOk();
+  if (!state.storageAvailable && !isDemo){
+    showAuth(true);
+    setWhoami();
+    showStorageBlockedWarning();
+    return;
+  }
+
   if (appMode === "real" && !hasSupabaseConfig){
     showAuth(true);
     setWhoami();
@@ -8240,6 +8371,7 @@ function wireUI(){
 
   $("btnSignIn").addEventListener("click", async () => {
     if (isDemo) return;
+    if (!ensureStorageAvailable()) return;
     const email = $("email").value.trim();
     const password = $("password").value;
     const { error } = await state.client.auth.signInWithPassword({ email, password });
@@ -8250,6 +8382,7 @@ function wireUI(){
   if (btnMagic){
     btnMagic.addEventListener("click", async () => {
       if (isDemo) return;
+      if (!ensureStorageAvailable()) return;
       const email = $("email").value.trim();
       if (!email){
         toast("Email needed", "Enter your email address first.");
@@ -8266,6 +8399,7 @@ function wireUI(){
 
   $("btnSignUp").addEventListener("click", async () => {
     if (isDemo) return;
+    if (!ensureStorageAvailable()) return;
     const email = $("email").value.trim();
     if (!email){
       toast("Email needed", "Enter your email address first.");

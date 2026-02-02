@@ -236,7 +236,8 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
   box-shadow: var(--shadow);
   padding: 12px 14px;
   display:none;
-  z-index: 9999;
+  z-index: 99999;
+  font-weight:700;
 }
 .toast.show{display:block}
 .toast .title{font-weight:900}
