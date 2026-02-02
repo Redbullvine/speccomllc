@@ -1,3 +1,5 @@
 # Local Netlify folder
 .netlify
-.
+.# Supabase temp artifacts
+supabase/.temp/
+supabase/.temp/**
