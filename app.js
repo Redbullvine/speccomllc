@@ -159,7 +159,7 @@ const I18N = {
     dprMetricSplice: "Splice locations created today",
     dprMetricWorkOrders: "Work orders completed today",
     dprMetricBlocked: "Blocked items today",
-    aboutCopy: "SpecCom was built by two longtime friends, Danny and Luis, who have spent years working in the field and dealing with the same challenges every splicing crew faces - scattered photos, missed documentation, and billing delays. We did not want another bloated system. We just wanted a simple way to organize our work, prove it was done right, and get paid faster. So we built SpecCom.",
+    aboutCopy: "SpecCom turns field chaos into a single, intelligent workflow -- accelerating documentation, tightening project coordination, and protecting margins with fewer surprises. The result is less rework, clearer accountability, and faster paths from job done to money in.",
     messagesScopeProject: "Project: {name}",
     messagesScopeGlobal: "Global messages",
     messagesScopeNone: "No project selected. Global messages only.",
@@ -271,7 +271,11 @@ const I18N = {
       mapActiveOnly: "Active only (last 10 min)",
       mapSearchPlaceholder: "Search by name",
       dropPin: "Drop Pin",
+      dropPinNamePlaceholder: "Location name",
       siteListTitle: "Sites",
+      siteNameTitle: "Location name",
+      siteNameSubtitle: "Name this splice location so it is easy to find later.",
+      siteNamePlaceholder: "Location name",
       sitePanelTitle: "Site panel",
       noSiteSelected: "No site selected.",
       siteStatusPending: "Pending sync",
@@ -289,8 +293,8 @@ const I18N = {
       mediaTitle: "Media",
       mediaSubtitle: "Add images from camera or gallery.",
       addMedia: "Add media",
-      codesTitle: "Codes",
-      codesSubtitle: "Add one or more codes for this site.",
+      codesTitle: "Billing codes",
+      codesSubtitle: "Add the billing codes used at this location.",
       entriesTitle: "Entries",
       entriesSubtitle: "Add neutral line entries with optional quantity.",
       addEntry: "Add",
@@ -447,7 +451,7 @@ const I18N = {
     dprMetricSplice: "Ubicaciones de empalme creadas hoy",
     dprMetricWorkOrders: "Ordenes completadas hoy",
     dprMetricBlocked: "Bloqueos hoy",
-    aboutCopy: "SpecCom fue creado por dos amigos de toda la vida, Danny y Luis, que han pasado anos trabajando en el campo y enfrentando los mismos problemas que cada cuadrilla de empalme tiene - fotos dispersas, documentacion perdida y retrasos en facturacion. No queriamos otro sistema pesado. Solo queriamos una forma simple de organizar el trabajo, probar que se hizo bien y cobrar mas rapido. Por eso construimos SpecCom.",
+    aboutCopy: "SpecCom transforma el caos de campo en un flujo inteligente -- acelera la documentacion, alinea la coordinacion del proyecto y protege el margen con menos sorpresas. El resultado es menos retrabajo, mas claridad y un camino mas rapido de trabajo completado a dinero cobrado.",
     messagesScopeProject: "Proyecto: {name}",
     messagesScopeGlobal: "Mensajes globales",
     messagesScopeNone: "Sin proyecto seleccionado. Solo mensajes globales.",
@@ -559,7 +563,11 @@ const I18N = {
       mapActiveOnly: "Solo activos (últimos 10 min)",
       mapSearchPlaceholder: "Buscar por nombre",
       dropPin: "Colocar pin",
+      dropPinNamePlaceholder: "Nombre de ubicación",
       siteListTitle: "Sitios",
+      siteNameTitle: "Nombre de ubicación",
+      siteNameSubtitle: "Nombra esta ubicación para encontrarla fácilmente después.",
+      siteNamePlaceholder: "Nombre de ubicación",
       sitePanelTitle: "Panel del sitio",
       noSiteSelected: "Ningún sitio seleccionado.",
       siteStatusPending: "Sincronización pendiente",
@@ -577,8 +585,8 @@ const I18N = {
       mediaTitle: "Media",
       mediaSubtitle: "Agrega imágenes desde cámara o galería.",
       addMedia: "Agregar media",
-      codesTitle: "Códigos",
-      codesSubtitle: "Agrega uno o más códigos para este sitio.",
+      codesTitle: "Códigos de facturación",
+      codesSubtitle: "Agrega los códigos de facturación usados en esta ubicación.",
       entriesTitle: "Entradas",
       entriesSubtitle: "Agrega entradas neutrales con cantidad opcional.",
       addEntry: "Agregar",
@@ -3512,10 +3520,20 @@ async function loadProjects(){
     loadMessages();
     return;
   }
-  const { data, error } = await state.client
+  const baseSelect = "id, name, description, created_at, location, job_number, is_demo";
+  let { data, error } = await state.client
     .from("projects")
-    .select("id, name, description, created_at, created_by, location, job_number, is_demo")
+    .select(`${baseSelect}, created_by`)
     .order("name");
+  if (error){
+    const message = String(error.message || "").toLowerCase();
+    if (message.includes("created_by") && message.includes("does not exist")){
+      ({ data, error } = await state.client
+        .from("projects")
+        .select(baseSelect)
+        .order("name"));
+    }
+  }
   if (error){
     toast("Projects load error", error.message);
     return;
@@ -3863,6 +3881,8 @@ function renderSitePanel(){
   const codesInput = $("siteCodesInput");
   const entryDesc = $("siteEntryDescription");
   const entryQty = $("siteEntryQuantity");
+  const siteNameInput = $("siteNameInput");
+  const saveNameBtn = $("btnSaveSiteName");
   const mediaInput = $("siteMediaInput");
   const saveCodesBtn = $("btnSaveCodes");
   const addEntryBtn = $("btnAddEntry");
@@ -3886,12 +3906,15 @@ function renderSitePanel(){
   if (entryDesc) entryDesc.disabled = disabled;
   if (entryQty) entryQty.disabled = disabled;
   if (notesInput) notesInput.disabled = disabled;
+  if (siteNameInput) siteNameInput.disabled = disabled;
+  if (saveNameBtn) saveNameBtn.disabled = disabled;
   if (saveCodesBtn) saveCodesBtn.disabled = disabled;
   if (addEntryBtn) addEntryBtn.disabled = disabled;
   if (saveNotesBtn) saveNotesBtn.disabled = disabled;
 
   if (codesInput) codesInput.value = (state.siteCodes || []).map((row) => row.code).join(", ");
   if (notesInput) notesInput.value = site?.notes || "";
+  if (siteNameInput) siteNameInput.value = site?.name || "";
 
   if (mediaGallery){
     if (!site){
@@ -3929,6 +3952,52 @@ function renderSitePanel(){
       }).join("");
     }
   }
+}
+
+async function saveSiteName(){
+  const site = state.activeSite;
+  if (!site){
+    toast("Site missing", "Site not found.");
+    return;
+  }
+  const input = $("siteNameInput");
+  const nextName = input?.value.trim() || "";
+  if (!nextName){
+    toast("Location name required", "Enter a location name.");
+    return;
+  }
+
+  if (site.is_pending){
+    state.pendingSites = loadPendingSitesFromStorage().map((row) => (
+      row.id === site.id ? { ...row, name: nextName } : row
+    ));
+    savePendingSitesToStorage(state.pendingSites);
+    state.activeSite = { ...site, name: nextName };
+    renderSiteList();
+    renderSitePanel();
+    toast("Saved", "Location name updated.");
+    return;
+  }
+
+  if (!state.client){
+    toast("Update failed", "Client not ready.");
+    return;
+  }
+  const { error } = await state.client
+    .from("sites")
+    .update({ name: nextName })
+    .eq("id", site.id);
+  if (error){
+    toast("Update failed", error.message);
+    return;
+  }
+  state.projectSites = (state.projectSites || []).map((row) => (
+    row.id === site.id ? { ...row, name: nextName } : row
+  ));
+  state.activeSite = { ...site, name: nextName };
+  renderSiteList();
+  renderSitePanel();
+  toast("Saved", "Location name updated.");
 }
 
 async function loadSiteMedia(siteId){
@@ -4168,6 +4237,12 @@ async function dropPin(){
     toast("Project required", "Select a project to drop a pin.");
     return;
   }
+  const nameInput = $("dropPinName");
+  const siteName = nameInput?.value.trim() || "";
+  if (!siteName){
+    toast("Location name required", "Enter a name for this splice location.");
+    return;
+  }
   const gps = await getCurrentGps();
   if (!gps){
     toast(t("pinMissingGps"), t("pinMissingGpsBody"));
@@ -4176,20 +4251,21 @@ async function dropPin(){
   if (gps.accuracy != null && gps.accuracy > 50){
     toast(t("pinAccuracyWarnTitle"), t("pinAccuracyWarnBody"));
   }
-  await createSiteFromPin(gps);
+  await createSiteFromPin(gps, siteName);
+  if (nameInput) nameInput.value = "";
 }
 
-async function createSiteFromPin(gps){
+async function createSiteFromPin(gps, siteName){
   ensureMap();
   if (state.map.instance){
     state.map.instance.setView([gps.lat, gps.lng], 17);
   }
-  const siteName = getNextSiteName();
+  const finalName = siteName || getNextSiteName();
   const latNum = Number(gps.lat);
   const lngNum = Number(gps.lng);
   const payload = {
     project_id: state.activeProject?.id || null,
-    name: siteName,
+    name: finalName,
     gps_lat: latNum,
     gps_lng: lngNum,
     gps_accuracy_m: gps.accuracy,
@@ -4245,6 +4321,15 @@ async function createSiteFromPin(gps){
     } else {
       reportErrorToast("Pin save error", error);
       return;
+    }
+  }
+  if (siteId && finalName){
+    const { error: nameErr } = await state.client
+      .from("sites")
+      .update({ name: finalName })
+      .eq("id", siteId);
+    if (nameErr){
+      toast("Site name update failed", nameErr.message);
     }
   }
   await loadProjectSites(state.activeProject?.id || null);
@@ -8593,6 +8678,10 @@ function wireUI(){
       await addSiteMedia(file);
       e.target.value = "";
     });
+  }
+  const saveSiteNameBtn = $("btnSaveSiteName");
+  if (saveSiteNameBtn){
+    saveSiteNameBtn.addEventListener("click", () => saveSiteName());
   }
   const saveCodesBtn = $("btnSaveCodes");
   if (saveCodesBtn){

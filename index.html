@@ -345,6 +345,7 @@
                 <div class="muted small" data-i18n="mapSubtitle">Drop a pin to create a site and add documentation.</div>
               </div>
               <div class="row map-controls">
+                <input id="dropPinName" class="input compact" placeholder="Site name" data-i18n-placeholder="dropPinNamePlaceholder" />
                 <button id="btnDropPin" class="btn" data-action="dropPin" data-i18n="dropPin">Drop Pin</button>
               </div>
             </div>
@@ -363,6 +364,15 @@
                     <button id="btnCloseSitePanel" class="btn ghost small" data-action="closeSitePanel" data-i18n="closeLabel">Close</button>
                   </div>
                   <div class="hr"></div>
+
+                  <div class="panel-section">
+                    <div class="section-title" data-i18n="siteNameTitle">Location name</div>
+                    <div class="muted small" data-i18n="siteNameSubtitle">Name this splice location so it is easy to find later.</div>
+                    <div class="row" style="margin-top:8px;">
+                      <input id="siteNameInput" class="input" placeholder="Location name" data-i18n-placeholder="siteNamePlaceholder" />
+                      <button id="btnSaveSiteName" class="btn secondary" data-action="saveSiteName" data-i18n="saveLabel">Save</button>
+                    </div>
+                  </div>
 
                   <div class="panel-section">
                     <div class="section-title" data-i18n="mediaTitle">Media</div>
@@ -596,7 +606,7 @@
         </div>
         <div class="menu-section">
           <div class="menu-title" data-i18n="menuAboutTitle">About</div>
-          <p class="muted small" id="aboutCopy" data-i18n="aboutCopy">SpecCom was built by two longtime friends, Danny and Luis, who have spent years working in the field and dealing with the same challenges every splicing crew faces - scattered photos, missed documentation, and billing delays. We did not want another bloated system. We just wanted a simple way to organize our work, prove it was done right, and get paid faster. So we built SpecCom.</p>
+          <p class="muted small" id="aboutCopy" data-i18n="aboutCopy">SpecCom turns field chaos into a single, intelligent workflow -- accelerating documentation, tightening project coordination, and protecting margins with fewer surprises. The result is less rework, clearer accountability, and faster paths from job done to money in.</p>
         </div>
         <div class="menu-footer">
           <button id="btnSignOut" class="btn secondary" type="button" style="display:none;" data-action="signOut" data-i18n="signOut">Sign out</button>
