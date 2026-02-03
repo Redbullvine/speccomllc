@@ -956,6 +956,12 @@ function isRpc404(error){
   return error?.status === 404 || String(error?.message || "").includes("404");
 }
 
+function isDuplicateKeyError(error){
+  if (!error) return false;
+  const message = String(error.message || "").toLowerCase();
+  return error.status === 409 || error.code === "23505" || message.includes("duplicate key") || message.includes("already exists");
+}
+
 function toast(title, body, variant){
   $("toastTitle").textContent = title;
   $("toastBody").textContent = body;
@@ -3073,6 +3079,7 @@ async function createProject(){
   }
 
   const orgId = state.profile?.org_id || null;
+  const creatorId = state.user?.id || null;
   let { data: projectId, error } = await state.client
     .rpc("fn_create_project", { p_name: name, p_description: description ?? null, p_org_id: orgId });
   if (error){
@@ -3080,7 +3087,7 @@ async function createProject(){
     if (isRpc404(error)){
       const fallback = await state.client
         .from("projects")
-        .insert({ name, description: description ?? null, org_id: orgId })
+        .insert({ name, description: description ?? null, org_id: orgId, created_by: creatorId })
         .select("id")
         .single();
       if (fallback.error){
@@ -3089,6 +3096,22 @@ async function createProject(){
         return;
       }
       projectId = fallback.data?.id || null;
+    } else if (isDuplicateKeyError(error)){
+      const existing = await fetchProjectByName(name, orgId);
+      if (existing){
+        if (!state.projects.find(p => p.id === existing.id)){
+          state.projects = (state.projects || []).concat(existing);
+        }
+        setActiveProjectById(existing.id);
+        closeCreateProjectModal();
+        closeProjectsModal();
+        refreshLocations();
+        toast("Project already exists", "Project already exists — opened it.");
+        await loadProjects();
+        return;
+      }
+      reportErrorToast("Create project failed", error);
+      return;
     } else {
       reportErrorToast("Create project failed", error);
       return;
@@ -3106,6 +3129,35 @@ async function createProject(){
   closeProjectsModal();
   refreshLocations();
   toast("Project created", "Project created.");
+}
+
+async function fetchProjectByName(name, orgId){
+  if (!state.client) return null;
+  const baseSelect = "id, name, description, created_at, location, job_number, created_by";
+  let query = state.client
+    .from("projects")
+    .select(baseSelect)
+    .eq("name", name)
+    .limit(1);
+  if (orgId){
+    query = query.eq("org_id", orgId);
+  }
+  let { data, error } = await query;
+  if (error && orgId){
+    const message = String(error.message || "").toLowerCase();
+    if (message.includes("org_id") && message.includes("does not exist")){
+      ({ data, error } = await state.client
+        .from("projects")
+        .select(baseSelect)
+        .eq("name", name)
+        .limit(1));
+    }
+  }
+  if (error){
+    debugLog("[fetchProjectByName] error", error);
+    return null;
+  }
+  return Array.isArray(data) ? (data[0] || null) : (data || null);
 }
 
 function getDprDefaultMetrics(){
