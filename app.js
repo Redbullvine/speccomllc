@@ -3681,7 +3681,7 @@ async function loadProjects(){
       project_id,
       role,
       role_code,
-      projects:project_id (
+      projects (
         ${baseSelect}
       )
     `)
