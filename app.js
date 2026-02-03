@@ -117,6 +117,53 @@ const state = {
 const WORK_ORDER_TYPES = ["INSTALL", "TROUBLE_TICKET", "MAINTENANCE", "SURVEY"];
 const WORK_ORDER_STATUSES = ["NEW", "ASSIGNED", "EN_ROUTE", "ON_SITE", "IN_PROGRESS", "BLOCKED", "COMPLETE", "CANCELED"];
 
+const ROLE_CODE_MAP = {
+  OWNER: "ADMIN",
+  PRIME: "PROJECT_MANAGER",
+  SUB: "USER_LEVEL_II",
+  SPLICER: "USER_LEVEL_I",
+  TDS: "SUPPORT",
+  ADMIN: "ADMIN",
+  TECHNICIAN: "USER_LEVEL_I",
+};
+
+const ROLE_CODE_OPTIONS = ["ADMIN", "PROJECT_MANAGER", "USER_LEVEL_I", "USER_LEVEL_II", "SUPPORT"];
+
+function mapLegacyRoleToCode(role){
+  const key = String(role || "").toUpperCase();
+  if (["ADMIN","PROJECT_MANAGER","USER_LEVEL_I","USER_LEVEL_II","SUPPORT"].includes(key)){
+    return key;
+  }
+  return ROLE_CODE_MAP[key] || "USER_LEVEL_I";
+}
+
+function mapRoleCodeToLegacy(roleCode){
+  switch (String(roleCode || "").toUpperCase()){
+    case "ADMIN":
+      return "OWNER";
+    case "PROJECT_MANAGER":
+      return "PRIME";
+    case "USER_LEVEL_II":
+      return "SUB";
+    case "SUPPORT":
+      return "TDS";
+    case "USER_LEVEL_I":
+    default:
+      return "SPLICER";
+  }
+}
+
+function getRoleCode(member = state.profile){
+  if (member?.role_code) return member.role_code;
+  if (member?.role) return mapLegacyRoleToCode(member.role);
+  if (isDemo) return mapLegacyRoleToCode(state.demo.role);
+  return "USER_LEVEL_I";
+}
+
+function formatRoleLabel(roleCode){
+  return String(roleCode || "").replace(/_/g, " ");
+}
+
 const I18N = {
   en: {
     brandSubtitle: "Field verification, documentation, and billing control",
@@ -155,7 +202,7 @@ const I18N = {
     dprRefresh: "Generate / Refresh",
     dprCommentsLabel: "Comments / Needs Addressed",
     dprCommentsPlaceholder: "Anything needs addressed?",
-    dprReadOnlyNote: "Read-only access. Ask an OWNER, ADMIN, or PRIME to update.",
+    dprReadOnlyNote: "Read-only access. Ask an Admin or Project Manager to update.",
     dprNoProject: "Select a project to view the report.",
     dprNoMetrics: "Generate a report to see metrics.",
     dprMetricSites: "Sites created today",
@@ -235,7 +282,7 @@ const I18N = {
     kpiNode: "Site",
     kpiCompletion: "Completion",
     kpiUnits: "Units",
-    pricingHidden: "Pricing hidden from splicers",
+    pricingHidden: "Pricing hidden for User Level I",
     alertsTitle: "Alerts",
     allowedQuantitiesTitle: "Allowed quantities",
     catalogQuickSearchTitle: "Catalog quick search",
@@ -343,8 +390,8 @@ const I18N = {
     locked: "LOCKED",
     pricingVisible: "Pricing visible (per role)",
     pricingHiddenLabel: "Pricing hidden",
-    subInvoicesLabel: "SUB invoices:",
-    tdsInvoicesLabel: "TDS invoices:",
+    subInvoicesLabel: "User Level II invoices:",
+    tdsInvoicesLabel: "Support invoices:",
     visible: "visible",
     hidden: "hidden",
     openNodeInvoices: "Open a site to see invoice actions.",
@@ -404,7 +451,7 @@ const I18N = {
     signedInDemo: "Signed in (Demo: {role})",
     signOut: "Sign out",
     roleLabel: "Role",
-    pricingHiddenSplicer: "Pricing hidden (splicer view)",
+    pricingHiddenSplicer: "Pricing hidden (User Level I view)",
     pricingProtected: "Pricing protected by role",
     gpsMissing: "No GPS",
     gpsMissingBody: "This browser/device doesn't support geolocation.",
@@ -450,7 +497,7 @@ const I18N = {
     dprRefresh: "Generar / Actualizar",
     dprCommentsLabel: "Comentarios / Pendientes",
     dprCommentsPlaceholder: "Algo que necesita atencion?",
-    dprReadOnlyNote: "Solo lectura. Pide a OWNER, ADMIN o PRIME que actualice.",
+    dprReadOnlyNote: "Solo lectura. Pide a un Admin o Project Manager que actualice.",
     dprNoProject: "Selecciona un proyecto para ver el reporte.",
     dprNoMetrics: "Genera un reporte para ver metricas.",
     dprMetricSites: "Sitios creados hoy",
@@ -530,7 +577,7 @@ const I18N = {
     kpiNode: "Sitio",
     kpiCompletion: "Avance",
     kpiUnits: "Unidades",
-    pricingHidden: "Precios ocultos para empalmadores",
+    pricingHidden: "Precios ocultos para Nivel I",
     alertsTitle: "Alertas",
     allowedQuantitiesTitle: "Cantidades permitidas",
     catalogQuickSearchTitle: "Búsqueda rápida del catálogo",
@@ -638,8 +685,8 @@ const I18N = {
     locked: "BLOQUEADO",
     pricingVisible: "Precios visibles (según rol)",
     pricingHiddenLabel: "Precios ocultos",
-    subInvoicesLabel: "Facturas SUB:",
-    tdsInvoicesLabel: "Facturas TDS:",
+    subInvoicesLabel: "Facturas Nivel II:",
+    tdsInvoicesLabel: "Facturas Soporte:",
     visible: "visible",
     hidden: "oculto",
     openNodeInvoices: "Abre un sitio para ver acciones de facturación.",
@@ -699,7 +746,7 @@ const I18N = {
     signedInDemo: "Sesión iniciada (Demo: {role})",
     signOut: "Cerrar sesión",
     roleLabel: "Rol",
-    pricingHiddenSplicer: "Precios ocultos (vista empalmador)",
+    pricingHiddenSplicer: "Precios ocultos (vista Nivel I)",
     pricingProtected: "Precios protegidos por rol",
     gpsMissing: "Sin GPS",
     gpsMissingBody: "Este navegador/dispositivo no soporta geolocalización.",
@@ -1477,7 +1524,7 @@ async function savePreferredLanguage(lang, { closeModal = false } = {}){
         preferred_language: next,
       });
     if (error){
-      toast("Profile needed", "Ask an OWNER to create your profile. Language saved locally.");
+      toast("Profile needed", "Ask an Admin to create your profile. Language saved locally.");
     }
   }
   await loadProfile();
@@ -1517,16 +1564,16 @@ function isDemoUser(){
 }
 
 function isBillingManager(){
-  const role = getRole();
-  return isPrivilegedRole(role) || role === "TDS";
+  const role = getRoleCode();
+  return isPrivilegedRole(role) || role === "SUPPORT";
 }
 
 function isOwner(){
-  return getRole() === "OWNER";
+  return getRoleCode() === "ADMIN";
 }
 
-function isPrivilegedRole(role = getRole()){
-  return role === "ADMIN" || role === "OWNER" || role === "PRIME";
+function isPrivilegedRole(roleCode = getRoleCode()){
+  return roleCode === "ADMIN" || roleCode === "PROJECT_MANAGER";
 }
 
 function isTechnician(){
@@ -1546,8 +1593,7 @@ function getDefaultView(){
 }
 
 function isViewAllowed(viewId){
-  const role = getRole();
-  if (role === "TECHNICIAN"){
+  if (isTechnician()){
     return ["viewTechnician", "viewMap", "viewSettings", "viewDailyReport"].includes(viewId);
   }
   if (viewId === "viewTechnician") return false;
@@ -1630,16 +1676,15 @@ function updateKPI(){
   // unit alert
   if (units.allowed > 0){
     if (ratio >= 1.0){
-      toast("Units exceeded", "Used units are over the allowed units. PRIME should review immediately.");
+      toast("Units exceeded", "Used units are over the allowed units. Project Manager should review immediately.");
     } else if (ratio >= 0.9){
-      toast("Units nearing limit", "Used units are above 90% of allowed. PRIME gets an alert.");
+      toast("Units nearing limit", "Used units are above 90% of allowed. Project Manager gets an alert.");
     }
   }
 }
 
 function setRoleBasedVisibility(){
-  const role = getRole();
-  const isTech = role === "TECHNICIAN";
+  const isTech = isTechnician();
   const allowedViews = isTech
     ? new Set(["viewTechnician", "viewMap", "viewSettings", "viewDailyReport"])
     : new Set(["viewDashboard", "viewNodes", "viewPhotos", "viewBilling", "viewInvoices", "viewMap", "viewCatalog", "viewAlerts", "viewAdmin", "viewSettings", "viewLabor", "viewDispatch", "viewDailyReport"]);
@@ -1669,14 +1714,14 @@ function setRoleBasedVisibility(){
 }
 
 function setRoleUI(){
-  const role = getRole();
+  const roleCode = getRoleCode();
   const roleChip = $("chipRole");
   if (roleChip){
-    roleChip.innerHTML = `<span class="dot ok"></span><span>${t("roleLabel")}: ${role}</span>`;
+    roleChip.innerHTML = `<span class="dot ok"></span><span>${t("roleLabel")}: ${formatRoleLabel(roleCode)}</span>`;
   }
 
   // Pricing visibility notice
-  const pricingHidden = (role === "SPLICER" || role === "TECHNICIAN");
+  const pricingHidden = roleCode === "USER_LEVEL_I";
   const pricingChip = $("chipPricing");
   if (pricingChip){
     pricingChip.style.display = "none";
@@ -3146,7 +3191,7 @@ async function ensureProjectMembership(projectId){
   if (!state.client || !state.user || !projectId) return;
   const { error } = await state.client
     .from("project_members")
-    .insert({ project_id: projectId, user_id: state.user.id, role: "OWNER" });
+    .insert({ project_id: projectId, user_id: state.user.id, role: "OWNER", role_code: "ADMIN" });
   if (error){
     const message = String(error.message || "").toLowerCase();
     if (message.includes("duplicate") || message.includes("exists") || message.includes("does not exist")) return;
@@ -3299,7 +3344,7 @@ async function loadDailyProgressReport(){
 
 async function generateDailyProgressReport(){
   if (!isPrivilegedRole()){
-    toast("Not allowed", "OWNER, ADMIN, or PRIME required.");
+    toast("Not allowed", "Admin or Project Manager required.");
     return;
   }
   const projectId = state.dpr.projectId;
@@ -3363,7 +3408,7 @@ async function generateDailyProgressReport(){
 
 async function saveDailyProgressComments(){
   if (!isPrivilegedRole()){
-    toast("Not allowed", "OWNER, ADMIN, or PRIME required.");
+    toast("Not allowed", "Admin or Project Manager required.");
     return;
   }
   if (!state.dpr.reportId){
@@ -3679,7 +3724,7 @@ async function loadAdminProfiles(){
   }
   const { data, error } = await state.client
     .from("profiles")
-    .select("id, display_name, role, created_at")
+    .select("id, display_name, role, role_code, created_at")
     .order("created_at", { ascending: true });
   if (error){
     toast("Profiles load error", error.message);
@@ -3720,9 +3765,9 @@ function renderAdminProfiles(){
               <input class="input compact" data-field="display_name" data-id="${row.id}" value="${escapeHtml(row.display_name || "")}" />
             </td>
             <td>
-              <select class="input compact" data-field="role" data-id="${row.id}">
-                ${state.demo.roles.map(role => `
-                  <option value="${role}" ${String(row.role) === role ? "selected" : ""}>${role}</option>
+              <select class="input compact" data-field="role_code" data-id="${row.id}">
+                ${ROLE_CODE_OPTIONS.map(role => `
+                  <option value="${role}" ${String(row.role_code || mapLegacyRoleToCode(row.role)) === role ? "selected" : ""}>${formatRoleLabel(role)}</option>
                 `).join("")}
               </select>
             </td>
@@ -3746,12 +3791,13 @@ async function createAdminProfile(){
     return;
   }
   if (!BUILD_MODE || !isOwner()){
-    toast("Not allowed", "Owner role required.");
+    toast("Not allowed", "Admin role required.");
     return;
   }
   const userId = $("adminUserId")?.value.trim();
   const email = $("adminUserEmail")?.value.trim();
-  const role = $("adminUserRole")?.value || "SPLICER";
+  const roleCode = $("adminUserRole")?.value || "USER_LEVEL_I";
+  const legacyRole = mapRoleCodeToLegacy(roleCode);
   if (!userId){
     toast("User id required", "Enter the auth user id (UUID).");
     return;
@@ -3765,7 +3811,8 @@ async function createAdminProfile(){
     .insert({
       id: userId,
       display_name: email || null,
-      role,
+      role: legacyRole,
+      role_code: roleCode,
     });
   if (error){
     toast("Create failed", error.message);
@@ -3783,13 +3830,14 @@ async function updateAdminProfile(userId){
     return;
   }
   if (!BUILD_MODE || !isOwner()){
-    toast("Not allowed", "Owner role required.");
+    toast("Not allowed", "Admin role required.");
     return;
   }
-  const roleEl = document.querySelector(`[data-field="role"][data-id="${userId}"]`);
+  const roleEl = document.querySelector(`[data-field="role_code"][data-id="${userId}"]`);
   const nameEl = document.querySelector(`[data-field="display_name"][data-id="${userId}"]`);
   if (!roleEl || !nameEl) return;
-  const nextRole = roleEl.value;
+  const nextRoleCode = roleEl.value;
+  const nextLegacyRole = mapRoleCodeToLegacy(nextRoleCode);
   const nextName = String(nameEl.value || "").trim();
   if (isDemo){
     toast("Demo disabled", "Profiles are not available in demo mode.");
@@ -3797,7 +3845,7 @@ async function updateAdminProfile(userId){
   }
   const { error } = await state.client
     .from("profiles")
-    .update({ role: nextRole, display_name: nextName || null })
+    .update({ role: nextLegacyRole, role_code: nextRoleCode, display_name: nextName || null })
     .eq("id", userId);
   if (error){
     toast("Update failed", error.message);
@@ -4580,10 +4628,10 @@ async function completeNode(nodeId){
     toast("Site missing", "Site not found.");
     return;
   }
-  const role = getRole();
-  const canComplete = BUILD_MODE ? (role === "OWNER" || role === "PRIME") : (role === "PRIME" || role === "OWNER");
+  const roleCode = getRoleCode();
+  const canComplete = BUILD_MODE ? (roleCode === "ADMIN" || roleCode === "PROJECT_MANAGER") : (roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN");
   if (!canComplete){
-    toast("Not allowed", "Only PRIME/OWNER can complete a site.");
+    toast("Not allowed", "Only Admin or Project Manager can complete a site.");
     return;
   }
   if (!state.activeNode || state.activeNode.node_number !== node.node_number){
@@ -4616,7 +4664,7 @@ async function completeNode(nodeId){
 
 async function editNodeMeta(nodeId){
   if (!BUILD_MODE || !isOwner()){
-    toast("Not allowed", "Owner role required.");
+    toast("Not allowed", "Admin role required.");
     return;
   }
   const node = state.projectNodes.find(n => n.id === nodeId);
@@ -4673,7 +4721,7 @@ async function deleteNode(nodeId){
     return;
   }
   if (!BUILD_MODE || !isOwner()){
-    toast("Not allowed", "Owner role required.");
+    toast("Not allowed", "Admin role required.");
     return;
   }
   const node = state.projectNodes.find(n => n.id === nodeId);
@@ -5102,8 +5150,8 @@ async function saveCurrentProjectPreference(projectId){
 }
 
 function canSeedDemo(){
-  const role = getRole();
-  return role === "OWNER" || role === "PRIME";
+  const roleCode = getRoleCode();
+  return roleCode === "ADMIN" || roleCode === "PROJECT_MANAGER";
 }
 
 async function seedDemoNode(){
@@ -5148,7 +5196,7 @@ function renderLocations(){
     if (billingLocked && r.isEditingPorts) r.isEditingPorts = false;
     const displayName = getSpliceLocationDisplayName(r, index);
     const inputValue = r.pending_label ?? (r.label ?? "");
-    const canDelete = BUILD_MODE ? true : getRole() === "OWNER";
+    const canDelete = BUILD_MODE ? true : getRoleCode() === "ADMIN";
     const disableActions = r.isDeleting;
     const nameHtml = r.isEditingName
       ? `
@@ -5689,9 +5737,9 @@ function openDeleteSpliceLocationModal(locationId){
   }
   const node = state.activeNode;
   if (!node) return;
-  const canDelete = BUILD_MODE ? true : getRole() === "OWNER";
+  const canDelete = BUILD_MODE ? true : getRoleCode() === "ADMIN";
   if (!canDelete){
-    toast("Not allowed", "Only OWNER can delete locations.");
+    toast("Not allowed", "Only Admin can delete locations.");
     return;
   }
   const modal = ensureDeleteSpliceModal();
@@ -5720,9 +5768,9 @@ async function deleteSpliceLocation(locationId, options = {}){
   if (!node) return false;
   const loc = node.splice_locations.find(l => l.id === locationId);
   if (!loc) return false;
-  const canDelete = BUILD_MODE ? true : getRole() === "OWNER";
+  const canDelete = BUILD_MODE ? true : getRoleCode() === "ADMIN";
   if (!canDelete){
-    toast("Not allowed", "Only OWNER can delete locations.");
+    toast("Not allowed", "Only Admin can delete locations.");
     return false;
   }
   if (loc.isDeleting) return false;
@@ -6111,7 +6159,7 @@ async function handleBackfillPhotoUpload(photoType, file){
     return;
   }
   if (!isOwner()){
-    toast("Not allowed", "Owner role required.");
+    toast("Not allowed", "Admin role required.");
     return;
   }
   if (!state.nodeProofStatus?.backfill_allowed){
@@ -6407,12 +6455,12 @@ function subscribeUsageEvents(nodeId){
 
 function renderInvoicePanel(){
   const wrap = $("invoicePanel");
-  const role = getRole();
+  const roleCode = getRoleCode();
   const node = state.activeNode;
 
-  const canSeeSubInvoices = (role === "PRIME" || role === "SUB" || role === "OWNER");
-  const canSeeTdsInvoices = (role === "TDS" || role === "PRIME" || role === "OWNER");
-  const canSeeAnyPricing = (role !== "SPLICER" && role !== "TECHNICIAN");
+  const canSeeSubInvoices = (roleCode === "PROJECT_MANAGER" || roleCode === "USER_LEVEL_II" || roleCode === "ADMIN");
+  const canSeeTdsInvoices = (roleCode === "SUPPORT" || roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN");
+  const canSeeAnyPricing = roleCode !== "USER_LEVEL_I";
 
   let html = "";
   html += `<div class="row">
@@ -6449,7 +6497,9 @@ function renderInvoicePanel(){
         ${invoices.map(inv => {
           const showAmount = canSeeAnyPricing && ( (inv.from === "SUB" && canSeeSubInvoices) || (inv.to === "SUB" && canSeeSubInvoices) || (inv.to === "TDS" && canSeeTdsInvoices) || (inv.from === "TDS" && canSeeTdsInvoices) );
           const amt = showAmount ? "$1,234.00 (demo)" : t("hidden");
-          return `<tr><td>${inv.from}</td><td>${inv.to}</td><td>${inv.status}</td><td>${amt}</td></tr>`;
+          const fromLabel = formatRoleLabel(mapLegacyRoleToCode(inv.from));
+          const toLabel = formatRoleLabel(mapLegacyRoleToCode(inv.to));
+          return `<tr><td>${fromLabel}</td><td>${toLabel}</td><td>${inv.status}</td><td>${amt}</td></tr>`;
         }).join("")}
         </tbody></table>`;
     }
@@ -6487,7 +6537,9 @@ function renderInvoicePanel(){
       <thead><tr><th>${t("fromLabel")}</th><th>${t("toLabel")}</th><th>${t("invoiceNumberLabel")}</th><th>${t("statusLabel")}</th><th>${t("amountLabel")}</th></tr></thead><tbody>
       ${rows.map(inv => {
         const amt = (canSeeAnyPricing && inv.amount != null) ? `$${Number(inv.amount).toFixed(2)}` : t("hidden");
-        return `<tr><td>${inv.from}</td><td>${inv.to}</td><td>${inv.number}</td><td>${inv.status}</td><td>${amt}</td></tr>`;
+        const fromLabel = formatRoleLabel(mapLegacyRoleToCode(inv.from));
+        const toLabel = formatRoleLabel(mapLegacyRoleToCode(inv.to));
+        return `<tr><td>${fromLabel}</td><td>${toLabel}</td><td>${inv.number}</td><td>${inv.status}</td><td>${amt}</td></tr>`;
       }).join("")}
       </tbody></table>`;
   }
@@ -6961,7 +7013,7 @@ async function markInvoiceReady(){
 
 async function updateInvoiceStatus(){
   if (!BUILD_MODE || !isOwner()){
-    toast("Not allowed", "Owner role required.");
+    toast("Not allowed", "Admin role required.");
     return;
   }
   if (isDemoUser()){
@@ -7320,15 +7372,15 @@ function getRemainingForItem(item){
 }
 
 function updateAlertsBadge(){
-  const role = getRole();
-  const canSeeAlerts = role === "PRIME" || role === "OWNER";
+  const roleCode = getRoleCode();
+  const canSeeAlerts = roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN";
   const openAlerts = canSeeAlerts ? (state.alerts || []).filter(a => a.status === "open") : [];
   const count = openAlerts.length;
   const badge = $("alertsBadge");
   if (badge){
     badge.textContent = canSeeAlerts
       ? (count ? `${count} alert${count > 1 ? "s" : ""}` : "No alerts")
-      : "Alerts for PRIME only";
+      : "Alerts for Project Managers only";
     badge.classList.toggle("warn", count > 0 && canSeeAlerts);
   }
   const navBadge = $("alertsNavBadge");
@@ -7387,8 +7439,8 @@ async function loadSplicePhotos(nodeId, locs){
 }
 
 function renderAlerts(){
-  const role = getRole();
-  const canSeeAlerts = role === "PRIME" || role === "OWNER";
+  const roleCode = getRoleCode();
+  const canSeeAlerts = roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN";
   const list = canSeeAlerts ? (state.alerts || []) : [];
   const targets = [$("alertsFeed"), $("alertsFeedFull")].filter(Boolean);
   if (!targets.length) return;
@@ -7414,7 +7466,7 @@ function renderAlerts(){
           </div>
         `;
       }).join("")
-    : `<div class="muted small">${canSeeAlerts ? "No alerts right now." : "Alerts are available to PRIME / OWNER."}</div>`;
+    : `<div class="muted small">${canSeeAlerts ? "No alerts right now." : "Alerts are available to Admin / Project Manager."}</div>`;
   targets.forEach((el) => {
     el.innerHTML = html;
   });
@@ -7770,7 +7822,7 @@ async function addSpliceLocation(){
 
 async function openNode(nodeNumber){
   ensureDemoSeed();
-  const role = getRole();
+  const roleCode = getRoleCode();
 
   const n = (nodeNumber || "").trim();
   if (!n){
@@ -7819,11 +7871,11 @@ async function openNode(nodeNumber){
     updateKPI();
     renderNodeCards();
 
-    // PRIME alert when near units
-    if (role === "PRIME" && state.activeNode.units_allowed > 0){
+    // Project Manager alert when near units
+    if (roleCode === "PROJECT_MANAGER" && state.activeNode.units_allowed > 0){
       const ratio = state.activeNode.units_used / state.activeNode.units_allowed;
       if (ratio >= 0.9){
-        toast("Prime alert", "Units are close to the allowed threshold for this site.");
+        toast("Project Manager alert", "Units are close to the allowed threshold for this site.");
       }
     }
     return;
@@ -8031,8 +8083,8 @@ async function markNodeReady(){
     toast("Demo restriction", t("availableInProduction"));
     return;
   }
-  const role = getRole();
-  if (role === "SPLICER" || role === "TECHNICIAN"){
+  const roleCode = getRoleCode();
+  if (roleCode === "USER_LEVEL_I"){
     toast("Not allowed", "Only billing roles can mark sites ready.");
     return;
   }
@@ -8077,9 +8129,9 @@ async function createInvoice(){
     return;
   }
 
-  const role = getRole();
-  if (role === "SPLICER" || role === "TECHNICIAN"){
-    toast("Nope", "Splicers and technicians can't create invoices.");
+  const roleCode = getRoleCode();
+  if (roleCode === "USER_LEVEL_I"){
+    toast("Nope", "User Level I can't create invoices.");
     return;
   }
 
@@ -8095,28 +8147,29 @@ async function createInvoice(){
   }
 
   // Minimal demo invoice routing
+  const legacyRole = mapRoleCodeToLegacy(roleCode);
   let to = null;
-  if (role === "SUB") to = "PRIME";
-  else if (role === "PRIME") to = "TDS";
-  else if (role === "OWNER") to = "PRIME";
-  else if (role === "TDS") to = "OWNER";
+  if (legacyRole === "SUB") to = "PRIME";
+  else if (legacyRole === "PRIME") to = "TDS";
+  else if (legacyRole === "OWNER") to = "PRIME";
+  else if (legacyRole === "TDS") to = "OWNER";
   else to = "PRIME";
 
   if (isDemo){
     state.demo.invoices.push({
       id: `inv-${Date.now()}`,
       node_number: node.node_number,
-      from: role,
+      from: legacyRole,
       to,
       status: "Draft",
       amount_hidden: false,
     });
-    toast("Invoice created", `${role} -> ${to} (demo). Visibility depends on role.`);
+    toast("Invoice created", `${formatRoleLabel(mapLegacyRoleToCode(legacyRole))} -> ${formatRoleLabel(mapLegacyRoleToCode(to))} (demo). Visibility depends on role.`);
     renderInvoicePanel();
     return;
   }
 
-  if (role === "SUB"){
+  if (legacyRole === "SUB"){
     const { error } = await state.client
       .from("sub_invoices")
       .insert({ node_id: node.id, status: "Draft" });
@@ -8124,7 +8177,7 @@ async function createInvoice(){
       toast("Invoice error", error.message);
       return;
     }
-  } else if (role === "PRIME" || role === "OWNER"){
+  } else if (legacyRole === "PRIME" || legacyRole === "OWNER"){
     const { error } = await state.client
       .from("prime_invoices")
       .insert({ node_id: node.id, status: "Draft" });
@@ -8134,7 +8187,7 @@ async function createInvoice(){
     }
   }
   await loadInvoices(node.id);
-  toast("Invoice created", `${role} -> ${to}. Visibility depends on role.`);
+  toast("Invoice created", `${formatRoleLabel(mapLegacyRoleToCode(legacyRole))} -> ${formatRoleLabel(mapLegacyRoleToCode(to))}. Visibility depends on role.`);
   renderInvoicePanel();
 }
 
@@ -8174,9 +8227,10 @@ async function initAuth(){
     if (isDemo){
       ensureDemoSeed();
       showAuth(false);
-      const pick = prompt("Demo mode: choose a role (ADMIN, OWNER, PRIME, TDS, SUB, SPLICER, TECHNICIAN)", state.demo.role) || state.demo.role;
-      const role = state.demo.roles.includes(pick.toUpperCase()) ? pick.toUpperCase() : state.demo.role;
-      state.demo.role = role;
+      const pick = prompt("Demo mode: choose a role (ADMIN, PROJECT_MANAGER, USER_LEVEL_I, USER_LEVEL_II, SUPPORT)", mapLegacyRoleToCode(state.demo.role)) || mapLegacyRoleToCode(state.demo.role);
+      const normalized = pick.toUpperCase();
+      const legacy = state.demo.roles.includes(normalized) ? normalized : mapRoleCodeToLegacy(normalized);
+      state.demo.role = legacy;
       await loadProjects();
       await loadProjectNodes(state.activeProject?.id || null);
       await loadProjectSites(state.activeProject?.id || null);
