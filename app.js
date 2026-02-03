@@ -137,7 +137,10 @@ const I18N = {
     messagesNav: "Messages",
     currentProjectLabel: "Current project",
     projectSummaryNone: "No project selected",
-    projectsEmpty: "No projects assigned yet. Create one to get started.",
+    projectsEmpty: "No projects yet. Create a project or ask your admin for access.",
+    projectsEmptyTitle: "No projects yet",
+    projectsEmptyBody: "Create a project to start tracking sites and documentation, or ask your admin to add you to an existing project.",
+    projectsEmptyCta: "Create project",
     createProject: "Create project",
     messagesEmpty: "No messages yet.",
     messagePlaceholder: "Write a message...",
@@ -429,7 +432,10 @@ const I18N = {
     messagesNav: "Mensajes",
     currentProjectLabel: "Proyecto actual",
     projectSummaryNone: "Sin proyecto seleccionado",
-    projectsEmpty: "Aun no hay proyectos asignados. Crea uno para comenzar.",
+    projectsEmpty: "Aun no hay proyectos. Crea un proyecto o pide acceso a tu administrador.",
+    projectsEmptyTitle: "Aun no hay proyectos",
+    projectsEmptyBody: "Crea un proyecto para empezar a rastrear sitios y documentación, o pide a tu administrador que te agregue a un proyecto existente.",
+    projectsEmptyCta: "Crear proyecto",
     createProject: "Crear proyecto",
     messagesEmpty: "Aun no hay mensajes.",
     messagePlaceholder: "Escribe un mensaje...",
@@ -2961,7 +2967,10 @@ function renderProjectsList(){
   if (!list) return;
   list.innerHTML = "";
   const empty = $("projectsEmpty");
+  const footer = $("projectsFooter");
   if (empty) empty.style.display = state.projects.length ? "none" : "";
+  list.style.display = state.projects.length ? "" : "none";
+  if (footer) footer.style.display = state.projects.length ? "" : "none";
   state.projects.forEach((project) => {
     const row = document.createElement("button");
     row.type = "button";
@@ -8611,6 +8620,13 @@ function wireUI(){
   const projectsCreateBtn = $("btnProjectsCreate");
   if (projectsCreateBtn){
     projectsCreateBtn.addEventListener("click", () => {
+      closeProjectsModal();
+      openCreateProjectModal();
+    });
+  }
+  const projectsEmptyCreateBtn = $("btnProjectsEmptyCreate");
+  if (projectsEmptyCreateBtn){
+    projectsEmptyCreateBtn.addEventListener("click", () => {
       closeProjectsModal();
       openCreateProjectModal();
     });

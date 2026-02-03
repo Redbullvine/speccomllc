@@ -217,6 +217,16 @@ h2::after{
   border-color: rgba(245,158,11,.6);
   background: rgba(60,30,0,.25);
 }
+.empty-state{
+  border:1px solid rgba(27,59,90,.6);
+  background: rgba(7,26,43,.6);
+  padding:14px;
+  border-radius: 14px;
+}
+.empty-state-title{
+  font-weight:900;
+  margin-bottom:6px;
+}
 .backfill-panel{
   margin-top:12px;
 }

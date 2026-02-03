@@ -544,14 +544,16 @@
     <div id="createProjectModal" class="modal" style="display:none;">
       <div class="card modal-card">
         <h2>Create project</h2>
-        <div class="field-stack" style="margin-top:12px;">
-          <input id="createProjectName" class="input" placeholder="Project name" />
-          <textarea id="createProjectDescription" class="input" rows="3" placeholder="Description (optional)"></textarea>
-        </div>
-        <div class="row" style="margin-top:12px; justify-content:flex-end;">
-          <button id="btnCreateProjectCancel" class="btn ghost">Cancel</button>
-          <button id="btnCreateProjectSave" class="btn">Create</button>
-        </div>
+        <form id="createProjectForm" autocomplete="off">
+          <div class="field-stack" style="margin-top:12px;">
+            <input id="createProjectName" name="project_name" class="input" placeholder="Project name" autocomplete="off" />
+            <textarea id="createProjectDescription" name="project_description" class="input" rows="3" placeholder="Description (optional)" autocomplete="off"></textarea>
+          </div>
+          <div class="row" style="margin-top:12px; justify-content:flex-end;">
+            <button id="btnCreateProjectCancel" class="btn ghost" type="button">Cancel</button>
+            <button id="btnCreateProjectSave" class="btn" type="button">Create</button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -562,8 +564,14 @@
           <button id="btnProjectsClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
         </div>
         <div id="projectsList" class="project-list" style="margin-top:10px;"></div>
-        <div id="projectsEmpty" class="note" style="display:none; margin-top:10px;" data-i18n="projectsEmpty">No projects assigned yet. Create one to get started.</div>
-        <div class="row" style="margin-top:12px; justify-content:flex-end;">
+        <div id="projectsEmpty" class="empty-state" style="display:none; margin-top:10px;">
+          <div class="empty-state-title" data-i18n="projectsEmptyTitle">No projects yet</div>
+          <div class="empty-state-body muted small" data-i18n="projectsEmptyBody">Create a project to start tracking sites and documentation, or ask your admin to add you to an existing project.</div>
+          <div class="row" style="margin-top:12px; justify-content:flex-end;">
+            <button id="btnProjectsEmptyCreate" class="btn" type="button" data-i18n="projectsEmptyCta">Create project</button>
+          </div>
+        </div>
+        <div id="projectsFooter" class="row" style="margin-top:12px; justify-content:flex-end;">
           <button id="btnProjectsCreate" class="btn" type="button" data-i18n="createProject">Create project</button>
         </div>
       </div>
