@@ -1,22 +1,6 @@
 -- Ensure pgcrypto available for gen_random_uuid if needed
 create extension if not exists pgcrypto;
 
--- Ensure ADMIN exists in app_role enum (older DBs may be missing it)
-do $$
-begin
-  if exists (select 1 from pg_type where typname = 'app_role') then
-    if not exists (
-      select 1
-      from pg_enum e
-      join pg_type t on t.oid = e.enumtypid
-      where t.typname = 'app_role'
-        and e.enumlabel = 'ADMIN'
-    ) then
-      alter type public.app_role add value 'ADMIN';
-    end if;
-  end if;
-end $$;
-
 -- Helper: is_admin_or_owner()
 create or replace function public.is_admin_or_owner()
 returns boolean
@@ -27,7 +11,7 @@ as $$
     select 1
     from public.profiles p
     where p.id = auth.uid()
-      and p.role in ('ADMIN','OWNER')
+      and p.role::text in ('ADMIN','OWNER')
   );
 $$;
 
@@ -99,7 +83,7 @@ begin
 
     update public.profiles
     set org_id = v_org_id,
-        role = case when role in ('ADMIN','OWNER') then role else 'OWNER' end
+        role = case when role::text in ('ADMIN','OWNER') then role else 'OWNER' end
     where id = v_user_id;
   end if;
 
