@@ -3111,6 +3111,7 @@ async function createProject(){
         if (!state.projects.find(p => p.id === existing.id)){
           state.projects = (state.projects || []).concat(existing);
         }
+        await ensureProjectMembership(existing.id);
         setActiveProjectById(existing.id);
         closeCreateProjectModal();
         closeProjectsModal();
@@ -3129,6 +3130,7 @@ async function createProject(){
   await loadProjects();
   const newProjectId = typeof projectId === "string" ? projectId : (projectId?.id || null);
   if (newProjectId){
+    await ensureProjectMembership(newProjectId);
     setActiveProjectById(newProjectId);
   } else {
     const match = state.projects.find(p => p.name === name);
@@ -3138,6 +3140,17 @@ async function createProject(){
   closeProjectsModal();
   refreshLocations();
   toast("Project created", "Project created.");
+}
+
+async function ensureProjectMembership(projectId){
+  if (!state.client || !state.user || !projectId) return;
+  const { error } = await state.client
+    .from("project_members")
+    .insert({ project_id: projectId, user_id: state.user.id, role: "OWNER" });
+  if (error){
+    const message = String(error.message || "").toLowerCase();
+    if (message.includes("duplicate") || message.includes("exists") || message.includes("does not exist")) return;
+  }
 }
 
 async function fetchProjectByName(name, orgId){
@@ -3581,28 +3594,71 @@ async function loadProjects(){
     loadMessages();
     return;
   }
-  const baseSelect = "id, name, description, created_at, location, job_number, is_demo";
-  let { data, error } = await state.client
-    .from("projects")
-    .select(`${baseSelect}, created_by`)
-    .order("name");
-  if (error){
-    const message = String(error.message || "").toLowerCase();
-    if (message.includes("created_by") && message.includes("does not exist")){
-      ({ data, error } = await state.client
-        .from("projects")
-        .select(baseSelect)
-        .order("name"));
-    }
-  }
-  if (error){
-    toast("Projects load error", error.message);
+  if (!state.client || !state.user){
+    state.projects = [];
+    renderProjects();
     return;
   }
-  state.projects = data || [];
+  const baseSelect = "id, name, description, created_at, location, job_number, is_demo, created_by";
+  let projects = [];
+  let memberProjectIds = [];
+
+  const membersResp = await state.client
+    .from("project_members")
+    .select("project_id")
+    .eq("user_id", state.user.id);
+  if (!membersResp.error){
+    memberProjectIds = (membersResp.data || []).map(r => r.project_id).filter(Boolean);
+  }
+
+  if (memberProjectIds.length){
+    const { data, error } = await state.client
+      .from("projects")
+      .select(baseSelect)
+      .in("id", memberProjectIds)
+      .order("name");
+    if (error){
+      toast("Projects load error", error.message);
+      return;
+    }
+    projects = (data || []);
+  }
+
+  // Fallback: include projects created by the user (legacy rows missing membership)
+  const createdResp = await state.client
+    .from("projects")
+    .select(baseSelect)
+    .eq("created_by", state.user.id)
+    .order("name");
+  if (!createdResp.error){
+    const existing = new Set(projects.map(p => p.id));
+    (createdResp.data || []).forEach((row) => {
+      if (!existing.has(row.id)) projects.push(row);
+    });
+  } else {
+    const message = String(createdResp.error.message || "").toLowerCase();
+    if (message.includes("created_by") && message.includes("does not exist")){
+      const { data } = await state.client
+        .from("projects")
+        .select(baseSelect.replace(", created_by", ""))
+        .order("name");
+      projects = data || projects;
+    }
+  }
+
+  state.projects = projects;
   if (state.activeProject){
     const match = state.projects.find(p => p.id === state.activeProject.id);
     state.activeProject = match || null;
+  }
+  if (!state.activeProject){
+    const preferred = state.profile?.current_project_id;
+    const match = preferred ? state.projects.find(p => p.id === preferred) : null;
+    if (match){
+      setActiveProjectById(match.id);
+    } else if (state.projects.length === 1){
+      setActiveProjectById(state.projects[0].id);
+    }
   }
   renderProjects();
   loadMessages();
@@ -5005,6 +5061,7 @@ async function loadBillingLocations(projectId){
 function setActiveProjectById(id){
   const next = state.projects.find(p => p.id === id) || null;
   state.activeProject = next;
+  saveCurrentProjectPreference(next?.id || null);
   renderProjects();
   loadProjectNodes(state.activeProject?.id || null);
   loadProjectSites(state.activeProject?.id || null);
@@ -5028,6 +5085,20 @@ function setActiveProjectById(id){
     loadDispatchTechnicians();
     loadDispatchWorkOrders();
   }
+}
+
+async function saveCurrentProjectPreference(projectId){
+  if (!state.client || !state.user || isDemo) return;
+  try{
+    const { error } = await state.client
+      .from("profiles")
+      .update({ current_project_id: projectId })
+      .eq("id", state.user.id);
+    if (!error && state.profile){
+      state.profile.current_project_id = projectId;
+      window.currentUserProfile = state.profile;
+    }
+  } catch {}
 }
 
 function canSeedDemo(){
@@ -8224,11 +8295,22 @@ async function loadProfile(){
   }
 
   // Expect a public.profiles row keyed by auth.uid()
-  const { data, error } = await state.client
+  let { data, error } = await state.client
     .from("profiles")
-    .select("role, display_name, preferred_language, is_demo")
+    .select("role, display_name, preferred_language, is_demo, current_project_id")
     .eq("id", state.user.id)
     .maybeSingle();
+
+  if (error){
+    const message = String(error.message || "").toLowerCase();
+    if (message.includes("does not exist")){
+      ({ data, error } = await state.client
+        .from("profiles")
+        .select("role, display_name")
+        .eq("id", state.user.id)
+        .maybeSingle());
+    }
+  }
 
   if (error){
     toast("Profile error", error.message);
