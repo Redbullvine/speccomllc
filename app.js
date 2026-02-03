@@ -1507,24 +1507,52 @@ async function savePreferredLanguage(lang, { closeModal = false } = {}){
     return;
   }
   if (state.profile){
-    const { error } = await state.client
-      .from("profiles")
-      .update({ preferred_language: next })
-      .eq("id", state.user.id);
-    if (error){
-      toast("Language save failed", error.message);
+    try{
+      const { error } = await state.client
+        .from("profiles")
+        .update({ preferred_language: next })
+        .eq("id", state.user.id);
+      if (error){
+        const message = String(error.message || "").toLowerCase();
+        if (error.status === 400 || message.includes("preferred_language")){
+          safeLocalStorageSet("preferred_language", next);
+          console.warn("preferred_language missing; using local fallback");
+          if (closeModal) showProfileSetupModal(false);
+          return;
+        }
+        toast("Language save failed", error.message);
+        return;
+      }
+    } catch (err){
+      console.warn("preferred_language missing; using local fallback", err);
+      safeLocalStorageSet("preferred_language", next);
+      if (closeModal) showProfileSetupModal(false);
       return;
     }
   } else {
-    const { error } = await state.client
-      .from("profiles")
-      .insert({
-        id: state.user.id,
-        display_name: state.user?.email || null,
-        preferred_language: next,
-      });
-    if (error){
-      toast("Profile needed", "Ask an Admin to create your profile. Language saved locally.");
+    try{
+      const { error } = await state.client
+        .from("profiles")
+        .insert({
+          id: state.user.id,
+          display_name: state.user?.email || null,
+          preferred_language: next,
+        });
+      if (error){
+        const message = String(error.message || "").toLowerCase();
+        if (error.status === 400 || message.includes("preferred_language")){
+          safeLocalStorageSet("preferred_language", next);
+          console.warn("preferred_language missing; using local fallback");
+          if (closeModal) showProfileSetupModal(false);
+          return;
+        }
+        toast("Profile needed", "Ask an Admin to create your profile. Language saved locally.");
+      }
+    } catch (err){
+      console.warn("preferred_language missing; using local fallback", err);
+      safeLocalStorageSet("preferred_language", next);
+      if (closeModal) showProfileSetupModal(false);
+      return;
     }
   }
   await loadProfile();
