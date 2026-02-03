@@ -3674,28 +3674,32 @@ async function loadProjects(){
   }
   const baseSelect = "id, name, description, created_at, location, job_number, is_demo, created_by";
   let projects = [];
-  let memberProjectIds = [];
 
-  const membersResp = await state.client
+  const { data: memberRows, error: memberError } = await state.client
     .from("project_members")
-    .select("project_id")
+    .select(`
+      project_id,
+      role,
+      role_code,
+      projects:project_id (
+        ${baseSelect}
+      )
+    `)
     .eq("user_id", state.user.id);
-  if (!membersResp.error){
-    memberProjectIds = (membersResp.data || []).map(r => r.project_id).filter(Boolean);
+  if (memberError){
+    toast("Projects load error", memberError.message);
+    return;
   }
-
-  if (memberProjectIds.length){
-    const { data, error } = await state.client
-      .from("projects")
-      .select(baseSelect)
-      .in("id", memberProjectIds)
-      .order("name");
-    if (error){
-      toast("Projects load error", error.message);
-      return;
-    }
-    projects = (data || []);
-  }
+  projects = (memberRows || [])
+    .map((row) => {
+      if (!row?.projects) return null;
+      return {
+        ...row.projects,
+        role: row.role || null,
+        role_code: row.role_code || null,
+      };
+    })
+    .filter(Boolean);
 
   // Fallback: include projects created by the user (legacy rows missing membership)
   const createdResp = await state.client
@@ -3733,6 +3737,8 @@ async function loadProjects(){
       setActiveProjectById(state.projects[0].id);
     }
   }
+  debugLog("Loaded projects", state.projects);
+  debugLog("Current project id", state.activeProject?.id || null);
   renderProjects();
   loadMessages();
 }
