@@ -4358,6 +4358,11 @@ async function createSiteFromPin(gps, siteName){
     });
   if (error){
     debugLog("[dropPin] rpc error", error);
+    const errorMessage = String(error.message || "").toLowerCase();
+    if (errorMessage.includes("schema cache")){
+      toast("Pin save error", "Schema cache is out of date. Refresh and try again.", "error");
+      return;
+    }
     if (isRpc404(error)){
       const fallback = await state.client
         .from("sites")
