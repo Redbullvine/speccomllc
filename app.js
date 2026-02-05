@@ -58,6 +58,7 @@ const state = {
     instance: null,
     markers: new Map(),
     userNames: new Map(),
+    dropPinMode: false,
   },
   technician: {
     timesheet: null,
@@ -336,7 +337,7 @@ const I18N = {
       pinAccuracyWarnTitle: "Low accuracy",
       pinAccuracyWarnBody: "Accuracy is low. Pin saved anyway.",
       pinDroppedTitle: "Pin saved",
-      pinDroppedBody: "Site created from GPS pin.",
+    pinDroppedBody: "Site created from map pin.",
       pinQueuedTitle: "Pin queued",
       pinQueuedBody: "Offline pin saved. Sync will run when online.",
       importLocations: "Import Locations (Excel/CSV)",
@@ -632,7 +633,7 @@ const I18N = {
       pinAccuracyWarnTitle: "Precisión baja",
       pinAccuracyWarnBody: "La precisión es baja. El pin se guardó.",
       pinDroppedTitle: "Pin guardado",
-      pinDroppedBody: "Sitio creado desde un pin GPS.",
+    pinDroppedBody: "Sitio creado desde un pin del mapa.",
       pinQueuedTitle: "Pin en cola",
       pinQueuedBody: "Pin sin conexión guardado. Se sincronizará al estar en línea.",
       importLocations: "Importar ubicaciones (Excel/CSV)",
@@ -1413,6 +1414,19 @@ function ensureMap(){
   window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors",
   }).addTo(map);
+  map.on("click", async (event) => {
+    if (!state.map.dropPinMode) return;
+    state.map.dropPinMode = false;
+    const nameInput = $("dropPinName");
+    const siteName = nameInput?.value.trim() || "";
+    const latlng = event?.latlng;
+    if (!latlng){
+      toast("Pin error", "Invalid map location.");
+      return;
+    }
+    await createSiteFromMapClick({ lat: latlng.lat, lng: latlng.lng }, siteName);
+    if (nameInput) nameInput.value = "";
+  });
   state.map.instance = map;
 }
 
@@ -4748,38 +4762,25 @@ async function dropPin(){
     toast("Project required", "Select a project to drop a pin.");
     return;
   }
-  const nameInput = $("dropPinName");
-  const siteName = nameInput?.value.trim() || "";
-  if (!siteName){
-    toast("Location name required", "Enter a name for this splice location.");
-    return;
-  }
-  const gps = await getCurrentGps();
-  if (!gps){
-    toast(t("pinMissingGps"), t("pinMissingGpsBody"));
-    return;
-  }
-  if (gps.accuracy != null && gps.accuracy > 50){
-    toast(t("pinAccuracyWarnTitle"), t("pinAccuracyWarnBody"));
-  }
-  await createSiteFromPin(gps, siteName);
-  if (nameInput) nameInput.value = "";
+  ensureMap();
+  state.map.dropPinMode = true;
+  toast("Place pin", "Click on the map to place the pin.");
 }
 
-async function createSiteFromPin(gps, siteName){
+async function createSiteFromMapClick(coords, siteName){
   ensureMap();
   if (state.map.instance){
-    state.map.instance.setView([gps.lat, gps.lng], 17);
+    state.map.instance.setView([coords.lat, coords.lng], 17);
   }
   const finalName = siteName || getNextSiteName();
-  const latNum = Number(gps.lat);
-  const lngNum = Number(gps.lng);
+  const latNum = Number(coords.lat);
+  const lngNum = Number(coords.lng);
   const payload = {
     project_id: state.activeProject?.id || null,
     name: finalName,
     gps_lat: latNum,
     gps_lng: lngNum,
-    gps_accuracy_m: gps.accuracy,
+    gps_accuracy_m: null,
     created_at: new Date().toISOString(),
   };
   if (isDemo){
