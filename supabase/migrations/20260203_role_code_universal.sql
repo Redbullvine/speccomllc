@@ -13,10 +13,9 @@ stable
 as $$
   select case p_role::text
     when 'OWNER' then 'ADMIN'
-    when 'PRIME' then 'PROJECT_MANAGER'
-    when 'SUB' then 'USER_LEVEL_II'
-    when 'SPLICER' then 'USER_LEVEL_I'
-    when 'TDS' then 'SUPPORT'
+    when 'PM' then 'PROJECT_MANAGER'
+    when 'USER1' then 'USER_LEVEL_II'
+    when 'USER2' then 'USER_LEVEL_I'
     when 'ADMIN' then 'ADMIN'
     when 'TECHNICIAN' then 'USER_LEVEL_I'
     else 'USER_LEVEL_I'

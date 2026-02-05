@@ -89,8 +89,8 @@ const state = {
     usageChannel: null,
   },
   demo: {
-    roles: ["ADMIN", "OWNER", "PRIME", "TDS", "SUB", "SPLICER", "TECHNICIAN"],
-    role: "SPLICER",
+    roles: ["ADMIN", "OWNER", "PM", "USER1", "USER2", "TECHNICIAN"],
+    role: "USER2",
     seeded: false,
     nodes: {},
     nodesList: [],
@@ -119,15 +119,14 @@ const WORK_ORDER_STATUSES = ["NEW", "ASSIGNED", "EN_ROUTE", "ON_SITE", "IN_PROGR
 
 const ROLE_CODE_MAP = {
   OWNER: "ADMIN",
-  PRIME: "PROJECT_MANAGER",
-  SUB: "USER_LEVEL_II",
-  SPLICER: "USER_LEVEL_I",
-  TDS: "SUPPORT",
   ADMIN: "ADMIN",
+  PM: "PROJECT_MANAGER",
+  USER1: "USER_LEVEL_II",
+  USER2: "USER_LEVEL_I",
   TECHNICIAN: "USER_LEVEL_I",
 };
 
-const ROLE_CODE_OPTIONS = ["ADMIN", "PROJECT_MANAGER", "USER_LEVEL_I", "USER_LEVEL_II", "SUPPORT"];
+const APP_ROLE_OPTIONS = ["OWNER", "ADMIN", "PM", "USER1", "USER2", "TECHNICIAN"];
 
 function mapLegacyRoleToCode(role){
   const key = String(role || "").toUpperCase();
@@ -140,16 +139,16 @@ function mapLegacyRoleToCode(role){
 function mapRoleCodeToLegacy(roleCode){
   switch (String(roleCode || "").toUpperCase()){
     case "ADMIN":
-      return "OWNER";
+      return "ADMIN";
     case "PROJECT_MANAGER":
-      return "PRIME";
+      return "PM";
     case "USER_LEVEL_II":
-      return "SUB";
+      return "USER1";
     case "SUPPORT":
-      return "TDS";
+      return "ADMIN";
     case "USER_LEVEL_I":
     default:
-      return "SPLICER";
+      return "USER2";
   }
 }
 
@@ -202,7 +201,7 @@ const I18N = {
     dprRefresh: "Generate / Refresh",
     dprCommentsLabel: "Comments / Needs Addressed",
     dprCommentsPlaceholder: "Anything needs addressed?",
-    dprReadOnlyNote: "Read-only access. Ask an Admin or Project Manager to update.",
+    dprReadOnlyNote: "Read-only access. Ask an Admin or PM to update.",
     dprNoProject: "Select a project to view the report.",
     dprNoMetrics: "Generate a report to see metrics.",
     dprMetricSites: "Sites created today",
@@ -340,6 +339,7 @@ const I18N = {
       pinDroppedBody: "Site created from GPS pin.",
       pinQueuedTitle: "Pin queued",
       pinQueuedBody: "Offline pin saved. Sync will run when online.",
+      importLocations: "Import Locations (Excel/CSV)",
       mediaTitle: "Media",
       mediaSubtitle: "Add images from camera or gallery.",
       addMedia: "Add media",
@@ -390,8 +390,8 @@ const I18N = {
     locked: "LOCKED",
     pricingVisible: "Pricing visible (per role)",
     pricingHiddenLabel: "Pricing hidden",
-    subInvoicesLabel: "User Level II invoices:",
-    tdsInvoicesLabel: "Support invoices:",
+    subInvoicesLabel: "USER1 invoices:",
+    tdsInvoicesLabel: "ADMIN invoices:",
     visible: "visible",
     hidden: "hidden",
     openNodeInvoices: "Open a site to see invoice actions.",
@@ -497,7 +497,7 @@ const I18N = {
     dprRefresh: "Generar / Actualizar",
     dprCommentsLabel: "Comentarios / Pendientes",
     dprCommentsPlaceholder: "Algo que necesita atencion?",
-    dprReadOnlyNote: "Solo lectura. Pide a un Admin o Project Manager que actualice.",
+    dprReadOnlyNote: "Solo lectura. Pide a un Admin o PM que actualice.",
     dprNoProject: "Selecciona un proyecto para ver el reporte.",
     dprNoMetrics: "Genera un reporte para ver metricas.",
     dprMetricSites: "Sitios creados hoy",
@@ -635,6 +635,7 @@ const I18N = {
       pinDroppedBody: "Sitio creado desde un pin GPS.",
       pinQueuedTitle: "Pin en cola",
       pinQueuedBody: "Pin sin conexión guardado. Se sincronizará al estar en línea.",
+      importLocations: "Importar ubicaciones (Excel/CSV)",
       mediaTitle: "Media",
       mediaSubtitle: "Agrega imágenes desde cámara o galería.",
       addMedia: "Agregar media",
@@ -685,8 +686,8 @@ const I18N = {
     locked: "BLOQUEADO",
     pricingVisible: "Precios visibles (según rol)",
     pricingHiddenLabel: "Precios ocultos",
-    subInvoicesLabel: "Facturas Nivel II:",
-    tdsInvoicesLabel: "Facturas Soporte:",
+    subInvoicesLabel: "Facturas USER1:",
+    tdsInvoicesLabel: "Facturas ADMIN:",
     visible: "visible",
     hidden: "oculto",
     openNodeInvoices: "Abre un sitio para ver acciones de facturación.",
@@ -804,6 +805,8 @@ function safeLocalStorageRemove(key){
   }
 }
 
+const CURRENT_PROJECT_KEY = "current_project_id";
+
 function storageOk(){
   try{
     localStorage.setItem("__t", "1");
@@ -855,6 +858,18 @@ function setPreferredLanguage(lang, { persist = true } = {}){
   }
   window.currentUserProfile = state.profile;
   applyI18n();
+}
+
+function getSavedProjectPreference(){
+  return safeLocalStorageGet(CURRENT_PROJECT_KEY);
+}
+
+function setSavedProjectPreference(projectId){
+  if (projectId){
+    safeLocalStorageSet(CURRENT_PROJECT_KEY, projectId);
+  } else {
+    safeLocalStorageRemove(CURRENT_PROJECT_KEY);
+  }
 }
 
 function t(key, vars = {}){
@@ -1593,11 +1608,16 @@ function isDemoUser(){
 
 function isBillingManager(){
   const role = getRoleCode();
-  return isPrivilegedRole(role) || role === "SUPPORT";
+  return isPrivilegedRole(role) || role === "ADMIN";
 }
 
 function isOwner(){
   return getRoleCode() === "ADMIN";
+}
+
+function isOwnerOrAdmin(){
+  const role = String(getRole() || "").toUpperCase();
+  return role === "OWNER" || role === "ADMIN";
 }
 
 function isPrivilegedRole(roleCode = getRoleCode()){
@@ -1704,9 +1724,9 @@ function updateKPI(){
   // unit alert
   if (units.allowed > 0){
     if (ratio >= 1.0){
-      toast("Units exceeded", "Used units are over the allowed units. Project Manager should review immediately.");
+      toast("Units exceeded", "Used units are over the allowed units. PM should review immediately.");
     } else if (ratio >= 0.9){
-      toast("Units nearing limit", "Used units are above 90% of allowed. Project Manager gets an alert.");
+      toast("Units nearing limit", "Used units are above 90% of allowed. PM gets an alert.");
     }
   }
 }
@@ -2461,6 +2481,39 @@ function parseCsv(text){
   return rows;
 }
 
+function normalizeImportHeader(value){
+  return String(value || "").trim().toLowerCase();
+}
+
+function findHeaderIndex(headers, names){
+  for (const name of names){
+    const idx = headers.indexOf(name);
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
+
+async function readLocationImportRows(file){
+  const name = String(file?.name || "").toLowerCase();
+  const type = String(file?.type || "").toLowerCase();
+  if (name.endsWith(".csv") || type.includes("csv")){
+    const text = await file.text();
+    return parseCsv(text);
+  }
+  if (name.endsWith(".xlsx") || type.includes("sheet") || type.includes("excel")){
+    if (!window.XLSX){
+      throw new Error("XLSX parser unavailable. Refresh and try again.");
+    }
+    const data = await file.arrayBuffer();
+    const workbook = window.XLSX.read(data, { type: "array" });
+    const sheetName = workbook.SheetNames?.[0];
+    if (!sheetName) return [];
+    const sheet = workbook.Sheets[sheetName];
+    return window.XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
+  }
+  throw new Error("Unsupported file type. Upload .csv or .xlsx.");
+}
+
 async function resolveUserIdByIdentifier(identifier){
   if (!identifier || !state.client) return null;
   const { data, error } = await state.client.rpc("fn_resolve_user_id", { identifier });
@@ -2592,6 +2645,171 @@ async function importDispatchCsv(file){
   } else {
     toast("Import complete", `Imported ${payloads.length} work orders.`);
   }
+}
+
+async function handleImportSites(projectId, file){
+  if (!file){
+    const input = $("importLocationsInput");
+    if (input){
+      input.value = "";
+      input.click();
+    }
+    return;
+  }
+  const activeProjectId = projectId || state.activeProject?.id || null;
+  if (!activeProjectId){
+    toast("Project required", "Select a project before importing.");
+    return;
+  }
+  if (!isPrivilegedRole()){
+    toast("Not allowed", "Only Admin or PM can import.");
+    return;
+  }
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
+  if (!state.session?.access_token){
+    toast("Import unavailable", "Sign in to import locations.");
+    return;
+  }
+
+  const form = new FormData();
+  form.append("project_id", activeProjectId);
+  form.append("file", file, file.name || "import.csv");
+
+  let response;
+  try{
+    response = await fetch("/.netlify/functions/import-sites", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${state.session.access_token}`,
+      },
+      body: form,
+    });
+  } catch (error){
+    reportErrorToast("Import failed", error);
+    return;
+  }
+
+  let payload = {};
+  try{
+    payload = await response.json();
+  } catch {
+    payload = {};
+  }
+
+  if (!response.ok || !payload.ok){
+    const message = payload?.error || "Import failed.";
+    toast("Import failed", message);
+    return;
+  }
+
+  toast("Import complete", `Imported ${payload.inserted_rows} sites, skipped ${payload.skipped_rows} rows.`);
+  await loadProjectSites(activeProjectId);
+}
+
+async function importLocationsFile(file){
+  if (!file) return;
+  if (!state.activeProject){
+    toast("Project required", "Select a project before importing.");
+    return;
+  }
+  if (!isPrivilegedRole()){
+    toast("Not allowed", "Only Admin or PM can import.");
+    return;
+  }
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
+  if (!state.client || !state.user){
+    toast("Import unavailable", "Sign in to import locations.");
+    return;
+  }
+  let rows = [];
+  try{
+    rows = await readLocationImportRows(file);
+  } catch (error){
+    reportErrorToast("Import failed", error);
+    return;
+  }
+  if (!rows.length){
+    toast("Import error", "No rows found.");
+    return;
+  }
+  const headers = rows[0].map(normalizeImportHeader);
+  const nameIdx = findHeaderIndex(headers, ["location_name", "name"]);
+  const latIdx = findHeaderIndex(headers, ["lat", "latitude"]);
+  const lngIdx = findHeaderIndex(headers, ["lng", "longitude"]);
+  const dropIdx = findHeaderIndex(headers, ["drop_number"]);
+  const workTypeIdx = findHeaderIndex(headers, ["work_type"]);
+  const notesIdx = findHeaderIndex(headers, ["notes"]);
+  const billingIdx = findHeaderIndex(headers, ["billing_code_default"]);
+
+  const missingHeaders = [];
+  if (latIdx < 0) missingHeaders.push("lat/latitude");
+  if (lngIdx < 0) missingHeaders.push("lng/longitude");
+  if (missingHeaders.length){
+    toast("Import error", `Missing headers: ${missingHeaders.join(", ")}`);
+    return;
+  }
+
+  const dataRows = rows.slice(1).filter((row) => row?.length && row.some(cell => String(cell || "").trim().length));
+  if (!dataRows.length){
+    toast("Import error", "No data rows found.");
+    return;
+  }
+
+  let skipped = 0;
+  const skippedRows = [];
+  const payloads = [];
+  dataRows.forEach((row, idx) => {
+    const rowNumber = idx + 2;
+    const lat = Number(String(row[latIdx] ?? "").trim());
+    const lng = Number(String(row[lngIdx] ?? "").trim());
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)){
+      skipped += 1;
+      skippedRows.push(rowNumber);
+      return;
+    }
+    const rawName = nameIdx >= 0 ? String(row[nameIdx] ?? "").trim() : "";
+    const name = rawName || `Location ${rowNumber - 1}`;
+    const payload = {
+      project_id: state.activeProject.id,
+      name,
+      gps_lat: lat,
+      gps_lng: lng,
+      created_by: state.user?.id || null,
+    };
+    const dropNumber = dropIdx >= 0 ? String(row[dropIdx] ?? "").trim() : "";
+    const workType = workTypeIdx >= 0 ? String(row[workTypeIdx] ?? "").trim() : "";
+    const notes = notesIdx >= 0 ? String(row[notesIdx] ?? "").trim() : "";
+    const billingCode = billingIdx >= 0 ? String(row[billingIdx] ?? "").trim() : "";
+    if (dropNumber) payload.drop_number = dropNumber;
+    if (workType) payload.work_type = workType;
+    if (notes) payload.notes = notes;
+    if (billingCode) payload.billing_code_default = billingCode;
+    payloads.push(payload);
+  });
+
+  if (!payloads.length){
+    toast("Import error", "No rows with valid coordinates.");
+    return;
+  }
+
+  const { error } = await state.client
+    .from("sites")
+    .insert(payloads);
+  if (error){
+    reportErrorToast("Import failed", error);
+    return;
+  }
+  await loadProjectSites(state.activeProject?.id || null);
+  if (skippedRows.length){
+    console.warn("Import skipped rows with missing/invalid coordinates:", skippedRows);
+  }
+  toast("Import complete", `Imported ${payloads.length} locations, skipped ${skipped} rows.`);
 }
 
 async function loadTechnicianTimesheet(){
@@ -3010,6 +3228,7 @@ function renderProjects(){
   renderProjectsList();
   syncDprProjectSelection();
   renderDprProjectOptions();
+  updateProjectScopedControls();
 }
 
 function renderProjectInfo(){
@@ -3027,12 +3246,18 @@ function renderProjectInfo(){
   const createdByLabel = createdBy
     ? (createdBy === state.user?.id ? "You" : String(createdBy).slice(0, 8))
     : "";
+  const canDelete = isOwnerOrAdmin();
   wrap.innerHTML = `
     <div class="project-info-row"><span class="project-info-label">Name</span><span class="project-info-value">${name}</span></div>
     ${description ? `<div class="project-info-row"><span class="project-info-label">Description</span><span class="project-info-value">${description}</span></div>` : ""}
     ${createdAt ? `<div class="project-info-row"><span class="project-info-label">Created</span><span class="project-info-value">${createdAt}</span></div>` : ""}
     ${createdByLabel ? `<div class="project-info-row"><span class="project-info-label">Created by</span><span class="project-info-value">${createdByLabel}</span></div>` : ""}
+    ${canDelete ? `<div class="row" style="margin-top:12px; justify-content:flex-end;"><button id="btnDeleteProject" class="btn danger small" type="button">Delete project</button></div>` : ""}
   `;
+  const deleteBtn = $("btnDeleteProject");
+  if (deleteBtn){
+    deleteBtn.addEventListener("click", () => openDeleteProjectModal());
+  }
 }
 
 function renderProjectsList(){
@@ -3064,6 +3289,30 @@ function renderProjectsList(){
     });
     list.appendChild(row);
   });
+}
+
+function updateProjectScopedControls(){
+  const importBtn = $("btnImportLocations");
+  const hasProject = Boolean(state.activeProject);
+  const demoLocked = isDemoUser();
+  const allowed = isPrivilegedRole();
+  if (importBtn){
+    importBtn.style.display = hasProject ? "" : "none";
+    importBtn.disabled = !allowed || demoLocked;
+    if (demoLocked){
+      importBtn.title = t("availableInProduction");
+    } else if (!allowed){
+      importBtn.title = "Admin or PM required.";
+    } else {
+      importBtn.title = "";
+    }
+  }
+
+  const canManageProjects = isOwnerOrAdmin();
+  const createBtn = $("btnProjectsCreate");
+  const emptyCreateBtn = $("btnProjectsEmptyCreate");
+  if (createBtn) createBtn.style.display = canManageProjects ? "" : "none";
+  if (emptyCreateBtn) emptyCreateBtn.style.display = canManageProjects ? "" : "none";
 }
 
 function openProjectsModal(){
@@ -3129,11 +3378,74 @@ function closeCreateProjectModal(){
   modal.style.display = "none";
 }
 
+function openDeleteProjectModal(){
+  if (!state.activeProject){
+    toast("Project required", "Select a project to delete.");
+    return;
+  }
+  if (!isOwnerOrAdmin()){
+    toast("Not allowed", "Only Owner or Admin can delete projects.");
+    return;
+  }
+  const modal = $("deleteProjectModal");
+  if (!modal) return;
+  const input = $("deleteProjectConfirm");
+  if (input) input.value = "";
+  modal.style.display = "";
+}
+
+function closeDeleteProjectModal(){
+  const modal = $("deleteProjectModal");
+  if (!modal) return;
+  modal.style.display = "none";
+}
+
+async function deleteProject(){
+  if (!state.activeProject){
+    toast("Project required", "Select a project to delete.");
+    return;
+  }
+  if (!isOwnerOrAdmin()){
+    toast("Not allowed", "Only Owner or Admin can delete projects.");
+    return;
+  }
+  if (!state.client){
+    toast("Delete failed", "Client not ready.");
+    return;
+  }
+  const confirmText = $("deleteProjectConfirm")?.value.trim();
+  if (confirmText !== "DELETE"){
+    toast("Confirmation required", "Type DELETE to confirm.");
+    return;
+  }
+
+  const projectId = state.activeProject.id;
+  const { data, error } = await state.client.rpc("fn_delete_project", { p_project_id: projectId });
+  if (error){
+    reportErrorToast("Delete failed", error);
+    return;
+  }
+  if (!data?.ok){
+    toast("Delete failed", "Delete did not complete.");
+    return;
+  }
+  state.projects = (state.projects || []).filter(p => p.id !== projectId);
+  state.activeProject = null;
+  await loadProjects();
+  closeDeleteProjectModal();
+  closeProjectsModal();
+  toast("Project deleted", "Project deleted.");
+}
+
 async function createProject(){
   const name = $("createProjectName")?.value.trim();
   const description = $("createProjectDescription")?.value.trim() || null;
   if (!name){
     toast("Project name required", "Enter a project name.");
+    return;
+  }
+  if (!isOwnerOrAdmin()){
+    toast("Not allowed", "Only Owner or Admin can create projects.");
     return;
   }
   if (isDemo){
@@ -3372,7 +3684,7 @@ async function loadDailyProgressReport(){
 
 async function generateDailyProgressReport(){
   if (!isPrivilegedRole()){
-    toast("Not allowed", "Admin or Project Manager required.");
+    toast("Not allowed", "Admin or PM required.");
     return;
   }
   const projectId = state.dpr.projectId;
@@ -3436,7 +3748,7 @@ async function generateDailyProgressReport(){
 
 async function saveDailyProgressComments(){
   if (!isPrivilegedRole()){
-    toast("Not allowed", "Admin or Project Manager required.");
+    toast("Not allowed", "Admin or PM required.");
     return;
   }
   if (!state.dpr.reportId){
@@ -3729,7 +4041,7 @@ async function loadProjects(){
     state.activeProject = match || null;
   }
   if (!state.activeProject){
-    const preferred = state.profile?.current_project_id;
+    const preferred = state.profile?.current_project_id || getSavedProjectPreference();
     const match = preferred ? state.projects.find(p => p.id === preferred) : null;
     if (match){
       setActiveProjectById(match.id);
@@ -3799,9 +4111,9 @@ function renderAdminProfiles(){
               <input class="input compact" data-field="display_name" data-id="${row.id}" value="${escapeHtml(row.display_name || "")}" />
             </td>
             <td>
-              <select class="input compact" data-field="role_code" data-id="${row.id}">
-                ${ROLE_CODE_OPTIONS.map(role => `
-                  <option value="${role}" ${String(row.role_code || mapLegacyRoleToCode(row.role)) === role ? "selected" : ""}>${formatRoleLabel(role)}</option>
+              <select class="input compact" data-field="role" data-id="${row.id}">
+                ${APP_ROLE_OPTIONS.map(role => `
+                  <option value="${role}" ${String(row.role || "").toUpperCase() === role ? "selected" : ""}>${formatRoleLabel(role)}</option>
                 `).join("")}
               </select>
             </td>
@@ -3830,8 +4142,8 @@ async function createAdminProfile(){
   }
   const userId = $("adminUserId")?.value.trim();
   const email = $("adminUserEmail")?.value.trim();
-  const roleCode = $("adminUserRole")?.value || "USER_LEVEL_I";
-  const legacyRole = mapRoleCodeToLegacy(roleCode);
+  const nextRole = $("adminUserRole")?.value || "USER2";
+  const nextRoleCode = mapLegacyRoleToCode(nextRole);
   if (!userId){
     toast("User id required", "Enter the auth user id (UUID).");
     return;
@@ -3845,8 +4157,8 @@ async function createAdminProfile(){
     .insert({
       id: userId,
       display_name: email || null,
-      role: legacyRole,
-      role_code: roleCode,
+      role: nextRole,
+      role_code: nextRoleCode,
     });
   if (error){
     toast("Create failed", error.message);
@@ -3867,11 +4179,11 @@ async function updateAdminProfile(userId){
     toast("Not allowed", "Admin role required.");
     return;
   }
-  const roleEl = document.querySelector(`[data-field="role_code"][data-id="${userId}"]`);
+  const roleEl = document.querySelector(`[data-field="role"][data-id="${userId}"]`);
   const nameEl = document.querySelector(`[data-field="display_name"][data-id="${userId}"]`);
   if (!roleEl || !nameEl) return;
-  const nextRoleCode = roleEl.value;
-  const nextLegacyRole = mapRoleCodeToLegacy(nextRoleCode);
+  const nextRole = roleEl.value;
+  const nextRoleCode = mapLegacyRoleToCode(nextRole);
   const nextName = String(nameEl.value || "").trim();
   if (isDemo){
     toast("Demo disabled", "Profiles are not available in demo mode.");
@@ -3879,7 +4191,7 @@ async function updateAdminProfile(userId){
   }
   const { error } = await state.client
     .from("profiles")
-    .update({ role: nextLegacyRole, role_code: nextRoleCode, display_name: nextName || null })
+    .update({ role: nextRole, role_code: nextRoleCode, display_name: nextName || null })
     .eq("id", userId);
   if (error){
     toast("Update failed", error.message);
@@ -4665,7 +4977,7 @@ async function completeNode(nodeId){
   const roleCode = getRoleCode();
   const canComplete = BUILD_MODE ? (roleCode === "ADMIN" || roleCode === "PROJECT_MANAGER") : (roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN");
   if (!canComplete){
-    toast("Not allowed", "Only Admin or Project Manager can complete a site.");
+    toast("Not allowed", "Only Admin or PM can complete a site.");
     return;
   }
   if (!state.activeNode || state.activeNode.node_number !== node.node_number){
@@ -5170,6 +5482,7 @@ function setActiveProjectById(id){
 }
 
 async function saveCurrentProjectPreference(projectId){
+  setSavedProjectPreference(projectId);
   if (!state.client || !state.user || isDemo) return;
   try{
     const { error } = await state.client
@@ -6493,7 +6806,7 @@ function renderInvoicePanel(){
   const node = state.activeNode;
 
   const canSeeSubInvoices = (roleCode === "PROJECT_MANAGER" || roleCode === "USER_LEVEL_II" || roleCode === "ADMIN");
-  const canSeeTdsInvoices = (roleCode === "SUPPORT" || roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN");
+  const canSeeTdsInvoices = (roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN");
   const canSeeAnyPricing = roleCode !== "USER_LEVEL_I";
 
   let html = "";
@@ -6529,7 +6842,7 @@ function renderInvoicePanel(){
       html += `<table class="table">
         <thead><tr><th>${t("fromLabel")}</th><th>${t("toLabel")}</th><th>${t("statusLabel")}</th><th>${t("amountLabel")}</th></tr></thead><tbody>
         ${invoices.map(inv => {
-          const showAmount = canSeeAnyPricing && ( (inv.from === "SUB" && canSeeSubInvoices) || (inv.to === "SUB" && canSeeSubInvoices) || (inv.to === "TDS" && canSeeTdsInvoices) || (inv.from === "TDS" && canSeeTdsInvoices) );
+          const showAmount = canSeeAnyPricing && ( (inv.from === "USER1" && canSeeSubInvoices) || (inv.to === "USER1" && canSeeSubInvoices) || (inv.to === "ADMIN" && canSeeTdsInvoices) || (inv.from === "ADMIN" && canSeeTdsInvoices) );
           const amt = showAmount ? "$1,234.00 (demo)" : t("hidden");
           const fromLabel = formatRoleLabel(mapLegacyRoleToCode(inv.from));
           const toLabel = formatRoleLabel(mapLegacyRoleToCode(inv.to));
@@ -6547,8 +6860,8 @@ function renderInvoicePanel(){
 
   if (canSeeSubInvoices){
     sub.forEach(inv => rows.push({
-      from: "SUB",
-      to: "PRIME",
+      from: "USER1",
+      to: "PM",
       status: inv.status || "Draft",
       amount: inv.total,
       number: inv.invoice_number || "-",
@@ -6556,8 +6869,8 @@ function renderInvoicePanel(){
   }
   if (canSeeTdsInvoices){
     prime.forEach(inv => rows.push({
-      from: "PRIME",
-      to: "TDS",
+      from: "PM",
+      to: "ADMIN",
       status: inv.status || "Draft",
       amount: inv.total,
       number: inv.invoice_number || "-",
@@ -7414,7 +7727,7 @@ function updateAlertsBadge(){
   if (badge){
     badge.textContent = canSeeAlerts
       ? (count ? `${count} alert${count > 1 ? "s" : ""}` : "No alerts")
-      : "Alerts for Project Managers only";
+      : "Alerts for PMs only";
     badge.classList.toggle("warn", count > 0 && canSeeAlerts);
   }
   const navBadge = $("alertsNavBadge");
@@ -7500,7 +7813,7 @@ function renderAlerts(){
           </div>
         `;
       }).join("")
-    : `<div class="muted small">${canSeeAlerts ? "No alerts right now." : "Alerts are available to Admin / Project Manager."}</div>`;
+    : `<div class="muted small">${canSeeAlerts ? "No alerts right now." : "Alerts are available to Admin / PM."}</div>`;
   targets.forEach((el) => {
     el.innerHTML = html;
   });
@@ -7905,11 +8218,11 @@ async function openNode(nodeNumber){
     updateKPI();
     renderNodeCards();
 
-    // Project Manager alert when near units
+    // PM alert when near units
     if (roleCode === "PROJECT_MANAGER" && state.activeNode.units_allowed > 0){
       const ratio = state.activeNode.units_used / state.activeNode.units_allowed;
       if (ratio >= 0.9){
-        toast("Project Manager alert", "Units are close to the allowed threshold for this site.");
+        toast("PM alert", "Units are close to the allowed threshold for this site.");
       }
     }
     return;
@@ -8074,7 +8387,7 @@ async function createNode(nodeNumber){
       units_used: 0,
       splice_locations: [],
       inventory_checks: [
-        { id:`inv-${Date.now()}-1`, item_code:"HAFO(OFDC-B8G)", item_name:"TDS Millennium example", photo:"./assets/millennium_example.png", qty_used: 1, planned_qty: 8, completed:false },
+        { id:`inv-${Date.now()}-1`, item_code:"HAFO(OFDC-B8G)", item_name:"ADMIN Millennium example", photo:"./assets/millennium_example.png", qty_used: 1, planned_qty: 8, completed:false },
       ],
       ready_for_billing: false,
     };
@@ -8183,11 +8496,11 @@ async function createInvoice(){
   // Minimal demo invoice routing
   const legacyRole = mapRoleCodeToLegacy(roleCode);
   let to = null;
-  if (legacyRole === "SUB") to = "PRIME";
-  else if (legacyRole === "PRIME") to = "TDS";
-  else if (legacyRole === "OWNER") to = "PRIME";
-  else if (legacyRole === "TDS") to = "OWNER";
-  else to = "PRIME";
+  if (legacyRole === "USER1") to = "PM";
+  else if (legacyRole === "PM") to = "ADMIN";
+  else if (legacyRole === "OWNER") to = "PM";
+  else if (legacyRole === "ADMIN") to = "OWNER";
+  else to = "PM";
 
   if (isDemo){
     state.demo.invoices.push({
@@ -8203,7 +8516,7 @@ async function createInvoice(){
     return;
   }
 
-  if (legacyRole === "SUB"){
+  if (legacyRole === "USER1"){
     const { error } = await state.client
       .from("sub_invoices")
       .insert({ node_id: node.id, status: "Draft" });
@@ -8211,7 +8524,7 @@ async function createInvoice(){
       toast("Invoice error", error.message);
       return;
     }
-  } else if (legacyRole === "PRIME" || legacyRole === "OWNER"){
+  } else if (legacyRole === "PM" || legacyRole === "OWNER" || legacyRole === "ADMIN"){
     const { error } = await state.client
       .from("prime_invoices")
       .insert({ node_id: node.id, status: "Draft" });
@@ -8687,6 +9000,7 @@ function wireUI(){
       clearProof();
       return;
     }
+    setSavedProjectPreference(null);
     await state.client.auth.signOut();
   });
 
@@ -8846,6 +9160,14 @@ function wireUI(){
   if (createProjectSaveBtn){
     createProjectSaveBtn.addEventListener("click", () => createProject());
   }
+  const deleteProjectCancelBtn = $("btnDeleteProjectCancel");
+  if (deleteProjectCancelBtn){
+    deleteProjectCancelBtn.addEventListener("click", () => closeDeleteProjectModal());
+  }
+  const deleteProjectConfirmBtn = $("btnDeleteProjectConfirm");
+  if (deleteProjectConfirmBtn){
+    deleteProjectConfirmBtn.addEventListener("click", () => deleteProject());
+  }
   const dprProjectSelect = $("dprProjectSelect");
   if (dprProjectSelect){
     dprProjectSelect.addEventListener("change", () => loadDailyProgressReport());
@@ -8901,6 +9223,18 @@ function wireUI(){
   const dropPinBtn = $("btnDropPin");
   if (dropPinBtn){
     dropPinBtn.addEventListener("click", () => dropPin());
+  }
+  const importLocationsBtn = $("btnImportLocations");
+  const importLocationsInput = $("importLocationsInput");
+  if (importLocationsBtn && importLocationsInput){
+    importLocationsBtn.addEventListener("click", () => {
+      handleImportSites(state.activeProject?.id || null);
+    });
+    importLocationsInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0] || null;
+      await handleImportSites(state.activeProject?.id || null, file);
+      e.target.value = "";
+    });
   }
   const siteList = $("siteList");
   if (siteList){

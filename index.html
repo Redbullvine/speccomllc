@@ -347,6 +347,8 @@
               <div class="row map-controls">
                 <input id="dropPinName" class="input compact" placeholder="Site name" data-i18n-placeholder="dropPinNamePlaceholder" />
                 <button id="btnDropPin" class="btn" data-action="dropPin" data-i18n="dropPin">Drop Pin</button>
+                <button id="btnImportLocations" class="btn secondary" type="button" data-i18n="importLocations">Import Locations (Excel/CSV)</button>
+                <input id="importLocationsInput" type="file" accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none;" />
               </div>
             </div>
             <div class="map-layout">
@@ -469,11 +471,12 @@
                 <input id="adminUserId" class="input" placeholder="Auth user id (UUID)" data-i18n-placeholder="adminUserIdPlaceholder" />
                 <input id="adminUserEmail" class="input" placeholder="Email or display name" data-i18n-placeholder="adminUserEmailPlaceholder" />
                 <select id="adminUserRole" class="input" style="min-width:180px;">
+                  <option value="OWNER">Owner</option>
                   <option value="ADMIN">Admin</option>
-                  <option value="PROJECT_MANAGER">Project Manager</option>
-                  <option value="USER_LEVEL_I">User Level I</option>
-                  <option value="USER_LEVEL_II">User Level II</option>
-                  <option value="SUPPORT">Support</option>
+                  <option value="PM">PM</option>
+                  <option value="USER1">User1</option>
+                  <option value="USER2">User2</option>
+                  <option value="TECHNICIAN">Technician</option>
                 </select>
                 <button id="btnAdminCreateUser" class="btn secondary" data-action="adminCreateUser" data-i18n="createProfile">Create profile</button>
               </div>
@@ -552,6 +555,20 @@
             <button id="btnCreateProjectSave" class="btn" type="button">Create</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <div id="deleteProjectModal" class="modal" style="display:none;">
+      <div class="card modal-card">
+        <h2>Delete project</h2>
+        <div class="muted small">Type DELETE to confirm. This permanently removes project data.</div>
+        <div class="field-stack" style="margin-top:12px;">
+          <input id="deleteProjectConfirm" class="input" placeholder="Type DELETE to confirm" autocomplete="off" />
+        </div>
+        <div class="row" style="margin-top:12px; justify-content:flex-end;">
+          <button id="btnDeleteProjectCancel" class="btn ghost" type="button">Cancel</button>
+          <button id="btnDeleteProjectConfirm" class="btn danger" type="button">Delete project</button>
+        </div>
       </div>
     </div>
 
@@ -690,6 +707,7 @@
   <script src="./env.generated.js"></script>
   <script src="./env.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script type="module" src="./supabaseClient.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
