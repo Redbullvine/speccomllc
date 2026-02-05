@@ -1,0 +1,10 @@
+{
+  "name": "speccom",
+  "private": true,
+  "dependencies": {
+    "@supabase/supabase-js": "^2.48.1",
+    "busboy": "^1.6.0",
+    "csv-parse": "^5.5.3",
+    "xlsx": "^0.18.5"
+  }
+}
