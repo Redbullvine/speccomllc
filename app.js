@@ -90,6 +90,7 @@ const state = {
     dropPinMode: false,
     pinTargetSiteId: null,
     pendingMarker: null,
+    pendingLatLng: null,
   },
   technician: {
     timesheet: null,
@@ -1593,24 +1594,22 @@ function ensureMap(){
   window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors",
   }).addTo(map);
+  window.__speccomMap = map;
   map.on("click", async (event) => {
-    if (!state.map.dropPinMode) return;
-    state.map.dropPinMode = false;
-    const targetSiteId = state.map.pinTargetSiteId;
-    state.map.pinTargetSiteId = null;
-    const nameInput = $("dropPinName");
-    const siteName = nameInput?.value.trim() || "";
     const latlng = event?.latlng;
     if (!latlng){
       toast("Pin error", "Invalid map location.");
       return;
     }
+    state.map.pendingLatLng = { lat: latlng.lat, lng: latlng.lng };
+    console.log("[map click]", latlng.lat, latlng.lng);
     showPendingPinMarker(latlng);
+    if (!state.map.dropPinMode) return;
+    state.map.dropPinMode = false;
+    const targetSiteId = state.map.pinTargetSiteId;
+    state.map.pinTargetSiteId = null;
     if (targetSiteId){
       await updateSiteLocationFromMapClick(targetSiteId, { lat: latlng.lat, lng: latlng.lng });
-    } else {
-      await createSiteFromMapClick({ lat: latlng.lat, lng: latlng.lng }, siteName);
-      if (nameInput) nameInput.value = "";
     }
   });
   state.map.instance = map;
@@ -4971,19 +4970,36 @@ async function dropPin(){
     return;
   }
   ensureMap();
-  state.map.dropPinMode = true;
-  state.map.pinTargetSiteId = null;
-  toast("Place pin", "Click on the map to place the pin.");
+  const pendingLatLng = state.map.pendingLatLng;
+  if (!pendingLatLng){
+    toast("Pin required", "Click the map to choose a location first.");
+    return;
+  }
+  const lat = Number(pendingLatLng.lat);
+  const lng = Number(pendingLatLng.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)){
+    toast("Pin required", "Click the map to choose a location first.");
+    return;
+  }
+  const siteName = $("dropPinName")?.value.trim() || "";
+  await createSiteFromMapClick({ lat, lng }, siteName);
+  const nameInput = $("dropPinName");
+  if (nameInput) nameInput.value = "";
 }
 
 async function createSiteFromMapClick(coords, siteName){
   ensureMap();
-  if (state.map.instance){
-    state.map.instance.setView([coords.lat, coords.lng], 17);
-  }
-  const finalName = String(siteName || "").trim() || "Pinned site";
   const latNum = Number(coords.lat);
   const lngNum = Number(coords.lng);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)){
+    toast("Pin error", "Invalid map coordinates.");
+    clearPendingPinMarker();
+    return;
+  }
+  if (state.map.instance){
+    state.map.instance.setView([latNum, lngNum], 17);
+  }
+  const finalName = String(siteName || "").trim() || "Pinned site";
   const payload = {
     project_id: state.activeProject?.id || null,
     name: finalName,

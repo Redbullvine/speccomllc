@@ -449,6 +449,10 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
   border-radius:16px;
   border:1px solid var(--line);
   overflow:hidden;
+  pointer-events:auto;
+}
+.leaflet-container{
+  pointer-events:auto;
 }
 .map-controls{
   gap:14px;
