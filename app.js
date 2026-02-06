@@ -60,6 +60,7 @@ const state = {
     userNames: new Map(),
     dropPinMode: false,
     pinTargetSiteId: null,
+    pendingMarker: null,
   },
   technician: {
     timesheet: null,
@@ -1407,6 +1408,122 @@ function stopLocationPolling(){
   }
 }
 
+const SITE_SELECT_COLUMNS = "id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, lat, lng, created_at";
+const SITE_SELECT_COLUMNS_GPS_ONLY = "id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at";
+const SITE_SELECT_COLUMNS_LEGACY_ONLY = "id, project_id, name, notes, lat, lng, created_at";
+
+function isMissingColumnError(error, column){
+  const message = String(error?.message || "").toLowerCase();
+  const col = String(column || "").toLowerCase();
+  if (!message) return false;
+  return message.includes("column") && message.includes(col) && (message.includes("does not exist") || message.includes("unknown column"));
+}
+
+function isMissingGpsColumnError(error){
+  return ["gps_lat", "gps_lng", "gps_accuracy_m"].some((col) => isMissingColumnError(error, col));
+}
+
+function isMissingLatLngColumnError(error){
+  return ["lat", "lng"].some((col) => isMissingColumnError(error, col));
+}
+
+function isRlsError(error){
+  const message = String(error?.message || "").toLowerCase();
+  return error?.code === "42501"
+    || message.includes("row-level security")
+    || message.includes("rls")
+    || message.includes("permission denied");
+}
+
+function appendRlsHint(message, error){
+  if (!isRlsError(error)) return message;
+  return `${message} Save blocked by database security (RLS). Ask admin to allow inserts on sites.`;
+}
+
+function reportPinErrorToast(title, error){
+  const base = getErrorMessage(error);
+  toast(title, appendRlsHint(base, error), "error");
+  console.error(error);
+}
+
+function stripGpsFields(payload){
+  const { gps_lat, gps_lng, gps_accuracy_m, ...rest } = payload || {};
+  return rest;
+}
+
+async function fetchSiteById(siteId){
+  if (!siteId) return { data: null, error: null };
+  let res = await state.client
+    .from("sites")
+    .select(SITE_SELECT_COLUMNS)
+    .eq("id", siteId)
+    .single();
+  if (!res.error) return res;
+  if (isMissingGpsColumnError(res.error)){
+    return await state.client
+      .from("sites")
+      .select(SITE_SELECT_COLUMNS_LEGACY_ONLY)
+      .eq("id", siteId)
+      .single();
+  }
+  if (isMissingLatLngColumnError(res.error)){
+    return await state.client
+      .from("sites")
+      .select(SITE_SELECT_COLUMNS_GPS_ONLY)
+      .eq("id", siteId)
+      .single();
+  }
+  return res;
+}
+
+async function fetchSitesByProject(projectId){
+  let res = await state.client
+    .from("sites")
+    .select(SITE_SELECT_COLUMNS)
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: true });
+  if (!res.error) return res;
+  if (isMissingGpsColumnError(res.error)){
+    return await state.client
+      .from("sites")
+      .select(SITE_SELECT_COLUMNS_LEGACY_ONLY)
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: true });
+  }
+  if (isMissingLatLngColumnError(res.error)){
+    return await state.client
+      .from("sites")
+      .select(SITE_SELECT_COLUMNS_GPS_ONLY)
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: true });
+  }
+  return res;
+}
+
+function clearPendingPinMarker(){
+  if (!state.map.pendingMarker || !state.map.instance) return;
+  try{
+    state.map.instance.removeLayer(state.map.pendingMarker);
+  } catch {}
+  state.map.pendingMarker = null;
+}
+
+function showPendingPinMarker(latlng){
+  ensureMap();
+  if (!state.map.instance || !window.L || !latlng) return;
+  clearPendingPinMarker();
+  const coords = [latlng.lat, latlng.lng];
+  const marker = window.L.circleMarker(coords, {
+    radius: 8,
+    color: "#ef4444",
+    fillColor: "#ef4444",
+    fillOpacity: 0.9,
+    weight: 2,
+  });
+  marker.addTo(state.map.instance);
+  state.map.pendingMarker = marker;
+}
+
 function ensureMap(){
   if (state.map.instance || !window.L) return;
   const mapEl = $("liveMap");
@@ -1427,6 +1544,7 @@ function ensureMap(){
       toast("Pin error", "Invalid map location.");
       return;
     }
+    showPendingPinMarker(latlng);
     if (targetSiteId){
       await updateSiteLocationFromMapClick(targetSiteId, { lat: latlng.lat, lng: latlng.lng });
     } else {
@@ -1453,10 +1571,21 @@ function updateMapMarkers(rows){
   const markers = state.map.markers;
   const seen = new Set();
   rows.forEach((row) => {
-    if (row.gps_lat == null || row.gps_lng == null) return;
+    const lat = row.gps_lat ?? row.lat;
+    const lng = row.gps_lng ?? row.lng;
+    if (lat == null || lng == null){
+      debugLog("[map] missing coordinates", row);
+      return;
+    }
+    const latNum = Number(lat);
+    const lngNum = Number(lng);
+    if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)){
+      debugLog("[map] invalid coordinates", row);
+      return;
+    }
     const id = row.id;
     if (!id) return;
-    const coords = [row.gps_lat, row.gps_lng];
+    const coords = [latNum, lngNum];
     let marker = markers.get(id);
     const color = row.is_pending ? "#f59e0b" : "#2f6feb";
     if (!marker){
@@ -4321,11 +4450,7 @@ async function loadProjectSites(projectId){
     renderSiteList();
     return;
   }
-  const { data, error } = await state.client
-    .from("sites")
-    .select("id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at")
-    .eq("project_id", projectId)
-    .order("created_at", { ascending: true });
+  const { data, error } = await fetchSitesByProject(projectId);
   if (error){
     toast("Sites load error", error.message);
     return;
@@ -4804,115 +4929,154 @@ async function createSiteFromMapClick(coords, siteName){
     gps_accuracy_m: null,
     created_at: new Date().toISOString(),
   };
-  if (isDemo){
-    const demoSite = { id: `demo-site-${Date.now()}`, ...payload };
-    state.demo.sites = state.demo.sites || [];
-    state.demo.sites.push(demoSite);
-    state.projectSites = state.demo.sites.filter((row) => row.project_id === payload.project_id);
-    renderSiteList();
-    updateMapMarkers(getVisibleSites());
-    await setActiveSite(demoSite.id);
-    toast(t("pinDroppedTitle"), t("pinDroppedBody"));
-    return;
-  }
-
-  if (!navigator.onLine || !state.client){
-    const pending = {
-      id: `pending-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      ...payload,
-    };
-    state.pendingSites = loadPendingSitesFromStorage();
-    state.pendingSites.push(pending);
-    savePendingSitesToStorage(state.pendingSites);
-    renderSiteList();
-    updateMapMarkers(getVisibleSites());
-    await setActiveSite(pending.id);
-    toast(t("pinQueuedTitle"), t("pinQueuedBody"));
-    return;
-  }
-
-  let createdSite = null;
-  let { data: siteId, error } = await state.client
-    .rpc("fn_create_site_pin", {
-      p_project_id: state.activeProject?.id || null,
-      p_lat: latNum,
-      p_lng: lngNum,
-    });
-  if (error){
-    debugLog("[dropPin] rpc error", error);
-    const errorMessage = String(error.message || "").toLowerCase();
-    if (errorMessage.includes("schema cache")){
-      toast("Pin save error", "Schema cache is out of date. Refresh and try again.", "error");
-      return;
-    }
-    if (isRpc404(error)){
-      const fallback = await state.client
-        .from("sites")
-        .insert({ ...payload, created_by: state.user?.id || null })
-        .select("id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at")
-        .single();
-      if (fallback.error){
-        debugLog("[dropPin] fallback error", fallback.error);
-        reportErrorToast("Pin save error", fallback.error);
-        return;
-      }
-      createdSite = fallback.data || null;
-      siteId = createdSite?.id || null;
-    } else {
-      reportErrorToast("Pin save error", error);
-      return;
-    }
-  }
-  if (siteId){
-    if (!createdSite){
-      const { data } = await state.client
-        .from("sites")
-        .select("id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at")
-        .eq("id", siteId)
-        .single();
-      createdSite = data || null;
-    }
-    if (createdSite){
-      state.projectSites = (state.projectSites || []).filter((row) => row.id !== createdSite.id).concat(createdSite);
+  try{
+    if (isDemo){
+      const demoSite = { id: `demo-site-${Date.now()}`, ...payload };
+      state.demo.sites = state.demo.sites || [];
+      state.demo.sites.push(demoSite);
+      state.projectSites = state.demo.sites.filter((row) => row.project_id === payload.project_id);
       renderSiteList();
       updateMapMarkers(getVisibleSites());
-      await setActiveSite(createdSite.id);
-    } else {
-      await loadProjectSites(state.activeProject?.id || null);
-      await setActiveSite(siteId);
+      await setActiveSite(demoSite.id);
+      toast(t("pinDroppedTitle"), t("pinDroppedBody"));
+      return;
     }
+
+    if (!navigator.onLine || !state.client){
+      const pending = {
+        id: `pending-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        ...payload,
+      };
+      state.pendingSites = loadPendingSitesFromStorage();
+      state.pendingSites.push(pending);
+      savePendingSitesToStorage(state.pendingSites);
+      renderSiteList();
+      updateMapMarkers(getVisibleSites());
+      await setActiveSite(pending.id);
+      toast(t("pinQueuedTitle"), t("pinQueuedBody"));
+      return;
+    }
+
+    let createdSite = null;
+    let siteId = null;
+    const rpcRes = await state.client
+      .rpc("fn_create_site_pin", {
+        p_project_id: state.activeProject?.id || null,
+        p_lat: latNum,
+        p_lng: lngNum,
+      });
+    if (rpcRes.error){
+      debugLog("[dropPin] rpc error", rpcRes.error);
+      const errorMessage = String(rpcRes.error.message || "").toLowerCase();
+      if (errorMessage.includes("schema cache")){
+        console.error(rpcRes.error);
+        toast("Pin save error", "Schema cache is out of date. Refresh and try again.", "error");
+        return;
+      }
+      if (isRpc404(rpcRes.error) || isMissingGpsColumnError(rpcRes.error)){
+        const basePayload = { ...payload, created_by: state.user?.id || null };
+        let fallback = await state.client
+          .from("sites")
+          .insert(basePayload)
+          .select("id")
+          .single();
+        if (fallback.error && isMissingGpsColumnError(fallback.error)){
+          fallback = await state.client
+            .from("sites")
+            .insert(stripGpsFields(basePayload))
+            .select("id")
+            .single();
+        }
+        if (fallback.error){
+          debugLog("[dropPin] fallback error", fallback.error);
+          reportPinErrorToast("Pin save error", fallback.error);
+          return;
+        }
+        siteId = fallback.data?.id || null;
+      } else {
+        reportPinErrorToast("Pin save error", rpcRes.error);
+        return;
+      }
+    } else {
+      siteId = rpcRes.data || null;
+    }
+
+    if (siteId){
+      const siteRes = await fetchSiteById(siteId);
+      if (siteRes.error){
+        reportPinErrorToast("Pin save error", siteRes.error);
+        return;
+      }
+      createdSite = siteRes.data || null;
+    }
+
+    if (siteId){
+      if (createdSite){
+        state.projectSites = (state.projectSites || []).filter((row) => row.id !== createdSite.id).concat(createdSite);
+        renderSiteList();
+        updateMapMarkers(getVisibleSites());
+        await setActiveSite(createdSite.id);
+      } else {
+        await loadProjectSites(state.activeProject?.id || null);
+        await setActiveSite(siteId);
+      }
+    }
+    toast(t("pinDroppedTitle"), t("pinDroppedBody"));
+  } finally {
+    clearPendingPinMarker();
   }
-  toast(t("pinDroppedTitle"), t("pinDroppedBody"));
 }
 
 async function updateSiteLocationFromMapClick(siteId, coords){
-  if (!siteId) return;
+  if (!siteId){
+    clearPendingPinMarker();
+    return;
+  }
   if (!state.client){
     toast("Pin update error", "Client not ready.");
+    clearPendingPinMarker();
     return;
   }
   const latNum = Number(coords.lat);
   const lngNum = Number(coords.lng);
   if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)){
     toast("Pin update error", "Invalid coordinates.");
+    clearPendingPinMarker();
     return;
   }
-  const { data, error } = await state.client
-    .from("sites")
-    .update({ gps_lat: latNum, gps_lng: lngNum, lat: latNum, lng: lngNum })
-    .eq("id", siteId)
-    .select("id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at")
-    .single();
-  if (error){
-    reportErrorToast("Pin update error", error);
-    return;
+  try{
+    let res = await state.client
+      .from("sites")
+      .update({ gps_lat: latNum, gps_lng: lngNum, lat: latNum, lng: lngNum })
+      .eq("id", siteId)
+      .select("id")
+      .single();
+    if (res.error && isMissingGpsColumnError(res.error)){
+      res = await state.client
+        .from("sites")
+        .update({ lat: latNum, lng: lngNum })
+        .eq("id", siteId)
+        .select("id")
+        .single();
+    }
+    if (res.error){
+      reportPinErrorToast("Pin update error", res.error);
+      return;
+    }
+    const siteRes = await fetchSiteById(siteId);
+    if (siteRes.error){
+      reportPinErrorToast("Pin update error", siteRes.error);
+      return;
+    }
+    if (siteRes.data){
+      state.projectSites = (state.projectSites || []).filter((row) => row.id !== siteRes.data.id).concat(siteRes.data);
+      updateMapMarkers(getVisibleSites());
+      await setActiveSite(siteRes.data.id);
+    }
+    toast("Pin updated", "Location updated.");
+  } finally {
+    clearPendingPinMarker();
   }
-  if (data){
-    state.projectSites = (state.projectSites || []).filter((row) => row.id !== data.id).concat(data);
-    updateMapMarkers(getVisibleSites());
-    await setActiveSite(data.id);
-  }
-  toast("Pin updated", "Location updated.");
 }
 
 async function syncPendingSites(){
@@ -4922,20 +5086,32 @@ async function syncPendingSites(){
   const remaining = [];
   for (const site of pending){
     const { id, is_pending, ...payload } = site;
-    const { data, error } = await state.client
+    let insertRes = await state.client
       .from("sites")
       .insert(payload)
-      .select("id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at")
+      .select("id")
       .single();
-    if (error || !data){
+    if (insertRes.error && isMissingGpsColumnError(insertRes.error)){
+      insertRes = await state.client
+        .from("sites")
+        .insert(stripGpsFields(payload))
+        .select("id")
+        .single();
+    }
+    if (insertRes.error || !insertRes.data?.id){
+      remaining.push(site);
+      continue;
+    }
+    const siteRes = await fetchSiteById(insertRes.data.id);
+    if (siteRes.error || !siteRes.data){
       remaining.push(site);
       continue;
     }
     if (state.activeSite?.id === site.id){
-      state.activeSite = data;
+      state.activeSite = siteRes.data;
     }
-    if (data.project_id === state.activeProject?.id){
-      state.projectSites = (state.projectSites || []).concat(data);
+    if (siteRes.data.project_id === state.activeProject?.id){
+      state.projectSites = (state.projectSites || []).concat(siteRes.data);
     }
   }
   state.pendingSites = remaining;
