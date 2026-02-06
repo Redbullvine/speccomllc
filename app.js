@@ -134,6 +134,11 @@ const state = {
   storageWarningShown: false,
   messagesEnabled: true,
   messagesDisabledReason: null,
+  features: {
+    messages: true,
+    labor: true,
+    dispatch: true,
+  },
   realtime: {
     usageChannel: null,
   },
@@ -1344,14 +1349,16 @@ function setActiveView(viewId){
     loadAdminProfiles();
   }
   if (viewId === "viewTechnician"){
-    loadTechnicianTimesheet();
+    if (state.features.labor) loadTechnicianTimesheet();
   }
   if (viewId === "viewDispatch"){
-    loadDispatchTechnicians();
-    loadDispatchWorkOrders();
+    if (state.features.dispatch){
+      loadDispatchTechnicians();
+      loadDispatchWorkOrders();
+    }
   }
   if (viewId === "viewLabor"){
-    loadLaborRows();
+    if (state.features.labor) loadLaborRows();
   }
   if (viewId === "viewMap"){
     ensureMap();
@@ -1473,6 +1480,14 @@ function isMissingGpsColumnError(error){
 
 function isMissingLatLngColumnError(error){
   return ["lat", "lng"].some((col) => isMissingColumnError(error, col));
+}
+
+function isMissingTable(err){
+  const message = String((err && (err.message || err.details || err.hint)) || "");
+  return (err && err.status === 404)
+    || message.includes("Could not find the table")
+    || message.includes("schema cache")
+    || message.includes("Not Found");
 }
 
 function isRlsError(error){
@@ -2311,6 +2326,11 @@ function renderTechnicianWorkOrders(){
 }
 
 async function loadAssignedWorkOrders(){
+  if (!state.features.dispatch){
+    state.workOrders.assigned = [];
+    renderTechnicianWorkOrders();
+    return;
+  }
   if (!isTechnician()){
     state.workOrders.assigned = [];
     renderTechnicianWorkOrders();
@@ -2337,6 +2357,12 @@ async function loadAssignedWorkOrders(){
     .order("scheduled_start", { ascending: true, nullsFirst: true })
     .order("priority", { ascending: true });
   if (error){
+    if (isMissingTable(error)){
+      state.features.dispatch = false;
+      state.workOrders.assigned = [];
+      renderTechnicianWorkOrders();
+      return;
+    }
     toast("Work orders load error", error.message);
     return;
   }
@@ -2409,6 +2435,7 @@ async function completeWorkOrder(workOrderId, notes = null){
 
 async function loadDispatchTechnicians(){
   const select = $("dispatchAssignUser");
+  if (!state.features.dispatch) return;
   if (!canViewDispatch() || !state.activeProject || !state.client || isDemo){
     state.workOrders.technicians = [];
     if (select) select.innerHTML = `<option value="">Unassigned</option>`;
@@ -2456,6 +2483,11 @@ function syncDispatchStatusFilter(){
 async function loadDispatchWorkOrders(){
   const wrap = $("dispatchTable");
   if (!wrap) return;
+  if (!state.features.dispatch){
+    state.workOrders.dispatch = [];
+    renderDispatchTable();
+    return;
+  }
   if (!canViewDispatch()){
     state.workOrders.dispatch = [];
     renderDispatchTable();
@@ -2493,6 +2525,12 @@ async function loadDispatchWorkOrders(){
     .order("scheduled_start", { ascending: true, nullsFirst: true })
     .order("priority", { ascending: true });
   if (error){
+    if (isMissingTable(error)){
+      state.features.dispatch = false;
+      state.workOrders.dispatch = [];
+      renderDispatchTable();
+      return;
+    }
     toast("Dispatch load error", error.message);
     return;
   }
@@ -3051,6 +3089,7 @@ async function importLocationsFile(file){
 }
 
 async function loadTechnicianTimesheet(){
+  if (!state.features.labor) return;
   if (!isTechnician()){
     state.technician.timesheet = null;
     state.technician.events = [];
@@ -3074,6 +3113,14 @@ async function loadTechnicianTimesheet(){
     .order("created_at", { ascending: false })
     .limit(1);
   if (error){
+    if (isMissingTable(error)){
+      state.features.labor = false;
+      state.technician.timesheet = null;
+      state.technician.events = [];
+      state.technician.activeEvent = null;
+      renderTechnicianDashboard();
+      return;
+    }
     toast("Timesheet load error", error.message);
     return;
   }
@@ -3176,6 +3223,11 @@ async function endTechnicianTimesheet(){
 async function loadLaborRows(){
   const wrap = $("laborTable");
   if (!wrap) return;
+  if (!state.features.labor){
+    state.labor.rows = [];
+    renderLaborTable();
+    return;
+  }
   if (!canViewLabor()){
     state.labor.rows = [];
     renderLaborTable();
@@ -3198,6 +3250,12 @@ async function loadLaborRows(){
     .order("work_date", { ascending: false })
     .order("created_at", { ascending: false });
   if (error){
+    if (isMissingTable(error)){
+      state.features.labor = false;
+      state.labor.rows = [];
+      renderLaborTable();
+      return;
+    }
     toast("Labor load error", error.message);
     return;
   }
@@ -3318,7 +3376,7 @@ function setWhoami(){
     if (el) el.style.display = authed ? "" : "none";
   });
   const messagesBtn = $("btnMessages");
-  if (messagesBtn) messagesBtn.style.display = authed && state.messagesEnabled ? "" : "none";
+  if (messagesBtn) messagesBtn.style.display = authed && state.messagesEnabled && state.features.messages ? "" : "none";
   updateMessagesBadge();
   setDemoBadge();
 }
@@ -3567,10 +3625,7 @@ function closeProjectsModal(){
 }
 
 function openMessagesModal(){
-  if (!state.messagesEnabled){
-    toast("Messages", "Messages module not installed yet.", "error");
-    return;
-  }
+  if (!state.features.messages || !state.messagesEnabled) return;
   const modal = $("messagesModal");
   if (!modal) return;
   loadMessages().then(() => {
@@ -4078,7 +4133,7 @@ function markMessagesRead(){
 }
 
 async function loadMessages(){
-  if (!state.messagesEnabled) return;
+  if (!state.messagesEnabled || !state.features.messages) return;
   if (!state.storageAvailable && !isDemo) return;
   if (isDemo){
     const projectId = state.activeProject?.id || null;
@@ -4105,19 +4160,9 @@ async function loadMessages(){
   }
   const { data, error } = await query;
   if (error){
-    const errorMessage = String(error.message || "").toLowerCase();
-    const status = Number(error.status || 0);
-    const code = String(error.code || "");
-    const missingTable = errorMessage.includes("public.messages")
-      || errorMessage.includes("relation") && errorMessage.includes("does not exist")
-      || errorMessage.includes("column") && errorMessage.includes("does not exist")
-      || errorMessage.includes("schema cache")
-      || errorMessage.includes("not found")
-      || code === "42P01"
-      || status === 404;
-    if (missingTable){
+    if (isMissingTable(error)){
+      state.features.messages = false;
       disableMessagesModule("missing_table");
-      toast("Messages", "Messages module not installed yet.", "error");
       return;
     }
     toast("Messages load error", error.message);
@@ -4302,7 +4347,6 @@ async function loadProjects(){
   debugLog("Loaded projects", state.projects);
   debugLog("Current project id", state.activeProject?.id || null);
   renderProjects();
-  loadMessages();
 }
 
 async function loadAdminProfiles(){
@@ -5827,7 +5871,6 @@ function setActiveProjectById(id){
   renderProjects();
   loadProjectNodes(state.activeProject?.id || null);
   loadProjectSites(state.activeProject?.id || null);
-  loadMessages();
   state.activeSite = null;
   renderSitePanel();
   loadRateCards(state.activeProject?.id || null);
@@ -5837,13 +5880,14 @@ function setActiveProjectById(id){
   state.billingInvoice = null;
   state.billingItems = [];
   renderBillingDetail();
-  if (isTechnician()){
+  const activeViewId = document.querySelector(".view.active")?.id || null;
+  if (activeViewId === "viewTechnician" && state.features.labor){
     loadTechnicianTimesheet();
   }
-  if (canViewLabor()){
+  if (activeViewId === "viewLabor" && state.features.labor){
     loadLaborRows();
   }
-  if (canViewDispatch()){
+  if (activeViewId === "viewDispatch" && state.features.dispatch){
     loadDispatchTechnicians();
     loadDispatchWorkOrders();
   }
@@ -8968,8 +9012,6 @@ async function initAuth(){
     setProofStatus();
       renderCatalogResults("catalogResults", "");
       renderCatalogResults("catalogResultsQuick", "");
-      loadTechnicianTimesheet();
-      loadLaborRows();
       setActiveView(getDefaultView());
       return;
     }
@@ -8995,17 +9037,11 @@ async function initAuth(){
         await loadLocationProofRequirements(state.activeProject?.id || null);
         await loadBillingLocations(state.activeProject?.id || null);
         await loadMaterialCatalog();
-      if (canViewDispatch()){
-        await loadDispatchTechnicians();
-        await loadDispatchWorkOrders();
-      }
       await loadAlerts();
       renderAlerts();
       renderCatalogResults("catalogResults", "");
         renderCatalogResults("catalogResultsQuick", "");
         renderBillingLocations();
-        loadTechnicianTimesheet();
-        loadLaborRows();
         setActiveView(getDefaultView());
         startLocationPolling();
         syncPendingSites();
@@ -9035,17 +9071,11 @@ async function initAuth(){
       await loadLocationProofRequirements(state.activeProject?.id || null);
       await loadBillingLocations(state.activeProject?.id || null);
       await loadMaterialCatalog();
-    if (canViewDispatch()){
-      await loadDispatchTechnicians();
-      await loadDispatchWorkOrders();
-    }
     await loadAlerts();
     renderAlerts();
     renderCatalogResults("catalogResults", "");
       renderCatalogResults("catalogResultsQuick", "");
       renderBillingLocations();
-      loadTechnicianTimesheet();
-      loadLaborRows();
       setActiveView(getDefaultView());
       startLocationPolling();
       syncPendingSites();
