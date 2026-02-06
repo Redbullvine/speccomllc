@@ -59,6 +59,7 @@ const state = {
     markers: new Map(),
     userNames: new Map(),
     dropPinMode: false,
+    pinTargetSiteId: null,
   },
   technician: {
     timesheet: null,
@@ -1417,6 +1418,8 @@ function ensureMap(){
   map.on("click", async (event) => {
     if (!state.map.dropPinMode) return;
     state.map.dropPinMode = false;
+    const targetSiteId = state.map.pinTargetSiteId;
+    state.map.pinTargetSiteId = null;
     const nameInput = $("dropPinName");
     const siteName = nameInput?.value.trim() || "";
     const latlng = event?.latlng;
@@ -1424,8 +1427,12 @@ function ensureMap(){
       toast("Pin error", "Invalid map location.");
       return;
     }
-    await createSiteFromMapClick({ lat: latlng.lat, lng: latlng.lng }, siteName);
-    if (nameInput) nameInput.value = "";
+    if (targetSiteId){
+      await updateSiteLocationFromMapClick(targetSiteId, { lat: latlng.lat, lng: latlng.lng });
+    } else {
+      await createSiteFromMapClick({ lat: latlng.lat, lng: latlng.lng }, siteName);
+      if (nameInput) nameInput.value = "";
+    }
   });
   state.map.instance = map;
 }
@@ -4412,6 +4419,7 @@ function renderSitePanel(){
   const saveCodesBtn = $("btnSaveCodes");
   const addEntryBtn = $("btnAddEntry");
   const saveNotesBtn = $("btnSaveNotes");
+  const editLocationBtn = $("btnEditSiteLocation");
 
   const site = state.activeSite;
   const isPending = Boolean(site?.is_pending);
@@ -4436,10 +4444,20 @@ function renderSitePanel(){
   if (saveCodesBtn) saveCodesBtn.disabled = disabled;
   if (addEntryBtn) addEntryBtn.disabled = disabled;
   if (saveNotesBtn) saveNotesBtn.disabled = disabled;
+  if (editLocationBtn) editLocationBtn.disabled = disabled;
 
   if (codesInput) codesInput.value = (state.siteCodes || []).map((row) => row.code).join(", ");
   if (notesInput) notesInput.value = site?.notes || "";
   if (siteNameInput) siteNameInput.value = site?.name || "";
+  if (editLocationBtn){
+    editLocationBtn.onclick = () => {
+      if (!site || isPending) return;
+      ensureMap();
+      state.map.dropPinMode = true;
+      state.map.pinTargetSiteId = site.id;
+      toast("Move pin", "Click on the map to update this pin.");
+    };
+  }
 
   if (mediaGallery){
     if (!site){
@@ -4764,6 +4782,7 @@ async function dropPin(){
   }
   ensureMap();
   state.map.dropPinMode = true;
+  state.map.pinTargetSiteId = null;
   toast("Place pin", "Click on the map to place the pin.");
 }
 
@@ -4780,6 +4799,8 @@ async function createSiteFromMapClick(coords, siteName){
     name: finalName,
     gps_lat: latNum,
     gps_lng: lngNum,
+    lat: latNum,
+    lng: lngNum,
     gps_accuracy_m: null,
     created_at: new Date().toISOString(),
   };
@@ -4810,6 +4831,7 @@ async function createSiteFromMapClick(coords, siteName){
     return;
   }
 
+  let createdSite = null;
   let { data: siteId, error } = await state.client
     .rpc("fn_create_site_pin", {
       p_project_id: state.activeProject?.id || null,
@@ -4827,33 +4849,70 @@ async function createSiteFromMapClick(coords, siteName){
       const fallback = await state.client
         .from("sites")
         .insert({ ...payload, created_by: state.user?.id || null })
-        .select("id")
+        .select("id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at")
         .single();
       if (fallback.error){
         debugLog("[dropPin] fallback error", fallback.error);
         reportErrorToast("Pin save error", fallback.error);
         return;
       }
-      siteId = fallback.data?.id || null;
+      createdSite = fallback.data || null;
+      siteId = createdSite?.id || null;
     } else {
       reportErrorToast("Pin save error", error);
       return;
     }
   }
-  if (siteId && finalName){
-    const { error: nameErr } = await state.client
-      .from("sites")
-      .update({ name: finalName })
-      .eq("id", siteId);
-    if (nameErr){
-      toast("Site name update failed", nameErr.message);
+  if (siteId){
+    if (!createdSite){
+      const { data } = await state.client
+        .from("sites")
+        .select("id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at")
+        .eq("id", siteId)
+        .single();
+      createdSite = data || null;
+    }
+    if (createdSite){
+      state.projectSites = (state.projectSites || []).filter((row) => row.id !== createdSite.id).concat(createdSite);
+      renderSiteList();
+      updateMapMarkers(getVisibleSites());
+      await setActiveSite(createdSite.id);
+    } else {
+      await loadProjectSites(state.activeProject?.id || null);
+      await setActiveSite(siteId);
     }
   }
-  await loadProjectSites(state.activeProject?.id || null);
-  if (siteId){
-    await setActiveSite(siteId);
-  }
   toast(t("pinDroppedTitle"), t("pinDroppedBody"));
+}
+
+async function updateSiteLocationFromMapClick(siteId, coords){
+  if (!siteId) return;
+  if (!state.client){
+    toast("Pin update error", "Client not ready.");
+    return;
+  }
+  const latNum = Number(coords.lat);
+  const lngNum = Number(coords.lng);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)){
+    toast("Pin update error", "Invalid coordinates.");
+    return;
+  }
+  const { data, error } = await state.client
+    .from("sites")
+    .update({ gps_lat: latNum, gps_lng: lngNum, lat: latNum, lng: lngNum })
+    .eq("id", siteId)
+    .select("id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at")
+    .single();
+  if (error){
+    reportErrorToast("Pin update error", error);
+    return;
+  }
+  if (data){
+    state.projectSites = (state.projectSites || []).filter((row) => row.id !== data.id).concat(data);
+    updateMapMarkers(getVisibleSites());
+    await setActiveSite(data.id);
+  }
+  toast("Pin updated", "Location updated.");
 }
 
 async function syncPendingSites(){
