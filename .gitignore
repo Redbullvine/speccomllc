@@ -3,3 +3,8 @@
 .# Supabase temp artifacts
 supabase/.temp/
 supabase/.temp/**
+
+# generated/local artifacts
+env_generated.js
+mapboard.*
+

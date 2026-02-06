@@ -2,6 +2,35 @@ import { appMode, hasSupabaseConfig, isDemo, makeClient } from "./supabaseClient
 
 const $ = (id) => document.getElementById(id);
 
+const ROLES = {
+  OWNER: "OWNER",
+  ADMIN: "ADMIN",
+  PROJECT_MANAGER: "PROJECT_MANAGER",
+  USER_LEVEL_1: "USER_LEVEL_1",
+  USER_LEVEL_2: "USER_LEVEL_2",
+  SUPPORT: "SUPPORT",
+};
+
+const ROLE_LABELS = {
+  [ROLES.OWNER]: "Owner",
+  [ROLES.ADMIN]: "Admin",
+  [ROLES.PROJECT_MANAGER]: "Project Manager",
+  [ROLES.USER_LEVEL_1]: "User Level 1",
+  [ROLES.USER_LEVEL_2]: "User Level 2",
+  [ROLES.SUPPORT]: "Support",
+};
+
+const ROLE_SET = new Set(Object.values(ROLES));
+const APP_ROLE_OPTIONS = [
+  ROLES.OWNER,
+  ROLES.ADMIN,
+  ROLES.PROJECT_MANAGER,
+  ROLES.USER_LEVEL_1,
+  ROLES.USER_LEVEL_2,
+  ROLES.SUPPORT,
+];
+const DEFAULT_ROLE = ROLES.USER_LEVEL_1;
+
 const state = {
   client: null,
   session: null,
@@ -92,8 +121,8 @@ const state = {
     usageChannel: null,
   },
   demo: {
-    roles: ["ADMIN", "OWNER", "PM", "USER1", "USER2", "TECHNICIAN"],
-    role: "USER2",
+    roles: APP_ROLE_OPTIONS.slice(),
+    role: DEFAULT_ROLE,
     seeded: false,
     nodes: {},
     nodesList: [],
@@ -120,50 +149,21 @@ const state = {
 const WORK_ORDER_TYPES = ["INSTALL", "TROUBLE_TICKET", "MAINTENANCE", "SURVEY"];
 const WORK_ORDER_STATUSES = ["NEW", "ASSIGNED", "EN_ROUTE", "ON_SITE", "IN_PROGRESS", "BLOCKED", "COMPLETE", "CANCELED"];
 
-const ROLE_CODE_MAP = {
-  OWNER: "ADMIN",
-  ADMIN: "ADMIN",
-  PM: "PROJECT_MANAGER",
-  USER1: "USER_LEVEL_II",
-  USER2: "USER_LEVEL_I",
-  TECHNICIAN: "USER_LEVEL_I",
-};
-
-const APP_ROLE_OPTIONS = ["OWNER", "ADMIN", "PM", "USER1", "USER2", "TECHNICIAN"];
-
-function mapLegacyRoleToCode(role){
+function normalizeRole(role){
   const key = String(role || "").toUpperCase();
-  if (["ADMIN","PROJECT_MANAGER","USER_LEVEL_I","USER_LEVEL_II","SUPPORT"].includes(key)){
-    return key;
-  }
-  return ROLE_CODE_MAP[key] || "USER_LEVEL_I";
-}
-
-function mapRoleCodeToLegacy(roleCode){
-  switch (String(roleCode || "").toUpperCase()){
-    case "ADMIN":
-      return "ADMIN";
-    case "PROJECT_MANAGER":
-      return "PM";
-    case "USER_LEVEL_II":
-      return "USER1";
-    case "SUPPORT":
-      return "ADMIN";
-    case "USER_LEVEL_I":
-    default:
-      return "USER2";
-  }
+  return ROLE_SET.has(key) ? key : DEFAULT_ROLE;
 }
 
 function getRoleCode(member = state.profile){
-  if (member?.role_code) return member.role_code;
-  if (member?.role) return mapLegacyRoleToCode(member.role);
-  if (isDemo) return mapLegacyRoleToCode(state.demo.role);
-  return "USER_LEVEL_I";
+  if (member?.role_code) return normalizeRole(member.role_code);
+  if (member?.role) return normalizeRole(member.role);
+  if (isDemo) return normalizeRole(state.demo.role);
+  return DEFAULT_ROLE;
 }
 
 function formatRoleLabel(roleCode){
-  return String(roleCode || "").replace(/_/g, " ");
+  const normalized = normalizeRole(roleCode);
+  return ROLE_LABELS[normalized] || normalized.replace(/_/g, " ");
 }
 
 const I18N = {
@@ -204,7 +204,7 @@ const I18N = {
     dprRefresh: "Generate / Refresh",
     dprCommentsLabel: "Comments / Needs Addressed",
     dprCommentsPlaceholder: "Anything needs addressed?",
-    dprReadOnlyNote: "Read-only access. Ask an Admin or PM to update.",
+    dprReadOnlyNote: "Read-only access. Ask an Admin or Project Manager to update.",
     dprNoProject: "Select a project to view the report.",
     dprNoMetrics: "Generate a report to see metrics.",
     dprMetricSites: "Sites created today",
@@ -284,7 +284,7 @@ const I18N = {
     kpiNode: "Site",
     kpiCompletion: "Completion",
     kpiUnits: "Units",
-    pricingHidden: "Pricing hidden for User Level I",
+    pricingHidden: "Pricing hidden for User Level 1",
     alertsTitle: "Alerts",
     allowedQuantitiesTitle: "Allowed quantities",
     catalogQuickSearchTitle: "Catalog quick search",
@@ -393,7 +393,7 @@ const I18N = {
     locked: "LOCKED",
     pricingVisible: "Pricing visible (per role)",
     pricingHiddenLabel: "Pricing hidden",
-    subInvoicesLabel: "USER1 invoices:",
+    subInvoicesLabel: "User Level 1 invoices:",
     tdsInvoicesLabel: "ADMIN invoices:",
     visible: "visible",
     hidden: "hidden",
@@ -454,7 +454,7 @@ const I18N = {
     signedInDemo: "Signed in (Demo: {role})",
     signOut: "Sign out",
     roleLabel: "Role",
-    pricingHiddenSplicer: "Pricing hidden (User Level I view)",
+    pricingHiddenSplicer: "Pricing hidden (User Level 1 view)",
     pricingProtected: "Pricing protected by role",
     gpsMissing: "No GPS",
     gpsMissingBody: "This browser/device doesn't support geolocation.",
@@ -500,7 +500,7 @@ const I18N = {
     dprRefresh: "Generar / Actualizar",
     dprCommentsLabel: "Comentarios / Pendientes",
     dprCommentsPlaceholder: "Algo que necesita atencion?",
-    dprReadOnlyNote: "Solo lectura. Pide a un Admin o PM que actualice.",
+    dprReadOnlyNote: "Solo lectura. Pide a un Admin o Project Manager que actualice.",
     dprNoProject: "Selecciona un proyecto para ver el reporte.",
     dprNoMetrics: "Genera un reporte para ver metricas.",
     dprMetricSites: "Sitios creados hoy",
@@ -689,7 +689,7 @@ const I18N = {
     locked: "BLOQUEADO",
     pricingVisible: "Precios visibles (según rol)",
     pricingHiddenLabel: "Precios ocultos",
-    subInvoicesLabel: "Facturas USER1:",
+    subInvoicesLabel: "Facturas User Level 1:",
     tdsInvoicesLabel: "Facturas ADMIN:",
     visible: "visible",
     hidden: "oculto",
@@ -1009,7 +1009,7 @@ async function hydrateTranslations(root = document){
   }
 }
 
-const DEBUG = Boolean(window.DEBUG);
+const DEBUG = Boolean(window.DEBUG) || new URLSearchParams(window.location.search).get("debug") === "1";
 
 function debugLog(label, payload){
   if (!DEBUG) return;
@@ -1451,7 +1451,7 @@ function isRlsError(error){
 
 function appendRlsHint(message, error){
   if (!isRlsError(error)) return message;
-  return `${message} Save blocked by database security (RLS). Ask admin to allow inserts on sites.`;
+  return `${message} Save blocked by database security (RLS). Ask Admin to allow inserts/updates on sites for project members.`;
 }
 
 function reportPinErrorToast(title, error){
@@ -1756,6 +1756,8 @@ async function savePreferredLanguage(lang, { closeModal = false } = {}){
           id: state.user.id,
           display_name: state.user?.email || null,
           preferred_language: next,
+          role: DEFAULT_ROLE,
+          role_code: DEFAULT_ROLE,
         });
       if (error){
         const message = String(error.message || "").toLowerCase();
@@ -1803,7 +1805,7 @@ function refreshLanguageSensitiveUI(){
 }
 
 function getRole(){
-  return state.profile?.role || state.demo.role;
+  return getRoleCode();
 }
 
 function isDemoUser(){
@@ -1812,24 +1814,24 @@ function isDemoUser(){
 
 function isBillingManager(){
   const role = getRoleCode();
-  return isPrivilegedRole(role) || role === "ADMIN";
+  return isPrivilegedRole(role) || role === ROLES.ADMIN;
 }
 
 function isOwner(){
-  return getRoleCode() === "ADMIN";
+  return getRoleCode() === ROLES.OWNER;
 }
 
 function isOwnerOrAdmin(){
-  const role = String(getRole() || "").toUpperCase();
-  return role === "OWNER" || role === "ADMIN";
+  const role = getRoleCode();
+  return role === ROLES.OWNER || role === ROLES.ADMIN;
 }
 
 function isPrivilegedRole(roleCode = getRoleCode()){
-  return roleCode === "ADMIN" || roleCode === "PROJECT_MANAGER";
+  return roleCode === ROLES.ADMIN || roleCode === ROLES.PROJECT_MANAGER || roleCode === ROLES.OWNER;
 }
 
-function isTechnician(){
-  return getRole() === "TECHNICIAN";
+function isFieldRole(roleCode = getRoleCode()){
+  return roleCode === ROLES.USER_LEVEL_1 || roleCode === ROLES.USER_LEVEL_2 || roleCode === ROLES.SUPPORT;
 }
 
 function canViewLabor(){
@@ -1845,7 +1847,7 @@ function getDefaultView(){
 }
 
 function isViewAllowed(viewId){
-  if (isTechnician()){
+  if (isFieldRole()){
     return ["viewTechnician", "viewMap", "viewSettings", "viewDailyReport"].includes(viewId);
   }
   if (viewId === "viewTechnician") return false;
@@ -1928,9 +1930,9 @@ function updateKPI(){
   // unit alert
   if (units.allowed > 0){
     if (ratio >= 1.0){
-      toast("Units exceeded", "Used units are over the allowed units. PM should review immediately.");
+      toast("Units exceeded", "Used units are over the allowed units. Project Manager should review immediately.");
     } else if (ratio >= 0.9){
-      toast("Units nearing limit", "Used units are above 90% of allowed. PM gets an alert.");
+      toast("Units nearing limit", "Used units are above 90% of allowed. Project Manager gets an alert.");
     }
   }
 }
@@ -1973,7 +1975,7 @@ function setRoleUI(){
   }
 
   // Pricing visibility notice
-  const pricingHidden = roleCode === "USER_LEVEL_I";
+  const pricingHidden = roleCode === ROLES.USER_LEVEL_1;
   const pricingChip = $("chipPricing");
   if (pricingChip){
     pricingChip.style.display = "none";
@@ -2382,9 +2384,9 @@ async function loadDispatchTechnicians(){
   }
   const { data, error } = await state.client
     .from("project_members")
-    .select("user_id, role")
+    .select("user_id, role_code")
     .eq("project_id", state.activeProject.id)
-    .eq("role", "TECHNICIAN");
+    .in("role_code", [ROLES.USER_LEVEL_1, ROLES.USER_LEVEL_2]);
   if (error){
     toast("Technicians load error", error.message);
     return;
@@ -2866,7 +2868,7 @@ async function handleImportSites(projectId, file){
     return;
   }
   if (!isPrivilegedRole()){
-    toast("Not allowed", "Only Admin or PM can import.");
+    toast("Not allowed", "Only Admin or Project Manager can import.");
     return;
   }
   if (isDemoUser()){
@@ -2920,7 +2922,7 @@ async function importLocationsFile(file){
     return;
   }
   if (!isPrivilegedRole()){
-    toast("Not allowed", "Only Admin or PM can import.");
+    toast("Not allowed", "Only Admin or Project Manager can import.");
     return;
   }
   if (isDemoUser()){
@@ -3506,7 +3508,7 @@ function updateProjectScopedControls(){
     if (demoLocked){
       importBtn.title = t("availableInProduction");
     } else if (!allowed){
-      importBtn.title = "Admin or PM required.";
+      importBtn.title = "Admin or Project Manager required.";
     } else {
       importBtn.title = "";
     }
@@ -3735,7 +3737,7 @@ async function ensureProjectMembership(projectId){
   if (!state.client || !state.user || !projectId) return;
   const { error } = await state.client
     .from("project_members")
-    .insert({ project_id: projectId, user_id: state.user.id, role: "OWNER", role_code: "ADMIN" });
+    .insert({ project_id: projectId, user_id: state.user.id, role: ROLES.OWNER, role_code: ROLES.OWNER });
   if (error){
     const message = String(error.message || "").toLowerCase();
     if (message.includes("duplicate") || message.includes("exists") || message.includes("does not exist")) return;
@@ -3888,7 +3890,7 @@ async function loadDailyProgressReport(){
 
 async function generateDailyProgressReport(){
   if (!isPrivilegedRole()){
-    toast("Not allowed", "Admin or PM required.");
+    toast("Not allowed", "Admin or Project Manager required.");
     return;
   }
   const projectId = state.dpr.projectId;
@@ -3952,7 +3954,7 @@ async function generateDailyProgressReport(){
 
 async function saveDailyProgressComments(){
   if (!isPrivilegedRole()){
-    toast("Not allowed", "Admin or PM required.");
+    toast("Not allowed", "Admin or Project Manager required.");
     return;
   }
   if (!state.dpr.reportId){
@@ -4057,19 +4059,31 @@ async function loadMessages(){
     updateMessagesBadge();
     return;
   }
+  const activeProjectId = typeof state.activeProject?.id === "string" && state.activeProject.id.trim()
+    ? state.activeProject.id.trim()
+    : null;
   let query = state.client
     .from("messages")
-    .select("id, project_id, sender_id, message_text, created_at")
+    .select("id, project_id, sender_id, recipient_id, body, priority, is_read, created_at")
     .order("created_at", { ascending: false });
-  if (state.activeProject?.id){
-    query = query.or(`project_id.eq.${state.activeProject.id},project_id.is.null`);
+  if (activeProjectId){
+    query = query.or(`project_id.eq.${activeProjectId},project_id.is.null`);
   } else {
     query = query.is("project_id", null);
   }
   const { data, error } = await query;
   if (error){
     const errorMessage = String(error.message || "").toLowerCase();
-    if (errorMessage.includes("public.messages") && errorMessage.includes("schema cache")){
+    const status = Number(error.status || 0);
+    const code = String(error.code || "");
+    const missingTable = errorMessage.includes("public.messages")
+      || errorMessage.includes("relation") && errorMessage.includes("does not exist")
+      || errorMessage.includes("column") && errorMessage.includes("does not exist")
+      || errorMessage.includes("schema cache")
+      || errorMessage.includes("not found")
+      || code === "42P01"
+      || status === 404;
+    if (missingTable){
       disableMessagesModule("missing_table");
       toast("Messages", "Messages module not installed yet.", "error");
       return;
@@ -4114,7 +4128,7 @@ function renderMessages(){
       : (msg.sender_id ? String(msg.sender_id).slice(0, 8) : t("messageSenderUnknown"));
     const time = msg.created_at ? new Date(msg.created_at).toLocaleString() : "";
     const scopeLabel = msg.project_id ? "" : t("globalLabel");
-    const body = escapeHtml(msg.message_text || "").replace(/\n/g, "<br>");
+    const body = escapeHtml(msg.body || "").replace(/\n/g, "<br>");
     const metaParts = [scopeLabel, sender, time].filter(Boolean);
     return `
       <div class="message-card">
@@ -4142,7 +4156,7 @@ async function sendMessage(){
       id: `demo-message-${Date.now()}`,
       project_id: projectId,
       sender_id: state.user?.id || "demo-user",
-      message_text: text,
+      body: text,
       created_at: new Date().toISOString(),
     };
     state.demo.messages = state.demo.messages || [];
@@ -4160,7 +4174,7 @@ async function sendMessage(){
   const payload = {
     project_id: state.activeProject?.id || null,
     sender_id: state.user.id,
-    message_text: text,
+    body: text,
   };
   const { error } = await state.client
     .from("messages")
@@ -4346,8 +4360,8 @@ async function createAdminProfile(){
   }
   const userId = $("adminUserId")?.value.trim();
   const email = $("adminUserEmail")?.value.trim();
-  const nextRole = $("adminUserRole")?.value || "USER2";
-  const nextRoleCode = mapLegacyRoleToCode(nextRole);
+  const nextRole = $("adminUserRole")?.value || DEFAULT_ROLE;
+  const nextRoleCode = normalizeRole(nextRole);
   if (!userId){
     toast("User id required", "Enter the auth user id (UUID).");
     return;
@@ -4387,7 +4401,7 @@ async function updateAdminProfile(userId){
   const nameEl = document.querySelector(`[data-field="display_name"][data-id="${userId}"]`);
   if (!roleEl || !nameEl) return;
   const nextRole = roleEl.value;
-  const nextRoleCode = mapLegacyRoleToCode(nextRole);
+  const nextRoleCode = normalizeRole(nextRole);
   const nextName = String(nameEl.value || "").trim();
   if (isDemo){
     toast("Demo disabled", "Profiles are not available in demo mode.");
@@ -4975,8 +4989,6 @@ async function createSiteFromMapClick(coords, siteName){
     name: finalName,
     gps_lat: latNum,
     gps_lng: lngNum,
-    lat: latNum,
-    lng: lngNum,
     gps_accuracy_m: null,
     created_at: new Date().toISOString(),
   };
@@ -5034,7 +5046,7 @@ async function createSiteFromMapClick(coords, siteName){
         if (fallback.error && isMissingGpsColumnError(fallback.error)){
           fallback = await state.client
             .from("sites")
-            .insert(stripGpsFields(basePayload))
+            .insert({ ...stripGpsFields(basePayload), lat: latNum, lng: lngNum })
             .select("id")
             .single();
         }
@@ -5053,6 +5065,16 @@ async function createSiteFromMapClick(coords, siteName){
     }
 
     if (siteId){
+      if (finalName){
+        const nameUpdate = await state.client
+          .from("sites")
+          .update({ name: finalName })
+          .eq("id", siteId);
+        if (nameUpdate.error){
+          reportPinErrorToast("Pin save error", nameUpdate.error);
+          return;
+        }
+      }
       const siteRes = await fetchSiteById(siteId);
       if (siteRes.error){
         reportPinErrorToast("Pin save error", siteRes.error);
@@ -5098,7 +5120,7 @@ async function updateSiteLocationFromMapClick(siteId, coords){
   try{
     let res = await state.client
       .from("sites")
-      .update({ gps_lat: latNum, gps_lng: lngNum, lat: latNum, lng: lngNum })
+      .update({ gps_lat: latNum, gps_lng: lngNum })
       .eq("id", siteId)
       .select("id")
       .single();
@@ -5137,15 +5159,25 @@ async function syncPendingSites(){
   const remaining = [];
   for (const site of pending){
     const { id, is_pending, ...payload } = site;
+    const gpsPayload = { ...payload };
+    delete gpsPayload.lat;
+    delete gpsPayload.lng;
+    delete gpsPayload.latitude;
+    delete gpsPayload.longitude;
     let insertRes = await state.client
       .from("sites")
-      .insert(payload)
+      .insert(gpsPayload)
       .select("id")
       .single();
     if (insertRes.error && isMissingGpsColumnError(insertRes.error)){
+      const legacyPayload = {
+        ...stripGpsFields(payload),
+        lat: payload.gps_lat ?? payload.lat ?? payload.latitude ?? null,
+        lng: payload.gps_lng ?? payload.lng ?? payload.longitude ?? null,
+      };
       insertRes = await state.client
         .from("sites")
-        .insert(stripGpsFields(payload))
+        .insert(legacyPayload)
         .select("id")
         .single();
     }
@@ -5264,7 +5296,7 @@ async function completeNode(nodeId){
   const roleCode = getRoleCode();
   const canComplete = BUILD_MODE ? (roleCode === "ADMIN" || roleCode === "PROJECT_MANAGER") : (roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN");
   if (!canComplete){
-    toast("Not allowed", "Only Admin or PM can complete a site.");
+    toast("Not allowed", "Only Admin or Project Manager can complete a site.");
     return;
   }
   if (!state.activeNode || state.activeNode.node_number !== node.node_number){
@@ -7092,9 +7124,9 @@ function renderInvoicePanel(){
   const roleCode = getRoleCode();
   const node = state.activeNode;
 
-  const canSeeSubInvoices = (roleCode === "PROJECT_MANAGER" || roleCode === "USER_LEVEL_II" || roleCode === "ADMIN");
-  const canSeeTdsInvoices = (roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN");
-  const canSeeAnyPricing = roleCode !== "USER_LEVEL_I";
+  const canSeeSubInvoices = (roleCode === ROLES.PROJECT_MANAGER || roleCode === ROLES.USER_LEVEL_2 || roleCode === ROLES.ADMIN || roleCode === ROLES.OWNER);
+  const canSeeTdsInvoices = (roleCode === ROLES.PROJECT_MANAGER || roleCode === ROLES.ADMIN || roleCode === ROLES.OWNER);
+  const canSeeAnyPricing = roleCode !== ROLES.USER_LEVEL_1;
 
   let html = "";
   html += `<div class="row">
@@ -7129,10 +7161,12 @@ function renderInvoicePanel(){
       html += `<table class="table">
         <thead><tr><th>${t("fromLabel")}</th><th>${t("toLabel")}</th><th>${t("statusLabel")}</th><th>${t("amountLabel")}</th></tr></thead><tbody>
         ${invoices.map(inv => {
-          const showAmount = canSeeAnyPricing && ( (inv.from === "USER1" && canSeeSubInvoices) || (inv.to === "USER1" && canSeeSubInvoices) || (inv.to === "ADMIN" && canSeeTdsInvoices) || (inv.from === "ADMIN" && canSeeTdsInvoices) );
+          const isSubSide = inv.from === ROLES.USER_LEVEL_1 || inv.from === ROLES.USER_LEVEL_2 || inv.to === ROLES.USER_LEVEL_1 || inv.to === ROLES.USER_LEVEL_2;
+          const isAdminSide = inv.from === ROLES.ADMIN || inv.to === ROLES.ADMIN || inv.from === ROLES.OWNER || inv.to === ROLES.OWNER;
+          const showAmount = canSeeAnyPricing && ((isSubSide && canSeeSubInvoices) || (isAdminSide && canSeeTdsInvoices));
           const amt = showAmount ? "$1,234.00 (demo)" : t("hidden");
-          const fromLabel = formatRoleLabel(mapLegacyRoleToCode(inv.from));
-          const toLabel = formatRoleLabel(mapLegacyRoleToCode(inv.to));
+          const fromLabel = formatRoleLabel(inv.from);
+          const toLabel = formatRoleLabel(inv.to);
           return `<tr><td>${fromLabel}</td><td>${toLabel}</td><td>${inv.status}</td><td>${amt}</td></tr>`;
         }).join("")}
         </tbody></table>`;
@@ -7147,8 +7181,8 @@ function renderInvoicePanel(){
 
   if (canSeeSubInvoices){
     sub.forEach(inv => rows.push({
-      from: "USER1",
-      to: "PM",
+      from: ROLES.USER_LEVEL_1,
+      to: ROLES.PROJECT_MANAGER,
       status: inv.status || "Draft",
       amount: inv.total,
       number: inv.invoice_number || "-",
@@ -7156,8 +7190,8 @@ function renderInvoicePanel(){
   }
   if (canSeeTdsInvoices){
     prime.forEach(inv => rows.push({
-      from: "PM",
-      to: "ADMIN",
+      from: ROLES.PROJECT_MANAGER,
+      to: ROLES.ADMIN,
       status: inv.status || "Draft",
       amount: inv.total,
       number: inv.invoice_number || "-",
@@ -7171,8 +7205,8 @@ function renderInvoicePanel(){
       <thead><tr><th>${t("fromLabel")}</th><th>${t("toLabel")}</th><th>${t("invoiceNumberLabel")}</th><th>${t("statusLabel")}</th><th>${t("amountLabel")}</th></tr></thead><tbody>
       ${rows.map(inv => {
         const amt = (canSeeAnyPricing && inv.amount != null) ? `$${Number(inv.amount).toFixed(2)}` : t("hidden");
-        const fromLabel = formatRoleLabel(mapLegacyRoleToCode(inv.from));
-        const toLabel = formatRoleLabel(mapLegacyRoleToCode(inv.to));
+        const fromLabel = formatRoleLabel(inv.from);
+        const toLabel = formatRoleLabel(inv.to);
         return `<tr><td>${fromLabel}</td><td>${toLabel}</td><td>${inv.number}</td><td>${inv.status}</td><td>${amt}</td></tr>`;
       }).join("")}
       </tbody></table>`;
@@ -8100,7 +8134,7 @@ function renderAlerts(){
           </div>
         `;
       }).join("")
-    : `<div class="muted small">${canSeeAlerts ? "No alerts right now." : "Alerts are available to Admin / PM."}</div>`;
+    : `<div class="muted small">${canSeeAlerts ? "No alerts right now." : "Alerts are available to Admin / Project Manager."}</div>`;
   targets.forEach((el) => {
     el.innerHTML = html;
   });
@@ -8505,11 +8539,11 @@ async function openNode(nodeNumber){
     updateKPI();
     renderNodeCards();
 
-    // PM alert when near units
+  // Project Manager alert when near units
     if (roleCode === "PROJECT_MANAGER" && state.activeNode.units_allowed > 0){
       const ratio = state.activeNode.units_used / state.activeNode.units_allowed;
       if (ratio >= 0.9){
-        toast("PM alert", "Units are close to the allowed threshold for this site.");
+        toast("Project Manager alert", "Units are close to the allowed threshold for this site.");
       }
     }
     return;
@@ -8718,7 +8752,7 @@ async function markNodeReady(){
     return;
   }
   const roleCode = getRoleCode();
-  if (roleCode === "USER_LEVEL_I"){
+  if (roleCode === ROLES.USER_LEVEL_1){
     toast("Not allowed", "Only billing roles can mark sites ready.");
     return;
   }
@@ -8764,8 +8798,8 @@ async function createInvoice(){
   }
 
   const roleCode = getRoleCode();
-  if (roleCode === "USER_LEVEL_I"){
-    toast("Nope", "User Level I can't create invoices.");
+  if (roleCode === ROLES.USER_LEVEL_1){
+    toast("Nope", "User Level 1 can't create invoices.");
     return;
   }
 
@@ -8781,29 +8815,28 @@ async function createInvoice(){
   }
 
   // Minimal demo invoice routing
-  const legacyRole = mapRoleCodeToLegacy(roleCode);
   let to = null;
-  if (legacyRole === "USER1") to = "PM";
-  else if (legacyRole === "PM") to = "ADMIN";
-  else if (legacyRole === "OWNER") to = "PM";
-  else if (legacyRole === "ADMIN") to = "OWNER";
-  else to = "PM";
+  if (roleCode === ROLES.USER_LEVEL_1 || roleCode === ROLES.USER_LEVEL_2 || roleCode === ROLES.SUPPORT) to = ROLES.PROJECT_MANAGER;
+  else if (roleCode === ROLES.PROJECT_MANAGER) to = ROLES.ADMIN;
+  else if (roleCode === ROLES.ADMIN) to = ROLES.OWNER;
+  else if (roleCode === ROLES.OWNER) to = ROLES.PROJECT_MANAGER;
+  else to = ROLES.PROJECT_MANAGER;
 
   if (isDemo){
     state.demo.invoices.push({
       id: `inv-${Date.now()}`,
       node_number: node.node_number,
-      from: legacyRole,
+      from: roleCode,
       to,
       status: "Draft",
       amount_hidden: false,
     });
-    toast("Invoice created", `${formatRoleLabel(mapLegacyRoleToCode(legacyRole))} -> ${formatRoleLabel(mapLegacyRoleToCode(to))} (demo). Visibility depends on role.`);
+    toast("Invoice created", `${formatRoleLabel(roleCode)} -> ${formatRoleLabel(to)} (demo). Visibility depends on role.`);
     renderInvoicePanel();
     return;
   }
 
-  if (legacyRole === "USER1"){
+  if (roleCode === ROLES.USER_LEVEL_1 || roleCode === ROLES.USER_LEVEL_2 || roleCode === ROLES.SUPPORT){
     const { error } = await state.client
       .from("sub_invoices")
       .insert({ node_id: node.id, status: "Draft" });
@@ -8811,7 +8844,7 @@ async function createInvoice(){
       toast("Invoice error", error.message);
       return;
     }
-  } else if (legacyRole === "PM" || legacyRole === "OWNER" || legacyRole === "ADMIN"){
+  } else if (roleCode === ROLES.PROJECT_MANAGER || roleCode === ROLES.OWNER || roleCode === ROLES.ADMIN){
     const { error } = await state.client
       .from("prime_invoices")
       .insert({ node_id: node.id, status: "Draft" });
@@ -8821,7 +8854,7 @@ async function createInvoice(){
     }
   }
   await loadInvoices(node.id);
-  toast("Invoice created", `${formatRoleLabel(mapLegacyRoleToCode(legacyRole))} -> ${formatRoleLabel(mapLegacyRoleToCode(to))}. Visibility depends on role.`);
+  toast("Invoice created", `${formatRoleLabel(roleCode)} -> ${formatRoleLabel(to)}. Visibility depends on role.`);
   renderInvoicePanel();
 }
 
@@ -8861,10 +8894,9 @@ async function initAuth(){
     if (isDemo){
       ensureDemoSeed();
       showAuth(false);
-      const pick = prompt("Demo mode: choose a role (ADMIN, PROJECT_MANAGER, USER_LEVEL_I, USER_LEVEL_II, SUPPORT)", mapLegacyRoleToCode(state.demo.role)) || mapLegacyRoleToCode(state.demo.role);
-      const normalized = pick.toUpperCase();
-      const legacy = state.demo.roles.includes(normalized) ? normalized : mapRoleCodeToLegacy(normalized);
-      state.demo.role = legacy;
+      const pick = prompt(`Demo mode: choose a role (${APP_ROLE_OPTIONS.join(", ")})`, state.demo.role) || state.demo.role;
+      const normalized = normalizeRole(pick);
+      state.demo.role = normalized;
       await loadProjects();
       await loadProjectNodes(state.activeProject?.id || null);
       await loadProjectSites(state.activeProject?.id || null);

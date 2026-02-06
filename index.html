@@ -12,13 +12,13 @@
   <header class="topbar">
     <div class="topbar-inner">
       <div class="brand">
-        <span class="brand-mark">GT</span>
         <div>
           <div class="brand-title">SpecCom</div>
           <div class="muted small" data-i18n="brandSubtitle">Field verification, documentation, and billing control</div>
         </div>
       </div>
       <div class="row topbar-actions">
+        <a class="topbar-btn" href="./mapboard.html">MapBoard</a>
         <button id="btnMessages" class="topbar-btn" type="button" data-i18n="messagesNav">Messages
           <span id="messagesBadge" class="alert-badge" style="display:none;">0</span>
         </button>
@@ -474,10 +474,10 @@
                 <select id="adminUserRole" class="input" style="min-width:180px;">
                   <option value="OWNER">Owner</option>
                   <option value="ADMIN">Admin</option>
-                  <option value="PM">PM</option>
-                  <option value="USER1">User1</option>
-                  <option value="USER2">User2</option>
-                  <option value="TECHNICIAN">Technician</option>
+                  <option value="PROJECT_MANAGER">Project Manager</option>
+                  <option value="USER_LEVEL_1">User Level 1</option>
+                  <option value="USER_LEVEL_2">User Level 2</option>
+                  <option value="SUPPORT">Support</option>
                 </select>
                 <button id="btnAdminCreateUser" class="btn secondary" data-action="adminCreateUser" data-i18n="createProfile">Create profile</button>
               </div>
@@ -704,8 +704,17 @@
     <div id="toastBody" class="body"></div>
   </div>
 
-  <script src="/.netlify/functions/app-config"></script>
-  <script src="./env.generated.js"></script>
+  <script>
+    (function(){
+      const host = window.location.hostname;
+      const isLocal = host === "localhost" || host === "127.0.0.1";
+      if (isLocal) return;
+      const s = document.createElement("script");
+      s.src = "/.netlify/functions/app-config";
+      document.head.appendChild(s);
+    })();
+  </script>
+  <script src="./env_generated.js"></script>
   <script src="./env.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
