@@ -11,6 +11,22 @@ const ROLES = {
   SUPPORT: "SUPPORT",
 };
 
+// --- Backward-compat role helpers (prevents runtime crashes from old code) ---
+const LEGACY_ROLE_MAP = {
+  TECHNICIAN: ROLES.USER_LEVEL_1,
+  SUB: ROLES.USER_LEVEL_1,
+  SPLICER: ROLES.USER_LEVEL_2,
+  PRIME: ROLES.PROJECT_MANAGER,
+  TDS: ROLES.ADMIN,
+};
+
+function getRoleValue(x){
+  if (!x) return null;
+  if (typeof x === "string") return x;
+  if (typeof x === "object" && x.role) return x.role;
+  return null;
+}
+
 const ROLE_LABELS = {
   [ROLES.OWNER]: "Owner",
   [ROLES.ADMIN]: "Admin",
@@ -151,8 +167,9 @@ const WORK_ORDER_TYPES = ["INSTALL", "TROUBLE_TICKET", "MAINTENANCE", "SURVEY"];
 const WORK_ORDER_STATUSES = ["NEW", "ASSIGNED", "EN_ROUTE", "ON_SITE", "IN_PROGRESS", "BLOCKED", "COMPLETE", "CANCELED"];
 
 function normalizeRole(role){
-  const key = String(role || "").toUpperCase();
-  return ROLE_SET.has(key) ? key : DEFAULT_ROLE;
+  const raw = getRoleValue(role);
+  const key = String(raw || "").toUpperCase();
+  return LEGACY_ROLE_MAP[key] || (ROLE_SET.has(key) ? key : DEFAULT_ROLE);
 }
 
 function getRoleCode(member = state.profile){
@@ -160,6 +177,22 @@ function getRoleCode(member = state.profile){
   if (member?.role) return normalizeRole(member.role);
   if (isDemo) return normalizeRole(state.demo.role);
   return DEFAULT_ROLE;
+}
+
+function isTechnician(x){
+  return normalizeRole(x) === ROLES.USER_LEVEL_1;
+}
+
+function isSplicer(x){
+  return normalizeRole(x) === ROLES.USER_LEVEL_2;
+}
+
+function isPrime(x){
+  return normalizeRole(x) === ROLES.PROJECT_MANAGER;
+}
+
+function isTds(x){
+  return normalizeRole(x) === ROLES.ADMIN;
 }
 
 function formatRoleLabel(roleCode){
@@ -9054,6 +9087,9 @@ async function loadProfile(){
     return;
   }
   state.profile = data || null;
+  if (state.profile){
+    state.profile.role = normalizeRole(state.profile.role);
+  }
   window.currentUserProfile = state.profile;
   if (state.profile?.preferred_language){
     setPreferredLanguage(state.profile.preferred_language);
