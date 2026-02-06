@@ -8,3 +8,6 @@ supabase/.temp/**
 env_generated.js
 mapboard.*
 
+
+# stray artifact from AI toolings, .mapboard*
+
