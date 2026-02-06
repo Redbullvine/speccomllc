@@ -1076,6 +1076,20 @@ function getRuntimeEnv(){
   return window.__ENV__ || window.__ENV || window.ENV || {};
 }
 
+function getSiteDisplayName(site){
+  const raw = String(site?.name || "").trim();
+  return raw || "Pinned site";
+}
+
+function getSiteCoords(site){
+  const lat = site?.gps_lat ?? site?.lat ?? null;
+  const lng = site?.gps_lng ?? site?.lng ?? null;
+  const latNum = Number(lat);
+  const lngNum = Number(lng);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return null;
+  return { lat: latNum, lng: lngNum };
+}
+
 function getDemoCredentials(){
   const env = getRuntimeEnv();
   return {
@@ -1524,6 +1538,42 @@ function showPendingPinMarker(latlng){
   state.map.pendingMarker = marker;
 }
 
+function focusSiteOnMap(site){
+  if (!site) return;
+  ensureMap();
+  if (!state.map.instance) return;
+  const coords = getSiteCoords(site);
+  if (!coords){
+    toast("Site has no coordinates", "Add coordinates to place this site on the map.");
+    return;
+  }
+  console.debug("[map] focus site", site.id, coords);
+  updateMapMarkers(getVisibleSites());
+  let marker = state.map.markers.get(site.id);
+  if (!marker && window.L){
+    const color = site.is_pending ? "#f59e0b" : "#2f6feb";
+    marker = window.L.circleMarker([coords.lat, coords.lng], {
+      radius: 8,
+      color,
+      fillColor: color,
+      fillOpacity: 0.9,
+      weight: 2,
+    });
+    marker.addTo(state.map.instance);
+    marker.on("click", () => setActiveSite(site.id));
+    const time = site.created_at ? new Date(site.created_at).toLocaleTimeString() : "-";
+    const pendingLabel = site.is_pending ? ` • ${t("siteStatusPending")}` : "";
+    marker.bindPopup(`<b>${escapeHtml(getSiteDisplayName(site))}</b>${pendingLabel}<br>${escapeHtml(time)}`);
+    state.map.markers.set(site.id, marker);
+  }
+  if (marker?.getLatLng){
+    const latLng = marker.getLatLng();
+    const zoom = Math.max(state.map.instance.getZoom() || 0, 17);
+    state.map.instance.setView(latLng, zoom);
+    if (marker.openPopup) marker.openPopup();
+  }
+}
+
 function ensureMap(){
   if (state.map.instance || !window.L) return;
   const mapEl = $("liveMap");
@@ -1571,25 +1621,18 @@ function updateMapMarkers(rows){
   const markers = state.map.markers;
   const seen = new Set();
   rows.forEach((row) => {
-    const lat = row.gps_lat ?? row.lat;
-    const lng = row.gps_lng ?? row.lng;
-    if (lat == null || lng == null){
+    const coords = getSiteCoords(row);
+    if (!coords){
       debugLog("[map] missing coordinates", row);
-      return;
-    }
-    const latNum = Number(lat);
-    const lngNum = Number(lng);
-    if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)){
-      debugLog("[map] invalid coordinates", row);
       return;
     }
     const id = row.id;
     if (!id) return;
-    const coords = [latNum, lngNum];
+    const markerCoords = [coords.lat, coords.lng];
     let marker = markers.get(id);
     const color = row.is_pending ? "#f59e0b" : "#2f6feb";
     if (!marker){
-      marker = window.L.circleMarker(coords, {
+      marker = window.L.circleMarker(markerCoords, {
         radius: 8,
         color,
         fillColor: color,
@@ -1600,14 +1643,14 @@ function updateMapMarkers(rows){
       marker.on("click", () => setActiveSite(id));
       markers.set(id, marker);
     } else {
-      marker.setLatLng(coords);
+      marker.setLatLng(markerCoords);
       if (marker.setStyle){
         marker.setStyle({ color, fillColor: color });
       }
     }
     const time = row.created_at ? new Date(row.created_at).toLocaleTimeString() : "-";
     const pendingLabel = row.is_pending ? ` • ${t("siteStatusPending")}` : "";
-    marker.bindPopup(`<b>${escapeHtml(row.name || "Site")}</b>${pendingLabel}<br>${escapeHtml(time)}`);
+    marker.bindPopup(`<b>${escapeHtml(getSiteDisplayName(row))}</b>${pendingLabel}<br>${escapeHtml(time)}`);
     seen.add(id);
   });
   markers.forEach((marker, id) => {
@@ -4495,9 +4538,10 @@ function renderSiteList(){
   wrap.innerHTML = rows.map((site) => {
     const isActive = state.activeSite?.id === site.id;
     const status = site.is_pending ? ` <span class="muted small">(${t("siteStatusPending")})</span>` : "";
+    const label = getSiteDisplayName(site);
     return `
       <button class="btn ${isActive ? "" : "secondary"} small" data-site-id="${site.id}">
-        <span>${escapeHtml(site.name || "Site")}${status}</span>
+        <span>${escapeHtml(label)}${status}</span>
       </button>
     `;
   }).join("");
@@ -4555,7 +4599,7 @@ function renderSitePanel(){
     } else {
       const when = site.created_at ? new Date(site.created_at).toLocaleString() : "-";
       const pendingLabel = site.is_pending ? ` • ${t("siteStatusPending")}` : "";
-      subtitle.textContent = `${site.name || "Site"} • ${when}${pendingLabel}`;
+      subtitle.textContent = `${getSiteDisplayName(site)} • ${when}${pendingLabel}`;
     }
   }
 
@@ -4629,11 +4673,7 @@ async function saveSiteName(){
     return;
   }
   const input = $("siteNameInput");
-  const nextName = input?.value.trim() || "";
-  if (!nextName){
-    toast("Location name required", "Enter a location name.");
-    return;
-  }
+  const nextName = String(input?.value || "").trim() || "Pinned site";
 
   if (site.is_pending){
     state.pendingSites = loadPendingSitesFromStorage().map((row) => (
@@ -4916,7 +4956,7 @@ async function createSiteFromMapClick(coords, siteName){
   if (state.map.instance){
     state.map.instance.setView([coords.lat, coords.lng], 17);
   }
-  const finalName = siteName || getNextSiteName();
+  const finalName = String(siteName || "").trim() || "Pinned site";
   const latNum = Number(coords.lat);
   const lngNum = Number(coords.lng);
   const payload = {
@@ -9474,10 +9514,12 @@ function wireUI(){
   }
   const siteList = $("siteList");
   if (siteList){
-    siteList.addEventListener("click", (e) => {
-      const btn = e.target.closest("button[data-site-id]");
+    siteList.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-site-id]");
       if (!btn) return;
-      setActiveSite(btn.dataset.siteId);
+      const siteId = btn.dataset.siteId;
+      await setActiveSite(siteId);
+      focusSiteOnMap(state.activeSite);
     });
   }
   const closePanelBtn = $("btnCloseSitePanel");
