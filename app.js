@@ -1082,8 +1082,8 @@ function getSiteDisplayName(site){
 }
 
 function getSiteCoords(site){
-  const lat = site?.gps_lat ?? site?.lat ?? null;
-  const lng = site?.gps_lng ?? site?.lng ?? null;
+  const lat = site?.gps_lat ?? site?.lat ?? site?.latitude ?? null;
+  const lng = site?.gps_lng ?? site?.lng ?? site?.longitude ?? null;
   const latNum = Number(lat);
   const lngNum = Number(lng);
   if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return null;
@@ -1547,15 +1547,8 @@ function focusSiteOnMap(siteId){
   }
   ensureMap();
   if (!state.map.instance) return;
-  const lat = site.gps_lat ?? site.lat ?? site.latitude ?? null;
-  const lng = site.gps_lng ?? site.lng ?? site.longitude ?? null;
-  if (lat == null || lng == null){
-    toast("Site has no coordinates", "Add coordinates to place this site on the map.");
-    return;
-  }
-  const coords = { lat: Number(lat), lng: Number(lng) };
-  const hasCoords = Number.isFinite(coords.lat) && Number.isFinite(coords.lng);
-  if (!hasCoords){
+  const coords = getSiteCoords(site);
+  if (!coords){
     toast("Site has no coordinates", "Add coordinates to place this site on the map.");
     return;
   }
