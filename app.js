@@ -1538,39 +1538,57 @@ function showPendingPinMarker(latlng){
   state.map.pendingMarker = marker;
 }
 
-function focusSiteOnMap(site){
-  if (!site) return;
+function focusSiteOnMap(siteId){
+  if (!siteId) return;
+  const site = getVisibleSites().find((row) => row.id === siteId) || null;
+  if (!site){
+    toast("Site not found", "Site data unavailable.");
+    return;
+  }
   ensureMap();
   if (!state.map.instance) return;
-  const coords = getSiteCoords(site);
-  if (!coords){
+  const lat = site.gps_lat ?? site.lat ?? site.latitude ?? null;
+  const lng = site.gps_lng ?? site.lng ?? site.longitude ?? null;
+  if (lat == null || lng == null){
     toast("Site has no coordinates", "Add coordinates to place this site on the map.");
     return;
   }
-  console.debug("[map] focus site", site.id, coords);
+  const coords = { lat: Number(lat), lng: Number(lng) };
+  const hasCoords = Number.isFinite(coords.lat) && Number.isFinite(coords.lng);
+  if (!hasCoords){
+    toast("Site has no coordinates", "Add coordinates to place this site on the map.");
+    return;
+  }
+  const marker = state.map.markers.get(siteId);
+  console.debug("focusSiteOnMap", {
+    siteId,
+    resolvedSiteId: site?.id,
+    coords: [coords.lat, coords.lng],
+    hasMarker: Boolean(marker),
+  });
   updateMapMarkers(getVisibleSites());
-  let marker = state.map.markers.get(site.id);
-  if (!marker && window.L){
+  let targetMarker = marker;
+  if (!targetMarker && window.L){
     const color = site.is_pending ? "#f59e0b" : "#2f6feb";
-    marker = window.L.circleMarker([coords.lat, coords.lng], {
+    targetMarker = window.L.circleMarker([coords.lat, coords.lng], {
       radius: 8,
       color,
       fillColor: color,
       fillOpacity: 0.9,
       weight: 2,
     });
-    marker.addTo(state.map.instance);
-    marker.on("click", () => setActiveSite(site.id));
+    targetMarker.addTo(state.map.instance);
+    targetMarker.on("click", () => setActiveSite(site.id));
     const time = site.created_at ? new Date(site.created_at).toLocaleTimeString() : "-";
     const pendingLabel = site.is_pending ? ` • ${t("siteStatusPending")}` : "";
-    marker.bindPopup(`<b>${escapeHtml(getSiteDisplayName(site))}</b>${pendingLabel}<br>${escapeHtml(time)}`);
-    state.map.markers.set(site.id, marker);
+    targetMarker.bindPopup(`<b>${escapeHtml(getSiteDisplayName(site))}</b>${pendingLabel}<br>${escapeHtml(time)}`);
+    state.map.markers.set(siteId, targetMarker);
   }
-  if (marker?.getLatLng){
-    const latLng = marker.getLatLng();
+  if (targetMarker?.getLatLng){
+    const latLng = targetMarker.getLatLng();
     const zoom = Math.max(state.map.instance.getZoom() || 0, 17);
     state.map.instance.setView(latLng, zoom);
-    if (marker.openPopup) marker.openPopup();
+    if (targetMarker.openPopup) targetMarker.openPopup();
   }
 }
 
@@ -9518,8 +9536,9 @@ function wireUI(){
       const btn = e.target.closest("[data-site-id]");
       if (!btn) return;
       const siteId = btn.dataset.siteId;
+      console.debug("siteList click", { siteId });
       await setActiveSite(siteId);
-      focusSiteOnMap(state.activeSite);
+      focusSiteOnMap(siteId);
     });
   }
   const closePanelBtn = $("btnCloseSitePanel");
