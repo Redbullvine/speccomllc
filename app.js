@@ -866,7 +866,15 @@ function ensureStorageAvailable(){
 }
 
 function getRuntimeEnv(){
-  return window.__ENV__ || window.__ENV || window.ENV || {};
+  if (window.__ENV && typeof window.__ENV === "object"){
+    return window.__ENV;
+  }
+
+  return {
+    SUPABASE_URL: null,
+    SUPABASE_ANON_KEY: null,
+    LIVE_MODE: false,
+  };
 }
 
 async function ensureAuthClient(){
@@ -1146,10 +1154,6 @@ const SINGLE_PROOF_PHOTO_MODE = String(
   || ""
 ).toLowerCase() === "true";
 const MVP_UNGATED = true;
-
-function getRuntimeEnv(){
-  return window.__ENV__ || window.__ENV || window.ENV || {};
-}
 
 function getSiteDisplayName(site){
   const raw = String(site?.name || "").trim();
