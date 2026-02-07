@@ -142,6 +142,7 @@ const state = {
     pinTargetSiteId: null,
     pendingMarker: null,
     pendingLatLng: null,
+    importPreviewMarkers: [],
   },
   technician: {
     timesheet: null,
@@ -1666,6 +1667,16 @@ function clearPendingPinMarker(){
   state.map.pendingMarker = null;
 }
 
+function clearImportPreviewMarkers(){
+  if (!state.map.instance || !state.map.importPreviewMarkers?.length) return;
+  state.map.importPreviewMarkers.forEach((marker) => {
+    try{
+      state.map.instance.removeLayer(marker);
+    } catch {}
+  });
+  state.map.importPreviewMarkers = [];
+}
+
 function showPendingPinMarker(latlng){
   ensureMap();
   if (!state.map.instance || !window.L || !latlng) return;
@@ -3032,52 +3043,52 @@ async function handleImportSites(projectId, file){
     toast("Project required", "Select a project before importing.");
     return;
   }
-  if (!isPrivilegedRole()){
-    toast("Not allowed", "Only Admin or Project Manager can import.");
+
+  console.log("Import handler reached, file selected:", file.name);
+  const text = await file.text();
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  if (lines.length < 2){
+    toast("Import error", "No data rows found.");
     return;
   }
-  if (isDemoUser()){
-    toast("Demo restriction", t("availableInProduction"));
-    return;
-  }
-  if (!state.session?.access_token){
-    toast("Import unavailable", "Sign in to import locations.");
+  const headers = lines[0].split(",").map(h => h.trim());
+  const rows = lines.slice(1).map((line) => {
+    const values = line.split(",");
+    return Object.fromEntries(
+      headers.map((h, i) => [h, values[i]?.trim()])
+    );
+  });
+  console.log("Parsed rows:", rows);
+
+  const valid = rows.every(r =>
+    r.location_name &&
+    !isNaN(parseFloat(r.latitude)) &&
+    !isNaN(parseFloat(r.longitude))
+  );
+  if (!valid){
+    toast("Invalid CSV format", "Invalid CSV format");
     return;
   }
 
-  const form = new FormData();
-  form.append("project_id", activeProjectId);
-  form.append("file", file, file.name || "import.csv");
-
-  let response;
-  try{
-    response = await fetch("/.netlify/functions/import-sites", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${state.session.access_token}`,
-      },
-      body: form,
+  clearImportPreviewMarkers();
+  ensureMap();
+  if (state.map.instance && window.L){
+    state.map.importPreviewMarkers = rows.map((row) => {
+      const lat = parseFloat(row.latitude);
+      const lng = parseFloat(row.longitude);
+      const marker = window.L.circleMarker([lat, lng], {
+        radius: 6,
+        color: "#f97316",
+        fillColor: "#f97316",
+        fillOpacity: 0.85,
+        weight: 2,
+      });
+      marker.addTo(state.map.instance);
+      return marker;
     });
-  } catch (error){
-    reportErrorToast("Import failed", error);
-    return;
   }
 
-  let payload = {};
-  try{
-    payload = await response.json();
-  } catch {
-    payload = {};
-  }
-
-  if (!response.ok || !payload.ok){
-    const message = payload?.error || "Import failed.";
-    toast("Import failed", message);
-    return;
-  }
-
-  toast("Import complete", `Imported ${payload.inserted_rows} sites, skipped ${payload.skipped_rows} rows.`);
-  await loadProjectSites(activeProjectId);
+  toast("Import preview", `You are about to import ${rows.length} locations.`);
 }
 
 async function importLocationsFile(file){
