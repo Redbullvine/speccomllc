@@ -3788,36 +3788,16 @@ function closeDeleteProjectModal(){
   modal.style.display = "none";
 }
 
-async function deleteProjectRecord(client, projectId) {
-  // 1️⃣ Try RPC first (if it exists)
-  const rpc = await client.rpc("fn_delete_project", {
+async function deleteProjectRpc(client, projectId) {
+  const { error } = await client.rpc("fn_delete_project", {
     p_project_id: projectId,
   });
-
-  if (!rpc.error) {
-    return { ok: true, source: "rpc" };
-  }
-
-  // If RPC does not exist, fall back
-  if (rpc.error.code !== "PGRST202") {
-    throw rpc.error;
-  }
-
-  // 2️⃣ Fallback: direct delete
-  const { error, count } = await client
-    .from("projects")
-    .delete({ count: "exact" })
-    .eq("id", projectId);
 
   if (error) {
     throw error;
   }
 
-  if (!count || count === 0) {
-    throw new Error("Delete failed: no rows affected");
-  }
-
-  return { ok: true, source: "direct" };
+  return true;
 }
 
 async function deleteProject(){
@@ -3841,15 +3821,14 @@ async function deleteProject(){
 
   const projectId = state.activeProject.id;
   try {
-    await deleteProjectRecord(state.client, projectId);
+    await deleteProjectRpc(state.client, projectId);
     toast("Project deleted", "Project deleted.");
     state.projects = (state.projects || []).filter(p => p.id !== projectId);
     state.activeProject = null;
-    await loadProjects();
     closeDeleteProjectModal();
     closeProjectsModal();
   } catch (err) {
-    console.error(err);
+    console.error("Delete failed", err);
     toast("Delete failed", "Delete failed.");
   }
 }

@@ -1,5 +1,5 @@
 create or replace function public.fn_delete_project(p_project_id uuid)
-returns jsonb
+returns void
 language plpgsql
 security definer
 set search_path = public, auth
@@ -26,6 +26,10 @@ begin
   delete from public.site_entries
   where site_id in (select id from public.sites where project_id = p_project_id);
 
+  if to_regclass('public.entries') is not null then
+    execute 'delete from public.entries where project_id = $1' using p_project_id;
+  end if;
+
   delete from public.sites
   where project_id = p_project_id;
 
@@ -35,7 +39,6 @@ begin
   delete from public.projects
   where id = p_project_id;
 
-  return jsonb_build_object('ok', true, 'project_id', p_project_id);
 end;
 $$;
 
