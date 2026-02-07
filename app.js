@@ -877,6 +877,16 @@ function getRuntimeEnv(){
   };
 }
 
+async function loadRuntimeEnv(){
+  if (window.__ENV) return window.__ENV;
+
+  const res = await fetch("/.netlify/functions/app-config");
+  if (!res.ok) throw new Error("Failed to load app config");
+
+  window.__ENV = await res.json();
+  return window.__ENV;
+}
+
 async function ensureAuthClient(){
   if (state.client) return state.client;
   let client = await makeClient();
@@ -9025,6 +9035,15 @@ async function initAuth(){
     showAuth(true);
     setWhoami();
     setAuthButtonsDisabled(false);
+  }
+
+  try{
+    const env = await loadRuntimeEnv();
+    if (!env?.SUPABASE_URL || !env?.SUPABASE_ANON_KEY){
+      throw new Error("Missing Supabase env");
+    }
+  } catch (err){
+    console.warn("Runtime env load failed", err);
   }
 
   state.client = await makeClient();
