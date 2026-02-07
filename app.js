@@ -3815,14 +3815,12 @@ async function deleteProject(){
       || message.includes("could not find the function")
       || message.includes("schema cache");
     if (missingFn){
-      const fallback = await state.client
+      const { error: deleteError } = await state.client
         .from("projects")
         .delete()
-        .eq("id", projectId)
-        .select("id")
-        .single();
-      if (fallback.error){
-        reportErrorToast("Delete failed", fallback.error);
+        .eq("id", projectId);
+      if (deleteError){
+        reportErrorToast("Delete failed", deleteError);
         return;
       }
       data = { ok: true };
