@@ -1,6 +1,7 @@
 import { appMode, hasSupabaseConfig, isDemo, makeClient } from "./supabaseClient.js";
 
 const $ = (id) => document.getElementById(id);
+let supabase = null;
 
 const ROLES = {
   OWNER: "OWNER",
@@ -892,6 +893,7 @@ async function ensureAuthClient(){
   let client = await makeClient();
   if (client){
     state.client = client;
+    supabase = client;
     return client;
   }
   const env = getRuntimeEnv();
@@ -916,6 +918,7 @@ async function ensureAuthClient(){
       storage: window.localStorage,
     },
   });
+  supabase = state.client;
   return state.client;
 }
 
@@ -9052,6 +9055,7 @@ async function initAuth(){
     setAuthButtonsDisabled(false);
     return;
   }
+  supabase = state.client;
   setAuthButtonsDisabled(false);
   window.addEventListener("online", () => syncPendingSites());
 
@@ -9227,7 +9231,80 @@ async function demoLogin(){
   }
 }
 
+let uiWired = false;
+const emailInput = $("email");
+const passwordInput = $("password");
+
+function showToast(message){
+  toast("Sign-in", message);
+}
+
+async function postLoginBootstrap(user){
+  state.user = user || state.user;
+  await loadProfile();
+  if (state.user){
+    showAuth(false);
+    await loadProjects();
+    await loadProjectNodes(state.activeProject?.id || null);
+    await loadProjectSites(state.activeProject?.id || null);
+    await loadUnitTypes();
+    await loadWorkCodes();
+    await loadRateCards(state.activeProject?.id || null);
+    await loadLocationProofRequirements(state.activeProject?.id || null);
+    await loadBillingLocations(state.activeProject?.id || null);
+    await loadMaterialCatalog();
+    await loadAlerts();
+    renderAlerts();
+    renderCatalogResults("catalogResults", "");
+    renderCatalogResults("catalogResultsQuick", "");
+    renderBillingLocations();
+    setActiveView(getDefaultView());
+    startLocationPolling();
+    syncPendingSites();
+  }
+  setWhoami();
+}
+
+function navigateToApp(){
+  showAuth(false);
+}
+
+async function handleSignIn() {
+  console.log("SIGN IN CLICKED");
+  if (!supabase) {
+    showToast("Supabase client unavailable");
+    return;
+  }
+
+  const email = emailInput?.value.trim() || "";
+  const password = passwordInput?.value || "";
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) {
+    showToast(error.message);
+    return;
+  }
+
+  // IMPORTANT: data.session is the truth
+  if (!data?.session) {
+    showToast("No session returned");
+    return;
+  }
+
+  // Success path
+  console.log("Logged in:", data.user.email);
+
+  await postLoginBootstrap(data.user); // projects, profile, etc.
+  navigateToApp(); // or window.location = "/"
+}
+
 function wireUI(){
+  if (uiWired) return;
+  uiWired = true;
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.addEventListener("click", () => setActiveView(btn.dataset.view));
   });
@@ -9481,26 +9558,15 @@ function wireUI(){
     await state.client.auth.signOut();
   });
 
-  $("btnSignIn").addEventListener("click", async (event) => {
-    event.preventDefault();
-    if (isDemo) return;
-    console.log("Sign in clicked");
-    ensureStorageAvailable();
-    const email = $("email").value.trim();
-    const password = $("password").value;
-    const client = await ensureAuthClient();
-    if (!client){
-      toast("Sign-in failed", "Supabase client unavailable.");
-      return;
-    }
-    const { error } = await client.auth.signInWithPassword({ email, password });
-    if (error) toast("Sign-in failed", error.message);
+  $("btnSignIn")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    handleSignIn();
   });
   const authForm = $("authForm");
   if (authForm){
-    authForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      $("btnSignIn")?.click();
+    authForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      handleSignIn();
     });
   }
 
@@ -9554,6 +9620,7 @@ function wireUI(){
   };
   if (emailInput) emailInput.addEventListener("input", forceEnableSignIn);
   if (passwordInput) passwordInput.addEventListener("input", forceEnableSignIn);
+  if (signInBtn) signInBtn.disabled = false;
 
   const catalogSearch = $("catalogSearch");
   if (catalogSearch){
@@ -9840,6 +9907,7 @@ function wireUI(){
 }
 
 startVisibilityWatch();
+window.addEventListener("DOMContentLoaded", wireUI);
 wireUI();
 applyI18n();
 syncLanguageControls();
