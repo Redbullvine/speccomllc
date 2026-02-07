@@ -1361,7 +1361,7 @@ function setEnvWarning(){
   if (appMode === "real" && !hasSupabaseConfig){
     banner.style.display = "";
     banner.classList.add("warning-banner");
-    banner.textContent = "Live mode configuration is required before using the app.";
+    banner.textContent = "";
   } else {
     banner.style.display = "none";
     banner.textContent = "";
