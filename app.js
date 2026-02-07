@@ -1910,7 +1910,7 @@ async function savePreferredLanguage(lang, { closeModal = false } = {}){
       return;
     }
   }
-  await loadProfile();
+  await loadProfile(state.client, state.user?.id);
   if (closeModal){
     showProfileSetupModal(!(state.profile && state.profile.preferred_language));
   }
@@ -9138,7 +9138,7 @@ async function initAuth(){
   state.client.auth.onAuthStateChange(async (_event, session) => {
     state.session = session;
     state.user = session?.user || null;
-    await loadProfile();
+    await loadProfile(state.client, state.user?.id);
     setWhoami();
       if (state.user) {
         showAuth(false);
@@ -9174,7 +9174,7 @@ async function initAuth(){
     }
   });
 
-    await loadProfile();
+    await loadProfile(state.client, state.user?.id);
     if (state.user){
       await loadProjects();
       await loadProjectNodes(state.activeProject?.id || null);
@@ -9199,28 +9199,28 @@ async function initAuth(){
   setProofStatus();
 }
 
-async function loadProfile(){
+async function loadProfile(client, userId){
   if (isDemo) return;
 
-  if (!state.user){
+  if (!client || !userId){
     state.profile = null;
     return;
   }
 
   // Expect a public.profiles row keyed by auth.uid()
-  let { data, error } = await state.client
+  let { data, error } = await client
     .from("profiles")
     .select("role, display_name, preferred_language, is_demo, current_project_id")
-    .eq("id", state.user.id)
+    .eq("id", userId)
     .maybeSingle();
 
   if (error){
     const message = String(error.message || "").toLowerCase();
     if (message.includes("does not exist")){
-      ({ data, error } = await state.client
+      ({ data, error } = await client
         .from("profiles")
         .select("role, display_name")
-        .eq("id", state.user.id)
+        .eq("id", userId)
         .maybeSingle());
     }
   }
@@ -9273,9 +9273,10 @@ function showToast(message){
   toast("Sign-in", message);
 }
 
-async function postLoginBootstrap(user){
+async function postLoginBootstrap(client, user){
+  state.client = client;
   state.user = user || state.user;
-  await loadProfile();
+  await loadProfile(client, state.user?.id);
   if (state.user){
     showAuth(false);
     await loadProjects();
@@ -9337,7 +9338,7 @@ async function handleSignIn(e) {
   // Success path
   console.log("Logged in:", data.user.email);
 
-  await postLoginBootstrap(data.user); // projects, profile, etc.
+  await postLoginBootstrap(client, data.user); // projects, profile, etc.
   navigateToApp(); // or window.location = "/"
 }
 
