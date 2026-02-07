@@ -2,6 +2,40 @@ import { appMode, hasSupabaseConfig, isDemo, makeClient } from "./supabaseClient
 
 const $ = (id) => document.getElementById(id);
 let supabase = null;
+const createClient = (url, anonKey) => window.supabase.createClient(url, anonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: window.localStorage,
+  },
+});
+
+const supabaseReady = (async () => {
+  const env = await loadRuntimeEnv();
+
+  if (!env?.SUPABASE_URL || !env?.SUPABASE_ANON_KEY) {
+    console.error("Missing Supabase env", env);
+    return null;
+  }
+
+  if (!window.supabase) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+
+  supabase = createClient(
+    env.SUPABASE_URL,
+    env.SUPABASE_ANON_KEY
+  );
+
+  return supabase;
+})();
 
 const ROLES = {
   OWNER: "OWNER",
@@ -9269,9 +9303,14 @@ function navigateToApp(){
   showAuth(false);
 }
 
-async function handleSignIn() {
+async function handleSignIn(e) {
+  e?.preventDefault?.();
+
   console.log("SIGN IN CLICKED");
-  if (!supabase) {
+
+  const client = await supabaseReady;
+
+  if (!client) {
     showToast("Supabase client unavailable");
     return;
   }
@@ -9279,7 +9318,7 @@ async function handleSignIn() {
   const email = emailInput?.value.trim() || "";
   const password = passwordInput?.value || "";
 
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await client.auth.signInWithPassword({
     email,
     password,
   });
