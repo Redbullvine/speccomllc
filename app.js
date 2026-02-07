@@ -3753,10 +3753,28 @@ async function deleteProject(){
   }
 
   const projectId = state.activeProject.id;
-  const { data, error } = await state.client.rpc("fn_delete_project", { p_project_id: projectId });
+  let { data, error } = await state.client.rpc("fn_delete_project", { p_project_id: projectId });
   if (error){
-    reportErrorToast("Delete failed", error);
-    return;
+    const message = String(error.message || "").toLowerCase();
+    const missingFn = error.code === "PGRST202"
+      || message.includes("could not find the function")
+      || message.includes("schema cache");
+    if (missingFn){
+      const fallback = await state.client
+        .from("projects")
+        .delete()
+        .eq("id", projectId)
+        .select("id")
+        .single();
+      if (fallback.error){
+        reportErrorToast("Delete failed", fallback.error);
+        return;
+      }
+      data = { ok: true };
+    } else {
+      reportErrorToast("Delete failed", error);
+      return;
+    }
   }
   if (!data?.ok){
     toast("Delete failed", "Delete did not complete.");
