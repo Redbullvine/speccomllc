@@ -1577,6 +1577,13 @@ function isMissingTable(err){
     || message.includes("Not Found");
 }
 
+function isNoRowsError(error){
+  const message = String(error?.message || "");
+  return error?.code === "PGRST116"
+    || message.includes("Cannot coerce the result to a single JSON object")
+    || message.includes("The result contains 0 rows");
+}
+
 function isRlsError(error){
   const message = String(error?.message || "").toLowerCase();
   return error?.code === "42501"
@@ -1607,21 +1614,22 @@ async function fetchSiteById(siteId){
     .from("sites")
     .select(SITE_SELECT_COLUMNS)
     .eq("id", siteId)
-    .single();
+    .maybeSingle();
+  if (res.error && isNoRowsError(res.error)) return { data: null, error: null };
   if (!res.error) return res;
   if (isMissingGpsColumnError(res.error)){
     return await state.client
       .from("sites")
       .select(SITE_SELECT_COLUMNS_LEGACY_ONLY)
       .eq("id", siteId)
-      .single();
+      .maybeSingle();
   }
   if (isMissingLatLngColumnError(res.error)){
     return await state.client
       .from("sites")
       .select(SITE_SELECT_COLUMNS_GPS_ONLY)
       .eq("id", siteId)
-      .single();
+      .maybeSingle();
   }
   return res;
 }
