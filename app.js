@@ -865,6 +865,42 @@ function ensureStorageAvailable(){
   return false;
 }
 
+function getRuntimeEnv(){
+  return window.__ENV__ || window.__ENV || window.ENV || {};
+}
+
+async function ensureAuthClient(){
+  if (state.client) return state.client;
+  let client = await makeClient();
+  if (client){
+    state.client = client;
+    return client;
+  }
+  const env = getRuntimeEnv();
+  const url = env.SUPABASE_URL || env.supabaseUrl || "";
+  const anonKey = env.SUPABASE_ANON_KEY || env.supabaseAnonKey || "";
+  if (!url || !anonKey) return null;
+  if (!window.supabase){
+    await new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+  if (!window.supabase?.createClient) return null;
+  state.client = window.supabase.createClient(url, anonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage: window.localStorage,
+    },
+  });
+  return state.client;
+}
+
 function showStorageBlockedWarning(){
   if (state.storageWarningShown) return;
   state.storageWarningShown = true;
@@ -8966,14 +9002,13 @@ async function initAuth(){
   if (appMode === "real" && !hasSupabaseConfig){
     showAuth(true);
     setWhoami();
-    setAuthButtonsDisabled(true);
-    return;
+    setAuthButtonsDisabled(false);
   }
 
   state.client = await makeClient();
   if (!state.client){
     showAuth(true);
-    setAuthButtonsDisabled(true);
+    setAuthButtonsDisabled(false);
     return;
   }
   setAuthButtonsDisabled(false);
@@ -9407,10 +9442,16 @@ function wireUI(){
 
   $("btnSignIn").addEventListener("click", async () => {
     if (isDemo) return;
-    if (!ensureStorageAvailable()) return;
+    console.log("Sign in clicked");
+    ensureStorageAvailable();
     const email = $("email").value.trim();
     const password = $("password").value;
-    const { error } = await state.client.auth.signInWithPassword({ email, password });
+    const client = await ensureAuthClient();
+    if (!client){
+      toast("Sign-in failed", "Supabase client unavailable.");
+      return;
+    }
+    const { error } = await client.auth.signInWithPassword({ email, password });
     if (error) toast("Sign-in failed", error.message);
   });
 
@@ -9455,6 +9496,15 @@ function wireUI(){
       await demoLogin();
     });
   }
+
+  const signInBtn = $("btnSignIn");
+  const emailInput = $("email");
+  const passwordInput = $("password");
+  const forceEnableSignIn = () => {
+    if (signInBtn) signInBtn.disabled = false;
+  };
+  if (emailInput) emailInput.addEventListener("input", forceEnableSignIn);
+  if (passwordInput) passwordInput.addEventListener("input", forceEnableSignIn);
 
   const catalogSearch = $("catalogSearch");
   if (catalogSearch){
