@@ -9481,7 +9481,8 @@ function wireUI(){
     await state.client.auth.signOut();
   });
 
-  $("btnSignIn").addEventListener("click", async () => {
+  $("btnSignIn").addEventListener("click", async (event) => {
+    event.preventDefault();
     if (isDemo) return;
     console.log("Sign in clicked");
     ensureStorageAvailable();
@@ -9495,6 +9496,13 @@ function wireUI(){
     const { error } = await client.auth.signInWithPassword({ email, password });
     if (error) toast("Sign-in failed", error.message);
   });
+  const authForm = $("authForm");
+  if (authForm){
+    authForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      $("btnSignIn")?.click();
+    });
+  }
 
   const btnMagic = $("btnMagicLink");
   if (btnMagic){

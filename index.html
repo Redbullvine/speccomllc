@@ -44,15 +44,17 @@
 
           <div class="hr"></div>
 
-          <div class="field-stack">
-            <input id="email" class="input" placeholder="email" data-i18n-placeholder="emailPlaceholder" />
-            <input id="password" class="input" placeholder="password" type="password" data-i18n-placeholder="passwordPlaceholder" />
-          </div>
-          <div class="row" style="margin-top:12px;">
-            <button id="btnSignIn" class="btn" data-action="signIn" data-i18n="signIn">Sign in</button>
-            <button id="btnSignUp" class="btn secondary" data-action="signUp" data-i18n="createUser">Create account</button>
-            <button id="btnDemoLogin" class="btn ghost" data-action="demoLogin" data-i18n="demoLogin">Demo login</button>
-          </div>
+          <form id="authForm" autocomplete="on">
+            <div class="field-stack">
+              <input id="email" class="input" placeholder="email" data-i18n-placeholder="emailPlaceholder" autocomplete="username" />
+              <input id="password" class="input" placeholder="password" type="password" data-i18n-placeholder="passwordPlaceholder" autocomplete="current-password" />
+            </div>
+            <div class="row" style="margin-top:12px;">
+              <button id="btnSignIn" class="btn" data-action="signIn" data-i18n="signIn" type="submit">Sign in</button>
+              <button id="btnSignUp" class="btn secondary" data-action="signUp" data-i18n="createUser" type="button">Create account</button>
+              <button id="btnDemoLogin" class="btn ghost" data-action="demoLogin" data-i18n="demoLogin" type="button">Demo login</button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
