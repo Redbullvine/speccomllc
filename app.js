@@ -3788,6 +3788,38 @@ function closeDeleteProjectModal(){
   modal.style.display = "none";
 }
 
+async function deleteProjectRecord(client, projectId) {
+  // 1️⃣ Try RPC first (if it exists)
+  const rpc = await client.rpc("fn_delete_project", {
+    p_project_id: projectId,
+  });
+
+  if (!rpc.error) {
+    return { ok: true, source: "rpc" };
+  }
+
+  // If RPC does not exist, fall back
+  if (rpc.error.code !== "PGRST202") {
+    throw rpc.error;
+  }
+
+  // 2️⃣ Fallback: direct delete
+  const { error, count } = await client
+    .from("projects")
+    .delete({ count: "exact" })
+    .eq("id", projectId);
+
+  if (error) {
+    throw error;
+  }
+
+  if (!count || count === 0) {
+    throw new Error("Delete failed: no rows affected");
+  }
+
+  return { ok: true, source: "direct" };
+}
+
 async function deleteProject(){
   if (!state.activeProject){
     toast("Project required", "Select a project to delete.");
@@ -3808,37 +3840,18 @@ async function deleteProject(){
   }
 
   const projectId = state.activeProject.id;
-  let { data, error } = await state.client.rpc("fn_delete_project", { p_project_id: projectId });
-  if (error){
-    const message = String(error.message || "").toLowerCase();
-    const missingFn = error.code === "PGRST202"
-      || message.includes("could not find the function")
-      || message.includes("schema cache");
-    if (missingFn){
-      const { error: deleteError } = await state.client
-        .from("projects")
-        .delete()
-        .eq("id", projectId);
-      if (deleteError){
-        reportErrorToast("Delete failed", deleteError);
-        return;
-      }
-      data = { ok: true };
-    } else {
-      reportErrorToast("Delete failed", error);
-      return;
-    }
+  try {
+    await deleteProjectRecord(state.client, projectId);
+    toast("Project deleted", "Project deleted.");
+    state.projects = (state.projects || []).filter(p => p.id !== projectId);
+    state.activeProject = null;
+    await loadProjects();
+    closeDeleteProjectModal();
+    closeProjectsModal();
+  } catch (err) {
+    console.error(err);
+    toast("Delete failed", "Delete failed.");
   }
-  if (!data?.ok){
-    toast("Delete failed", "Delete did not complete.");
-    return;
-  }
-  state.projects = (state.projects || []).filter(p => p.id !== projectId);
-  state.activeProject = null;
-  await loadProjects();
-  closeDeleteProjectModal();
-  closeProjectsModal();
-  toast("Project deleted", "Project deleted.");
 }
 
 async function createProject(){
