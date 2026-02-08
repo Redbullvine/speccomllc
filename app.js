@@ -1,6 +1,8 @@
 import { appMode, hasSupabaseConfig, isDemo, makeClient } from "./supabaseClient.js";
 
 const $ = (id) => document.getElementById(id);
+window.SpecCom = window.SpecCom || {};
+SpecCom.helpers = SpecCom.helpers || {};
 let supabase = null;
 const createClient = (url, anonKey) => window.supabase.createClient(url, anonKey, {
   auth: {
@@ -95,11 +97,21 @@ const state = {
   siteMedia: [],
   siteCodes: [],
   siteEntries: [],
+  orgs: [],
+  invoices: [],
   pendingSites: [],
   billingLocations: [],
   billingLocation: null,
   billingInvoice: null,
   billingItems: [],
+  invoiceAgent: {
+    candidates: [],
+    selectedIds: [],
+    results: null,
+    allowDuplicates: false,
+    busy: false,
+    siteMap: new Map(),
+  },
   workCodes: [],
   rateCards: [],
   rateCardItems: [],
@@ -422,6 +434,23 @@ const I18N = {
       pinQueuedTitle: "Pin queued",
       pinQueuedBody: "Offline pin saved. Sync will run when online.",
       importLocations: "Import Locations (Excel/CSV)",
+      invoiceAgentAction: "Invoice Agent",
+      invoiceAgentTitle: "Invoice Agent",
+      invoiceAgentSubtitle: "Generate draft invoices from completed sites with billing entries.",
+      invoiceAgentFromLabel: "From company",
+      invoiceAgentToLabel: "To company",
+      invoiceAgentSelectAll: "Select all eligible",
+      invoiceAgentAllowDuplicates: "Allow duplicates",
+      invoiceAgentGenerate: "Generate Drafts",
+      invoiceAgentNoProject: "Select a project to generate invoices.",
+      invoiceAgentNoEligible: "No eligible sites found.",
+      invoiceAgentResultsTitle: "Invoice Agent results",
+      invoiceAgentExportCsv: "Export CSV",
+      invoiceAgentExportPdf: "Export PDF",
+      yourInvoicesTitle: "Your invoices",
+      yourInvoicesEmpty: "No invoices yet.",
+      issuerLabel: "Issuer",
+      recipientLabel: "Recipient",
       mediaTitle: "Media",
       mediaSubtitle: "Add images from camera or gallery.",
       addMedia: "Add media",
@@ -515,6 +544,7 @@ const I18N = {
     toLabel: "To",
     amountLabel: "Amount",
     invoiceNumberLabel: "Invoice #",
+    locationLabel: "Location",
     selectLocationToBill: "Select a location to start billing.",
     billingNotesPlaceholder: "Notes",
     translated: "Translated",
@@ -718,6 +748,23 @@ const I18N = {
       pinQueuedTitle: "Pin en cola",
       pinQueuedBody: "Pin sin conexión guardado. Se sincronizará al estar en línea.",
       importLocations: "Importar ubicaciones (Excel/CSV)",
+      invoiceAgentAction: "Agente de facturación",
+      invoiceAgentTitle: "Agente de facturación",
+      invoiceAgentSubtitle: "Genera facturas borrador desde ubicaciones completas con entradas de facturación.",
+      invoiceAgentFromLabel: "Empresa emisora",
+      invoiceAgentToLabel: "Empresa receptora",
+      invoiceAgentSelectAll: "Seleccionar elegibles",
+      invoiceAgentAllowDuplicates: "Permitir duplicados",
+      invoiceAgentGenerate: "Generar borradores",
+      invoiceAgentNoProject: "Selecciona un proyecto para generar facturas.",
+      invoiceAgentNoEligible: "No hay ubicaciones elegibles.",
+      invoiceAgentResultsTitle: "Resultados del agente de facturación",
+      invoiceAgentExportCsv: "Exportar CSV",
+      invoiceAgentExportPdf: "Exportar PDF",
+      yourInvoicesTitle: "Tus facturas",
+      yourInvoicesEmpty: "Aún no hay facturas.",
+      issuerLabel: "Emisor",
+      recipientLabel: "Receptor",
       mediaTitle: "Media",
       mediaSubtitle: "Agrega imágenes desde cámara o galería.",
       addMedia: "Agregar media",
@@ -811,6 +858,7 @@ const I18N = {
     toLabel: "Para",
     amountLabel: "Monto",
     invoiceNumberLabel: "Factura #",
+    locationLabel: "Ubicación",
     selectLocationToBill: "Selecciona una ubicación para iniciar facturación.",
     billingNotesPlaceholder: "Notas",
     translated: "Traducido",
@@ -1748,6 +1796,376 @@ async function confirmImportLocations(){
   await loadProjectSites(projectId);
 }
 
+SpecCom.helpers.resetInvoiceAgentState = function(){
+  state.invoiceAgent.candidates = [];
+  state.invoiceAgent.selectedIds = [];
+  state.invoiceAgent.results = null;
+  state.invoiceAgent.allowDuplicates = false;
+  state.invoiceAgent.busy = false;
+  state.invoiceAgent.siteMap = new Map();
+};
+
+SpecCom.helpers.isInvoiceAgentAllowed = function(){
+  return isPrivilegedRole();
+};
+
+SpecCom.helpers.openInvoiceAgentModal = async function(){
+  if (!SpecCom.helpers.isInvoiceAgentAllowed()){
+    toast("Not allowed", "Only Admin, Project Manager, or Owner can generate invoices.");
+    return;
+  }
+  const modal = $("invoiceAgentModal");
+  if (!modal) return;
+  SpecCom.helpers.resetInvoiceAgentState();
+  if (!state.orgs.length){
+    await SpecCom.helpers.loadOrgs();
+  }
+  SpecCom.helpers.populateInvoiceAgentOrgs();
+  modal.style.display = "";
+  SpecCom.helpers.renderInvoiceAgentModal();
+  await SpecCom.helpers.loadInvoiceAgentCandidates();
+};
+
+SpecCom.helpers.closeInvoiceAgentModal = function(){
+  const modal = $("invoiceAgentModal");
+  if (!modal) return;
+  modal.style.display = "none";
+};
+
+SpecCom.helpers.populateInvoiceAgentOrgs = function(){
+  const fromSelect = $("invoiceAgentFromOrg");
+  const toSelect = $("invoiceAgentToOrg");
+  if (!fromSelect || !toSelect) return;
+  const orgs = state.orgs || [];
+  fromSelect.innerHTML = orgs.map((org) => (
+    `<option value="${org.id}">${escapeHtml(org.name)}</option>`
+  )).join("");
+  toSelect.innerHTML = orgs.map((org) => (
+    `<option value="${org.id}">${escapeHtml(org.name)}</option>`
+  )).join("");
+  const userOrgId = state.profile?.org_id || null;
+  if (userOrgId){
+    fromSelect.value = userOrgId;
+    if (!isOwner()){
+      fromSelect.disabled = true;
+    }
+    if (toSelect.value === userOrgId && orgs.length > 1){
+      const firstOther = orgs.find(o => o.id !== userOrgId);
+      if (firstOther) toSelect.value = firstOther.id;
+    }
+  }
+};
+
+SpecCom.helpers.getSiteCompletionState = function(site){
+  const hasStatus = Object.prototype.hasOwnProperty.call(site, "status");
+  const hasCompleted = Object.prototype.hasOwnProperty.call(site, "completed");
+  if (hasStatus){
+    return String(site.status || "").toUpperCase() === "COMPLETE";
+  }
+  if (hasCompleted){
+    return Boolean(site.completed);
+  }
+  // Backward-compat: treat unknown status as complete.
+  return true;
+};
+
+SpecCom.helpers.loadInvoiceAgentCandidates = async function(){
+  const summary = $("invoiceAgentSummary");
+  const list = $("invoiceAgentList");
+  if (!summary || !list) return;
+  const projectId = state.activeProject?.id || null;
+  if (!projectId){
+    summary.textContent = t("invoiceAgentNoProject");
+    list.innerHTML = "";
+    return;
+  }
+  if (!state.client){
+    summary.textContent = "Loading...";
+    return;
+  }
+  const sites = getVisibleSites().filter((site) => !site.is_pending);
+  state.invoiceAgent.siteMap = new Map(sites.map((site) => [site.id, site]));
+  if (!sites.length){
+    summary.textContent = t("invoiceAgentNoEligible");
+    list.innerHTML = "";
+    return;
+  }
+  const siteIds = sites.map((site) => site.id);
+  const { data: entries, error } = await state.client
+    .from("site_entries")
+    .select("site_id, description, quantity")
+    .in("site_id", siteIds);
+  if (error){
+    toast("Load failed", error.message || "Failed to load site entries.");
+    summary.textContent = "Unable to load site entries.";
+    list.innerHTML = "";
+    return;
+  }
+  const entryMap = new Map();
+  (entries || []).forEach((row) => {
+    const code = String(row.description || "").trim();
+    const qty = Number(row.quantity || 0);
+    if (!code || !Number.isFinite(qty) || qty <= 0) return;
+    if (!entryMap.has(row.site_id)) entryMap.set(row.site_id, []);
+    entryMap.get(row.site_id).push({ code, qty });
+  });
+  const candidates = sites.map((site) => {
+    const billable = entryMap.get(site.id) || [];
+    const complete = SpecCom.helpers.getSiteCompletionState(site);
+    const eligible = complete && billable.length > 0;
+    return {
+      id: site.id,
+      name: getSiteDisplayName(site),
+      complete,
+      billable,
+      eligible,
+    };
+  });
+  state.invoiceAgent.candidates = candidates;
+  state.invoiceAgent.selectedIds = candidates.filter(c => c.eligible).map(c => c.id);
+  SpecCom.helpers.renderInvoiceAgentModal();
+};
+
+SpecCom.helpers.renderInvoiceAgentModal = function(){
+  const summary = $("invoiceAgentSummary");
+  const list = $("invoiceAgentList");
+  const results = $("invoiceAgentResults");
+  const selectAll = $("invoiceAgentSelectAll");
+  const allowDuplicates = $("invoiceAgentAllowDuplicates");
+  if (!summary || !list) return;
+  const candidates = state.invoiceAgent.candidates || [];
+  const eligible = candidates.filter(c => c.eligible);
+  const fromName = (state.orgs || []).find(o => o.id === $("invoiceAgentFromOrg")?.value)?.name || "";
+  const toName = (state.orgs || []).find(o => o.id === $("invoiceAgentToOrg")?.value)?.name || "";
+  if (!candidates.length){
+    summary.textContent = t("invoiceAgentNoEligible");
+  } else {
+    summary.textContent = `${eligible.length} eligible sites ready for invoice generation.` + (fromName && toName ? ` (${fromName} â†’ ${toName})` : "");
+  }
+  if (!candidates.length){
+    list.innerHTML = "";
+  } else {
+    list.innerHTML = candidates.map((c) => {
+      const selected = state.invoiceAgent.selectedIds.includes(c.id);
+      const statusLabel = c.complete ? "COMPLETE" : "INCOMPLETE";
+      const entryLabel = c.billable.length ? `${c.billable.length} items` : "No items";
+      const disabled = !c.eligible;
+      return `
+        <label class="row" style="gap:10px; align-items:flex-start;">
+          <input type="checkbox" data-site-id="${c.id}" ${selected ? "checked" : ""} ${disabled ? "disabled" : ""} />
+          <div>
+            <div style="font-weight:700;">${escapeHtml(c.name)}</div>
+            <div class="muted small">${statusLabel} â€¢ ${entryLabel}</div>
+          </div>
+        </label>
+      `;
+    }).join("");
+  }
+  if (selectAll){
+    selectAll.checked = eligible.length > 0 && state.invoiceAgent.selectedIds.length === eligible.length;
+  }
+  if (allowDuplicates){
+    allowDuplicates.checked = state.invoiceAgent.allowDuplicates;
+  }
+  if (results){
+    results.style.display = state.invoiceAgent.results ? "" : "none";
+    if (state.invoiceAgent.results){
+      SpecCom.helpers.renderInvoiceAgentResults();
+    }
+  }
+};
+
+SpecCom.helpers.renderInvoiceAgentResults = function(){
+  const results = $("invoiceAgentResults");
+  if (!results) return;
+  const data = state.invoiceAgent.results;
+  if (!data){
+    results.style.display = "none";
+    return;
+  }
+  const created = data.created ?? 0;
+  const skipped = data.skipped ?? 0;
+  const errors = data.errors || [];
+  const invoices = data.invoices || [];
+  let html = `<div style="font-weight:800;">${t("invoiceAgentResultsTitle")}</div>`;
+  html += `<div class="muted small" style="margin-top:6px;">Created ${created} draft invoices. Skipped ${skipped}.</div>`;
+  if (errors.length){
+    html += `<div class="muted small" style="margin-top:6px;">Errors:</div>`;
+    html += `<div class="field-stack" style="margin-top:6px;">${errors.map((err) => (
+      `<div class="muted small">Site ${escapeHtml(err.site_id || "?")}: ${escapeHtml(err.reason || "Failed")}</div>`
+    )).join("")}</div>`;
+  }
+  if (invoices.length){
+    html += `<div class="field-stack" style="margin-top:10px;">${invoices.map((inv) => {
+      const site = state.invoiceAgent.siteMap.get(inv.site_id);
+      const siteName = site ? getSiteDisplayName(site) : inv.site_id;
+      const total = Number(inv.total || 0);
+      return `
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-weight:700;">${escapeHtml(siteName)}</div>
+            <div class="muted small">Draft â€¢ ${formatMoney(total)}</div>
+          </div>
+          <div class="row">
+            <button class="btn ghost small" data-action="invoiceAgentExportCsv" data-invoice-id="${inv.invoice_id}" data-site-id="${inv.site_id}">${t("invoiceAgentExportCsv")}</button>
+            <button class="btn ghost small" data-action="invoiceAgentExportPdf" data-invoice-id="${inv.invoice_id}" data-site-id="${inv.site_id}">${t("invoiceAgentExportPdf")}</button>
+          </div>
+        </div>
+      `;
+    }).join("")}</div>`;
+  }
+  results.innerHTML = html;
+  results.style.display = "";
+};
+
+SpecCom.helpers.confirmInvoiceAgentGenerate = async function(){
+  if (state.invoiceAgent.busy) return;
+  const projectId = state.activeProject?.id || null;
+  const selected = state.invoiceAgent.selectedIds || [];
+  const fromOrgId = $("invoiceAgentFromOrg")?.value || null;
+  const toOrgId = $("invoiceAgentToOrg")?.value || null;
+  if (!projectId){
+    toast("Missing project", t("invoiceAgentNoProject"));
+    return;
+  }
+  if (!fromOrgId || !toOrgId){
+    toast("Missing org", "Select both from and to companies.");
+    return;
+  }
+  if (fromOrgId === toOrgId){
+    toast("Invalid orgs", "From and To companies must differ.");
+    return;
+  }
+  if (!selected.length){
+    toast("No sites", "Select at least one eligible site.");
+    return;
+  }
+  if (!state.client){
+    toast("Unavailable", "Supabase client unavailable.");
+    return;
+  }
+  state.invoiceAgent.busy = true;
+  const btn = $("btnInvoiceAgentConfirm");
+  if (btn) btn.disabled = true;
+  const { data, error } = await state.client.rpc("fn_generate_tiered_invoices", {
+    p_project_id: projectId,
+    p_site_ids: selected,
+    p_allow_duplicate: state.invoiceAgent.allowDuplicates,
+    p_from_org_id: fromOrgId,
+    p_to_org_id: toOrgId,
+  });
+  if (btn) btn.disabled = false;
+  state.invoiceAgent.busy = false;
+  if (error){
+    toast("Generation failed", error.message || "Invoice generation failed.");
+    return;
+  }
+  // TODO(phase2): email delivery + accounting sync after invoice generation.
+  state.invoiceAgent.results = data || null;
+  SpecCom.helpers.renderInvoiceAgentModal();
+  await SpecCom.helpers.loadYourInvoices(projectId);
+};
+
+SpecCom.helpers.loadInvoiceAgentExportData = async function(invoiceId){
+  const { data: invoice, error: invoiceErr } = await state.client
+    .from("invoices")
+    .select("id, invoice_number, status, subtotal, tax, total, created_at, project_id, site_id")
+    .eq("id", invoiceId)
+    .maybeSingle();
+  if (invoiceErr || !invoice){
+    throw new Error(invoiceErr?.message || "Invoice not found.");
+  }
+  const { data: items, error: itemsErr } = await state.client
+    .from("invoice_items")
+    .select("id, work_code_id, description, unit, qty, rate, work_codes(code)")
+    .eq("invoice_id", invoiceId)
+    .order("sort_order");
+  if (itemsErr){
+    throw new Error(itemsErr.message || "Unable to load invoice items.");
+  }
+  return { invoice, items: items || [] };
+};
+
+SpecCom.helpers.exportInvoiceAgentCsvPayload = function(invoice, site, items){
+  const header = [
+    ["Invoice Number", invoice.invoice_number || ""],
+    ["Project", state.activeProject?.name || ""],
+    ["Site", site ? getSiteDisplayName(site) : ""],
+    ["Prepared By", state.profile?.display_name || state.user?.email || ""],
+    ["Prepared At", new Date(invoice.created_at || Date.now()).toLocaleString()],
+    ["Status", invoice.status || ""],
+  ];
+  const rows = (items || []).map((item) => ([
+    item.work_codes?.code || item.description || "",
+    item.description || "",
+    item.unit || "",
+    item.qty ?? 0,
+    item.rate ?? 0,
+    (Number(item.qty || 0) * Number(item.rate || 0)).toFixed(2),
+  ]));
+  const csv = []
+    .concat(header.map(row => row.map(escapeCsv).join(",")))
+    .concat([["Work Code","Description","Unit","Qty","Rate","Amount"].join(",")])
+    .concat(rows.map(row => row.map(escapeCsv).join(",")))
+    .join("\n");
+  return csv;
+};
+
+SpecCom.helpers.printInvoiceAgentPayload = function(invoice, site, items){
+  const totals = computeInvoiceTotals(items);
+  const now = new Date(invoice.created_at || Date.now()).toLocaleString();
+  const codeList = (items || []).map(i => i.work_codes?.code || i.description).filter(Boolean).join(", ");
+  const html = `
+    <html>
+      <head>
+        <title>Invoice ${invoice.invoice_number || ""}</title>
+        <style>
+          body{font-family:Arial, sans-serif; padding:24px; color:#111;}
+          h1{margin:0 0 8px;}
+          table{width:100%; border-collapse:collapse; margin-top:16px;}
+          th,td{border-bottom:1px solid #ccc; text-align:left; padding:8px;}
+          .meta{margin-top:12px; font-size:14px;}
+          .totals{margin-top:16px; text-align:right;}
+        </style>
+      </head>
+      <body>
+        <h1>Invoice ${escapeHtml(invoice.invoice_number || "")}</h1>
+        <div class="meta">Project: ${escapeHtml(state.activeProject?.name || "")}</div>
+        <div class="meta">Site: ${escapeHtml(site ? getSiteDisplayName(site) : "")}</div>
+        <div class="meta">Prepared by: ${escapeHtml(state.profile?.display_name || state.user?.email || "")}</div>
+        <div class="meta">Prepared at: ${escapeHtml(now)}</div>
+        <div class="meta">Work codes: ${escapeHtml(codeList || "-")}</div>
+        <table>
+          <thead><tr><th>Work Code</th><th>Description</th><th>Unit</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
+          <tbody>
+            ${(items || []).map((item) => `
+              <tr>
+                <td>${escapeHtml(item.work_codes?.code || item.description || "")}</td>
+                <td>${escapeHtml(item.description || "")}</td>
+                <td>${escapeHtml(item.unit || "")}</td>
+                <td>${Number(item.qty || 0)}</td>
+                <td>${formatMoney(item.rate)}</td>
+                <td>${formatMoney(Number(item.qty || 0) * Number(item.rate || 0))}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+        <div class="totals">
+          <div>Subtotal: ${formatMoney(totals.subtotal)}</div>
+          <div>Tax: ${formatMoney(totals.tax)}</div>
+          <div><b>Total: ${formatMoney(totals.total)}</b></div>
+        </div>
+      </body>
+    </html>
+  `;
+  const win = window.open("", "_blank");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  win.print();
+};
+
 function normalizeImportHeader(header){
   return String(header || "").trim().toLowerCase();
 }
@@ -2306,6 +2724,31 @@ function setRoleBasedVisibility(){
   }
 }
 
+SpecCom.helpers.loadYourInvoices = async function(projectId){
+  if (!projectId){
+    state.invoices = [];
+    renderInvoicePanel();
+    return;
+  }
+  if (isDemo){
+    state.invoices = [];
+    renderInvoicePanel();
+    return;
+  }
+  if (!state.client) return;
+  const { data, error } = await state.client
+    .from("invoices")
+    .select("id, invoice_number, status, total, site_id, billed_by_org_id, billed_to_org_id, created_at")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+  if (error){
+    toast("Invoices load error", error.message);
+    return;
+  }
+  state.invoices = data || [];
+  renderInvoicePanel();
+};
+
 function setRoleUI(){
   const roleCode = getRoleCode();
   const roleChip = $("chipRole");
@@ -2326,6 +2769,10 @@ function setRoleUI(){
   const buildChip = $("chipBuildMode");
   if (buildChip){
     buildChip.style.display = BUILD_MODE ? "inline-flex" : "none";
+  }
+  const invoiceAgentBtn = $("btnInvoiceAgent");
+  if (invoiceAgentBtn){
+    invoiceAgentBtn.style.display = SpecCom.helpers.isInvoiceAgentAllowed() ? "" : "none";
   }
   document.querySelectorAll(".no-pay-banner").forEach((el) => {
     el.style.display = BUILD_MODE ? "none" : "";
@@ -5967,6 +6414,22 @@ async function loadWorkCodes(){
   state.workCodes = data || [];
 }
 
+SpecCom.helpers.loadOrgs = async function(){
+  if (isDemo){
+    state.orgs = state.demo.orgs || [];
+    return;
+  }
+  const { data, error } = await state.client
+    .from("orgs")
+    .select("id, name, role")
+    .order("name");
+  if (error){
+    toast("Orgs error", error.message);
+    return;
+  }
+  state.orgs = data || [];
+};
+
 async function loadRateCards(projectId){
   if (isDemo){
     state.rateCards = state.demo.rateCards || [];
@@ -6194,6 +6657,7 @@ function setActiveProjectById(id){
   loadRateCards(state.activeProject?.id || null);
   loadLocationProofRequirements(state.activeProject?.id || null);
   loadBillingLocations(state.activeProject?.id || null);
+  SpecCom.helpers.loadYourInvoices(state.activeProject?.id || null);
   state.billingLocation = null;
   state.billingInvoice = null;
   state.billingItems = [];
@@ -7532,98 +7996,38 @@ function subscribeUsageEvents(nodeId){
 
 function renderInvoicePanel(){
   const wrap = $("invoicePanel");
-  const roleCode = getRoleCode();
-  const node = state.activeNode;
-
-  const canSeeSubInvoices = (roleCode === ROLES.PROJECT_MANAGER || roleCode === ROLES.USER_LEVEL_2 || roleCode === ROLES.ADMIN || roleCode === ROLES.OWNER);
-  const canSeeTdsInvoices = (roleCode === ROLES.PROJECT_MANAGER || roleCode === ROLES.ADMIN || roleCode === ROLES.OWNER);
-  const canSeeAnyPricing = roleCode !== ROLES.USER_LEVEL_1;
-
-  let html = "";
-  html += `<div class="row">
-    <span class="chip"><span class="dot ${canSeeAnyPricing ? "ok" : "bad"}"></span><span>${canSeeAnyPricing ? t("pricingVisible") : t("pricingHiddenLabel")}</span></span>
-    <span class="chip"><span class="dot ${canSeeSubInvoices ? "ok" : "bad"}"></span><span>${t("subInvoicesLabel")} ${canSeeSubInvoices ? t("visible") : t("hidden")}</span></span>
-    <span class="chip"><span class="dot ${canSeeTdsInvoices ? "ok" : "bad"}"></span><span>${t("tdsInvoicesLabel")} ${canSeeTdsInvoices ? t("visible") : t("hidden")}</span></span>
-  </div>`;
-
-  html += `<div class="hr"></div>`;
-
-  if (!node){
-    html += `<div class="muted small">${t("openNodeInvoices")}</div>`;
-    wrap.innerHTML = html;
+  if (!wrap) return;
+  const invoices = state.invoices || [];
+  if (!state.activeProject){
+    wrap.innerHTML = `<div class="muted small">${t("selectProjectLocations")}</div>`;
     return;
   }
-
-  const eligible = true;
-
-  html += `<div class="note">
-    <div style="font-weight:900;">${t("billingGateTitle")}</div>
-    <div class="muted small">${t("billingGateBypass")}</div>
-    <div style="margin-top:8px;">${t("statusLabel")}: ${eligible ? `<span class="pill-ok">${t("eligibleLabel")}</span>` : `<span class="pill-warn">${t("notReadyLabel")}</span>`}</div>
-  </div>`;
-
-  html += `<div class="hr"></div>`;
-
-  if (isDemo){
-    const invoices = state.demo.invoices.filter(i => i.node_number === node.node_number);
-    if (!invoices.length){
-      html += `<div class="muted small">${t("noInvoices")}</div>`;
-    } else {
-      html += `<table class="table">
-        <thead><tr><th>${t("fromLabel")}</th><th>${t("toLabel")}</th><th>${t("statusLabel")}</th><th>${t("amountLabel")}</th></tr></thead><tbody>
-        ${invoices.map(inv => {
-          const isSubSide = inv.from === ROLES.USER_LEVEL_1 || inv.from === ROLES.USER_LEVEL_2 || inv.to === ROLES.USER_LEVEL_1 || inv.to === ROLES.USER_LEVEL_2;
-          const isAdminSide = inv.from === ROLES.ADMIN || inv.to === ROLES.ADMIN || inv.from === ROLES.OWNER || inv.to === ROLES.OWNER;
-          const showAmount = canSeeAnyPricing && ((isSubSide && canSeeSubInvoices) || (isAdminSide && canSeeTdsInvoices));
-          const amt = showAmount ? "$1,234.00 (demo)" : t("hidden");
-          const fromLabel = formatRoleLabel(inv.from);
-          const toLabel = formatRoleLabel(inv.to);
-          return `<tr><td>${fromLabel}</td><td>${toLabel}</td><td>${inv.status}</td><td>${amt}</td></tr>`;
-        }).join("")}
-        </tbody></table>`;
-    }
-    wrap.innerHTML = html;
+  if (!invoices.length){
+    wrap.innerHTML = `<div class="muted small">${t("yourInvoicesEmpty")}</div>`;
     return;
   }
-
-  const sub = node.invoices?.sub || [];
-  const prime = node.invoices?.prime || [];
-  const rows = [];
-
-  if (canSeeSubInvoices){
-    sub.forEach(inv => rows.push({
-      from: ROLES.USER_LEVEL_1,
-      to: ROLES.PROJECT_MANAGER,
-      status: inv.status || "Draft",
-      amount: inv.total,
-      number: inv.invoice_number || "-",
-    }));
-  }
-  if (canSeeTdsInvoices){
-    prime.forEach(inv => rows.push({
-      from: ROLES.PROJECT_MANAGER,
-      to: ROLES.ADMIN,
-      status: inv.status || "Draft",
-      amount: inv.total,
-      number: inv.invoice_number || "-",
-    }));
-  }
-
-  if (!rows.length){
-    html += `<div class="muted small">${t("noInvoices")}</div>`;
-  } else {
-    html += `<table class="table">
-      <thead><tr><th>${t("fromLabel")}</th><th>${t("toLabel")}</th><th>${t("invoiceNumberLabel")}</th><th>${t("statusLabel")}</th><th>${t("amountLabel")}</th></tr></thead><tbody>
-      ${rows.map(inv => {
-        const amt = (canSeeAnyPricing && inv.amount != null) ? `$${Number(inv.amount).toFixed(2)}` : t("hidden");
-        const fromLabel = formatRoleLabel(inv.from);
-        const toLabel = formatRoleLabel(inv.to);
-        return `<tr><td>${fromLabel}</td><td>${toLabel}</td><td>${inv.number}</td><td>${inv.status}</td><td>${amt}</td></tr>`;
-      }).join("")}
-      </tbody></table>`;
-  }
-
-  wrap.innerHTML = html;
+  const orgId = state.profile?.org_id || null;
+  const rows = invoices.map((inv) => {
+    const site = (state.projectSites || []).find(s => s.id === inv.site_id) || null;
+    const siteName = site ? getSiteDisplayName(site) : inv.site_id || "-";
+    const roleLabel = orgId && inv.billed_by_org_id === orgId ? t("issuerLabel") : t("recipientLabel");
+    return `
+      <tr>
+        <td>${escapeHtml(inv.invoice_number || "-")}</td>
+        <td>${escapeHtml(siteName)}</td>
+        <td>${escapeHtml(inv.status || "draft")}</td>
+        <td>${roleLabel}</td>
+        <td>${formatMoney(inv.total)}</td>
+      </tr>
+    `;
+  }).join("");
+  wrap.innerHTML = `
+    <div class="muted small" style="margin-bottom:8px;">${t("yourInvoicesTitle")}</div>
+    <table class="table">
+      <thead><tr><th>${t("invoiceNumberLabel")}</th><th>${t("locationLabel")}</th><th>${t("statusLabel")}</th><th>${t("roleLabel")}</th><th>${t("amountLabel")}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
 }
 
 
@@ -9497,9 +9901,11 @@ async function postLoginBootstrap(client, user){
     await loadProjectSites(state.activeProject?.id || null);
     await loadUnitTypes();
     await loadWorkCodes();
+    await SpecCom.helpers.loadOrgs();
     await loadRateCards(state.activeProject?.id || null);
     await loadLocationProofRequirements(state.activeProject?.id || null);
     await loadBillingLocations(state.activeProject?.id || null);
+    await SpecCom.helpers.loadYourInvoices(state.activeProject?.id || null);
     await loadMaterialCatalog();
     await loadAlerts();
     renderAlerts();
@@ -10056,6 +10462,10 @@ function wireUI(){
       e.target.value = "";
     });
   }
+  const invoiceAgentBtn = $("btnInvoiceAgent");
+  if (invoiceAgentBtn){
+    invoiceAgentBtn.addEventListener("click", () => SpecCom.helpers.openInvoiceAgentModal());
+  }
   const siteList = $("siteList");
   if (siteList){
     siteList.addEventListener("click", async (e) => {
@@ -10082,6 +10492,82 @@ function wireUI(){
   const importConfirmBtn = $("btnImportLocationsConfirm");
   if (importConfirmBtn){
     importConfirmBtn.addEventListener("click", () => confirmImportLocations());
+  }
+  const invoiceAgentCloseBtn = $("btnInvoiceAgentClose");
+  if (invoiceAgentCloseBtn){
+    invoiceAgentCloseBtn.addEventListener("click", () => SpecCom.helpers.closeInvoiceAgentModal());
+  }
+  const invoiceAgentCancelBtn = $("btnInvoiceAgentCancel");
+  if (invoiceAgentCancelBtn){
+    invoiceAgentCancelBtn.addEventListener("click", () => SpecCom.helpers.closeInvoiceAgentModal());
+  }
+  const invoiceAgentConfirmBtn = $("btnInvoiceAgentConfirm");
+  if (invoiceAgentConfirmBtn){
+    invoiceAgentConfirmBtn.addEventListener("click", () => SpecCom.helpers.confirmInvoiceAgentGenerate());
+  }
+  const invoiceAgentSelectAll = $("invoiceAgentSelectAll");
+  if (invoiceAgentSelectAll){
+    invoiceAgentSelectAll.addEventListener("change", (e) => {
+      const eligible = state.invoiceAgent.candidates.filter(c => c.eligible).map(c => c.id);
+      state.invoiceAgent.selectedIds = e.target.checked ? eligible : [];
+      SpecCom.helpers.renderInvoiceAgentModal();
+    });
+  }
+  const invoiceAgentFromOrg = $("invoiceAgentFromOrg");
+  if (invoiceAgentFromOrg){
+    invoiceAgentFromOrg.addEventListener("change", () => SpecCom.helpers.renderInvoiceAgentModal());
+  }
+  const invoiceAgentToOrg = $("invoiceAgentToOrg");
+  if (invoiceAgentToOrg){
+    invoiceAgentToOrg.addEventListener("change", () => SpecCom.helpers.renderInvoiceAgentModal());
+  }
+  const invoiceAgentAllowDuplicates = $("invoiceAgentAllowDuplicates");
+  if (invoiceAgentAllowDuplicates){
+    invoiceAgentAllowDuplicates.addEventListener("change", (e) => {
+      state.invoiceAgent.allowDuplicates = e.target.checked;
+    });
+  }
+  const invoiceAgentList = $("invoiceAgentList");
+  if (invoiceAgentList){
+    invoiceAgentList.addEventListener("change", (e) => {
+      const checkbox = e.target.closest("input[type='checkbox'][data-site-id]");
+      if (!checkbox) return;
+      const siteId = checkbox.dataset.siteId;
+      if (!siteId) return;
+      if (checkbox.checked){
+        if (!state.invoiceAgent.selectedIds.includes(siteId)){
+          state.invoiceAgent.selectedIds.push(siteId);
+        }
+      } else {
+        state.invoiceAgent.selectedIds = state.invoiceAgent.selectedIds.filter(id => id !== siteId);
+      }
+      SpecCom.helpers.renderInvoiceAgentModal();
+    });
+  }
+  const invoiceAgentResults = $("invoiceAgentResults");
+  if (invoiceAgentResults){
+    invoiceAgentResults.addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-action]");
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const invoiceId = btn.dataset.invoiceId;
+      const siteId = btn.dataset.siteId;
+      if (!invoiceId) return;
+      try{
+        const { invoice, items } = await SpecCom.helpers.loadInvoiceAgentExportData(invoiceId);
+        const site = state.invoiceAgent.siteMap.get(siteId) || null;
+        if (action === "invoiceAgentExportCsv"){
+          const csv = SpecCom.helpers.exportInvoiceAgentCsvPayload(invoice, site, items);
+          downloadFile(`invoice-${invoice.invoice_number || invoice.id}.csv`, csv, "text/csv");
+        }
+        if (action === "invoiceAgentExportPdf"){
+          SpecCom.helpers.printInvoiceAgentPayload(invoice, site, items);
+        }
+      } catch (err){
+        console.error(err);
+        toast("Export failed", err.message || "Unable to export invoice.");
+      }
+    });
   }
   const siteMediaInput = $("siteMediaInput");
   if (siteMediaInput){

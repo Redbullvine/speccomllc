@@ -349,6 +349,7 @@
                 <input id="dropPinName" class="input compact" placeholder="Site name" data-i18n-placeholder="dropPinNamePlaceholder" />
                 <button id="btnDropPin" class="btn" data-action="dropPin" data-i18n="dropPin">Drop Pin</button>
                 <button id="btnImportLocations" class="btn secondary" type="button" data-i18n="importLocations">Import Locations (Excel/CSV)</button>
+                <button id="btnInvoiceAgent" class="btn secondary" type="button" data-i18n="invoiceAgentAction">Invoice Agent</button>
                 <input id="importLocationsInput" type="file" accept=".csv,.xlsx,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf" style="display:none;" />
               </div>
             </div>
@@ -693,6 +694,42 @@
         <div class="row" style="margin-top:12px; justify-content:flex-end;">
           <button id="btnImportLocationsCancel" class="btn ghost" type="button">Cancel</button>
           <button id="btnImportLocationsConfirm" class="btn" type="button">Confirm Import</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="invoiceAgentModal" class="modal" style="display:none;">
+      <div class="card modal-card">
+        <div class="modal-header">
+          <h2 data-i18n="invoiceAgentTitle">Invoice Agent</h2>
+          <button id="btnInvoiceAgentClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
+        </div>
+        <div class="field-stack" style="margin-top:10px;">
+          <div>
+            <div class="muted small" data-i18n="invoiceAgentFromLabel">From company</div>
+            <select id="invoiceAgentFromOrg" class="input"></select>
+          </div>
+          <div>
+            <div class="muted small" data-i18n="invoiceAgentToLabel">To company</div>
+            <select id="invoiceAgentToOrg" class="input"></select>
+          </div>
+        </div>
+        <div id="invoiceAgentSummary" class="muted small" style="margin-top:6px;"></div>
+        <div class="row" style="margin-top:10px; justify-content:space-between; align-items:center;">
+          <label class="row" style="gap:8px;">
+            <input id="invoiceAgentSelectAll" type="checkbox" />
+            <span data-i18n="invoiceAgentSelectAll">Select all eligible</span>
+          </label>
+          <label class="row" style="gap:8px;">
+            <input id="invoiceAgentAllowDuplicates" type="checkbox" />
+            <span data-i18n="invoiceAgentAllowDuplicates">Allow duplicates</span>
+          </label>
+        </div>
+        <div id="invoiceAgentList" class="field-stack" style="margin-top:10px; max-height:260px; overflow:auto;"></div>
+        <div id="invoiceAgentResults" class="note" style="display:none; margin-top:12px;"></div>
+        <div class="row" style="margin-top:12px; justify-content:flex-end;">
+          <button id="btnInvoiceAgentCancel" class="btn ghost" type="button" data-i18n="cancelLabel">Cancel</button>
+          <button id="btnInvoiceAgentConfirm" class="btn" type="button" data-i18n="invoiceAgentGenerate">Generate Drafts</button>
         </div>
       </div>
     </div>
