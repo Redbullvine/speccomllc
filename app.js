@@ -41,6 +41,7 @@ const supabaseReady = (async () => {
 })();
 
 const ROLES = {
+  ROOT: "ROOT",
   OWNER: "OWNER",
   ADMIN: "ADMIN",
   PROJECT_MANAGER: "PROJECT_MANAGER",
@@ -66,6 +67,7 @@ function getRoleValue(x){
 }
 
 const ROLE_LABELS = {
+  [ROLES.ROOT]: "Root",
   [ROLES.OWNER]: "Owner",
   [ROLES.ADMIN]: "Admin",
   [ROLES.PROJECT_MANAGER]: "Project Manager",
@@ -2590,21 +2592,29 @@ function isDemoUser(){
   return Boolean(state.profile?.is_demo);
 }
 
+SpecCom.helpers.isRoot = function(){
+  return getRoleCode() === ROLES.ROOT;
+};
+
 function isBillingManager(){
   const role = getRoleCode();
+  if (SpecCom.helpers.isRoot()) return true;
   return isPrivilegedRole(role) || role === ROLES.ADMIN;
 }
 
 function isOwner(){
+  if (SpecCom.helpers.isRoot()) return true;
   return getRoleCode() === ROLES.OWNER;
 }
 
 function isOwnerOrAdmin(){
   const role = getRoleCode();
+  if (SpecCom.helpers.isRoot()) return true;
   return role === ROLES.OWNER || role === ROLES.ADMIN;
 }
 
 function isPrivilegedRole(roleCode = getRoleCode()){
+  if (SpecCom.helpers.isRoot()) return true;
   return roleCode === ROLES.ADMIN || roleCode === ROLES.PROJECT_MANAGER || roleCode === ROLES.OWNER;
 }
 
@@ -2645,6 +2655,89 @@ function formatMoney(value){
   const num = Number(value || 0);
   return `$${num.toFixed(2)}`;
 }
+
+SpecCom.helpers.isRecoveryHash = function(){
+  const hash = String(window.location.hash || "");
+  if (!hash) return false;
+  const normalized = hash.startsWith("#") ? hash.slice(1) : hash;
+  return normalized.includes("type=recovery");
+};
+
+SpecCom.helpers.enterResetMode = function(){
+  const authForm = $("authForm");
+  const resetForm = $("resetForm");
+  if (authForm) authForm.style.display = "none";
+  if (resetForm) resetForm.style.display = "";
+  showAuth(true);
+};
+
+SpecCom.helpers.exitResetMode = function(){
+  const authForm = $("authForm");
+  const resetForm = $("resetForm");
+  if (authForm) authForm.style.display = "";
+  if (resetForm) resetForm.style.display = "none";
+};
+
+SpecCom.helpers.handleForgotPassword = async function(){
+  const client = state.client || supabase;
+  if (!client){
+    toast("Reset failed", "Supabase client unavailable.");
+    return;
+  }
+  let email = $("email")?.value.trim() || "";
+  if (!email){
+    const prompted = prompt("Enter your email address");
+    email = String(prompted || "").trim();
+  }
+  if (!email){
+    toast("Email required", "Enter your email address first.");
+    return;
+  }
+  const { error } = await client.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/#reset`,
+  });
+  if (error){
+    toast("Reset failed", error.message || "Password reset failed.");
+    return;
+  }
+  toast("Check your email", "Password reset link sent.");
+};
+
+SpecCom.helpers.handleResetSubmit = async function(){
+  const client = state.client || supabase;
+  if (!client){
+    toast("Reset failed", "Supabase client unavailable.");
+    return;
+  }
+  const nextPassword = $("resetPassword")?.value || "";
+  const confirmPassword = $("resetPasswordConfirm")?.value || "";
+  if (nextPassword.length < 8){
+    toast("Password too short", "Password must be at least 8 characters.");
+    return;
+  }
+  if (nextPassword !== confirmPassword){
+    toast("Passwords do not match", "Please confirm your password.");
+    return;
+  }
+  const { error } = await client.auth.updateUser({ password: nextPassword });
+  if (error){
+    toast("Reset failed", error.message || "Password update failed.");
+    return;
+  }
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  toast("Password updated", "Please sign in.");
+  await client.auth.signOut();
+  SpecCom.helpers.exitResetMode();
+  showAuth(true);
+};
+
+SpecCom.helpers.applyAuthModeFromHash = function(){
+  if (SpecCom.helpers.isRecoveryHash()){
+    SpecCom.helpers.enterResetMode();
+  } else {
+    SpecCom.helpers.exitResetMode();
+  }
+};
 
 function getNodeUnits(node){
   const allowed = node.units_allowed ?? node.allowed_units ?? 0;
@@ -5134,7 +5227,7 @@ async function loadProjects(){
 async function loadAdminProfiles(){
   const gate = $("adminBuildGate");
   const panel = $("adminUsersPanel");
-  const allowed = BUILD_MODE && isOwner();
+  const allowed = SpecCom.helpers.isRoot() || (BUILD_MODE && isOwner());
   if (gate) gate.style.display = allowed ? "none" : "";
   if (panel) panel.style.display = allowed ? "" : "none";
   if (!allowed) return;
@@ -5159,7 +5252,7 @@ async function loadAdminProfiles(){
 function renderAdminProfiles(){
   const wrap = $("adminUsersList");
   if (!wrap) return;
-  if (!BUILD_MODE || !isOwner()){
+  if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
     wrap.innerHTML = "";
     return;
   }
@@ -5212,7 +5305,7 @@ async function createAdminProfile(){
     toast("Demo restriction", t("availableInProduction"));
     return;
   }
-  if (!BUILD_MODE || !isOwner()){
+  if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
     toast("Not allowed", "Admin role required.");
     return;
   }
@@ -5251,7 +5344,7 @@ async function updateAdminProfile(userId){
     toast("Demo restriction", t("availableInProduction"));
     return;
   }
-  if (!BUILD_MODE || !isOwner()){
+  if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
     toast("Not allowed", "Admin role required.");
     return;
   }
@@ -5282,7 +5375,7 @@ async function deleteAdminProfile(userId){
     toast("Demo restriction", t("availableInProduction"));
     return;
   }
-  if (!BUILD_MODE || !isOwner()){
+  if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
     toast("Not allowed", "Owner role required.");
     return;
   }
@@ -6086,7 +6179,7 @@ function renderNodeCards(){
     wrap.innerHTML = `<div class="muted small">${t("selectProjectNodes")}</div>`;
     return;
   }
-  const showBuildControls = BUILD_MODE && isOwner();
+  const showBuildControls = SpecCom.helpers.isRoot() || (BUILD_MODE && isOwner());
   const activeNode = state.projectNodes.find(n => n.status === "ACTIVE");
   wrap.innerHTML = state.projectNodes.map((node) => {
     const status = node.status || "NOT_STARTED";
@@ -6169,7 +6262,11 @@ async function completeNode(nodeId){
     return;
   }
   const roleCode = getRoleCode();
-  const canComplete = BUILD_MODE ? (roleCode === "ADMIN" || roleCode === "PROJECT_MANAGER") : (roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN");
+  const canComplete = SpecCom.helpers.isRoot()
+    ? true
+    : (BUILD_MODE
+      ? (roleCode === "ADMIN" || roleCode === "PROJECT_MANAGER")
+      : (roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN"));
   if (!canComplete){
     toast("Not allowed", "Only Admin or Project Manager can complete a site.");
     return;
@@ -6203,7 +6300,7 @@ async function completeNode(nodeId){
 }
 
 async function editNodeMeta(nodeId){
-  if (!BUILD_MODE || !isOwner()){
+  if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
     toast("Not allowed", "Admin role required.");
     return;
   }
@@ -6260,7 +6357,7 @@ async function deleteNode(nodeId){
     toast("Demo restriction", t("availableInProduction"));
     return;
   }
-  if (!BUILD_MODE || !isOwner()){
+  if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
     toast("Not allowed", "Admin role required.");
     return;
   }
@@ -6709,7 +6806,7 @@ async function saveCurrentProjectPreference(projectId){
 
 function canSeedDemo(){
   const roleCode = getRoleCode();
-  return roleCode === "ADMIN" || roleCode === "PROJECT_MANAGER";
+  return SpecCom.helpers.isRoot() || roleCode === "ADMIN" || roleCode === "PROJECT_MANAGER";
 }
 
 async function seedDemoNode(){
@@ -6754,7 +6851,7 @@ function renderLocations(){
     if (billingLocked && r.isEditingPorts) r.isEditingPorts = false;
     const displayName = getSpliceLocationDisplayName(r, index);
     const inputValue = r.pending_label ?? (r.label ?? "");
-    const canDelete = BUILD_MODE ? true : getRoleCode() === "ADMIN";
+    const canDelete = SpecCom.helpers.isRoot() || (BUILD_MODE ? true : getRoleCode() === "ADMIN");
     const disableActions = r.isDeleting;
     const nameHtml = r.isEditingName
       ? `
@@ -7295,7 +7392,7 @@ function openDeleteSpliceLocationModal(locationId){
   }
   const node = state.activeNode;
   if (!node) return;
-  const canDelete = BUILD_MODE ? true : getRoleCode() === "ADMIN";
+  const canDelete = SpecCom.helpers.isRoot() || (BUILD_MODE ? true : getRoleCode() === "ADMIN");
   if (!canDelete){
     toast("Not allowed", "Only Admin can delete locations.");
     return;
@@ -7326,7 +7423,7 @@ async function deleteSpliceLocation(locationId, options = {}){
   if (!node) return false;
   const loc = node.splice_locations.find(l => l.id === locationId);
   if (!loc) return false;
-  const canDelete = BUILD_MODE ? true : getRoleCode() === "ADMIN";
+  const canDelete = SpecCom.helpers.isRoot() || (BUILD_MODE ? true : getRoleCode() === "ADMIN");
   if (!canDelete){
     toast("Not allowed", "Only Admin can delete locations.");
     return false;
@@ -8512,7 +8609,7 @@ async function markInvoiceReady(){
 }
 
 async function updateInvoiceStatus(){
-  if (!BUILD_MODE || !isOwner()){
+  if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
     toast("Not allowed", "Admin role required.");
     return;
   }
@@ -8873,7 +8970,7 @@ function getRemainingForItem(item){
 
 function updateAlertsBadge(){
   const roleCode = getRoleCode();
-  const canSeeAlerts = roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN";
+  const canSeeAlerts = SpecCom.helpers.isRoot() || roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN";
   const openAlerts = canSeeAlerts ? (state.alerts || []).filter(a => a.status === "open") : [];
   const count = openAlerts.length;
   const badge = $("alertsBadge");
@@ -8940,7 +9037,7 @@ async function loadSplicePhotos(nodeId, locs){
 
 function renderAlerts(){
   const roleCode = getRoleCode();
-  const canSeeAlerts = roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN";
+  const canSeeAlerts = SpecCom.helpers.isRoot() || roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN";
   const list = canSeeAlerts ? (state.alerts || []) : [];
   const targets = [$("alertsFeed"), $("alertsFeedFull")].filter(Boolean);
   if (!targets.length) return;
@@ -9726,6 +9823,8 @@ async function initAuth(){
   supabase = state.client;
   setAuthButtonsDisabled(false);
   window.addEventListener("online", () => syncPendingSites());
+  SpecCom.helpers.applyAuthModeFromHash();
+  window.addEventListener("hashchange", () => SpecCom.helpers.applyAuthModeFromHash());
 
   if (window.location.pathname.endsWith("/demo-login")){
     await demoLogin();
@@ -10243,6 +10342,20 @@ function wireUI(){
     authForm.addEventListener("submit", (e) => {
       e.preventDefault();
       handleSignIn();
+    });
+  }
+  const forgotBtn = $("btnForgotPassword");
+  if (forgotBtn){
+    forgotBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      await SpecCom.helpers.handleForgotPassword();
+    });
+  }
+  const resetBtn = $("btnResetPassword");
+  if (resetBtn){
+    resetBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      await SpecCom.helpers.handleResetSubmit();
     });
   }
 

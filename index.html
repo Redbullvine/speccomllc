@@ -54,6 +54,18 @@
               <button id="btnSignUp" class="btn secondary" data-action="signUp" data-i18n="createUser" type="button">Create account</button>
               <button id="btnDemoLogin" class="btn ghost" data-action="demoLogin" data-i18n="demoLogin" type="button">Demo login</button>
             </div>
+            <div class="row" style="margin-top:8px;">
+              <button id="btnForgotPassword" class="btn ghost small" type="button">Forgot password?</button>
+            </div>
+          </form>
+          <form id="resetForm" autocomplete="on" style="display:none;">
+            <div class="field-stack">
+              <input id="resetPassword" class="input" placeholder="New password" type="password" autocomplete="new-password" />
+              <input id="resetPasswordConfirm" class="input" placeholder="Confirm password" type="password" autocomplete="new-password" />
+            </div>
+            <div class="row" style="margin-top:12px;">
+              <button id="btnResetPassword" class="btn" type="button">Reset password</button>
+            </div>
           </form>
         </div>
       </div>
