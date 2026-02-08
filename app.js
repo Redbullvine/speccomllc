@@ -2038,33 +2038,53 @@ SpecCom.helpers.confirmInvoiceAgentGenerate = async function(){
     return;
   }
   if (!selected.length){
-    toast("No sites", "Select at least one eligible site.");
+    toast("No eligible sites", "No eligible sites found for invoicing.");
     return;
   }
   if (!state.client){
     toast("Unavailable", "Supabase client unavailable.");
     return;
   }
+  toast("Invoice Agent", "Generating invoice drafts...");
   state.invoiceAgent.busy = true;
   const btn = $("btnInvoiceAgentConfirm");
-  if (btn) btn.disabled = true;
-  const { data, error } = await state.client.rpc("fn_generate_tiered_invoices", {
-    p_project_id: projectId,
-    p_site_ids: selected,
-    p_allow_duplicate: state.invoiceAgent.allowDuplicates,
-    p_from_org_id: fromOrgId,
-    p_to_org_id: toOrgId,
-  });
-  if (btn) btn.disabled = false;
-  state.invoiceAgent.busy = false;
-  if (error){
-    toast("Generation failed", error.message || "Invoice generation failed.");
-    return;
+  if (btn){
+    btn.disabled = true;
+    btn.dataset.originalLabel = btn.textContent;
+    btn.textContent = "Generating...";
   }
-  // TODO(phase2): email delivery + accounting sync after invoice generation.
-  state.invoiceAgent.results = data || null;
-  SpecCom.helpers.renderInvoiceAgentModal();
-  await SpecCom.helpers.loadYourInvoices(projectId);
+  try{
+    const { data, error } = await state.client.rpc("fn_generate_tiered_invoices", {
+      p_project_id: projectId,
+      p_site_ids: selected,
+      p_allow_duplicate: state.invoiceAgent.allowDuplicates,
+      p_from_org_id: fromOrgId,
+      p_to_org_id: toOrgId,
+    });
+    if (error){
+      throw error;
+    }
+    // TODO(phase2): email delivery + accounting sync after invoice generation.
+    state.invoiceAgent.results = data || null;
+    SpecCom.helpers.renderInvoiceAgentModal();
+    await SpecCom.helpers.loadYourInvoices(projectId);
+    const createdCount = Number(data?.created || 0);
+    if (createdCount > 0){
+      toast("Invoice drafts created", `Invoice drafts created (${createdCount} sites)`);
+    } else {
+      toast("No eligible sites", "No eligible sites found for invoicing.");
+    }
+  } catch (err){
+    console.error(err);
+    toast("Invoice generation failed", "Please try again.");
+  } finally {
+    state.invoiceAgent.busy = false;
+    if (btn){
+      btn.disabled = false;
+      btn.textContent = btn.dataset.originalLabel || "Generate Drafts";
+      delete btn.dataset.originalLabel;
+    }
+  }
 };
 
 SpecCom.helpers.loadInvoiceAgentExportData = async function(invoiceId){
