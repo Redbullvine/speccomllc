@@ -2,6 +2,7 @@ import { appMode, hasSupabaseConfig, isDemo, makeClient } from "./supabaseClient
 
 const $ = (id) => document.getElementById(id);
 window.SpecCom = window.SpecCom || {};
+const SpecCom = window.SpecCom;
 SpecCom.helpers = SpecCom.helpers || {};
 let supabase = null;
 const createClient = (url, anonKey) => window.supabase.createClient(url, anonKey, {
