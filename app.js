@@ -2648,6 +2648,7 @@ function isBillingUnlocked(){
   if (MVP_UNGATED) return true;
   if (isDemo) return true;
   if (BUILD_MODE) return true;
+  if (SpecCom.helpers.isRoot()) return true;
   return Boolean(state.nodeProofStatus?.billing_unlocked);
 }
 
@@ -8212,7 +8213,7 @@ function renderBillingDetail(){
   const proofLabel = proofRequired === 0 ? t("proofNotRequired") : t("proofProgress", { uploaded: proofUploaded, required: proofRequired });
   const totals = computeInvoiceTotals(items);
   const status = invoice?.status || "draft";
-  const locked = ["submitted", "paid", "void"].includes(status);
+  const locked = SpecCom.helpers.isRoot() ? false : ["submitted", "paid", "void"].includes(status);
   const billingUnlocked = isBillingUnlocked();
   const editLocked = locked || !billingUnlocked;
   const rateCard = state.rateCards.find(r => r.id === state.activeRateCardId);
@@ -8957,6 +8958,7 @@ function getLocationBillingStatus(locationId){
 }
 
 function isLocationBillingLocked(locationId){
+  if (SpecCom.helpers.isRoot()) return false;
   if (BUILD_MODE) return false;
   const status = getLocationBillingStatus(locationId);
   return ["ready", "submitted", "paid", "void"].includes(String(status).toLowerCase());
