@@ -50,7 +50,7 @@
               <input id="password" class="input" placeholder="password" type="password" data-i18n-placeholder="passwordPlaceholder" autocomplete="current-password" />
             </div>
             <div class="row" style="margin-top:12px;">
-              <button id="btnSignIn" class="btn" data-action="signIn" data-i18n="signIn" type="submit">Sign in</button>
+              <button id="btnSignIn" class="btn" data-action="signIn" data-i18n="signIn" type="button">Sign in</button>
               <button id="btnSignUp" class="btn secondary" data-action="signUp" data-i18n="createUser" type="button">Create account</button>
               <button id="btnDemoLogin" class="btn ghost" data-action="demoLogin" data-i18n="demoLogin" type="button">Demo login</button>
             </div>
@@ -678,6 +678,21 @@
         <div class="row" style="margin-top:12px; justify-content:flex-end;">
           <button id="btnDispatchCancel" class="btn ghost" data-action="dispatchCancel" data-i18n="cancelLabel">Cancel</button>
           <button id="btnDispatchSave" class="btn" data-action="dispatchSave" data-i18n="saveLabel">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="importLocationsModal" class="modal" style="display:none;">
+      <div class="card modal-card">
+        <div class="modal-header">
+          <h2>Import locations</h2>
+          <button id="btnImportLocationsClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
+        </div>
+        <div id="importLocationsSummary" class="muted small" style="margin-top:6px;"></div>
+        <div id="importLocationsList" class="field-stack" style="margin-top:10px; max-height:240px; overflow:auto;"></div>
+        <div class="row" style="margin-top:12px; justify-content:flex-end;">
+          <button id="btnImportLocationsCancel" class="btn ghost" type="button">Cancel</button>
+          <button id="btnImportLocationsConfirm" class="btn" type="button">Confirm Import</button>
         </div>
       </div>
     </div>

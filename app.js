@@ -158,6 +158,10 @@ const state = {
     editing: null,
     importWarnings: [],
   },
+  importPreview: {
+    projectId: null,
+    rows: [],
+  },
   labor: {
     rows: [],
   },
@@ -1677,6 +1681,59 @@ function clearImportPreviewMarkers(){
   state.map.importPreviewMarkers = [];
 }
 
+function openImportLocationsModal(rows, project){
+  const modal = $("importLocationsModal");
+  const summary = $("importLocationsSummary");
+  const list = $("importLocationsList");
+  if (!modal || !summary || !list) return;
+  const projectName = project?.name || "Project";
+  summary.textContent = `You are about to import ${rows.length} locations into Project ${projectName}.`;
+  list.innerHTML = rows
+    .slice(0, 50)
+    .map((row) => {
+      const lat = Number(row.latitude).toFixed(6);
+      const lng = Number(row.longitude).toFixed(6);
+      return `<div class="muted small">• ${escapeHtml(row.location_name)} (${lat}, ${lng})</div>`;
+    })
+    .join("");
+  if (rows.length > 50){
+    list.innerHTML += `<div class="muted small">…and ${rows.length - 50} more</div>`;
+  }
+  modal.style.display = "";
+}
+
+function closeImportLocationsModal(){
+  const modal = $("importLocationsModal");
+  if (!modal) return;
+  modal.style.display = "none";
+}
+
+async function confirmImportLocations(){
+  const rows = state.importPreview.rows || [];
+  const projectId = state.importPreview.projectId;
+  if (!rows.length || !projectId){
+    closeImportLocationsModal();
+    return;
+  }
+  const client = await supabaseReady;
+  if (!client){
+    toast("Import failed", "Supabase client unavailable.");
+    return;
+  }
+  const { error } = await client.rpc("fn_import_sites", {
+    p_project_id: projectId,
+    p_sites: rows,
+  });
+  if (error){
+    toast("Import failed", error.message || "Import failed.");
+    return;
+  }
+  toast("Import complete", `Imported ${rows.length} locations.`);
+  closeImportLocationsModal();
+  clearImportPreviewMarkers();
+  await loadProjectSites(projectId);
+}
+
 function showPendingPinMarker(latlng){
   ensureMap();
   if (!state.map.instance || !window.L || !latlng) return;
@@ -3029,7 +3086,7 @@ async function importDispatchCsv(file){
   }
 }
 
-async function handleImportSites(projectId, file){
+async function handleLocationImport(file){
   if (!file){
     const input = $("importLocationsInput");
     if (input){
@@ -3038,9 +3095,14 @@ async function handleImportSites(projectId, file){
     }
     return;
   }
-  const activeProjectId = projectId || state.activeProject?.id || null;
+  const activeProjectId = state.activeProject?.id || null;
   if (!activeProjectId){
     toast("Project required", "Select a project before importing.");
+    return;
+  }
+
+  if (!file.name.toLowerCase().endsWith(".csv")){
+    toast("Import error", "Only CSV files are supported right now.");
     return;
   }
 
@@ -3051,31 +3113,47 @@ async function handleImportSites(projectId, file){
     toast("Import error", "No data rows found.");
     return;
   }
-  const headers = lines[0].split(",").map(h => h.trim());
-  const rows = lines.slice(1).map((line) => {
+  const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+  const rows = lines.slice(1).map((line, idx) => {
     const values = line.split(",");
-    return Object.fromEntries(
+    const row = Object.fromEntries(
       headers.map((h, i) => [h, values[i]?.trim()])
     );
+    row.__rowNumber = idx + 2;
+    return row;
   });
   console.log("Parsed rows:", rows);
 
-  const valid = rows.every(r =>
-    r.location_name &&
-    !isNaN(parseFloat(r.latitude)) &&
-    !isNaN(parseFloat(r.longitude))
-  );
-  if (!valid){
-    toast("Invalid CSV format", "Invalid CSV format");
+  const invalidRows = rows
+    .filter(r => {
+      const nameOk = Boolean(r.location_name && String(r.location_name).trim());
+      const lat = Number.parseFloat(r.latitude);
+      const lng = Number.parseFloat(r.longitude);
+      const latOk = Number.isFinite(lat) && lat >= -90 && lat <= 90;
+      const lngOk = Number.isFinite(lng) && lng >= -180 && lng <= 180;
+      return !(nameOk && latOk && lngOk);
+    })
+    .map(r => r.__rowNumber);
+  if (invalidRows.length){
+    toast("Invalid CSV format", `Invalid rows: ${invalidRows.join(", ")}`);
     return;
   }
+
+  const normalized = rows.map((row) => ({
+    location_name: String(row.location_name).trim(),
+    latitude: Number.parseFloat(row.latitude),
+    longitude: Number.parseFloat(row.longitude),
+  }));
+
+  state.importPreview.projectId = activeProjectId;
+  state.importPreview.rows = normalized;
 
   clearImportPreviewMarkers();
   ensureMap();
   if (state.map.instance && window.L){
-    state.map.importPreviewMarkers = rows.map((row) => {
-      const lat = parseFloat(row.latitude);
-      const lng = parseFloat(row.longitude);
+    state.map.importPreviewMarkers = normalized.map((row) => {
+      const lat = row.latitude;
+      const lng = row.longitude;
       const marker = window.L.circleMarker([lat, lng], {
         radius: 6,
         color: "#f97316",
@@ -3088,7 +3166,7 @@ async function handleImportSites(projectId, file){
     });
   }
 
-  toast("Import preview", `You are about to import ${rows.length} locations.`);
+  openImportLocationsModal(normalized, state.activeProject);
 }
 
 async function importLocationsFile(file){
@@ -9844,11 +9922,11 @@ function wireUI(){
   const importLocationsInput = $("importLocationsInput");
   if (importLocationsBtn && importLocationsInput){
     importLocationsBtn.addEventListener("click", () => {
-      handleImportSites(state.activeProject?.id || null);
+      importLocationsInput.click();
     });
     importLocationsInput.addEventListener("change", async (e) => {
       const file = e.target.files?.[0] || null;
-      await handleImportSites(state.activeProject?.id || null, file);
+      await handleLocationImport(file);
       e.target.value = "";
     });
   }
@@ -9866,6 +9944,18 @@ function wireUI(){
   const closePanelBtn = $("btnCloseSitePanel");
   if (closePanelBtn){
     closePanelBtn.addEventListener("click", () => closeSitePanel());
+  }
+  const importCloseBtn = $("btnImportLocationsClose");
+  if (importCloseBtn){
+    importCloseBtn.addEventListener("click", () => closeImportLocationsModal());
+  }
+  const importCancelBtn = $("btnImportLocationsCancel");
+  if (importCancelBtn){
+    importCancelBtn.addEventListener("click", () => closeImportLocationsModal());
+  }
+  const importConfirmBtn = $("btnImportLocationsConfirm");
+  if (importConfirmBtn){
+    importConfirmBtn.addEventListener("click", () => confirmImportLocations());
   }
   const siteMediaInput = $("siteMediaInput");
   if (siteMediaInput){
