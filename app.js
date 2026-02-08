@@ -1720,7 +1720,7 @@ async function confirmImportLocations(){
     toast("Import failed", "Supabase client unavailable.");
     return;
   }
-  const { error } = await client.rpc("fn_import_sites", {
+  const { data, error } = await client.rpc("fn_import_sites", {
     p_project_id: projectId,
     p_sites: rows,
   });
@@ -1728,10 +1728,139 @@ async function confirmImportLocations(){
     toast("Import failed", error.message || "Import failed.");
     return;
   }
-  toast("Import complete", `Imported ${rows.length} locations.`);
-  closeImportLocationsModal();
+  const imported = data?.imported ?? 0;
+  const skipped = data?.skipped ?? 0;
+  const errors = data?.errors || [];
+  toast("Import complete", `Imported ${imported} locations. Skipped ${skipped}.`);
+  if (errors.length){
+    const summary = $("importLocationsSummary");
+    const list = $("importLocationsList");
+    if (summary) summary.textContent = `Imported ${imported}. Skipped ${skipped}.`;
+    if (list){
+      list.innerHTML = errors.map((err) => (
+        `<div class="muted small">Row ${escapeHtml(err.row)}: ${escapeHtml(err.reason || "Invalid row")}</div>`
+      )).join("");
+    }
+  } else {
+    closeImportLocationsModal();
+  }
   clearImportPreviewMarkers();
   await loadProjectSites(projectId);
+}
+
+function normalizeImportHeader(header){
+  return String(header || "").trim().toLowerCase();
+}
+
+function parseDelimited(text, delimiter){
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(delimiter).map(normalizeImportHeader);
+  return lines.slice(1).map((line, idx) => {
+    const values = line.split(delimiter);
+    const row = Object.fromEntries(
+      headers.map((h, i) => [h, values[i]?.trim()])
+    );
+    row.__rowNumber = idx + 2;
+    return row;
+  });
+}
+
+async function parseCsvFile(file){
+  const text = await file.text();
+  return parseDelimited(text, ",");
+}
+
+async function parseXlsxFile(file){
+  if (!window.XLSX) throw new Error("XLSX parser not available");
+  const buffer = await file.arrayBuffer();
+  const workbook = window.XLSX.read(buffer, { type: "array" });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1 });
+  if (!rows.length) return [];
+  const headers = rows[0].map(normalizeImportHeader);
+  return rows.slice(1).filter((r) => r && r.length).map((r, idx) => {
+    const row = Object.fromEntries(
+      headers.map((h, i) => [h, String(r[i] ?? "").trim()])
+    );
+    row.__rowNumber = idx + 2;
+    return row;
+  });
+}
+
+async function loadPdfJs(){
+  if (window.pdfjsLib) return window.pdfjsLib;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  return window.pdfjsLib;
+}
+
+async function parsePdfFile(file){
+  const pdfjsLib = await loadPdfJs();
+  // TODO: PDF parsing assumes a text table with comma/tab or multi-space delimiters.
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  let text = "";
+  for (let i = 1; i <= pdf.numPages; i += 1){
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items.map((item) => item.str).join(" ");
+    text += `${pageText}\n`;
+  }
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return [];
+  const headerLine = lines[0];
+  let delimiter = ",";
+  if (headerLine.includes("\t")) delimiter = "\t";
+  else if (!headerLine.includes(",")) delimiter = null;
+  if (delimiter){
+    return parseDelimited(lines.join("\n"), delimiter);
+  }
+  // fallback to 2+ spaces
+  const headers = headerLine.split(/\s{2,}/).map(normalizeImportHeader);
+  return lines.slice(1).map((line, idx) => {
+    const values = line.split(/\s{2,}/);
+    const row = Object.fromEntries(
+      headers.map((h, i) => [h, values[i]?.trim()])
+    );
+    row.__rowNumber = idx + 2;
+    return row;
+  });
+}
+
+function buildItemsFromRow(row){
+  const items = [];
+  Object.keys(row).forEach((key) => {
+    const match = key.match(/^item_(\d+)$/);
+    if (!match) return;
+    const idx = match[1];
+    const item = String(row[key] || "").trim();
+    if (!item) return;
+    const qtyKey = `qty_${idx}`;
+    const qtyRaw = row[qtyKey];
+    const qty = qtyRaw == null || qtyRaw === "" ? null : Number(qtyRaw);
+    items.push({ item, qty: Number.isFinite(qty) ? qty : null });
+  });
+  return items;
+}
+
+function validateImportRows(rows){
+  const invalidRows = [];
+  rows.forEach((r) => {
+    const nameOk = Boolean(r.location_name && String(r.location_name).trim());
+    const lat = Number.parseFloat(r.latitude);
+    const lng = Number.parseFloat(r.longitude);
+    const latOk = Number.isFinite(lat) && lat >= -90 && lat <= 90;
+    const lngOk = Number.isFinite(lng) && lng >= -180 && lng <= 180;
+    if (!(nameOk && latOk && lngOk)) invalidRows.push(r.__rowNumber);
+  });
+  return invalidRows;
 }
 
 function showPendingPinMarker(latlng){
@@ -3101,39 +3230,31 @@ async function handleLocationImport(file){
     return;
   }
 
-  if (!file.name.toLowerCase().endsWith(".csv")){
-    toast("Import error", "Only CSV files are supported right now.");
+  console.log("Import handler reached, file selected:", file.name);
+  const name = file.name.toLowerCase();
+  let rows = [];
+  try{
+    if (name.endsWith(".csv")){
+      rows = await parseCsvFile(file);
+    } else if (name.endsWith(".xlsx") || name.endsWith(".xls")){
+      rows = await parseXlsxFile(file);
+    } else if (name.endsWith(".pdf")){
+      rows = await parsePdfFile(file);
+    } else {
+      toast("Import error", "Unsupported file type.");
+      return;
+    }
+  } catch (error){
+    reportErrorToast("Import failed", error);
     return;
   }
-
-  console.log("Import handler reached, file selected:", file.name);
-  const text = await file.text();
-  const lines = text.split(/\r?\n/).filter(Boolean);
-  if (lines.length < 2){
+  if (!rows.length){
     toast("Import error", "No data rows found.");
     return;
   }
-  const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
-  const rows = lines.slice(1).map((line, idx) => {
-    const values = line.split(",");
-    const row = Object.fromEntries(
-      headers.map((h, i) => [h, values[i]?.trim()])
-    );
-    row.__rowNumber = idx + 2;
-    return row;
-  });
   console.log("Parsed rows:", rows);
 
-  const invalidRows = rows
-    .filter(r => {
-      const nameOk = Boolean(r.location_name && String(r.location_name).trim());
-      const lat = Number.parseFloat(r.latitude);
-      const lng = Number.parseFloat(r.longitude);
-      const latOk = Number.isFinite(lat) && lat >= -90 && lat <= 90;
-      const lngOk = Number.isFinite(lng) && lng >= -180 && lng <= 180;
-      return !(nameOk && latOk && lngOk);
-    })
-    .map(r => r.__rowNumber);
+  const invalidRows = validateImportRows(rows);
   if (invalidRows.length){
     toast("Invalid CSV format", `Invalid rows: ${invalidRows.join(", ")}`);
     return;
@@ -3143,6 +3264,11 @@ async function handleLocationImport(file){
     location_name: String(row.location_name).trim(),
     latitude: Number.parseFloat(row.latitude),
     longitude: Number.parseFloat(row.longitude),
+    finish_date: row.finish_date ? String(row.finish_date).trim() : null,
+    map_url: row.map_url ? String(row.map_url).trim() : null,
+    gps_status: row.gps_status ? String(row.gps_status).trim() : null,
+    items: buildItemsFromRow(row),
+    __rowNumber: row.__rowNumber,
   }));
 
   state.importPreview.projectId = activeProjectId;
