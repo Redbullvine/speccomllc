@@ -2167,14 +2167,14 @@ SpecCom.helpers.printInvoiceAgentPayload = function(invoice, site, items){
   win.print();
 };
 
-function normalizeImportHeader(header){
+SpecCom.helpers.normalizeImportHeader = function(header){
   return String(header || "").trim().toLowerCase();
-}
+};
 
 function parseDelimited(text, delimiter){
   const lines = text.split(/\r?\n/).filter(Boolean);
   if (lines.length < 2) return [];
-  const headers = lines[0].split(delimiter).map(normalizeImportHeader);
+  const headers = lines[0].split(delimiter).map(SpecCom.helpers.normalizeImportHeader);
   return lines.slice(1).map((line, idx) => {
     const values = line.split(delimiter);
     const row = Object.fromEntries(
@@ -2198,7 +2198,7 @@ async function parseXlsxFile(file){
   const sheet = workbook.Sheets[sheetName];
   const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1 });
   if (!rows.length) return [];
-  const headers = rows[0].map(normalizeImportHeader);
+  const headers = rows[0].map(SpecCom.helpers.normalizeImportHeader);
   return rows.slice(1).filter((r) => r && r.length).map((r, idx) => {
     const row = Object.fromEntries(
       headers.map((h, i) => [h, String(r[i] ?? "").trim()])
@@ -2242,7 +2242,7 @@ async function parsePdfFile(file){
     return parseDelimited(lines.join("\n"), delimiter);
   }
   // fallback to 2+ spaces
-  const headers = headerLine.split(/\s{2,}/).map(normalizeImportHeader);
+  const headers = headerLine.split(/\s{2,}/).map(SpecCom.helpers.normalizeImportHeader);
   return lines.slice(1).map((line, idx) => {
     const values = line.split(/\s{2,}/);
     const row = Object.fromEntries(
@@ -3497,10 +3497,6 @@ function parseCsv(text){
   return rows;
 }
 
-function normalizeImportHeader(value){
-  return String(value || "").trim().toLowerCase();
-}
-
 function findHeaderIndex(headers, names){
   for (const name of names){
     const idx = headers.indexOf(name);
@@ -3772,7 +3768,7 @@ async function importLocationsFile(file){
     toast("Import error", "No rows found.");
     return;
   }
-  const headers = rows[0].map(normalizeImportHeader);
+  const headers = rows[0].map(SpecCom.helpers.normalizeImportHeader);
   const nameIdx = findHeaderIndex(headers, ["location_name", "name"]);
   const latIdx = findHeaderIndex(headers, ["lat", "latitude"]);
   const lngIdx = findHeaderIndex(headers, ["lng", "longitude"]);
