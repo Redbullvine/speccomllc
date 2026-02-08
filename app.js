@@ -4459,16 +4459,21 @@ function updateProjectScopedControls(){
   const importBtn = $("btnImportLocations");
   const hasProject = Boolean(state.activeProject);
   const demoLocked = isDemoUser();
-  const allowed = isPrivilegedRole();
+  const allowed = SpecCom.helpers.isRoot() || isPrivilegedRole();
   if (importBtn){
     importBtn.style.display = hasProject ? "" : "none";
-    importBtn.disabled = !allowed || demoLocked;
-    if (demoLocked){
-      importBtn.title = t("availableInProduction");
-    } else if (!allowed){
-      importBtn.title = "Admin or Project Manager required.";
-    } else {
+    if (SpecCom.helpers.isRoot()){
+      importBtn.disabled = false;
       importBtn.title = "";
+    } else {
+      importBtn.disabled = !allowed || demoLocked;
+      if (demoLocked){
+        importBtn.title = t("availableInProduction");
+      } else if (!allowed){
+        importBtn.title = "Admin or Project Manager required.";
+      } else {
+        importBtn.title = "";
+      }
     }
   }
 
@@ -5157,6 +5162,28 @@ async function loadProjects(){
   }
   const baseSelect = "id, name, description, created_at, location, job_number, is_demo, created_by";
   let projects = [];
+
+  if (SpecCom.helpers.isRoot()){
+    const { data, error } = await state.client
+      .from("projects")
+      .select(baseSelect)
+      .order("name");
+    if (error){
+      toast("Projects load error", error.message);
+      return;
+    }
+    projects = data || [];
+    state.projects = projects;
+    if (state.activeProject){
+      const match = state.projects.find(p => p.id === state.activeProject.id);
+      state.activeProject = match || null;
+    }
+    if (!state.activeProject && state.projects.length){
+      setActiveProjectById(state.projects[0].id);
+    }
+    renderProjects();
+    return;
+  }
 
   const { data: memberRows, error: memberError } = await state.client
     .from("project_members")
@@ -6845,7 +6872,7 @@ function renderLocations(){
     const customValue = portValue === "custom" ? activePorts : "";
     const customStyle = portValue === "custom" ? "" : 'style="display:none;"';
     const counts = countRequiredSlotUploads(r);
-    const missing = counts.uploaded < counts.required;
+    const missing = SpecCom.helpers.isRoot() ? false : counts.uploaded < counts.required;
     const disableToggle = r.isDeleting || (!r.completed && missing);
     const billingLocked = isLocationBillingLocked(r.id);
     if (billingLocked && r.isEditingName) r.isEditingName = false;
