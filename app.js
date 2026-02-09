@@ -2823,6 +2823,51 @@ SpecCom.helpers.editProject = async function(){
   toast("Project updated", "Project updated.");
 };
 
+SpecCom.helpers.deleteSiteFromPanel = async function(){
+  const site = state.activeSite;
+  if (!site || site.is_pending){
+    toast("Site required", "Select a site to delete.");
+    return;
+  }
+  if (!SpecCom.helpers.isRoot()){
+    toast("Not allowed", "Root role required.");
+    return;
+  }
+  const confirmDelete = confirm("Are you sure you want to delete this site? This cannot be undone.");
+  if (!confirmDelete) return;
+  if (!state.client){
+    toast("Delete failed", "Client not ready.");
+    return;
+  }
+  try{
+    if (!isDemo){
+      await state.client.from("site_media").delete().eq("site_id", site.id);
+      await state.client.from("site_codes").delete().eq("site_id", site.id);
+      await state.client.from("site_entries").delete().eq("site_id", site.id);
+      const { error } = await state.client.from("sites").delete().eq("id", site.id);
+      if (error) throw error;
+    }
+    state.projectSites = (state.projectSites || []).filter(s => s.id !== site.id);
+    state.pendingSites = (state.pendingSites || []).filter(s => s.id !== site.id);
+    if (state.map?.instance && state.map?.markers?.has(site.id)){
+      const marker = state.map.markers.get(site.id);
+      if (marker){
+        try{ state.map.instance.removeLayer(marker); } catch {}
+      }
+      state.map.markers.delete(site.id);
+    }
+    closeSitePanel();
+    renderSiteList();
+    if (state.map?.instance){
+      updateMapMarkers(getVisibleSites());
+    }
+    toast("Deleted", "Site deleted.");
+  } catch (err){
+    console.error("Delete site failed", err);
+    toast("Delete failed", err.message || "Delete failed.");
+  }
+};
+
 function getNodeUnits(node){
   const allowed = node.units_allowed ?? node.allowed_units ?? 0;
   const used = node.units_used ?? node.used_units ?? 0;
@@ -5684,6 +5729,7 @@ function renderSitePanel(){
   const addEntryBtn = $("btnAddEntry");
   const saveNotesBtn = $("btnSaveNotes");
   const editLocationBtn = $("btnEditSiteLocation");
+  const isRoot = SpecCom.helpers.isRoot();
 
   const site = state.activeSite;
   const isPending = Boolean(site?.is_pending);
@@ -5709,6 +5755,24 @@ function renderSitePanel(){
   if (addEntryBtn) addEntryBtn.disabled = disabled;
   if (saveNotesBtn) saveNotesBtn.disabled = disabled;
   if (editLocationBtn) editLocationBtn.disabled = disabled;
+
+  const nameRow = siteNameInput?.closest(".row");
+  if (nameRow && !document.getElementById("btnDeleteSite")){
+    const btn = document.createElement("button");
+    btn.id = "btnDeleteSite";
+    btn.type = "button";
+    btn.className = "btn danger";
+    btn.textContent = "Delete site";
+    nameRow.appendChild(btn);
+  }
+  const deleteSiteBtn = $("btnDeleteSite");
+  if (deleteSiteBtn){
+    deleteSiteBtn.style.display = (isRoot && site && !isPending) ? "" : "none";
+    deleteSiteBtn.disabled = disabled;
+    deleteSiteBtn.onclick = async () => {
+      await SpecCom.helpers.deleteSiteFromPanel();
+    };
+  }
 
   if (codesInput) codesInput.value = (state.siteCodes || []).map((row) => row.code).join(", ");
   if (notesInput) notesInput.value = site?.notes || "";
