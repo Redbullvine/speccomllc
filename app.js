@@ -100,6 +100,10 @@ const state = {
   siteMedia: [],
   siteCodes: [],
   siteEntries: [],
+  mediaViewer: {
+    open: false,
+    index: 0,
+  },
   orgs: [],
   invoices: [],
   pendingSites: [],
@@ -2866,6 +2870,159 @@ SpecCom.helpers.deleteSiteFromPanel = async function(){
     console.error("Delete site failed", err);
     toast("Delete failed", err.message || "Delete failed.");
   }
+};
+
+SpecCom.helpers.ensureMediaViewerModal = function(){
+  let modal = document.getElementById("mediaViewerModal");
+  if (modal) return modal;
+  modal = document.createElement("div");
+  modal.id = "mediaViewerModal";
+  modal.className = "modal";
+  modal.style.display = "none";
+  modal.innerHTML = `
+    <div class="card modal-card" style="max-width:980px;">
+      <div class="modal-header">
+        <h2>Photo</h2>
+        <button id="btnMediaViewerClose" class="btn ghost small" type="button">Close</button>
+      </div>
+      <div id="mediaViewerBody" class="row" style="gap:16px; align-items:flex-start; flex-wrap:wrap;">
+        <div style="flex:1 1 520px; min-width:260px;">
+          <img id="mediaViewerImg" src="" alt="site media" style="width:100%; max-height:70vh; object-fit:contain; background:#0d0d0d; border-radius:12px;" />
+          <div class="row" style="justify-content:space-between; margin-top:10px;">
+            <button id="btnMediaPrev" class="btn ghost small" type="button">Previous</button>
+            <button id="btnMediaNext" class="btn ghost small" type="button">Next</button>
+          </div>
+        </div>
+        <div style="flex:1 1 260px; min-width:220px;">
+          <div class="note">
+            <div id="mediaViewerMetaSite" style="font-weight:700;"></div>
+            <div id="mediaViewerMetaProject" class="muted small" style="margin-top:4px;"></div>
+            <div id="mediaViewerMetaTime" class="muted small" style="margin-top:4px;"></div>
+            <div id="mediaViewerMetaGps" class="muted small" style="margin-top:4px;"></div>
+          </div>
+          <div id="mediaViewerActions" class="row" style="justify-content:flex-end; margin-top:12px; display:none;">
+            <button id="btnMediaDelete" class="btn danger small" type="button">Delete photo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const closeBtn = modal.querySelector("#btnMediaViewerClose");
+  if (closeBtn){
+    closeBtn.addEventListener("click", () => SpecCom.helpers.closeMediaViewer());
+  }
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) SpecCom.helpers.closeMediaViewer();
+  });
+  modal.querySelector("#btnMediaPrev")?.addEventListener("click", () => SpecCom.helpers.navigateMedia(-1));
+  modal.querySelector("#btnMediaNext")?.addEventListener("click", () => SpecCom.helpers.navigateMedia(1));
+  modal.querySelector("#btnMediaDelete")?.addEventListener("click", async () => {
+    await SpecCom.helpers.deleteActiveMedia();
+  });
+
+  if (!SpecCom.helpers._mediaKeyListener){
+    SpecCom.helpers._mediaKeyListener = true;
+    document.addEventListener("keydown", (e) => {
+      if (!state.mediaViewer.open) return;
+      if (e.key === "ArrowLeft") SpecCom.helpers.navigateMedia(-1);
+      if (e.key === "ArrowRight") SpecCom.helpers.navigateMedia(1);
+      if (e.key === "Escape") SpecCom.helpers.closeMediaViewer();
+    });
+  }
+
+  return modal;
+};
+
+SpecCom.helpers.openMediaViewer = function(index){
+  const modal = SpecCom.helpers.ensureMediaViewerModal();
+  const items = state.siteMedia || [];
+  if (!items.length) return;
+  const bounded = Math.max(0, Math.min(index, items.length - 1));
+  state.mediaViewer.open = true;
+  state.mediaViewer.index = bounded;
+  SpecCom.helpers.renderMediaViewer();
+  modal.style.display = "";
+};
+
+SpecCom.helpers.closeMediaViewer = function(){
+  const modal = document.getElementById("mediaViewerModal");
+  if (modal) modal.style.display = "none";
+  state.mediaViewer.open = false;
+};
+
+SpecCom.helpers.navigateMedia = function(delta){
+  const items = state.siteMedia || [];
+  if (!items.length) return;
+  const next = (state.mediaViewer.index + delta + items.length) % items.length;
+  state.mediaViewer.index = next;
+  SpecCom.helpers.renderMediaViewer();
+};
+
+SpecCom.helpers.renderMediaViewer = function(){
+  const modal = SpecCom.helpers.ensureMediaViewerModal();
+  const img = modal.querySelector("#mediaViewerImg");
+  const metaSite = modal.querySelector("#mediaViewerMetaSite");
+  const metaProject = modal.querySelector("#mediaViewerMetaProject");
+  const metaTime = modal.querySelector("#mediaViewerMetaTime");
+  const metaGps = modal.querySelector("#mediaViewerMetaGps");
+  const actions = modal.querySelector("#mediaViewerActions");
+  const items = state.siteMedia || [];
+  const item = items[state.mediaViewer.index];
+  if (!item || !img) return;
+  img.src = item.previewUrl || "";
+  const site = state.activeSite;
+  const project = state.activeProject;
+  if (metaSite){
+    const label = site ? getSiteDisplayName(site) : "Site";
+    const idLabel = site?.id ? ` (${String(site.id).slice(0, 8)})` : "";
+    metaSite.textContent = `${label}${idLabel}`;
+  }
+  if (metaProject) metaProject.textContent = project ? `Project: ${project.name || project.id}` : "Project";
+  if (metaTime){
+    const ts = item.created_at ? new Date(item.created_at).toLocaleString() : "Timestamp unknown";
+    metaTime.textContent = `Uploaded: ${ts}`;
+  }
+  if (metaGps){
+    const lat = item.gps_lat;
+    const lng = item.gps_lng;
+    metaGps.textContent = (Number.isFinite(lat) && Number.isFinite(lng))
+      ? `GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}`
+      : "GPS: unavailable";
+  }
+  if (actions){
+    actions.style.display = SpecCom.helpers.isRoot() ? "" : "none";
+  }
+};
+
+SpecCom.helpers.deleteActiveMedia = async function(){
+  if (!SpecCom.helpers.isRoot()) return;
+  const items = state.siteMedia || [];
+  const item = items[state.mediaViewer.index];
+  if (!item) return;
+  const ok = confirm("Delete this photo? This cannot be undone.");
+  if (!ok) return;
+  if (!state.client){
+    toast("Delete failed", "Client not ready.");
+    return;
+  }
+  const { error } = await state.client.from("site_media").delete().eq("id", item.id);
+  if (error){
+    toast("Delete failed", error.message);
+    return;
+  }
+  state.siteMedia = items.filter((m) => m.id !== item.id);
+  renderSitePanel();
+  if (!state.siteMedia.length){
+    SpecCom.helpers.closeMediaViewer();
+    return;
+  }
+  if (state.mediaViewer.index >= state.siteMedia.length){
+    state.mediaViewer.index = state.siteMedia.length - 1;
+  }
+  SpecCom.helpers.renderMediaViewer();
+  toast("Deleted", "Photo deleted.");
 };
 
 function getNodeUnits(node){
@@ -5788,16 +5945,26 @@ function renderSitePanel(){
   }
 
   if (mediaGallery){
+    if (!mediaGallery.dataset.viewerBound){
+      mediaGallery.dataset.viewerBound = "true";
+      mediaGallery.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-action='openMedia']");
+        if (!btn) return;
+        const idx = Number(btn.dataset.index);
+        if (!Number.isFinite(idx)) return;
+        SpecCom.helpers.openMediaViewer(idx);
+      });
+    }
     if (!site){
       mediaGallery.innerHTML = `<div class="muted small">${t("noSiteSelected")}</div>`;
     } else if (!(state.siteMedia || []).length){
       mediaGallery.innerHTML = `<div class="muted small">${t("mediaSubtitle")}</div>`;
     } else {
-      mediaGallery.innerHTML = state.siteMedia.map((item) => `
-        <div class="media-card">
+      mediaGallery.innerHTML = state.siteMedia.map((item, idx) => `
+        <button class="media-card" type="button" data-action="openMedia" data-index="${idx}">
           ${item.previewUrl ? `<img src="${item.previewUrl}" alt="media" />` : ""}
           <div class="media-meta">${escapeHtml(new Date(item.created_at).toLocaleString())}</div>
-        </div>
+        </button>
       `).join("");
     }
   }
