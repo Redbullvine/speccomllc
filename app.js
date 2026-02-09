@@ -2593,7 +2593,8 @@ function isDemoUser(){
 }
 
 SpecCom.helpers.isRoot = function(){
-  return getRoleCode() === ROLES.ROOT;
+  const roleCode = state.profile?.role_code || state.profile?.role || "";
+  return String(roleCode || "").toUpperCase() === "ROOT";
 };
 
 function isBillingManager(){
@@ -2738,6 +2739,63 @@ SpecCom.helpers.applyAuthModeFromHash = function(){
   } else {
     SpecCom.helpers.exitResetMode();
   }
+};
+
+SpecCom.helpers.editProject = async function(){
+  const project = state.activeProject;
+  if (!project){
+    toast("Project required", "Select a project first.");
+    return;
+  }
+  const canEdit = SpecCom.helpers.isRoot() || getRoleCode() === ROLES.PROJECT_MANAGER || isOwnerOrAdmin();
+  if (!canEdit){
+    toast("Not allowed", "Project Manager or Admin required.");
+    return;
+  }
+  const nextName = prompt("Edit project name", project.name || "");
+  if (nextName === null) return;
+  const nextDesc = prompt("Edit project description", project.description || "");
+  if (nextDesc === null) return;
+  const trimmedName = String(nextName || "").trim();
+  if (!trimmedName){
+    toast("Name required", "Project name cannot be empty.");
+    return;
+  }
+  const trimmedDesc = String(nextDesc || "").trim();
+  if (trimmedName === project.name && trimmedDesc === (project.description || "")) return;
+  if (isDemo){
+    project.name = trimmedName;
+    project.description = trimmedDesc || null;
+    const match = (state.projects || []).find(p => p.id === project.id);
+    if (match){
+      match.name = project.name;
+      match.description = project.description;
+    }
+    renderProjects();
+    toast("Project updated", "Project updated.");
+    return;
+  }
+  if (!state.client){
+    toast("Update failed", "Client not ready.");
+    return;
+  }
+  const { error } = await state.client
+    .from("projects")
+    .update({ name: trimmedName, description: trimmedDesc || null })
+    .eq("id", project.id);
+  if (error){
+    toast("Update failed", error.message);
+    return;
+  }
+  project.name = trimmedName;
+  project.description = trimmedDesc || null;
+  const match = (state.projects || []).find(p => p.id === project.id);
+  if (match){
+    match.name = project.name;
+    match.description = project.description;
+  }
+  renderProjects();
+  toast("Project updated", "Project updated.");
 };
 
 function getNodeUnits(node){
@@ -4411,13 +4469,21 @@ function renderProjectInfo(){
     ? (createdBy === state.user?.id ? "You" : String(createdBy).slice(0, 8))
     : "";
   const canDelete = isOwnerOrAdmin();
+  const canEdit = SpecCom.helpers.isRoot() || getRoleCode() === ROLES.PROJECT_MANAGER || isOwnerOrAdmin();
   wrap.innerHTML = `
     <div class="project-info-row"><span class="project-info-label">Name</span><span class="project-info-value">${name}</span></div>
     ${description ? `<div class="project-info-row"><span class="project-info-label">Description</span><span class="project-info-value">${description}</span></div>` : ""}
     ${createdAt ? `<div class="project-info-row"><span class="project-info-label">Created</span><span class="project-info-value">${createdAt}</span></div>` : ""}
     ${createdByLabel ? `<div class="project-info-row"><span class="project-info-label">Created by</span><span class="project-info-value">${createdByLabel}</span></div>` : ""}
-    ${canDelete ? `<div class="row" style="margin-top:12px; justify-content:flex-end;"><button id="btnDeleteProject" class="btn danger small" type="button">Delete project</button></div>` : ""}
+    <div class="row" style="margin-top:12px; justify-content:flex-end; gap:8px;">
+      ${canEdit ? `<button id="btnEditProject" class="btn secondary small" type="button">Edit project</button>` : ""}
+      ${canDelete ? `<button id="btnDeleteProject" class="btn danger small" type="button">Delete project</button>` : ""}
+    </div>
   `;
+  const editBtn = $("btnEditProject");
+  if (editBtn){
+    editBtn.addEventListener("click", () => SpecCom.helpers.editProject());
+  }
   const deleteBtn = $("btnDeleteProject");
   if (deleteBtn){
     deleteBtn.addEventListener("click", () => openDeleteProjectModal());
@@ -9972,7 +10038,7 @@ async function loadProfile(client, userId){
   // Expect a public.profiles row keyed by auth.uid()
   let { data, error } = await client
     .from("profiles")
-    .select("role, display_name, preferred_language, is_demo, current_project_id")
+    .select("role, role_code, display_name, preferred_language, is_demo, current_project_id")
     .eq("id", userId)
     .maybeSingle();
 
@@ -9981,7 +10047,7 @@ async function loadProfile(client, userId){
     if (message.includes("does not exist")){
       ({ data, error } = await client
         .from("profiles")
-        .select("role, display_name")
+        .select("role, role_code, display_name")
         .eq("id", userId)
         .maybeSingle());
     }
