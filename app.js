@@ -2741,6 +2741,31 @@ SpecCom.helpers.applyAuthModeFromHash = function(){
   }
 };
 
+SpecCom.helpers.handleSignOut = async function(){
+  if (isDemo){
+    state.activeNode = null;
+    showAuth(true);
+    setWhoami();
+    clearProof();
+    return;
+  }
+  setSavedProjectPreference(null);
+  try{
+    const client = state.client || supabase;
+    if (client?.auth){
+      await client.auth.signOut();
+    }
+  } catch (err){
+    console.error("Sign out failed", err);
+  } finally {
+    state.session = null;
+    state.user = null;
+    state.profile = null;
+    showAuth(true);
+    setWhoami();
+  }
+};
+
 SpecCom.helpers.editProject = async function(){
   const project = state.activeProject;
   if (!project){
@@ -10417,18 +10442,13 @@ function wireUI(){
     });
   }
 
-  $("btnSignOut").addEventListener("click", async () => {
-    if (isDemo){
-      // reset
-      state.activeNode = null;
-      showAuth(true);
-      setWhoami();
-      clearProof();
-      return;
-    }
-    setSavedProjectPreference(null);
-    await state.client.auth.signOut();
-  });
+  const signOutBtn = $("btnSignOut");
+  if (signOutBtn){
+    signOutBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      await SpecCom.helpers.handleSignOut();
+    });
+  }
 
   $("btnSignIn")?.addEventListener("click", (e) => {
     e.preventDefault();
