@@ -716,6 +716,13 @@
           <h2 data-i18n="invoiceAgentTitle">Invoice Agent</h2>
           <button id="btnInvoiceAgentClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
         </div>
+        <div class="row" style="margin-top:10px; justify-content:space-between; align-items:center;">
+          <button id="btnInvoiceImport" class="btn ghost" type="button">Import Billing Spreadsheet</button>
+          <input id="invoiceImportInput" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none;" />
+          <button id="btnInvoiceImportExport" class="btn ghost small" type="button" style="display:none;">Export Preview CSV</button>
+        </div>
+        <div id="invoiceImportSummary" class="muted small" style="margin-top:6px;"></div>
+        <div id="invoiceImportList" class="field-stack" style="margin-top:8px; max-height:200px; overflow:auto;"></div>
         <div class="field-stack" style="margin-top:10px;">
           <div>
             <div class="muted small" data-i18n="invoiceAgentFromLabel">From company</div>
@@ -741,6 +748,7 @@
         <div id="invoiceAgentResults" class="note" style="display:none; margin-top:12px;"></div>
         <div class="row" style="margin-top:12px; justify-content:flex-end;">
           <button id="btnInvoiceAgentCancel" class="btn ghost" type="button" data-i18n="cancelLabel">Cancel</button>
+          <button id="btnInvoiceImportApply" class="btn secondary" type="button" style="display:none;">Apply Import & Generate</button>
           <button id="btnInvoiceAgentConfirm" class="btn" type="button" data-i18n="invoiceAgentGenerate">Generate Drafts</button>
         </div>
       </div>

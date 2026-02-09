@@ -118,6 +118,7 @@ const state = {
     allowDuplicates: false,
     busy: false,
     siteMap: new Map(),
+    importPreview: null,
   },
   workCodes: [],
   rateCards: [],
@@ -1810,6 +1811,7 @@ SpecCom.helpers.resetInvoiceAgentState = function(){
   state.invoiceAgent.allowDuplicates = false;
   state.invoiceAgent.busy = false;
   state.invoiceAgent.siteMap = new Map();
+  state.invoiceAgent.importPreview = null;
 };
 
 SpecCom.helpers.isInvoiceAgentAllowed = function(){
@@ -1831,6 +1833,7 @@ SpecCom.helpers.openInvoiceAgentModal = async function(){
   modal.style.display = "";
   SpecCom.helpers.renderInvoiceAgentModal();
   await SpecCom.helpers.loadInvoiceAgentCandidates();
+  SpecCom.helpers.renderInvoiceImportPreview();
 };
 
 SpecCom.helpers.closeInvoiceAgentModal = function(){
@@ -3023,6 +3026,210 @@ SpecCom.helpers.deleteActiveMedia = async function(){
   }
   SpecCom.helpers.renderMediaViewer();
   toast("Deleted", "Photo deleted.");
+};
+
+SpecCom.helpers.parseInvoiceSpreadsheet = async function(file){
+  if (!file) throw new Error("No file selected.");
+  const name = String(file.name || "").toLowerCase();
+  if (!name.endsWith(".xlsx")){
+    throw new Error("Unsupported file type. Upload .xlsx.");
+  }
+  if (!window.XLSX){
+    throw new Error("XLSX parser unavailable. Refresh and try again.");
+  }
+  const data = await file.arrayBuffer();
+  const workbook = window.XLSX.read(data, { type: "array" });
+  const sheetName = workbook.SheetNames?.[0];
+  if (!sheetName) return [];
+  const sheet = workbook.Sheets[sheetName];
+  const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
+  if (!rows.length) return [];
+  const headers = rows[0].map(SpecCom.helpers.normalizeImportHeader);
+  return rows.slice(1).filter((r) => r && r.length).map((r, idx) => {
+    const row = Object.fromEntries(
+      headers.map((h, i) => [h, String(r[i] ?? "").trim()])
+    );
+    row.__rowNumber = idx + 2;
+    return row;
+  });
+};
+
+SpecCom.helpers.prepareInvoiceImportPreview = function(rows){
+  const siteMap = new Map((state.projectSites || []).map((s) => [String(s.name || "").trim().toLowerCase(), s]));
+  const preview = [];
+  const missing = [];
+  for (const row of rows){
+    const rawName = String(row.location_name || "").trim();
+    if (!rawName) continue;
+    const key = rawName.toLowerCase();
+    const site = siteMap.get(key) || null;
+    const items = [];
+    Object.keys(row).forEach((k) => {
+      const keyName = String(k || "").toLowerCase();
+      if (!keyName.startsWith("item_")) return;
+      const idx = keyName.replace("item_", "");
+      const qtyKey = `qty_${idx}`;
+      const code = String(row[k] || "").trim();
+      const qtyVal = Number(row[qtyKey] || 0);
+      if (!code) return;
+      if (!Number.isFinite(qtyVal) || qtyVal <= 0) return;
+      items.push({ code, qty: qtyVal });
+    });
+    if (!site){
+      missing.push({ name: rawName, row: row.__rowNumber });
+      continue;
+    }
+    preview.push({
+      site,
+      location_name: rawName,
+      finish_date: String(row.finish_date || "").trim() || null,
+      items,
+      rowNumber: row.__rowNumber,
+    });
+  }
+  return { preview, missing };
+};
+
+SpecCom.helpers.renderInvoiceImportPreview = function(){
+  const summary = $("invoiceImportSummary");
+  const list = $("invoiceImportList");
+  const exportBtn = $("btnInvoiceImportExport");
+  const applyBtn = $("btnInvoiceImportApply");
+  const data = state.invoiceAgent.importPreview;
+  if (!summary || !list) return;
+  if (!data){
+    summary.textContent = "";
+    list.innerHTML = "";
+    if (exportBtn) exportBtn.style.display = "none";
+    if (applyBtn) applyBtn.style.display = "none";
+    return;
+  }
+  const total = data.preview.length;
+  const missing = data.missing.length;
+  summary.textContent = total
+    ? `Parsed ${total} sites. Missing ${missing}.`
+    : "No matching sites found.";
+  list.innerHTML = data.preview.slice(0, 60).map((row) => {
+    const codes = row.items.map(i => `${i.code} (${i.qty})`).join(", ");
+    return `<div class="muted small">Row ${row.rowNumber}: ${escapeHtml(row.location_name)} → ${escapeHtml(codes || "No items")}</div>`;
+  }).join("");
+  if (missing){
+    list.innerHTML += data.missing.slice(0, 20).map((row) => (
+      `<div class="muted small" style="color:#b45309;">Missing site: ${escapeHtml(row.name)} (Row ${row.row})</div>`
+    )).join("");
+  }
+  if (exportBtn) exportBtn.style.display = total ? "" : "none";
+  if (applyBtn) applyBtn.style.display = total ? "" : "none";
+};
+
+SpecCom.helpers.exportInvoiceImportCsv = function(){
+  const data = state.invoiceAgent.importPreview;
+  if (!data?.preview?.length) return;
+  const rows = [];
+  rows.push(["location_name", "code", "qty", "site_id"].join(","));
+  data.preview.forEach((row) => {
+    row.items.forEach((item) => {
+      rows.push([escapeCsv(row.location_name), escapeCsv(item.code), item.qty, row.site.id].join(","));
+    });
+  });
+  downloadFile("invoice-import-preview.csv", rows.join("\n"), "text/csv");
+};
+
+SpecCom.helpers.applyInvoiceImport = async function(){
+  const data = state.invoiceAgent.importPreview;
+  if (!data || !data.preview.length){
+    toast("No data", "Import a spreadsheet first.");
+    return;
+  }
+  if (!state.client){
+    toast("Import failed", "Client not ready.");
+    return;
+  }
+  const siteIds = data.preview.map(r => r.site.id);
+  const { data: existing } = await state.client
+    .from("site_entries")
+    .select("site_id")
+    .in("site_id", siteIds);
+  const existingSet = new Set((existing || []).map(r => r.site_id));
+  if (existingSet.size){
+    const ok = confirm("Some sites already have billing entries. Overwrite existing billing entries?");
+    if (!ok) return;
+  }
+
+  const payload = [];
+  data.preview.forEach((row) => {
+    row.items.forEach((item) => {
+      payload.push({
+        site_id: row.site.id,
+        description: item.code,
+        quantity: item.qty,
+      });
+    });
+  });
+  if (!payload.length){
+    toast("No items", "No billable items found.");
+    return;
+  }
+  if (existingSet.size){
+    await state.client.from("site_entries").delete().in("site_id", siteIds);
+  }
+  const { error } = await state.client.from("site_entries").insert(payload);
+  if (error){
+    toast("Import failed", error.message);
+    return;
+  }
+  toast("Billing updated", `Updated billing for ${siteIds.length} sites.`);
+  await SpecCom.helpers.generateProjectInvoiceFromImport();
+};
+
+SpecCom.helpers.generateProjectInvoiceFromImport = async function(){
+  const data = state.invoiceAgent.importPreview;
+  if (!data || !data.preview.length) return;
+  if (!state.client || !state.activeProject){
+    toast("Invoice failed", "Project not ready.");
+    return;
+  }
+  const totals = new Map();
+  data.preview.forEach((row) => {
+    row.items.forEach((item) => {
+      const key = item.code;
+      totals.set(key, (totals.get(key) || 0) + item.qty);
+    });
+  });
+  const { data: invoiceRow, error: invoiceErr } = await state.client
+    .from("invoices")
+    .insert({
+      project_id: state.activeProject.id,
+      status: "draft",
+      created_by: state.user?.id || null,
+      subtotal: 0,
+      tax: 0,
+      total: 0,
+    })
+    .select("id")
+    .single();
+  if (invoiceErr){
+    toast("Invoice failed", invoiceErr.message);
+    return;
+  }
+  const invoiceId = invoiceRow?.id;
+  const itemsPayload = Array.from(totals.entries()).map(([code, qty], idx) => ({
+    invoice_id: invoiceId,
+    work_code_id: null,
+    description: code,
+    unit: "",
+    qty,
+    rate: 0,
+    sort_order: idx,
+  }));
+  if (itemsPayload.length){
+    const { error } = await state.client.from("invoice_items").insert(itemsPayload);
+    if (error){
+      toast("Invoice failed", error.message);
+      return;
+    }
+  }
+  toast("Invoice draft created", "Project invoice generated.");
 };
 
 function getNodeUnits(node){
@@ -10982,6 +11189,35 @@ function wireUI(){
   const invoiceAgentConfirmBtn = $("btnInvoiceAgentConfirm");
   if (invoiceAgentConfirmBtn){
     invoiceAgentConfirmBtn.addEventListener("click", () => SpecCom.helpers.confirmInvoiceAgentGenerate());
+  }
+  const invoiceImportBtn = $("btnInvoiceImport");
+  const invoiceImportInput = $("invoiceImportInput");
+  if (invoiceImportBtn && invoiceImportInput){
+    invoiceImportBtn.addEventListener("click", () => invoiceImportInput.click());
+    invoiceImportInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0] || null;
+      try{
+        const rows = await SpecCom.helpers.parseInvoiceSpreadsheet(file);
+        const { preview, missing } = SpecCom.helpers.prepareInvoiceImportPreview(rows);
+        state.invoiceAgent.importPreview = { preview, missing };
+        SpecCom.helpers.renderInvoiceImportPreview();
+      } catch (err){
+        console.error(err);
+        toast("Import failed", err.message || "Import failed.");
+      } finally {
+        e.target.value = "";
+      }
+    });
+  }
+  const invoiceImportExport = $("btnInvoiceImportExport");
+  if (invoiceImportExport){
+    invoiceImportExport.addEventListener("click", () => SpecCom.helpers.exportInvoiceImportCsv());
+  }
+  const invoiceImportApply = $("btnInvoiceImportApply");
+  if (invoiceImportApply){
+    invoiceImportApply.addEventListener("click", async () => {
+      await SpecCom.helpers.applyInvoiceImport();
+    });
   }
   const invoiceAgentSelectAll = $("invoiceAgentSelectAll");
   if (invoiceAgentSelectAll){
