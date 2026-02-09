@@ -10006,6 +10006,8 @@ async function loadProfile(client, userId){
   setDemoBadge();
   applyDemoRestrictions();
   renderInvoicePanel();
+  updateProjectScopedControls();
+  renderLocations();
 }
 
 async function demoLogin(){
