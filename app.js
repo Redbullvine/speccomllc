@@ -5170,7 +5170,6 @@ async function createProject(){
         if (!state.projects.find(p => p.id === existing.id)){
           state.projects = (state.projects || []).concat(existing);
         }
-        await ensureProjectMembership(existing.id);
         setActiveProjectById(existing.id);
         closeCreateProjectModal();
         closeProjectsModal();
@@ -5189,7 +5188,6 @@ async function createProject(){
   await loadProjects();
   const newProjectId = typeof projectId === "string" ? projectId : (projectId?.id || null);
   if (newProjectId){
-    await ensureProjectMembership(newProjectId);
     setActiveProjectById(newProjectId);
   } else {
     const match = state.projects.find(p => p.name === name);
@@ -5199,17 +5197,6 @@ async function createProject(){
   closeProjectsModal();
   refreshLocations();
   toast("Project created", "Project created.");
-}
-
-async function ensureProjectMembership(projectId){
-  if (!state.client || !state.user || !projectId) return;
-  const { error } = await state.client
-    .from("project_members")
-    .insert({ project_id: projectId, user_id: state.user.id, role: ROLES.OWNER, role_code: ROLES.OWNER });
-  if (error){
-    const message = String(error.message || "").toLowerCase();
-    if (message.includes("duplicate") || message.includes("exists") || message.includes("does not exist")) return;
-  }
 }
 
 async function fetchProjectByName(name, orgId){
