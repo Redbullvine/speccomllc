@@ -5005,6 +5005,8 @@ function openMenuModal(){
   const modal = $("menuModal");
   if (!modal) return;
   syncMenuLanguageToggle();
+  const grantBtn = $("btnGrantProjectAccess");
+  if (grantBtn) grantBtn.style.display = SpecCom.helpers.isRoot() ? "" : "none";
   modal.style.display = "";
 }
 
@@ -5012,6 +5014,74 @@ function closeMenuModal(){
   const modal = $("menuModal");
   if (!modal) return;
   modal.style.display = "none";
+}
+
+function openGrantAccessModal(){
+  if (!SpecCom.helpers.isRoot()){
+    toast("Not allowed", "Only ROOT can grant project access.");
+    return;
+  }
+  const modal = $("grantAccessModal");
+  if (!modal) return;
+  const userInput = $("grantAccessUser");
+  const roleSelect = $("grantAccessRole");
+  const note = $("grantAccessNote");
+  if (userInput) userInput.value = "";
+  if (roleSelect) roleSelect.value = "USER_LEVEL_1";
+  if (note){
+    const projectName = state.activeProject?.name || "current project";
+    note.textContent = `Access will be granted for ${projectName}.`;
+  }
+  modal.style.display = "";
+}
+
+function closeGrantAccessModal(){
+  const modal = $("grantAccessModal");
+  if (!modal) return;
+  modal.style.display = "none";
+}
+
+function normalizeRoleForGrant(role){
+  const raw = String(role || "").toUpperCase().trim();
+  if (raw === "USER1" || raw === "USER_LEVEL_1") return "USER_LEVEL_1";
+  if (raw === "USER2" || raw === "USER_LEVEL_2") return "USER_LEVEL_2";
+  if (raw === "PM" || raw === "PROJECT_MANAGER") return "PROJECT_MANAGER";
+  return raw;
+}
+
+async function confirmGrantAccess(){
+  if (!SpecCom.helpers.isRoot()){
+    toast("Not allowed", "Only ROOT can grant project access.");
+    return;
+  }
+  if (!state.activeProject){
+    toast("Project required", "Select a project first.");
+    return;
+  }
+  const userInput = $("grantAccessUser")?.value.trim();
+  const roleSelect = $("grantAccessRole")?.value || "USER_LEVEL_1";
+  if (!userInput){
+    toast("User required", "Enter an email or user id.");
+    return;
+  }
+  const client = await supabaseReady;
+  if (!client){
+    toast("Access failed", "Supabase client unavailable.");
+    return;
+  }
+  const roleCode = normalizeRoleForGrant(roleSelect);
+  const { data, error } = await client.rpc("fn_grant_project_access", {
+    p_project_id: state.activeProject.id,
+    p_user_identifier: userInput,
+    p_role_code: roleCode,
+  });
+  if (error){
+    toast("Access failed", error.message || "Access failed.");
+    return;
+  }
+  toast("Access granted", `Granted ${roleCode} access.`);
+  closeGrantAccessModal();
+  return data;
 }
 
 function openCreateProjectModal(){
@@ -11019,6 +11089,13 @@ function wireUI(){
   if (menuCloseBtn){
     menuCloseBtn.addEventListener("click", () => closeMenuModal());
   }
+  const grantAccessBtn = $("btnGrantProjectAccess");
+  if (grantAccessBtn){
+    grantAccessBtn.addEventListener("click", () => {
+      closeMenuModal();
+      openGrantAccessModal();
+    });
+  }
   document.querySelectorAll(".menu-link").forEach((btn) => {
     btn.addEventListener("click", () => {
       const viewId = btn.dataset.view;
@@ -11150,6 +11227,18 @@ function wireUI(){
   const importConfirmBtn = $("btnImportLocationsConfirm");
   if (importConfirmBtn){
     importConfirmBtn.addEventListener("click", () => confirmImportLocations());
+  }
+  const grantAccessCloseBtn = $("btnGrantAccessClose");
+  if (grantAccessCloseBtn){
+    grantAccessCloseBtn.addEventListener("click", () => closeGrantAccessModal());
+  }
+  const grantAccessCancelBtn = $("btnGrantAccessCancel");
+  if (grantAccessCancelBtn){
+    grantAccessCancelBtn.addEventListener("click", () => closeGrantAccessModal());
+  }
+  const grantAccessConfirmBtn = $("btnGrantAccessConfirm");
+  if (grantAccessConfirmBtn){
+    grantAccessConfirmBtn.addEventListener("click", () => confirmGrantAccess());
   }
   const invoiceAgentCloseBtn = $("btnInvoiceAgentClose");
   if (invoiceAgentCloseBtn){

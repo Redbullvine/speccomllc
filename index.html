@@ -634,6 +634,7 @@
         <div class="menu-section">
           <div class="menu-title" data-i18n="menuNavTitle">Navigation</div>
           <button class="menu-link" type="button" data-view="viewDailyReport" data-i18n="dailyReportTitle">Daily Report</button>
+          <button id="btnGrantProjectAccess" class="menu-link" type="button" style="display:none;">Grant Project Access</button>
         </div>
         <div class="menu-section">
           <div class="menu-title" data-i18n="menuSettingsTitle">Settings</div>
@@ -706,6 +707,33 @@
         <div class="row" style="margin-top:12px; justify-content:flex-end;">
           <button id="btnImportLocationsCancel" class="btn ghost" type="button">Cancel</button>
           <button id="btnImportLocationsConfirm" class="btn" type="button">Confirm Import</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="grantAccessModal" class="modal" style="display:none;">
+      <div class="card modal-card">
+        <div class="modal-header">
+          <h2>Grant Project Access</h2>
+          <button id="btnGrantAccessClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
+        </div>
+        <div class="field-stack" style="margin-top:10px;">
+          <label class="muted small">User email or ID</label>
+          <input id="grantAccessUser" class="input" placeholder="user@example.com or UUID" autocomplete="off" />
+          <label class="muted small">Role</label>
+          <select id="grantAccessRole" class="input">
+            <option value="USER_LEVEL_1">User Level 1</option>
+            <option value="USER_LEVEL_2">User Level 2</option>
+            <option value="PROJECT_MANAGER">Project Manager</option>
+            <option value="ADMIN">Admin</option>
+            <option value="OWNER">Owner</option>
+            <option value="SUPPORT">Support</option>
+          </select>
+        </div>
+        <div id="grantAccessNote" class="muted small" style="margin-top:10px;"></div>
+        <div class="row" style="margin-top:12px; justify-content:flex-end;">
+          <button id="btnGrantAccessCancel" class="btn ghost" type="button">Cancel</button>
+          <button id="btnGrantAccessConfirm" class="btn" type="button">Grant Access</button>
         </div>
       </div>
     </div>
