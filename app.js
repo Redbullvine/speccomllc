@@ -1812,6 +1812,9 @@ SpecCom.helpers.openInvoiceAgentModal = async function(){
   const modal = $("invoiceAgentModal");
   if (!modal) return;
   SpecCom.helpers.resetInvoiceAgentState();
+  if (state.activeProject?.id){
+    await loadRateCards(state.activeProject.id);
+  }
   if (!state.orgs.length){
     await SpecCom.helpers.loadOrgs();
   }
@@ -1928,11 +1931,19 @@ SpecCom.helpers.renderInvoiceAgentModal = function(){
   const results = $("invoiceAgentResults");
   const selectAll = $("invoiceAgentSelectAll");
   const allowDuplicates = $("invoiceAgentAllowDuplicates");
+  const tierWrap = $("invoiceAgentTierWrap");
+  const tierSelect = $("invoiceAgentTier");
   if (!summary || !list) return;
   const candidates = state.invoiceAgent.candidates || [];
   const eligible = candidates.filter(c => c.eligible);
   const fromName = (state.orgs || []).find(o => o.id === $("invoiceAgentFromOrg")?.value)?.name || "";
   const toName = (state.orgs || []).find(o => o.id === $("invoiceAgentToOrg")?.value)?.name || "";
+  if (tierWrap){
+    tierWrap.style.display = SpecCom.helpers.isRoot() ? "" : "none";
+    if (tierSelect && !tierSelect.value){
+      tierSelect.value = "OWNER";
+    }
+  }
   if (!candidates.length){
     summary.textContent = t("invoiceAgentNoEligible");
   } else {
@@ -2020,17 +2031,20 @@ SpecCom.helpers.confirmInvoiceAgentGenerate = async function(){
   const selected = state.invoiceAgent.selectedIds || [];
   const fromOrgId = $("invoiceAgentFromOrg")?.value || null;
   const toOrgId = $("invoiceAgentToOrg")?.value || null;
+  const tier = SpecCom.helpers.isRoot() ? ($("invoiceAgentTier")?.value || null) : null;
   if (!projectId){
     toast("Missing project", t("invoiceAgentNoProject"));
     return;
   }
-  if (!fromOrgId || !toOrgId){
-    toast("Missing org", "Select both from and to companies.");
-    return;
-  }
-  if (fromOrgId === toOrgId){
-    toast("Invalid orgs", "From and To companies must differ.");
-    return;
+  if (!tier){
+    if (!fromOrgId || !toOrgId){
+      toast("Missing org", "Select both from and to companies.");
+      return;
+    }
+    if (fromOrgId === toOrgId){
+      toast("Invalid orgs", "From and To companies must differ.");
+      return;
+    }
   }
   if (!selected.length){
     toast("No eligible sites", "No eligible sites found for invoicing.");
@@ -2049,13 +2063,31 @@ SpecCom.helpers.confirmInvoiceAgentGenerate = async function(){
     btn.textContent = "Generating...";
   }
   try{
-    const { data, error } = await state.client.rpc("fn_generate_tiered_invoices", {
-      p_project_id: projectId,
-      p_site_ids: selected,
-      p_allow_duplicate: state.invoiceAgent.allowDuplicates,
-      p_from_org_id: fromOrgId,
-      p_to_org_id: toOrgId,
-    });
+    let data = null;
+    let error = null;
+    if (tier){
+      const roleName = String(tier || "").toUpperCase();
+      const cardName = roleName;
+      const rateCard = (state.rateCards || []).find(r => r.name === cardName);
+      if (!rateCard){
+        toast("Missing pricing", `No rate card found for ${cardName}. Import pricing first.`);
+        return;
+      }
+      ({ data, error } = await state.client.rpc("fn_generate_site_invoices", {
+        p_project_id: projectId,
+        p_site_ids: selected,
+        p_allow_duplicate: state.invoiceAgent.allowDuplicates,
+        p_rate_card_id: rateCard.id,
+      }));
+    } else {
+      ({ data, error } = await state.client.rpc("fn_generate_tiered_invoices", {
+        p_project_id: projectId,
+        p_site_ids: selected,
+        p_allow_duplicate: state.invoiceAgent.allowDuplicates,
+        p_from_org_id: fromOrgId,
+        p_to_org_id: toOrgId,
+      }));
+    }
     if (error){
       throw error;
     }
@@ -5007,6 +5039,8 @@ function openMenuModal(){
   syncMenuLanguageToggle();
   const grantBtn = $("btnGrantProjectAccess");
   if (grantBtn) grantBtn.style.display = SpecCom.helpers.isRoot() ? "" : "none";
+  const priceBtn = $("btnImportPriceSheet");
+  if (priceBtn) priceBtn.style.display = SpecCom.helpers.isRoot() ? "" : "none";
   modal.style.display = "";
 }
 
@@ -5014,6 +5048,116 @@ function closeMenuModal(){
   const modal = $("menuModal");
   if (!modal) return;
   modal.style.display = "none";
+}
+
+function openPriceSheetModal(){
+  if (!SpecCom.helpers.isRoot()){
+    toast("Not allowed", "Only ROOT can import pricing.");
+    return;
+  }
+  const modal = $("priceSheetModal");
+  if (!modal) return;
+  const input = $("priceSheetInput");
+  if (input) input.value = "";
+  modal.style.display = "";
+}
+
+function closePriceSheetModal(){
+  const modal = $("priceSheetModal");
+  if (!modal) return;
+  modal.style.display = "none";
+}
+
+function parsePriceSheetRows(rows){
+  if (!rows.length) return [];
+  const headers = rows[0].map(SpecCom.helpers.normalizeImportHeader);
+  const codeIdx = findHeaderIndex(headers, ["code", "billing_code", "work_code"]);
+  const descIdx = findHeaderIndex(headers, ["description", "desc"]);
+  const unitIdx = findHeaderIndex(headers, ["unit", "units"]);
+  const rateIdx = findHeaderIndex(headers, ["rate", "price", "unit_price"]);
+  if (codeIdx < 0 || rateIdx < 0){
+    throw new Error("Missing headers: code and rate are required");
+  }
+  const dataRows = rows.slice(1).filter((row) => row?.length && row.some(cell => String(cell || "").trim().length));
+  return dataRows.map((row, idx) => {
+    const rawCode = String(row[codeIdx] ?? "").trim();
+    const rawRate = String(row[rateIdx] ?? "").trim();
+    const rate = Number(rawRate.replace(/[^0-9.\-]/g, ""));
+    return {
+      code: rawCode,
+      description: descIdx >= 0 ? String(row[descIdx] ?? "").trim() : "",
+      unit: unitIdx >= 0 ? String(row[unitIdx] ?? "").trim() : "",
+      rate: Number.isFinite(rate) ? rate : null,
+      __rowNumber: idx + 2,
+    };
+  }).filter(r => r.code);
+}
+
+async function confirmImportPriceSheet(){
+  if (!SpecCom.helpers.isRoot()){
+    toast("Not allowed", "Only ROOT can import pricing.");
+    return;
+  }
+  if (!state.activeProject){
+    toast("Project required", "Select a project first.");
+    return;
+  }
+  const input = $("priceSheetInput");
+  const file = input?.files?.[0] || null;
+  if (!file){
+    toast("File required", "Choose a price sheet file.");
+    return;
+  }
+  const name = file.name.toLowerCase();
+  let rows = [];
+  try{
+    if (name.endsWith(".csv")){
+      rows = await parseCsvFile(file);
+    } else if (name.endsWith(".xlsx") || name.endsWith(".xls")){
+      rows = await parseXlsxFile(file);
+    } else if (name.endsWith(".pdf")){
+      rows = await parsePdfFile(file);
+    } else {
+      toast("Import error", "Unsupported file type.");
+      return;
+    }
+  } catch (error){
+    reportErrorToast("Import failed", error);
+    return;
+  }
+  if (!rows.length){
+    toast("Import error", "No data rows found.");
+    return;
+  }
+  let payloadRows = [];
+  try{
+    payloadRows = parsePriceSheetRows(rows);
+  } catch (err){
+    toast("Import error", err.message || "Invalid price sheet.");
+    return;
+  }
+  const invalid = payloadRows.filter(r => !r.code || r.rate == null);
+  if (invalid.length){
+    toast("Import error", "Some rows are missing code or rate.");
+    return;
+  }
+  const client = await supabaseReady;
+  if (!client){
+    toast("Import failed", "Supabase client unavailable.");
+    return;
+  }
+  const { data, error } = await client.rpc("fn_import_rate_cards_tiered", {
+    p_project_id: state.activeProject.id,
+    p_rows: payloadRows,
+  });
+  if (error){
+    toast("Import failed", error.message || "Import failed.");
+    return;
+  }
+  const imported = data?.imported ?? payloadRows.length;
+  toast("Pricing imported", `Imported ${imported} codes.`);
+  closePriceSheetModal();
+  await loadRateCards(state.activeProject.id);
 }
 
 function openGrantAccessModal(){
@@ -7162,6 +7306,18 @@ async function loadRateCards(projectId){
     return;
   }
   state.rateCards = data || [];
+  const roleCode = getRoleCode();
+  const roleCardName = (roleCode === ROLES.USER_LEVEL_1)
+    ? "USER_LEVEL_1"
+    : (roleCode === ROLES.USER_LEVEL_2)
+      ? "USER_LEVEL_2"
+      : (roleCode === ROLES.OWNER || SpecCom.helpers.isRoot())
+        ? "OWNER"
+        : null;
+  if (roleCardName){
+    const roleCard = state.rateCards.find(r => r.name === roleCardName);
+    if (roleCard) state.activeRateCardId = roleCard.id;
+  }
   if (DEFAULT_RATE_CARD_NAME){
     const named = state.rateCards.find(r => r.name === DEFAULT_RATE_CARD_NAME);
     if (named) state.activeRateCardId = named.id;
@@ -11096,6 +11252,13 @@ function wireUI(){
       openGrantAccessModal();
     });
   }
+  const importPriceBtn = $("btnImportPriceSheet");
+  if (importPriceBtn){
+    importPriceBtn.addEventListener("click", () => {
+      closeMenuModal();
+      openPriceSheetModal();
+    });
+  }
   document.querySelectorAll(".menu-link").forEach((btn) => {
     btn.addEventListener("click", () => {
       const viewId = btn.dataset.view;
@@ -11239,6 +11402,18 @@ function wireUI(){
   const grantAccessConfirmBtn = $("btnGrantAccessConfirm");
   if (grantAccessConfirmBtn){
     grantAccessConfirmBtn.addEventListener("click", () => confirmGrantAccess());
+  }
+  const priceSheetCloseBtn = $("btnPriceSheetClose");
+  if (priceSheetCloseBtn){
+    priceSheetCloseBtn.addEventListener("click", () => closePriceSheetModal());
+  }
+  const priceSheetCancelBtn = $("btnPriceSheetCancel");
+  if (priceSheetCancelBtn){
+    priceSheetCancelBtn.addEventListener("click", () => closePriceSheetModal());
+  }
+  const priceSheetConfirmBtn = $("btnPriceSheetConfirm");
+  if (priceSheetConfirmBtn){
+    priceSheetConfirmBtn.addEventListener("click", () => confirmImportPriceSheet());
   }
   const invoiceAgentCloseBtn = $("btnInvoiceAgentClose");
   if (invoiceAgentCloseBtn){

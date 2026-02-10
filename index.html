@@ -635,6 +635,7 @@
           <div class="menu-title" data-i18n="menuNavTitle">Navigation</div>
           <button class="menu-link" type="button" data-view="viewDailyReport" data-i18n="dailyReportTitle">Daily Report</button>
           <button id="btnGrantProjectAccess" class="menu-link" type="button" style="display:none;">Grant Project Access</button>
+          <button id="btnImportPriceSheet" class="menu-link" type="button" style="display:none;">Import Price Sheet</button>
         </div>
         <div class="menu-section">
           <div class="menu-title" data-i18n="menuSettingsTitle">Settings</div>
@@ -711,6 +712,24 @@
       </div>
     </div>
 
+    <div id="priceSheetModal" class="modal" style="display:none;">
+      <div class="card modal-card">
+        <div class="modal-header">
+          <h2>Import Price Sheet</h2>
+          <button id="btnPriceSheetClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
+        </div>
+        <div class="field-stack" style="margin-top:10px;">
+          <input id="priceSheetInput" type="file" accept=".csv,.xlsx,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf" />
+          <div class="muted small">Expected headers: code, description, unit, rate</div>
+          <div class="muted small">USER2 = USER1 +25% • OWNER = USER2 +25%</div>
+        </div>
+        <div class="row" style="margin-top:12px; justify-content:flex-end;">
+          <button id="btnPriceSheetCancel" class="btn ghost" type="button">Cancel</button>
+          <button id="btnPriceSheetConfirm" class="btn" type="button">Import Pricing</button>
+        </div>
+      </div>
+    </div>
+
     <div id="grantAccessModal" class="modal" style="display:none;">
       <div class="card modal-card">
         <div class="modal-header">
@@ -759,6 +778,14 @@
           <div>
             <div class="muted small" data-i18n="invoiceAgentToLabel">To company</div>
             <select id="invoiceAgentToOrg" class="input"></select>
+          </div>
+          <div id="invoiceAgentTierWrap" style="display:none;">
+            <div class="muted small">Pricing tier</div>
+            <select id="invoiceAgentTier" class="input">
+              <option value="USER_LEVEL_1">User Level 1</option>
+              <option value="USER_LEVEL_2">User Level 2</option>
+              <option value="OWNER">Owner</option>
+            </select>
           </div>
         </div>
         <div id="invoiceAgentSummary" class="muted small" style="margin-top:6px;"></div>
