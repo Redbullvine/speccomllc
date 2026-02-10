@@ -1,43 +1,30 @@
-import { appMode, hasSupabaseConfig, isDemo, makeClient } from "./supabaseClient.js";
+import { APP_MODE, hasSupabaseConfig, makeClient, refreshConfig } from "./supabaseClient.js";
+
+const isDebug = new URLSearchParams(location.search).has("debug");
+const dlog = (...args) => { if (isDebug) console.log(...args); };
 
 const $ = (id) => document.getElementById(id);
 window.SpecCom = window.SpecCom || {};
 const SpecCom = window.SpecCom;
 SpecCom.helpers = SpecCom.helpers || {};
 let supabase = null;
-const createClient = (url, anonKey) => window.supabase.createClient(url, anonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storage: window.localStorage,
-  },
-});
+let appMode = "real";
+let isDemo = false;
 
 const supabaseReady = (async () => {
-  const env = await loadRuntimeEnv();
+  await loadRuntimeEnv();
+  refreshConfig();
+  appMode = APP_MODE;
+  isDemo = APP_MODE === "demo";
 
-  if (!env?.SUPABASE_URL || !env?.SUPABASE_ANON_KEY) {
-    console.error("Missing Supabase env", env);
+  const client = makeClient();
+  if (!client) {
+    dlog("[config] missing Supabase env");
     return null;
   }
 
-  if (!window.supabase) {
-    await new Promise((resolve, reject) => {
-      const s = document.createElement("script");
-      s.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-      s.onload = resolve;
-      s.onerror = reject;
-      document.head.appendChild(s);
-    });
-  }
-
-  supabase = createClient(
-    env.SUPABASE_URL,
-    env.SUPABASE_ANON_KEY
-  );
-
-  return supabase;
+  supabase = client;
+  return client;
 })();
 
 const ROLES = {
@@ -967,54 +954,53 @@ function getRuntimeEnv(){
   }
 
   return {
-    SUPABASE_URL: null,
-    SUPABASE_ANON_KEY: null,
-    LIVE_MODE: false,
+    SUPABASE_URL: "",
+    SUPABASE_ANON_KEY: "",
+    APP_MODE: "real",
   };
 }
 
+async function tryFetchAppConfig(){
+  try{
+    const res = await fetch("/.netlify/functions/app-config", { cache: "no-store" });
+    if (!res.ok) throw new Error(`app-config ${res.status}`);
+    return await res.json();
+  } catch (e){
+    dlog("[config] app-config fetch not available (ok in demo/static):", e?.message || e);
+    return null;
+  }
+}
+
 async function loadRuntimeEnv(){
-  if (window.__ENV) return window.__ENV;
+  if (window.__ENV){
+    dlog("[config] using window.__ENV");
+    return window.__ENV;
+  }
 
-  const res = await fetch("/.netlify/functions/app-config");
-  if (!res.ok) throw new Error("Failed to load app config");
+  const cfg = await tryFetchAppConfig();
+  if (cfg){
+    window.__ENV = cfg;
+    dlog("[config] window.__ENV set from app-config");
+    return cfg;
+  }
 
-  window.__ENV = await res.json();
+  window.__ENV = window.__ENV || { SUPABASE_URL: "", SUPABASE_ANON_KEY: "", APP_MODE: "real" };
   return window.__ENV;
 }
 
 async function ensureAuthClient(){
   if (state.client) return state.client;
+  await loadRuntimeEnv();
+  refreshConfig();
+  appMode = APP_MODE;
+  isDemo = APP_MODE === "demo";
   let client = await makeClient();
   if (client){
     state.client = client;
     supabase = client;
     return client;
   }
-  const env = getRuntimeEnv();
-  const url = env.SUPABASE_URL || env.supabaseUrl || "";
-  const anonKey = env.SUPABASE_ANON_KEY || env.supabaseAnonKey || "";
-  if (!url || !anonKey) return null;
-  if (!window.supabase){
-    await new Promise((resolve, reject) => {
-      const s = document.createElement("script");
-      s.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-      s.onload = resolve;
-      s.onerror = reject;
-      document.head.appendChild(s);
-    });
-  }
-  if (!window.supabase?.createClient) return null;
-  state.client = window.supabase.createClient(url, anonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      storage: window.localStorage,
-    },
-  });
-  supabase = state.client;
-  return state.client;
+  return null;
 }
 
 function showStorageBlockedWarning(){
@@ -2342,7 +2328,7 @@ function focusSiteOnMap(siteId){
     return;
   }
   const marker = state.map.markers.get(siteId);
-  console.debug("focusSiteOnMap", {
+  dlog("focusSiteOnMap", {
     siteId,
     resolvedSiteId: site?.id,
     coords: [coords.lat, coords.lng],
@@ -2390,7 +2376,7 @@ function ensureMap(){
       return;
     }
     state.map.pendingLatLng = { lat: latlng.lat, lng: latlng.lng };
-    console.log("[map click]", latlng.lat, latlng.lng);
+    dlog("[map click]", latlng.lat, latlng.lng);
     showPendingPinMarker(latlng);
     if (!state.map.dropPinMode) return;
     state.map.dropPinMode = false;
@@ -4280,7 +4266,7 @@ async function handleLocationImport(file){
     return;
   }
 
-  console.log("Import handler reached, file selected:", file.name);
+  dlog("Import handler reached, file selected:", file.name);
   const name = file.name.toLowerCase();
   let rows = [];
   try{
@@ -4302,7 +4288,7 @@ async function handleLocationImport(file){
     toast("Import error", "No data rows found.");
     return;
   }
-  console.log("Parsed rows:", rows);
+  dlog("Parsed rows:", rows);
 
   const invalidRows = validateImportRows(rows);
   if (invalidRows.length){
@@ -10589,7 +10575,7 @@ function navigateToApp(){
 async function handleSignIn(e) {
   e?.preventDefault?.();
 
-  console.log("SIGN IN CLICKED");
+  dlog("SIGN IN CLICKED");
 
   const client = await supabaseReady;
 
@@ -10618,7 +10604,7 @@ async function handleSignIn(e) {
   }
 
   // Success path
-  console.log("Logged in:", data.user.email);
+  dlog("Logged in:", data.user.email);
 
   await postLoginBootstrap(client, data.user); // projects, profile, etc.
   navigateToApp(); // or window.location = "/"
@@ -11144,7 +11130,7 @@ function wireUI(){
       const btn = e.target.closest("[data-site-id]");
       if (!btn) return;
       const siteId = btn.dataset.siteId;
-      console.debug("siteList click", { siteId });
+      dlog("siteList click", { siteId });
       await setActiveSite(siteId);
       focusSiteOnMap(siteId);
     });

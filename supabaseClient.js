@@ -1,55 +1,33 @@
-// Supabase client loader.
-// APP_MODE controls demo vs real; missing keys show a warning in the UI.
+import { createClient } from "@supabase/supabase-js";
 
-const runtimeEnv = window.__ENV__ || window.__ENV || window.ENV || {};
-const { SUPABASE_URL, SUPABASE_ANON_KEY, APP_MODE } = runtimeEnv;
+export let SUPABASE_URL = "";
+export let SUPABASE_ANON_KEY = "";
+export let APP_MODE = "real";
 
-export const config = {
-  url: SUPABASE_URL || "",
-  anonKey: SUPABASE_ANON_KEY || "",
-  appMode: String(APP_MODE || "real").toLowerCase(),
-};
-
-export const appMode = "real";
-export const hasSupabaseConfig = Boolean(config.url && config.anonKey);
-export const isDemo = false;
-
-let _clientPromise = null;
-let _client = null;
-
-export function getSupabase(){
-  return _client;
+function readWindowEnv() {
+  if (typeof window === "undefined") return null;
+  return window.__ENV || null;
 }
 
-export async function ensureSupabaseLoaded(){
-  if (!hasSupabaseConfig) return;
-
-  if (window.supabase) return;
-
-  await new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-    s.onload = resolve;
-    s.onerror = reject;
-    document.head.appendChild(s);
-  });
+export function refreshConfig() {
+  const env = readWindowEnv();
+  SUPABASE_URL = (env?.SUPABASE_URL || "").trim();
+  SUPABASE_ANON_KEY = (env?.SUPABASE_ANON_KEY || "").trim();
+  APP_MODE = (env?.APP_MODE || "real").trim();
+  return { SUPABASE_URL, SUPABASE_ANON_KEY, APP_MODE };
 }
 
-export async function makeClient(){
-  if (!hasSupabaseConfig) return null;
-  if (_client) return _client;
-  if (_clientPromise) return _clientPromise;
-  _clientPromise = (async () => {
-    await ensureSupabaseLoaded();
-    _client = window.supabase.createClient(config.url, config.anonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-        storage: window.localStorage,
-      },
-    });
-    return _client;
-  })();
-  return _clientPromise;
+export function hasSupabaseConfig() {
+  refreshConfig();
+  return !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
+}
+
+export function makeClient() {
+  refreshConfig();
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return null;
+  }
+
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
