@@ -5137,22 +5137,40 @@ async function loadTesseract(){
 }
 
 function extractLatLng(text){
-  const coordRe = /(-?\d{1,2}\.\d+)\s*[, ]\s*(-?\d{1,3}\.\d+)/;
-  const match = text.match(coordRe);
-  if (!match) return null;
-  const lat = Number(match[1]);
-  const lng = Number(match[2]);
+  const basic = /(-?\d{1,2}\.\d+)\s*[, ]\s*(-?\d{1,3}\.\d+)/;
+  const match = text.match(basic);
+  if (match){
+    const lat = Number(match[1]);
+    const lng = Number(match[2]);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180){
+      return { lat, lng };
+    }
+  }
+  const nswe = /(\d{1,2}\.\d+)\s*([NS])\s+(\d{1,3}\.\d+)\s*([EW])/i;
+  const matchNswe = text.match(nswe);
+  if (!matchNswe) return null;
+  let lat = Number(matchNswe[1]);
+  let lng = Number(matchNswe[3]);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (matchNswe[2].toUpperCase() === "S") lat *= -1;
+  if (matchNswe[4].toUpperCase() === "W") lng *= -1;
   if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
   return { lat, lng };
 }
 
-function extractLocationName(text){
+function extractLocationTokens(text){
+  const tokens = [];
   const npMatch = text.match(/\b([A-Za-z]*NetworkPoint-\d+)\b/);
-  if (npMatch) return npMatch[1];
+  if (npMatch) tokens.push(npMatch[1]);
   const nodeMatch = text.match(/\bNODE\d+[_-]?[A-Z0-9_-]*\b/i);
-  if (nodeMatch) return nodeMatch[0];
-  return null;
+  if (nodeMatch) tokens.push(nodeMatch[0]);
+  const codeMatch = text.match(/\b[A-Z]{2,4}_\d{2,6}\b/);
+  if (codeMatch) tokens.push(codeMatch[0]);
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  lines.forEach((line) => {
+    if (/^\d{3,6}$/.test(line)) tokens.push(line);
+  });
+  return Array.from(new Set(tokens));
 }
 
 function findNearestSiteByGps(lat, lng){
@@ -5181,6 +5199,13 @@ function findSiteByName(name){
   const key = String(name).trim().toLowerCase();
   const sites = state.projectSites || [];
   return sites.find((s) => String(s.name || "").trim().toLowerCase() === key) || null;
+}
+
+function findSiteByToken(token){
+  if (!token) return null;
+  const key = String(token).trim().toLowerCase();
+  const sites = state.projectSites || [];
+  return sites.find((s) => String(s.name || "").trim().toLowerCase().includes(key)) || null;
 }
 
 async function uploadSiteMediaForSite(file, site, gps, capturedAt){
@@ -5215,6 +5240,7 @@ async function ocrImageTopRight(blob){
   const sy = 0;
   canvas.width = cropW;
   canvas.height = cropH;
+  ctx.filter = "contrast(1.4) grayscale(1)";
   ctx.drawImage(bitmap, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
   const { data } = await Tesseract.recognize(canvas, "eng");
   return data?.text || "";
@@ -5255,8 +5281,9 @@ async function confirmImportTestResults(){
     try{
       const blob = await entry.async("blob");
       const text = await ocrImageTopRight(blob);
+      if (isDebug) dlog("[test-results] OCR text:", text);
       const gps = extractLatLng(text);
-      const locName = extractLocationName(text);
+      const tokens = extractLocationTokens(text);
       let target = null;
       if (gps){
         const nearest = findNearestSiteByGps(gps.lat, gps.lng);
@@ -5264,8 +5291,11 @@ async function confirmImportTestResults(){
           target = nearest.site;
         }
       }
-      if (!target && locName){
-        target = findSiteByName(locName);
+      if (!target && tokens.length){
+        for (const token of tokens){
+          target = findSiteByName(token) || findSiteByToken(token);
+          if (target) break;
+        }
       }
       if (!target){
         skipped += 1;
