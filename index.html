@@ -637,6 +637,7 @@
           <button id="btnGrantProjectAccess" class="menu-link" type="button" style="display:none;">Grant Project Access</button>
           <button id="btnImportPriceSheet" class="menu-link" type="button" style="display:none;">Import Price Sheet</button>
           <button id="btnCreateProjectFromStaking" class="menu-link" type="button" style="display:none;">Create Project from Staking PDF</button>
+          <button id="btnImportTestResults" class="menu-link" type="button" style="display:none;">Import Test Results (ZIP)</button>
         </div>
         <div class="menu-section">
           <div class="menu-title" data-i18n="menuSettingsTitle">Settings</div>
@@ -745,6 +746,24 @@
         <div class="row" style="margin-top:12px; justify-content:flex-end;">
           <button id="btnStakingProjectCancel" class="btn ghost" type="button">Cancel</button>
           <button id="btnStakingProjectConfirm" class="btn" type="button">Create Project</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="testResultsModal" class="modal" style="display:none;">
+      <div class="card modal-card">
+        <div class="modal-header">
+          <h2>Import Test Results (ZIP)</h2>
+          <button id="btnTestResultsClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
+        </div>
+        <div class="field-stack" style="margin-top:10px;">
+          <input id="testResultsInput" type="file" accept=".zip,application/zip" />
+          <div class="muted small">Reads screenshot text to match GPS/location and attach photos to sites.</div>
+        </div>
+        <div id="testResultsSummary" class="muted small" style="margin-top:10px;"></div>
+        <div class="row" style="margin-top:12px; justify-content:flex-end;">
+          <button id="btnTestResultsCancel" class="btn ghost" type="button">Cancel</button>
+          <button id="btnTestResultsConfirm" class="btn" type="button">Import Screenshots</button>
         </div>
       </div>
     </div>

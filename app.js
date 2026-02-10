@@ -5043,6 +5043,8 @@ function openMenuModal(){
   if (priceBtn) priceBtn.style.display = SpecCom.helpers.isRoot() ? "" : "none";
   const stakingBtn = $("btnCreateProjectFromStaking");
   if (stakingBtn) stakingBtn.style.display = SpecCom.helpers.isRoot() ? "" : "none";
+  const testBtn = $("btnImportTestResults");
+  if (testBtn) testBtn.style.display = SpecCom.helpers.isRoot() ? "" : "none";
   modal.style.display = "";
 }
 
@@ -5088,6 +5090,201 @@ function closeStakingProjectModal(){
   const modal = $("stakingProjectModal");
   if (!modal) return;
   modal.style.display = "none";
+}
+
+function openTestResultsModal(){
+  if (!SpecCom.helpers.isRoot()){
+    toast("Not allowed", "Only ROOT can import test results.");
+    return;
+  }
+  const modal = $("testResultsModal");
+  if (!modal) return;
+  const input = $("testResultsInput");
+  const summary = $("testResultsSummary");
+  if (input) input.value = "";
+  if (summary) summary.textContent = "";
+  modal.style.display = "";
+}
+
+function closeTestResultsModal(){
+  const modal = $("testResultsModal");
+  if (!modal) return;
+  modal.style.display = "none";
+}
+
+async function loadJsZip(){
+  if (window.JSZip) return window.JSZip;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js";
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  return window.JSZip;
+}
+
+async function loadTesseract(){
+  if (window.Tesseract) return window.Tesseract;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  return window.Tesseract;
+}
+
+function extractLatLng(text){
+  const coordRe = /(-?\d{1,2}\.\d+)\s*[, ]\s*(-?\d{1,3}\.\d+)/;
+  const match = text.match(coordRe);
+  if (!match) return null;
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { lat, lng };
+}
+
+function extractLocationName(text){
+  const npMatch = text.match(/\b([A-Za-z]*NetworkPoint-\d+)\b/);
+  if (npMatch) return npMatch[1];
+  const nodeMatch = text.match(/\bNODE\d+[_-]?[A-Z0-9_-]*\b/i);
+  if (nodeMatch) return nodeMatch[0];
+  return null;
+}
+
+function findNearestSiteByGps(lat, lng){
+  const sites = state.projectSites || [];
+  let best = null;
+  let bestDist = Infinity;
+  const toRad = (x) => (x * Math.PI) / 180;
+  for (const s of sites){
+    if (s.gps_lat == null || s.gps_lng == null) continue;
+    const dLat = toRad(lat - s.gps_lat);
+    const dLng = toRad(lng - s.gps_lng);
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat)) * Math.cos(toRad(s.gps_lat)) * Math.sin(dLng / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const dist = 6371 * c;
+    if (dist < bestDist){
+      bestDist = dist;
+      best = s;
+    }
+  }
+  return best ? { site: best, distanceKm: bestDist } : null;
+}
+
+function findSiteByName(name){
+  if (!name) return null;
+  const key = String(name).trim().toLowerCase();
+  const sites = state.projectSites || [];
+  return sites.find((s) => String(s.name || "").trim().toLowerCase() === key) || null;
+}
+
+async function uploadSiteMediaForSite(file, site, gps, capturedAt){
+  if (!site || !file) return null;
+  const uploadPath = await uploadProofPhoto(file, site.id, "site-media");
+  if (!uploadPath) return null;
+  const { error } = await state.client
+    .from("site_media")
+    .insert({
+      site_id: site.id,
+      media_path: uploadPath,
+      gps_lat: gps?.lat ?? null,
+      gps_lng: gps?.lng ?? null,
+      gps_accuracy_m: gps?.accuracy ?? null,
+      created_at: capturedAt || new Date().toISOString(),
+    });
+  if (error){
+    toast("Media save error", error.message);
+    return null;
+  }
+  return uploadPath;
+}
+
+async function ocrImageTopRight(blob){
+  const Tesseract = await loadTesseract();
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  const cropW = Math.floor(bitmap.width * 0.45);
+  const cropH = Math.floor(bitmap.height * 0.35);
+  const sx = bitmap.width - cropW;
+  const sy = 0;
+  canvas.width = cropW;
+  canvas.height = cropH;
+  ctx.drawImage(bitmap, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
+  const { data } = await Tesseract.recognize(canvas, "eng");
+  return data?.text || "";
+}
+
+async function confirmImportTestResults(){
+  if (!SpecCom.helpers.isRoot()){
+    toast("Not allowed", "Only ROOT can import test results.");
+    return;
+  }
+  if (!state.activeProject){
+    toast("Project required", "Select a project first.");
+    return;
+  }
+  if (!state.client){
+    toast("Import failed", "Client not ready.");
+    return;
+  }
+  const input = $("testResultsInput");
+  const summary = $("testResultsSummary");
+  const file = input?.files?.[0] || null;
+  if (!file){
+    toast("File required", "Choose a ZIP file.");
+    return;
+  }
+  const JSZip = await loadJsZip();
+  const zip = await JSZip.loadAsync(file);
+  const entries = Object.values(zip.files || {}).filter((f) => !f.dir);
+  const images = entries.filter((f) => /\.(png|jpe?g)$/i.test(f.name));
+  if (!images.length){
+    toast("Import failed", "No images found in ZIP.");
+    return;
+  }
+  toast("Import started", `Processing ${images.length} images...`);
+  let matched = 0;
+  let skipped = 0;
+  for (const entry of images){
+    try{
+      const blob = await entry.async("blob");
+      const text = await ocrImageTopRight(blob);
+      const gps = extractLatLng(text);
+      const locName = extractLocationName(text);
+      let target = null;
+      if (gps){
+        const nearest = findNearestSiteByGps(gps.lat, gps.lng);
+        if (nearest && nearest.distanceKm < 0.25){
+          target = nearest.site;
+        }
+      }
+      if (!target && locName){
+        target = findSiteByName(locName);
+      }
+      if (!target){
+        skipped += 1;
+        continue;
+      }
+      const fileName = entry.name.split("/").pop() || "test-result.png";
+      const fileObj = new File([blob], fileName, { type: blob.type || "image/png" });
+      await uploadSiteMediaForSite(fileObj, target, gps, new Date().toISOString());
+      matched += 1;
+    } catch (err){
+      skipped += 1;
+      if (summary) summary.textContent = `Last error: ${err.message || err}`;
+    }
+  }
+  toast("Import complete", `Attached ${matched} images. Skipped ${skipped}.`);
+  if (summary){
+    summary.textContent = `Attached ${matched} images. Skipped ${skipped}.`;
+  }
+  await loadProjectSites(state.activeProject.id);
 }
 
 async function parseStakingPdf(file){
@@ -11416,6 +11613,13 @@ function wireUI(){
       openStakingProjectModal();
     });
   }
+  const testResultsBtn = $("btnImportTestResults");
+  if (testResultsBtn){
+    testResultsBtn.addEventListener("click", () => {
+      closeMenuModal();
+      openTestResultsModal();
+    });
+  }
   document.querySelectorAll(".menu-link").forEach((btn) => {
     btn.addEventListener("click", () => {
       const viewId = btn.dataset.view;
@@ -11583,6 +11787,18 @@ function wireUI(){
   const stakingProjectConfirmBtn = $("btnStakingProjectConfirm");
   if (stakingProjectConfirmBtn){
     stakingProjectConfirmBtn.addEventListener("click", () => confirmCreateProjectFromStaking());
+  }
+  const testResultsCloseBtn = $("btnTestResultsClose");
+  if (testResultsCloseBtn){
+    testResultsCloseBtn.addEventListener("click", () => closeTestResultsModal());
+  }
+  const testResultsCancelBtn = $("btnTestResultsCancel");
+  if (testResultsCancelBtn){
+    testResultsCancelBtn.addEventListener("click", () => closeTestResultsModal());
+  }
+  const testResultsConfirmBtn = $("btnTestResultsConfirm");
+  if (testResultsConfirmBtn){
+    testResultsConfirmBtn.addEventListener("click", () => confirmImportTestResults());
   }
   const invoiceAgentCloseBtn = $("btnInvoiceAgentClose");
   if (invoiceAgentCloseBtn){
