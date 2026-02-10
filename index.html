@@ -636,6 +636,7 @@
           <button class="menu-link" type="button" data-view="viewDailyReport" data-i18n="dailyReportTitle">Daily Report</button>
           <button id="btnGrantProjectAccess" class="menu-link" type="button" style="display:none;">Grant Project Access</button>
           <button id="btnImportPriceSheet" class="menu-link" type="button" style="display:none;">Import Price Sheet</button>
+          <button id="btnCreateProjectFromStaking" class="menu-link" type="button" style="display:none;">Create Project from Staking PDF</button>
         </div>
         <div class="menu-section">
           <div class="menu-title" data-i18n="menuSettingsTitle">Settings</div>
@@ -726,6 +727,24 @@
         <div class="row" style="margin-top:12px; justify-content:flex-end;">
           <button id="btnPriceSheetCancel" class="btn ghost" type="button">Cancel</button>
           <button id="btnPriceSheetConfirm" class="btn" type="button">Import Pricing</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="stakingProjectModal" class="modal" style="display:none;">
+      <div class="card modal-card">
+        <div class="modal-header">
+          <h2>Create Project from Staking PDF</h2>
+          <button id="btnStakingProjectClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
+        </div>
+        <div class="field-stack" style="margin-top:10px;">
+          <input id="stakingProjectInput" type="file" accept=".pdf,application/pdf" />
+          <div class="muted small">Uploads a staking package PDF and builds a project + placeholder sites.</div>
+        </div>
+        <div id="stakingProjectSummary" class="muted small" style="margin-top:10px;"></div>
+        <div class="row" style="margin-top:12px; justify-content:flex-end;">
+          <button id="btnStakingProjectCancel" class="btn ghost" type="button">Cancel</button>
+          <button id="btnStakingProjectConfirm" class="btn" type="button">Create Project</button>
         </div>
       </div>
     </div>

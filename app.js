@@ -5041,6 +5041,8 @@ function openMenuModal(){
   if (grantBtn) grantBtn.style.display = SpecCom.helpers.isRoot() ? "" : "none";
   const priceBtn = $("btnImportPriceSheet");
   if (priceBtn) priceBtn.style.display = SpecCom.helpers.isRoot() ? "" : "none";
+  const stakingBtn = $("btnCreateProjectFromStaking");
+  if (stakingBtn) stakingBtn.style.display = SpecCom.helpers.isRoot() ? "" : "none";
   modal.style.display = "";
 }
 
@@ -5066,6 +5068,111 @@ function closePriceSheetModal(){
   const modal = $("priceSheetModal");
   if (!modal) return;
   modal.style.display = "none";
+}
+
+function openStakingProjectModal(){
+  if (!SpecCom.helpers.isRoot()){
+    toast("Not allowed", "Only ROOT can create projects from staking PDFs.");
+    return;
+  }
+  const modal = $("stakingProjectModal");
+  if (!modal) return;
+  const input = $("stakingProjectInput");
+  const summary = $("stakingProjectSummary");
+  if (input) input.value = "";
+  if (summary) summary.textContent = "";
+  modal.style.display = "";
+}
+
+function closeStakingProjectModal(){
+  const modal = $("stakingProjectModal");
+  if (!modal) return;
+  modal.style.display = "none";
+}
+
+async function parseStakingPdf(file){
+  const pdfjsLib = await loadPdfJs();
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  let text = "";
+  for (let i = 1; i <= pdf.numPages; i += 1){
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items.map((item) => item.str).join(" ");
+    text += `${pageText}\n`;
+  }
+  const matchPackage = text.match(/\b(\d{3,6}[A-Z]{1,3}_\d{1,3})\b/);
+  const matchClarity = text.match(/\bPR\d{6}\b/);
+  const matchWbs = text.match(/\bTC-\d+\b/);
+  const matchCompany = text.match(/Company:\s*([A-Za-z0-9 .,&-]+)/i);
+  const packageId = matchPackage ? matchPackage[1] : "Staking Project";
+  const clarityId = matchClarity ? matchClarity[0] : "";
+  const wbs = matchWbs ? matchWbs[0] : "";
+  const company = matchCompany ? matchCompany[1].trim() : "";
+  const networkPointMatches = Array.from(text.matchAll(/\b([A-Za-z]*NetworkPoint-\d+)\b/g)).map(m => m[1]);
+  const networkPoints = Array.from(new Set(networkPointMatches));
+  return {
+    packageId,
+    clarityId,
+    wbs,
+    company,
+    networkPoints,
+  };
+}
+
+async function confirmCreateProjectFromStaking(){
+  if (!SpecCom.helpers.isRoot()){
+    toast("Not allowed", "Only ROOT can create projects from staking PDFs.");
+    return;
+  }
+  const input = $("stakingProjectInput");
+  const summary = $("stakingProjectSummary");
+  const file = input?.files?.[0] || null;
+  if (!file){
+    toast("File required", "Choose a staking PDF.");
+    return;
+  }
+  let parsed = null;
+  try{
+    parsed = await parseStakingPdf(file);
+  } catch (err){
+    reportErrorToast("Parse failed", err);
+    return;
+  }
+  if (!parsed){
+    toast("Parse failed", "Unable to read PDF.");
+    return;
+  }
+  const projectName = parsed.packageId || "Staking Project";
+  const descriptionParts = [];
+  if (parsed.clarityId) descriptionParts.push(`Clarity ID: ${parsed.clarityId}`);
+  if (parsed.wbs) descriptionParts.push(`WBS: ${parsed.wbs}`);
+  if (parsed.company) descriptionParts.push(`Company: ${parsed.company}`);
+  const description = descriptionParts.join(" | ");
+  const sites = parsed.networkPoints || [];
+  if (summary){
+    summary.textContent = `Parsed ${sites.length} network points for ${projectName}.`;
+  }
+  const client = await supabaseReady;
+  if (!client){
+    toast("Create failed", "Supabase client unavailable.");
+    return;
+  }
+  const { data, error } = await client.rpc("fn_create_project_from_staking", {
+    p_project_name: projectName,
+    p_description: description,
+    p_sites: sites,
+  });
+  if (error){
+    toast("Create failed", error.message || "Create failed.");
+    return;
+  }
+  toast("Project created", `Created ${projectName}.`);
+  closeStakingProjectModal();
+  await loadProjects();
+  if (data?.project_id){
+    setActiveProjectById(data.project_id);
+  }
 }
 
 function normalizeHeaderRow(row){
@@ -11302,6 +11409,13 @@ function wireUI(){
       openPriceSheetModal();
     });
   }
+  const stakingProjectBtn = $("btnCreateProjectFromStaking");
+  if (stakingProjectBtn){
+    stakingProjectBtn.addEventListener("click", () => {
+      closeMenuModal();
+      openStakingProjectModal();
+    });
+  }
   document.querySelectorAll(".menu-link").forEach((btn) => {
     btn.addEventListener("click", () => {
       const viewId = btn.dataset.view;
@@ -11457,6 +11571,18 @@ function wireUI(){
   const priceSheetConfirmBtn = $("btnPriceSheetConfirm");
   if (priceSheetConfirmBtn){
     priceSheetConfirmBtn.addEventListener("click", () => confirmImportPriceSheet());
+  }
+  const stakingProjectCloseBtn = $("btnStakingProjectClose");
+  if (stakingProjectCloseBtn){
+    stakingProjectCloseBtn.addEventListener("click", () => closeStakingProjectModal());
+  }
+  const stakingProjectCancelBtn = $("btnStakingProjectCancel");
+  if (stakingProjectCancelBtn){
+    stakingProjectCancelBtn.addEventListener("click", () => closeStakingProjectModal());
+  }
+  const stakingProjectConfirmBtn = $("btnStakingProjectConfirm");
+  if (stakingProjectConfirmBtn){
+    stakingProjectConfirmBtn.addEventListener("click", () => confirmCreateProjectFromStaking());
   }
   const invoiceAgentCloseBtn = $("btnInvoiceAgentClose");
   if (invoiceAgentCloseBtn){
