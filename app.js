@@ -5068,20 +5068,53 @@ function closePriceSheetModal(){
   modal.style.display = "none";
 }
 
-function parsePriceSheetRows(rows){
-  if (!rows.length) return [];
-  const headers = rows[0].map(SpecCom.helpers.normalizeImportHeader);
-  const codeIdx = findHeaderIndex(headers, ["code", "billing_code", "work_code"]);
-  const descIdx = findHeaderIndex(headers, ["description", "desc"]);
-  const unitIdx = findHeaderIndex(headers, ["unit", "units"]);
-  const rateIdx = findHeaderIndex(headers, ["rate", "price", "unit_price"]);
-  if (codeIdx < 0 || rateIdx < 0){
-    throw new Error("Missing headers: code and rate are required");
+function normalizeHeaderRow(row){
+  return row.map((cell) => SpecCom.helpers.normalizeImportHeader(cell));
+}
+
+function findHeaderRowIndex(gridRows){
+  const maxScan = Math.min(gridRows.length, 25);
+  const headerTargets = ["tds unit", "component price", "unit price", "millennium desc"];
+  let best = { idx: -1, score: 0 };
+  for (let i = 0; i < maxScan; i += 1){
+    const row = gridRows[i] || [];
+    const normalized = normalizeHeaderRow(row);
+    const score = headerTargets.reduce((acc, h) => acc + (normalized.includes(h) ? 1 : 0), 0);
+    if (score > best.score){
+      best = { idx: i, score };
+    }
   }
-  const dataRows = rows.slice(1).filter((row) => row?.length && row.some(cell => String(cell || "").trim().length));
+  return best.score >= 2 ? best.idx : -1;
+}
+
+function parsePriceSheetRows(rows, gridMode = false){
+  if (!rows.length) return [];
+  let headers = [];
+  let dataRows = [];
+  if (gridMode){
+    const headerIdx = findHeaderRowIndex(rows);
+    if (headerIdx < 0){
+      throw new Error("Header row not found");
+    }
+    headers = normalizeHeaderRow(rows[headerIdx]);
+    dataRows = rows.slice(headerIdx + 1).filter((row) => row?.length && row.some(cell => String(cell || "").trim().length));
+  } else {
+    headers = rows[0].map(SpecCom.helpers.normalizeImportHeader);
+    dataRows = rows.slice(1).filter((row) => row?.length && row.some(cell => String(cell || "").trim().length));
+  }
+  const codeIdx = findHeaderIndex(headers, ["tds unit", "code", "billing_code", "work_code"]);
+  const descIdx = findHeaderIndex(headers, ["millennium desc.", "millennium desc", "description", "desc"]);
+  const unitIdx = findHeaderIndex(headers, ["unit", "units"]);
+  const componentIdx = findHeaderIndex(headers, ["component price"]);
+  const unitPriceIdx = findHeaderIndex(headers, ["unit price", "rate", "price", "unit_price"]);
+  if (codeIdx < 0 || (componentIdx < 0 && unitPriceIdx < 0)){
+    throw new Error("Missing headers: code and price are required");
+  }
   return dataRows.map((row, idx) => {
     const rawCode = String(row[codeIdx] ?? "").trim();
-    const rawRate = String(row[rateIdx] ?? "").trim();
+    const rawRatePrimary = componentIdx >= 0 ? String(row[componentIdx] ?? "").trim() : "";
+    const rawRateFallback = unitPriceIdx >= 0 ? String(row[unitPriceIdx] ?? "").trim() : "";
+    const rawRate = rawRatePrimary || rawRateFallback;
     const rate = Number(rawRate.replace(/[^0-9.\-]/g, ""));
     return {
       code: rawCode,
@@ -5091,6 +5124,32 @@ function parsePriceSheetRows(rows){
       __rowNumber: idx + 2,
     };
   }).filter(r => r.code);
+}
+
+async function readPriceSheetRows(file){
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".xlsx") || name.endsWith(".xls")){
+    if (!window.XLSX) throw new Error("XLSX parser not available");
+    const buffer = await file.arrayBuffer();
+    const workbook = window.XLSX.read(buffer, { type: "array" });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    return { gridMode: true, rows };
+  }
+  if (name.endsWith(".csv")){
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    const parsed = lines.map((line) => line.split(","));
+    return { gridMode: true, rows: parsed };
+  }
+  if (name.endsWith(".pdf")){
+    const pdfRows = await parsePdfFile(file);
+    const headers = Object.keys(pdfRows[0] || {});
+    const grid = [headers].concat(pdfRows.map((row) => headers.map((h) => row[h])));
+    return { gridMode: true, rows: grid };
+  }
+  throw new Error("Unsupported file type");
 }
 
 async function confirmImportPriceSheet(){
@@ -5108,32 +5167,16 @@ async function confirmImportPriceSheet(){
     toast("File required", "Choose a price sheet file.");
     return;
   }
-  const name = file.name.toLowerCase();
-  let rows = [];
-  try{
-    if (name.endsWith(".csv")){
-      rows = await parseCsvFile(file);
-    } else if (name.endsWith(".xlsx") || name.endsWith(".xls")){
-      rows = await parseXlsxFile(file);
-    } else if (name.endsWith(".pdf")){
-      rows = await parsePdfFile(file);
-    } else {
-      toast("Import error", "Unsupported file type.");
-      return;
-    }
-  } catch (error){
-    reportErrorToast("Import failed", error);
-    return;
-  }
-  if (!rows.length){
-    toast("Import error", "No data rows found.");
-    return;
-  }
   let payloadRows = [];
   try{
-    payloadRows = parsePriceSheetRows(rows);
+    const parsed = await readPriceSheetRows(file);
+    if (!parsed.rows.length){
+      toast("Import error", "No data rows found.");
+      return;
+    }
+    payloadRows = parsePriceSheetRows(parsed.rows, parsed.gridMode);
   } catch (err){
-    toast("Import error", err.message || "Invalid price sheet.");
+    reportErrorToast("Import failed", err);
     return;
   }
   const invalid = payloadRows.filter(r => !r.code || r.rate == null);
