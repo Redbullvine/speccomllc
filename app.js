@@ -17,7 +17,7 @@ const supabaseReady = (async () => {
   appMode = APP_MODE;
   isDemo = APP_MODE === "demo";
 
-  const client = makeClient();
+  const client = await makeClient();
   if (!client) {
     dlog("[config] missing Supabase env");
     return null;
