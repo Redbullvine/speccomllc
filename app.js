@@ -5433,25 +5433,80 @@ async function loadTesseract(){
 }
 
 function extractLatLng(text){
-  const basic = /(-?\d{1,2}\.\d+)\s*[, ]\s*(-?\d{1,3}\.\d+)/;
-  const match = text.match(basic);
-  if (match){
-    const lat = Number(match[1]);
-    const lng = Number(match[2]);
-    if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180){
-      return { lat, lng };
-    }
+  const raw = String(text || "");
+  if (!raw.trim()) return null;
+  const normalized = raw
+    .replace(/\u00B0/g, " ")
+    .replace(/\u00BA/g, " ")
+    .replace(/\u2019/g, "'")
+    .replace(/\u201C|\u201D/g, "\"")
+    .replace(/(\d),(\d)/g, "$1.$2");
+
+  const isValid = (lat, lng) => (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180
+  );
+  const dirLat = (d) => {
+    const v = String(d || "").toUpperCase();
+    // OCR often confuses "N" as "M" on screenshot overlays.
+    if (v === "S") return -1;
+    if (v === "N" || v === "M") return 1;
+    return null;
+  };
+  const dirLng = (d) => {
+    const v = String(d || "").toUpperCase();
+    if (v === "W") return -1;
+    if (v === "E") return 1;
+    return null;
+  };
+
+  const basic = /(-?\d{1,2}\.\d+)\s*[,;\s|]+\s*(-?\d{1,3}\.\d+)/;
+  const basicMatch = normalized.match(basic);
+  if (basicMatch){
+    const lat = Number(basicMatch[1]);
+    const lng = Number(basicMatch[2]);
+    if (isValid(lat, lng)) return { lat, lng };
   }
-  const nswe = /(\d{1,2}\.\d+)\s*([NS])\s+(\d{1,3}\.\d+)\s*([EW])/i;
-  const matchNswe = text.match(nswe);
-  if (!matchNswe) return null;
-  let lat = Number(matchNswe[1]);
-  let lng = Number(matchNswe[3]);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  if (matchNswe[2].toUpperCase() === "S") lat *= -1;
-  if (matchNswe[4].toUpperCase() === "W") lng *= -1;
-  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
-  return { lat, lng };
+
+  const latFirst = /(\d{1,2}\.\d+)\s*([NSM])[\s,;|]+(\d{1,3}\.\d+)\s*([EW])/i;
+  const latFirstMatch = normalized.match(latFirst);
+  if (latFirstMatch){
+    const latSign = dirLat(latFirstMatch[2]);
+    const lngSign = dirLng(latFirstMatch[4]);
+    const lat = Number(latFirstMatch[1]) * (latSign ?? 1);
+    const lng = Number(latFirstMatch[3]) * (lngSign ?? 1);
+    if (isValid(lat, lng)) return { lat, lng };
+  }
+
+  const dirFirst = /([NSM])\s*(\d{1,2}\.\d+)[\s,;|]+([EW])\s*(\d{1,3}\.\d+)/i;
+  const dirFirstMatch = normalized.match(dirFirst);
+  if (dirFirstMatch){
+    const latSign = dirLat(dirFirstMatch[1]);
+    const lngSign = dirLng(dirFirstMatch[3]);
+    const lat = Number(dirFirstMatch[2]) * (latSign ?? 1);
+    const lng = Number(dirFirstMatch[4]) * (lngSign ?? 1);
+    if (isValid(lat, lng)) return { lat, lng };
+  }
+
+  const dms = /(\d{1,2})\D+(\d{1,2})\D+(\d{1,2}(?:\.\d+)?)\D*([NSM])[\s,;|]+(\d{1,3})\D+(\d{1,2})\D+(\d{1,2}(?:\.\d+)?)\D*([EW])/i;
+  const dmsMatch = normalized.match(dms);
+  if (dmsMatch){
+    const latDeg = Number(dmsMatch[1]);
+    const latMin = Number(dmsMatch[2]);
+    const latSec = Number(dmsMatch[3]);
+    const lngDeg = Number(dmsMatch[5]);
+    const lngMin = Number(dmsMatch[6]);
+    const lngSec = Number(dmsMatch[7]);
+    const latSign = dirLat(dmsMatch[4]);
+    const lngSign = dirLng(dmsMatch[8]);
+    const lat = (latDeg + (latMin / 60) + (latSec / 3600)) * (latSign ?? 1);
+    const lng = (lngDeg + (lngMin / 60) + (lngSec / 3600)) * (lngSign ?? 1);
+    if (isValid(lat, lng)) return { lat, lng };
+  }
+
+  return null;
 }
 
 function extractLocationTokens(text){
@@ -5542,6 +5597,21 @@ async function ocrImageTopRight(blob){
   return data?.text || "";
 }
 
+async function ocrImageFullFrame(blob){
+  const Tesseract = await loadTesseract();
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  const maxWidth = 1800;
+  const scale = Math.min(1, maxWidth / bitmap.width);
+  canvas.width = Math.max(1, Math.floor(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.floor(bitmap.height * scale));
+  ctx.filter = "contrast(1.35) grayscale(1)";
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const { data } = await Tesseract.recognize(canvas, "eng");
+  return data?.text || "";
+}
+
 async function confirmImportTestResults(){
   if (!SpecCom.helpers.isRoot()){
     toast("Not allowed", "Only ROOT can import test results.");
@@ -5585,10 +5655,17 @@ async function confirmImportTestResults(){
   for (const entry of images){
     try{
       const blob = await entry.async("blob");
-      const text = await ocrImageTopRight(blob);
-      if (isDebug) dlog("[test-results] OCR text:", text);
-      const gps = extractLatLng(text);
-      const tokens = extractLocationTokens(text);
+      let text = await ocrImageTopRight(blob);
+      if (isDebug) dlog("[test-results] OCR text (top-right):", text);
+      let gps = extractLatLng(text);
+      let tokens = extractLocationTokens(text);
+      if (!gps && !tokens.length){
+        const fullText = await ocrImageFullFrame(blob);
+        text = `${text}\n${fullText}`;
+        if (isDebug) dlog("[test-results] OCR text (full):", fullText);
+        gps = extractLatLng(text);
+        tokens = extractLocationTokens(text);
+      }
       if (!gps && !tokens.length){
         skipped += 1;
         skippedNoSignal += 1;
