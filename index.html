@@ -22,6 +22,7 @@
           <span id="messagesBadge" class="alert-badge" style="display:none;">0</span>
         </button>
         <button id="btnProjects" class="topbar-btn" type="button" data-i18n="projectsNav">Projects</button>
+        <button id="btnMapToggle" class="topbar-btn" type="button" data-i18n="mapToggle" aria-pressed="true">Map</button>
         <button id="btnMenu" class="icon-btn" type="button" aria-label="Menu">
           <span class="hamburger">
             <span></span>
@@ -365,8 +366,16 @@
                 <input id="importLocationsInput" type="file" accept=".csv,.xlsx,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf" style="display:none;" />
               </div>
             </div>
-            <div class="map-layout">
-              <div>
+            <div id="mapLayout" class="map-layout">
+              <div id="mapShell" class="map-shell">
+                <div class="map-sheet-bar">
+                  <button id="mapSheetHandle" class="map-sheet-handle" type="button" aria-label="Resize map"></button>
+                  <div class="map-sheet-snaps" role="group" aria-label="Map size">
+                    <button class="map-snap-btn" type="button" data-map-snap="30">30%</button>
+                    <button class="map-snap-btn" type="button" data-map-snap="60">60%</button>
+                    <button class="map-snap-btn" type="button" data-map-snap="90">90%</button>
+                  </div>
+                </div>
                 <div id="liveMap" class="map"></div>
                 <div id="mapStatus" class="muted small" style="margin-top:10px;"></div>
               </div>
@@ -741,6 +750,9 @@
         <div class="field-stack" style="margin-top:10px;">
           <input id="stakingProjectInput" type="file" accept=".pdf,application/pdf" />
           <div class="muted small">Uploads a staking package PDF and builds a project + placeholder sites.</div>
+          <div class="hr" style="margin:8px 0;"></div>
+          <input id="stakingLocationsInput" type="file" accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" />
+          <div class="muted small">Optional: upload a location spreadsheet to set accurate GPS and merge by location name.</div>
         </div>
         <div id="stakingProjectSummary" class="muted small" style="margin-top:10px;"></div>
         <div class="row" style="margin-top:12px; justify-content:flex-end;">

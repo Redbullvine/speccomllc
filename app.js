@@ -145,6 +145,8 @@ const state = {
     instance: null,
     markers: new Map(),
     userNames: new Map(),
+    panelVisible: true,
+    mobileSnap: 60,
     dropPinMode: false,
     pinTargetSiteId: null,
     pendingMarker: null,
@@ -270,6 +272,9 @@ const I18N = {
     selectProject: "Select project",
     projectsNav: "Projects",
     messagesNav: "Messages",
+    mapToggle: "Map",
+    mapShow: "Show map",
+    mapHide: "Hide map",
     currentProjectLabel: "Current project",
     projectSummaryNone: "No project selected",
     projectsEmpty: "No projects yet. Create a project or ask your admin for access.",
@@ -584,6 +589,9 @@ const I18N = {
     selectProject: "Seleccionar proyecto",
     projectsNav: "Proyectos",
     messagesNav: "Mensajes",
+    mapToggle: "Mapa",
+    mapShow: "Mostrar mapa",
+    mapHide: "Ocultar mapa",
     currentProjectLabel: "Proyecto actual",
     projectSummaryNone: "Sin proyecto seleccionado",
     projectsEmpty: "Aun no hay proyectos. Crea un proyecto o pide acceso a tu administrador.",
@@ -931,6 +939,9 @@ function safeLocalStorageRemove(key){
 }
 
 const CURRENT_PROJECT_KEY = "current_project_id";
+const MAP_PANEL_VISIBLE_KEY = "map_panel_visible";
+const MAP_PANEL_MOBILE_SNAP_KEY = "map_panel_mobile_snap";
+const MAP_SHEET_SNAPS = [30, 60, 90];
 
 function storageOk(){
   try{
@@ -1050,6 +1061,135 @@ function setSavedProjectPreference(projectId){
   } else {
     safeLocalStorageRemove(CURRENT_PROJECT_KEY);
   }
+}
+
+function getSavedMapPanelVisible(){
+  const raw = safeLocalStorageGet(MAP_PANEL_VISIBLE_KEY);
+  if (raw == null) return true;
+  return raw !== "0";
+}
+
+function nearestMapSnap(value){
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 60;
+  return MAP_SHEET_SNAPS.reduce((closest, snap) => (
+    Math.abs(snap - num) < Math.abs(closest - num) ? snap : closest
+  ), MAP_SHEET_SNAPS[0]);
+}
+
+function getSavedMapSheetSnap(){
+  return nearestMapSnap(safeLocalStorageGet(MAP_PANEL_MOBILE_SNAP_KEY));
+}
+
+function isMobileViewport(){
+  return window.matchMedia("(max-width: 980px)").matches;
+}
+
+function isMapViewActive(){
+  return Boolean($("viewMap")?.classList.contains("active"));
+}
+
+function applyMapSheetSnapUI(){
+  const snap = nearestMapSnap(state.map.mobileSnap);
+  const heightValue = `${snap}vh`;
+  const mapShell = $("mapShell");
+  if (mapShell){
+    mapShell.style.setProperty("--map-sheet-height", heightValue);
+  }
+  document.documentElement.style.setProperty("--map-sheet-height", heightValue);
+  document.querySelectorAll(".map-snap-btn").forEach((btn) => {
+    btn.classList.toggle("active", Number(btn.dataset.mapSnap) === snap);
+  });
+}
+
+function setMapSheetSnap(snap, { persist = true } = {}){
+  state.map.mobileSnap = nearestMapSnap(snap);
+  if (persist){
+    safeLocalStorageSet(MAP_PANEL_MOBILE_SNAP_KEY, String(state.map.mobileSnap));
+  }
+  applyMapSheetSnapUI();
+  if (state.map.panelVisible !== false && isMapViewActive() && state.map.instance){
+    setTimeout(() => state.map.instance.invalidateSize(), 50);
+  }
+}
+
+function bindMapSheetDrag(){
+  const handle = $("mapSheetHandle");
+  if (!handle || handle.dataset.bound === "1") return;
+  handle.dataset.bound = "1";
+  let pointerId = null;
+  let previewSnap = state.map.mobileSnap || 60;
+
+  const finishDrag = () => {
+    pointerId = null;
+    setMapSheetSnap(previewSnap);
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onUp);
+  };
+
+  const onMove = (e) => {
+    if (e.pointerId !== pointerId) return;
+    const vh = ((window.innerHeight - e.clientY) / window.innerHeight) * 100;
+    const bounded = Math.max(24, Math.min(92, vh));
+    previewSnap = nearestMapSnap(bounded);
+    const mapShell = $("mapShell");
+    if (mapShell){
+      mapShell.style.setProperty("--map-sheet-height", `${bounded.toFixed(1)}vh`);
+    }
+    document.documentElement.style.setProperty("--map-sheet-height", `${bounded.toFixed(1)}vh`);
+  };
+
+  const onUp = (e) => {
+    if (e.pointerId !== pointerId) return;
+    finishDrag();
+  };
+
+  handle.addEventListener("pointerdown", (e) => {
+    if (!isMobileViewport() || state.map.panelVisible === false) return;
+    pointerId = e.pointerId;
+    previewSnap = state.map.mobileSnap || 60;
+    handle.setPointerCapture?.(pointerId);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  });
+}
+
+function applyMapPanelVisibility(){
+  const mapLayout = $("mapLayout");
+  const mapShell = $("mapShell");
+  const toggleBtn = $("btnMapToggle");
+  const isVisible = state.map.panelVisible !== false;
+
+  if (mapLayout) mapLayout.classList.toggle("map-collapsed", !isVisible);
+  if (mapShell) mapShell.hidden = !isVisible;
+  if (toggleBtn){
+    toggleBtn.classList.toggle("is-active", isVisible);
+    toggleBtn.setAttribute("aria-pressed", isVisible ? "true" : "false");
+    toggleBtn.title = isVisible ? t("mapHide") : t("mapShow");
+  }
+  applyMapSheetSnapUI();
+
+  if (isVisible && isMapViewActive()){
+    ensureMap();
+    if (state.map.instance){
+      setTimeout(() => state.map.instance.invalidateSize(), 50);
+    }
+  }
+}
+
+function setMapPanelVisible(visible, { persist = true } = {}){
+  const next = Boolean(visible);
+  state.map.panelVisible = next;
+  if (persist){
+    safeLocalStorageSet(MAP_PANEL_VISIBLE_KEY, next ? "1" : "0");
+  }
+  applyMapPanelVisibility();
+}
+
+function toggleMapPanel(){
+  setMapPanelVisible(!state.map.panelVisible);
 }
 
 function t(key, vars = {}){
@@ -1495,10 +1635,13 @@ function setActiveView(viewId){
     if (state.features.labor) loadLaborRows();
   }
   if (viewId === "viewMap"){
-    ensureMap();
-    if (state.map.instance){
-      setTimeout(() => state.map.instance.invalidateSize(), 50);
+    if (state.map.panelVisible !== false){
+      ensureMap();
+      if (state.map.instance){
+        setTimeout(() => state.map.instance.invalidateSize(), 50);
+      }
     }
+    applyMapPanelVisibility();
     refreshLocations();
   }
   if (viewId === "viewDailyReport"){
@@ -2606,6 +2749,7 @@ function refreshLanguageSensitiveUI(){
   renderDprMetrics();
   renderDprProjectOptions();
   applyI18n();
+  applyMapPanelVisibility();
   refreshLocations();
 }
 
@@ -4466,6 +4610,153 @@ async function importLocationsFile(file){
   toast("Import complete", `Imported ${payloads.length} locations, skipped ${skipped} rows.`);
 }
 
+async function importLocationsSpreadsheetForProject(file, projectId){
+  if (!file) return { inserted: 0, updated: 0, skipped: 0 };
+  if (!projectId){
+    toast("Project required", "Select a project before importing.");
+    return null;
+  }
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return null;
+  }
+  if (!state.client || !state.user){
+    toast("Import unavailable", "Sign in to import locations.");
+    return null;
+  }
+  let rows = [];
+  try{
+    rows = await readLocationImportRows(file);
+  } catch (error){
+    reportErrorToast("Import failed", error);
+    return null;
+  }
+  if (!rows.length){
+    toast("Import error", "No rows found.");
+    return null;
+  }
+  const headers = rows[0].map(SpecCom.helpers.normalizeImportHeader);
+  const nameIdx = findHeaderIndex(headers, ["location_name", "name"]);
+  const latIdx = findHeaderIndex(headers, ["lat", "latitude"]);
+  const lngIdx = findHeaderIndex(headers, ["lng", "longitude"]);
+  const dropIdx = findHeaderIndex(headers, ["drop_number"]);
+  const workTypeIdx = findHeaderIndex(headers, ["work_type"]);
+  const notesIdx = findHeaderIndex(headers, ["notes"]);
+  const billingIdx = findHeaderIndex(headers, ["billing_code_default"]);
+
+  const missingHeaders = [];
+  if (latIdx < 0) missingHeaders.push("lat/latitude");
+  if (lngIdx < 0) missingHeaders.push("lng/longitude");
+  if (missingHeaders.length){
+    toast("Import error", `Missing headers: ${missingHeaders.join(", ")}`);
+    return null;
+  }
+
+  const dataRows = rows.slice(1).filter((row) => row?.length && row.some(cell => String(cell || "").trim().length));
+  if (!dataRows.length){
+    toast("Import error", "No data rows found.");
+    return null;
+  }
+
+  const { data: existingSites, error: existingError } = await state.client
+    .from("sites")
+    .select("id, name")
+    .eq("project_id", projectId);
+  if (existingError){
+    reportErrorToast("Import failed", existingError);
+    return null;
+  }
+  const byName = new Map((existingSites || []).map((s) => [String(s.name || "").trim().toLowerCase(), s]));
+
+  let skipped = 0;
+  const skippedRows = [];
+  const inserts = [];
+  const updates = [];
+
+  dataRows.forEach((row, idx) => {
+    const rowNumber = idx + 2;
+    const lat = Number(String(row[latIdx] ?? "").trim());
+    const lng = Number(String(row[lngIdx] ?? "").trim());
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)){
+      skipped += 1;
+      skippedRows.push(rowNumber);
+      return;
+    }
+    const rawName = nameIdx >= 0 ? String(row[nameIdx] ?? "").trim() : "";
+    const name = rawName || `Location ${rowNumber - 1}`;
+    const dropNumber = dropIdx >= 0 ? String(row[dropIdx] ?? "").trim() : "";
+    const workType = workTypeIdx >= 0 ? String(row[workTypeIdx] ?? "").trim() : "";
+    const notes = notesIdx >= 0 ? String(row[notesIdx] ?? "").trim() : "";
+    const billingCode = billingIdx >= 0 ? String(row[billingIdx] ?? "").trim() : "";
+
+    const existing = byName.get(String(name).trim().toLowerCase()) || null;
+    if (existing){
+      const update = {
+        id: existing.id,
+        data: {
+          gps_lat: lat,
+          gps_lng: lng,
+        },
+      };
+      if (dropNumber) update.data.drop_number = dropNumber;
+      if (workType) update.data.work_type = workType;
+      if (notes) update.data.notes = notes;
+      if (billingCode) update.data.billing_code_default = billingCode;
+      updates.push(update);
+    } else {
+      const payload = {
+        project_id: projectId,
+        name,
+        gps_lat: lat,
+        gps_lng: lng,
+        created_by: state.user?.id || null,
+      };
+      if (dropNumber) payload.drop_number = dropNumber;
+      if (workType) payload.work_type = workType;
+      if (notes) payload.notes = notes;
+      if (billingCode) payload.billing_code_default = billingCode;
+      inserts.push(payload);
+    }
+  });
+
+  if (!inserts.length && !updates.length){
+    toast("Import error", "No rows with valid coordinates.");
+    return null;
+  }
+
+  let inserted = 0;
+  let updated = 0;
+  if (updates.length){
+    for (const update of updates){
+      const { error } = await state.client
+        .from("sites")
+        .update(update.data)
+        .eq("id", update.id);
+      if (error){
+        reportErrorToast("Import failed", error);
+        return null;
+      }
+      updated += 1;
+    }
+  }
+  if (inserts.length){
+    const { error } = await state.client
+      .from("sites")
+      .insert(inserts);
+    if (error){
+      reportErrorToast("Import failed", error);
+      return null;
+    }
+    inserted = inserts.length;
+  }
+
+  if (skippedRows.length){
+    console.warn("Import skipped rows with missing/invalid coordinates:", skippedRows);
+  }
+  toast("Import complete", `Added ${inserted} new locations, updated ${updated}, skipped ${skipped}.`);
+  return { inserted, updated, skipped };
+}
+
 async function loadTechnicianTimesheet(){
   if (!state.features.labor) return;
   if (!isTechnician()){
@@ -5036,6 +5327,9 @@ function closeMessagesModal(){
 function openMenuModal(){
   const modal = $("menuModal");
   if (!modal) return;
+  if (isMapViewActive() && state.map.panelVisible !== false){
+    setMapPanelVisible(false);
+  }
   syncMenuLanguageToggle();
   const grantBtn = $("btnGrantProjectAccess");
   if (grantBtn) grantBtn.style.display = SpecCom.helpers.isRoot() ? "" : "none";
@@ -5080,8 +5374,10 @@ function openStakingProjectModal(){
   const modal = $("stakingProjectModal");
   if (!modal) return;
   const input = $("stakingProjectInput");
+  const locationsInput = $("stakingLocationsInput");
   const summary = $("stakingProjectSummary");
   if (input) input.value = "";
+  if (locationsInput) locationsInput.value = "";
   if (summary) summary.textContent = "";
   modal.style.display = "";
 }
@@ -5259,6 +5555,13 @@ async function confirmImportTestResults(){
     toast("Import failed", "Client not ready.");
     return;
   }
+  const sites = state.projectSites || [];
+  if (!sites.length){
+    toast("Import unavailable", "No sites in this project. Add sites before importing test results.");
+    const summary = $("testResultsSummary");
+    if (summary) summary.textContent = "No sites in this project. Add sites before importing test results.";
+    return;
+  }
   const input = $("testResultsInput");
   const summary = $("testResultsSummary");
   const file = input?.files?.[0] || null;
@@ -5277,6 +5580,8 @@ async function confirmImportTestResults(){
   toast("Import started", `Processing ${images.length} images...`);
   let matched = 0;
   let skipped = 0;
+  let skippedNoSignal = 0;
+  let skippedNoMatch = 0;
   for (const entry of images){
     try{
       const blob = await entry.async("blob");
@@ -5284,6 +5589,11 @@ async function confirmImportTestResults(){
       if (isDebug) dlog("[test-results] OCR text:", text);
       const gps = extractLatLng(text);
       const tokens = extractLocationTokens(text);
+      if (!gps && !tokens.length){
+        skipped += 1;
+        skippedNoSignal += 1;
+        continue;
+      }
       let target = null;
       if (gps){
         const nearest = findNearestSiteByGps(gps.lat, gps.lng);
@@ -5299,6 +5609,7 @@ async function confirmImportTestResults(){
       }
       if (!target){
         skipped += 1;
+        skippedNoMatch += 1;
         continue;
       }
       const fileName = entry.name.split("/").pop() || "test-result.png";
@@ -5310,10 +5621,13 @@ async function confirmImportTestResults(){
       if (summary) summary.textContent = `Last error: ${err.message || err}`;
     }
   }
-  toast("Import complete", `Attached ${matched} images. Skipped ${skipped}.`);
-  if (summary){
-    summary.textContent = `Attached ${matched} images. Skipped ${skipped}.`;
-  }
+  const details = [];
+  if (skippedNoSignal) details.push(`${skippedNoSignal} missing GPS/text`);
+  if (skippedNoMatch) details.push(`${skippedNoMatch} no site match`);
+  const detailText = details.length ? ` (${details.join(", ")})` : "";
+  const finalText = `Attached ${matched} images. Skipped ${skipped}.${detailText}`;
+  toast("Import complete", finalText);
+  if (summary) summary.textContent = finalText;
   await loadProjectSites(state.activeProject.id);
 }
 
@@ -5353,8 +5667,10 @@ async function confirmCreateProjectFromStaking(){
     return;
   }
   const input = $("stakingProjectInput");
+  const locationsInput = $("stakingLocationsInput");
   const summary = $("stakingProjectSummary");
   const file = input?.files?.[0] || null;
+  const locationsFile = locationsInput?.files?.[0] || null;
   if (!file){
     toast("File required", "Choose a staking PDF.");
     return;
@@ -5399,6 +5715,13 @@ async function confirmCreateProjectFromStaking(){
   await loadProjects();
   if (data?.project_id){
     setActiveProjectById(data.project_id);
+    if (locationsFile){
+      const importSummary = await importLocationsSpreadsheetForProject(locationsFile, data.project_id);
+      if (importSummary){
+        toast("Locations merged", `Added ${importSummary.inserted} new locations, updated ${importSummary.updated}, skipped ${importSummary.skipped}.`);
+      }
+      await loadProjectSites(data.project_id);
+    }
   }
 }
 
@@ -11216,6 +11539,16 @@ async function handleSignIn(e) {
 function wireUI(){
   if (uiWired) return;
   uiWired = true;
+  state.map.panelVisible = getSavedMapPanelVisible();
+  state.map.mobileSnap = getSavedMapSheetSnap();
+  applyMapPanelVisibility();
+  bindMapSheetDrag();
+  window.addEventListener("resize", () => {
+    applyMapSheetSnapUI();
+    if (isMapViewActive() && state.map.panelVisible !== false && state.map.instance){
+      setTimeout(() => state.map.instance.invalidateSize(), 40);
+    }
+  });
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.addEventListener("click", () => setActiveView(btn.dataset.view));
   });
@@ -11580,6 +11913,15 @@ function wireUI(){
   if (projectsBtn){
     projectsBtn.addEventListener("click", () => openProjectsModal());
   }
+  const mapToggleBtn = $("btnMapToggle");
+  if (mapToggleBtn){
+    mapToggleBtn.addEventListener("click", () => toggleMapPanel());
+  }
+  document.querySelectorAll(".map-snap-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setMapSheetSnap(Number(btn.dataset.mapSnap));
+    });
+  });
   const projectsOpenBtn = $("btnOpenProjects");
   if (projectsOpenBtn){
     projectsOpenBtn.addEventListener("click", () => openProjectsModal());
