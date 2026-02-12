@@ -171,6 +171,7 @@ const state = {
     projectId: null,
     rows: [],
   },
+  testResultsImportRunning: false,
   labor: {
     rows: [],
   },
@@ -5798,6 +5799,11 @@ async function confirmImportTestResults(){
   }
   const input = $("testResultsInput");
   const summary = $("testResultsSummary");
+  const confirmBtn = $("btnTestResultsConfirm");
+  if (state.testResultsImportRunning){
+    toast("Import in progress", "A test-results import is already running.");
+    return;
+  }
   const file = input?.files?.[0] || null;
   const setSummary = (msg) => {
     if (summary) summary.textContent = msg;
@@ -5806,196 +5812,232 @@ async function confirmImportTestResults(){
     toast("File required", "Choose a ZIP file.");
     return;
   }
-  setSummary("Preparing import...");
-  setSummary("Loading ZIP parser...");
-  const JSZip = await loadJsZip();
-  setSummary("Loading OCR engine (first run can take up to 30 seconds)...");
-  await loadTesseract();
-  const zip = await JSZip.loadAsync(file);
-  const entries = Object.values(zip.files || {}).filter((f) => !f.dir);
-  const images = entries.filter((f) => /\.(png|jpe?g)$/i.test(f.name));
-  if (!images.length){
-    toast("Import failed", "No images found in ZIP.");
-    return;
-  }
-  toast("Import started", `Processing ${images.length} images...`);
-  setSummary(`Starting import: 0/${images.length} processed.`);
-  let matched = 0;
-  let skipped = 0;
-  let skippedNoSignal = 0;
-  let skippedNoMatch = 0;
-  const attachedDebugRows = [];
-  const skippedDebugRows = [];
-  const progress = {
-    current: 0,
-    total: images.length,
-    phase: "Initializing...",
-  };
-  const renderProgress = () => {
-    setSummary(`[${progress.current}/${progress.total}] ${progress.phase} | Attached ${matched}, skipped ${skipped}`);
-  };
-  renderProgress();
-  const heartbeat = setInterval(renderProgress, 1500);
-  for (const [index, entry] of images.entries()){
-    progress.current = index + 1;
-    const fileName = entry.name.split("/").pop() || `test-result-${index + 1}.png`;
-    progress.phase = `Reading ${fileName}`;
+  state.testResultsImportRunning = true;
+  if (confirmBtn) confirmBtn.disabled = true;
+
+  let heartbeat = null;
+  try{
+    setSummary("Preparing import...");
+    setSummary("Loading ZIP parser...");
+    const JSZip = await loadJsZip();
+    setSummary("Loading OCR engine (first run can take up to 30 seconds)...");
+    await loadTesseract();
+    const zip = await JSZip.loadAsync(file);
+    const entries = Object.values(zip.files || {}).filter((f) => !f.dir);
+    const images = entries.filter((f) => /\.(png|jpe?g)$/i.test(f.name));
+    if (!images.length){
+      toast("Import failed", "No images found in ZIP.");
+      return;
+    }
+    toast("Import started", `Processing ${images.length} images...`);
+    setSummary(`Starting import: 0/${images.length} processed.`);
+    let matched = 0;
+    let skipped = 0;
+    let skippedNoSignal = 0;
+    let skippedNoMatch = 0;
+    const attachedDebugRows = [];
+    const skippedDebugRows = [];
+    const progress = {
+      current: 0,
+      total: images.length,
+      phase: "Initializing...",
+    };
+    const renderProgress = () => {
+      setSummary(`[${progress.current}/${progress.total}] ${progress.phase} | Attached ${matched}, skipped ${skipped}`);
+    };
     renderProgress();
-    try{
-      const blob = await entry.async("blob");
-      let gpsSource = null;
-      let text = await ocrImageTopRight(blob);
-      if (isDebug) dlog("[test-results] OCR text (top-right):", text);
-      const bottomRightText = await ocrImageBottomRight(blob);
-      if (isDebug) dlog("[test-results] OCR text (bottom-right):", bottomRightText);
-      text = `${text}\n${bottomRightText}`;
-      let gps = extractLatLng(text);
-      let tokens = extractLocationTokens(text);
-      if (gps){
-        gpsSource = "ocr";
-      }
-      if (!gps && !tokens.length){
-        progress.phase = `Scanning full frame (${fileName})`;
-        renderProgress();
-        const fullText = await ocrImageFullFrame(blob);
-        text = `${text}\n${fullText}`;
-        if (isDebug) dlog("[test-results] OCR text (full):", fullText);
-        gps = extractLatLng(text);
-        tokens = extractLocationTokens(text);
+    heartbeat = setInterval(renderProgress, 1500);
+    for (const [index, entry] of images.entries()){
+      progress.current = index + 1;
+      const entryName = entry.name || `test-result-${index + 1}.png`;
+      const fileName = entryName.split("/").pop() || `test-result-${index + 1}.png`;
+      progress.phase = `Reading ${entryName}`;
+      renderProgress();
+      try{
+        const blob = await entry.async("blob");
+        let gpsSource = null;
+        let text = await ocrImageTopRight(blob);
+        if (isDebug) dlog("[test-results] OCR text (top-right):", text);
+        const bottomRightText = await ocrImageBottomRight(blob);
+        if (isDebug) dlog("[test-results] OCR text (bottom-right):", bottomRightText);
+        text = `${text}\n${bottomRightText}`;
+        let gps = extractLatLng(text);
+        let tokens = extractLocationTokens(text);
         if (gps){
-          gpsSource = "ocr-full";
+          gpsSource = "ocr";
         }
-      }
-      if (!gps){
-        const exifGps = await extractExifGps(blob);
-        if (exifGps){
-          gps = exifGps;
-          gpsSource = "exif";
+        if (!gps && !tokens.length){
+          progress.phase = `Scanning full frame (${entryName})`;
+          renderProgress();
+          const fullText = await ocrImageFullFrame(blob);
+          text = `${text}\n${fullText}`;
+          if (isDebug) dlog("[test-results] OCR text (full):", fullText);
+          gps = extractLatLng(text);
+          tokens = extractLocationTokens(text);
+          if (gps){
+            gpsSource = "ocr-full";
+          }
         }
-      }
-      if (!gps && !tokens.length){
-        skipped += 1;
-        skippedNoSignal += 1;
-        skippedDebugRows.push({
+        if (!gps){
+          const exifGps = await extractExifGps(blob);
+          if (exifGps){
+            gps = exifGps;
+            gpsSource = "exif";
+          }
+        }
+        if (!gps && !tokens.length){
+          skipped += 1;
+          skippedNoSignal += 1;
+          skippedDebugRows.push({
+            zip_entry: entryName,
+            file_name: fileName,
+            reason: "missing_gps_and_tokens",
+            gps_source: gpsSource || "",
+            parsed_lat: "",
+            parsed_lng: "",
+            nearest_site: "",
+            nearest_distance_km: "",
+            tokens: "",
+            ocr_excerpt: String(text || "").replace(/\s+/g, " ").trim().slice(0, 280),
+          });
+          continue;
+        }
+        let target = null;
+        let nearest = null;
+        if (gps){
+          nearest = findNearestSiteByGps(gps.lat, gps.lng);
+          if (nearest && nearest.distanceKm <= TEST_RESULTS_GPS_MATCH_RADIUS_KM){
+            target = nearest.site;
+          }
+        }
+        if (!target && tokens.length){
+          for (const token of tokens){
+            target = findSiteByName(token) || findSiteByToken(token);
+            if (target) break;
+          }
+        }
+        if (!target){
+          skipped += 1;
+          skippedNoMatch += 1;
+          skippedDebugRows.push({
+            zip_entry: entryName,
+            file_name: fileName,
+            reason: "no_site_match",
+            gps_source: gpsSource || "",
+            parsed_lat: gps?.lat ?? "",
+            parsed_lng: gps?.lng ?? "",
+            nearest_site: nearest?.site?.name || "",
+            nearest_distance_km: nearest?.distanceKm != null ? Number(nearest.distanceKm).toFixed(4) : "",
+            tokens: tokens.join(" | "),
+            ocr_excerpt: String(text || "").replace(/\s+/g, " ").trim().slice(0, 280),
+          });
+          continue;
+        }
+        progress.phase = `Uploading ${entryName} -> ${target.name || target.id}`;
+        renderProgress();
+        const fileObj = new File([blob], fileName, { type: blob.type || "image/png" });
+        const uploadPath = await uploadSiteMediaForSite(fileObj, target, gps, new Date().toISOString());
+        if (!uploadPath){
+          skipped += 1;
+          skippedDebugRows.push({
+            zip_entry: entryName,
+            file_name: fileName,
+            reason: "upload_failed",
+            gps_source: gpsSource || "",
+            parsed_lat: gps?.lat ?? "",
+            parsed_lng: gps?.lng ?? "",
+            nearest_site: nearest?.site?.name || "",
+            nearest_distance_km: nearest?.distanceKm != null ? Number(nearest.distanceKm).toFixed(4) : "",
+            tokens: tokens.join(" | "),
+            ocr_excerpt: "uploadProofPhoto/site_media insert returned no path",
+          });
+          continue;
+        }
+        matched += 1;
+        attachedDebugRows.push({
+          zip_entry: entryName,
           file_name: fileName,
-          reason: "missing_gps_and_tokens",
-          gps_source: gpsSource || "",
-          parsed_lat: "",
-          parsed_lng: "",
-          nearest_site: "",
-          nearest_distance_km: "",
-          tokens: "",
-          ocr_excerpt: String(text || "").replace(/\s+/g, " ").trim().slice(0, 280),
-        });
-        continue;
-      }
-      let target = null;
-      let nearest = null;
-      if (gps){
-        nearest = findNearestSiteByGps(gps.lat, gps.lng);
-        if (nearest && nearest.distanceKm <= TEST_RESULTS_GPS_MATCH_RADIUS_KM){
-          target = nearest.site;
-        }
-      }
-      if (!target && tokens.length){
-        for (const token of tokens){
-          target = findSiteByName(token) || findSiteByToken(token);
-          if (target) break;
-        }
-      }
-      if (!target){
-        skipped += 1;
-        skippedNoMatch += 1;
-        skippedDebugRows.push({
-          file_name: fileName,
-          reason: "no_site_match",
+          site_name: target.name || "",
+          site_id: target.id || "",
           gps_source: gpsSource || "",
           parsed_lat: gps?.lat ?? "",
           parsed_lng: gps?.lng ?? "",
           nearest_site: nearest?.site?.name || "",
           nearest_distance_km: nearest?.distanceKm != null ? Number(nearest.distanceKm).toFixed(4) : "",
           tokens: tokens.join(" | "),
-          ocr_excerpt: String(text || "").replace(/\s+/g, " ").trim().slice(0, 280),
+          media_path: uploadPath,
         });
-        continue;
+      } catch (err){
+        skipped += 1;
+        skippedDebugRows.push({
+          zip_entry: entry.name || `test-result-${index + 1}.png`,
+          file_name: entry.name.split("/").pop() || `test-result-${index + 1}.png`,
+          reason: "exception",
+          gps_source: "",
+          parsed_lat: "",
+          parsed_lng: "",
+          nearest_site: "",
+          nearest_distance_km: "",
+          tokens: "",
+          ocr_excerpt: String(err?.message || err || "").slice(0, 280),
+        });
+        setSummary(`Last error: ${err.message || err}`);
       }
-      progress.phase = `Uploading ${fileName} -> ${target.name || target.id}`;
-      renderProgress();
-      const fileObj = new File([blob], fileName, { type: blob.type || "image/png" });
-      const uploadPath = await uploadSiteMediaForSite(fileObj, target, gps, new Date().toISOString());
-      matched += 1;
-      attachedDebugRows.push({
-        file_name: fileName,
-        site_name: target.name || "",
-        site_id: target.id || "",
-        gps_source: gpsSource || "",
-        parsed_lat: gps?.lat ?? "",
-        parsed_lng: gps?.lng ?? "",
-        nearest_site: nearest?.site?.name || "",
-        nearest_distance_km: nearest?.distanceKm != null ? Number(nearest.distanceKm).toFixed(4) : "",
-        tokens: tokens.join(" | "),
-        media_path: uploadPath || "",
-      });
-    } catch (err){
-      skipped += 1;
-      skippedDebugRows.push({
-        file_name: entry.name.split("/").pop() || `test-result-${index + 1}.png`,
-        reason: "exception",
-        gps_source: "",
-        parsed_lat: "",
-        parsed_lng: "",
-        nearest_site: "",
-        nearest_distance_km: "",
-        tokens: "",
-        ocr_excerpt: String(err?.message || err || "").slice(0, 280),
-      });
-      setSummary(`Last error: ${err.message || err}`);
     }
+    const details = [];
+    if (skippedNoSignal) details.push(`${skippedNoSignal} missing GPS/text`);
+    if (skippedNoMatch) details.push(`${skippedNoMatch} no site match`);
+    const detailText = details.length ? ` (${details.join(", ")})` : "";
+    const finalText = `Attached ${matched} images. Skipped ${skipped}.${detailText}`;
+    toast("Import complete", finalText);
+    setSummary(finalText);
+    if (attachedDebugRows.length){
+      const attachedHeader = [
+        "zip_entry",
+        "file_name",
+        "site_name",
+        "site_id",
+        "gps_source",
+        "parsed_lat",
+        "parsed_lng",
+        "nearest_site",
+        "nearest_distance_km",
+        "tokens",
+        "media_path",
+      ];
+      const attachedCsv = [attachedHeader.join(",")]
+        .concat(attachedDebugRows.map((row) => attachedHeader.map((key) => escapeCsv(row[key])).join(",")))
+        .join("\n");
+      downloadFile(`test-results-attached-${Date.now()}.csv`, attachedCsv, "text/csv");
+    }
+    if (skippedDebugRows.length){
+      const header = [
+        "zip_entry",
+        "file_name",
+        "reason",
+        "gps_source",
+        "parsed_lat",
+        "parsed_lng",
+        "nearest_site",
+        "nearest_distance_km",
+        "tokens",
+        "ocr_excerpt",
+      ];
+      const csv = [header.join(",")]
+        .concat(skippedDebugRows.map((row) => header.map((key) => escapeCsv(row[key])).join(",")))
+        .join("\n");
+      downloadFile(`test-results-debug-${Date.now()}.csv`, csv, "text/csv");
+    }
+    await loadProjectSites(state.activeProject.id);
+  } catch (err){
+    const message = err?.message || String(err);
+    toast("Import failed", message);
+    setSummary(`Import failed: ${message}`);
+  } finally {
+    if (heartbeat) clearInterval(heartbeat);
+    state.testResultsImportRunning = false;
+    if (confirmBtn) confirmBtn.disabled = false;
   }
-  clearInterval(heartbeat);
-  const details = [];
-  if (skippedNoSignal) details.push(`${skippedNoSignal} missing GPS/text`);
-  if (skippedNoMatch) details.push(`${skippedNoMatch} no site match`);
-  const detailText = details.length ? ` (${details.join(", ")})` : "";
-  const finalText = `Attached ${matched} images. Skipped ${skipped}.${detailText}`;
-  toast("Import complete", finalText);
-  setSummary(finalText);
-  if (attachedDebugRows.length){
-    const attachedHeader = [
-      "file_name",
-      "site_name",
-      "site_id",
-      "gps_source",
-      "parsed_lat",
-      "parsed_lng",
-      "nearest_site",
-      "nearest_distance_km",
-      "tokens",
-      "media_path",
-    ];
-    const attachedCsv = [attachedHeader.join(",")]
-      .concat(attachedDebugRows.map((row) => attachedHeader.map((key) => escapeCsv(row[key])).join(",")))
-      .join("\n");
-    downloadFile(`test-results-attached-${Date.now()}.csv`, attachedCsv, "text/csv");
-  }
-  if (skippedDebugRows.length){
-    const header = [
-      "file_name",
-      "reason",
-      "gps_source",
-      "parsed_lat",
-      "parsed_lng",
-      "nearest_site",
-      "nearest_distance_km",
-      "tokens",
-      "ocr_excerpt",
-    ];
-    const csv = [header.join(",")]
-      .concat(skippedDebugRows.map((row) => header.map((key) => escapeCsv(row[key])).join(",")))
-      .join("\n");
-    downloadFile(`test-results-debug-${Date.now()}.csv`, csv, "text/csv");
-  }
-  await loadProjectSites(state.activeProject.id);
 }
 
 async function parseStakingPdf(file){
