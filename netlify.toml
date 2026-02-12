@@ -6,6 +6,18 @@
 [build.environment]
   APP_MODE = "real"
 
+[[redirects]]
+  from = "/api/get-projects"
+  to = "/.netlify/functions/get-projects"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+  force = true
+
 [[headers]]
   for = "/*"
   [headers.values]
