@@ -5462,14 +5462,6 @@ function extractLatLng(text){
     return null;
   };
 
-  const basic = /(-?\d{1,2}\.\d+)\s*[,;\s|]+\s*(-?\d{1,3}\.\d+)/;
-  const basicMatch = normalized.match(basic);
-  if (basicMatch){
-    const lat = Number(basicMatch[1]);
-    const lng = Number(basicMatch[2]);
-    if (isValid(lat, lng)) return { lat, lng };
-  }
-
   const latFirst = /(\d{1,2}\.\d+)\s*([NSM])[\s,;|]+(\d{1,3}\.\d+)\s*([EW])/i;
   const latFirstMatch = normalized.match(latFirst);
   if (latFirstMatch){
@@ -5490,6 +5482,16 @@ function extractLatLng(text){
     if (isValid(lat, lng)) return { lat, lng };
   }
 
+  const pairWithTrail = /(-?\d{1,2}\.\d+)\s*([NSM])?[\s,;|]+(-?\d{1,3}\.\d+)\s*([EW])/i;
+  const pairWithTrailMatch = normalized.match(pairWithTrail);
+  if (pairWithTrailMatch){
+    const latSign = pairWithTrailMatch[2] ? dirLat(pairWithTrailMatch[2]) : null;
+    const lngSign = dirLng(pairWithTrailMatch[4]);
+    const lat = Math.abs(Number(pairWithTrailMatch[1])) * (latSign ?? (Number(pairWithTrailMatch[1]) < 0 ? -1 : 1));
+    const lng = Math.abs(Number(pairWithTrailMatch[3])) * (lngSign ?? (Number(pairWithTrailMatch[3]) < 0 ? -1 : 1));
+    if (isValid(lat, lng)) return { lat, lng };
+  }
+
   const dms = /(\d{1,2})\D+(\d{1,2})\D+(\d{1,2}(?:\.\d+)?)\D*([NSM])[\s,;|]+(\d{1,3})\D+(\d{1,2})\D+(\d{1,2}(?:\.\d+)?)\D*([EW])/i;
   const dmsMatch = normalized.match(dms);
   if (dmsMatch){
@@ -5503,6 +5505,14 @@ function extractLatLng(text){
     const lngSign = dirLng(dmsMatch[8]);
     const lat = (latDeg + (latMin / 60) + (latSec / 3600)) * (latSign ?? 1);
     const lng = (lngDeg + (lngMin / 60) + (lngSec / 3600)) * (lngSign ?? 1);
+    if (isValid(lat, lng)) return { lat, lng };
+  }
+
+  const basic = /(-?\d{1,2}\.\d+)\s*[,;\s|]+\s*(-?\d{1,3}\.\d+)/;
+  const basicMatch = normalized.match(basic);
+  if (basicMatch){
+    const lat = Number(basicMatch[1]);
+    const lng = Number(basicMatch[2]);
     if (isValid(lat, lng)) return { lat, lng };
   }
 
@@ -5523,6 +5533,8 @@ function extractLocationTokens(text){
   });
   return Array.from(new Set(tokens));
 }
+
+const TEST_RESULTS_GPS_MATCH_RADIUS_KM = 0.5;
 
 function findNearestSiteByGps(lat, lng){
   const sites = state.projectSites || [];
@@ -5559,6 +5571,141 @@ function findSiteByToken(token){
   return sites.find((s) => String(s.name || "").trim().toLowerCase().includes(key)) || null;
 }
 
+function parseExifGpsFromArrayBuffer(buffer){
+  const view = new DataView(buffer);
+  if (view.byteLength < 4 || view.getUint16(0, false) !== 0xFFD8) return null;
+  const readAscii = (offset, len) => {
+    let out = "";
+    for (let i = 0; i < len && (offset + i) < view.byteLength; i += 1){
+      const c = view.getUint8(offset + i);
+      if (c === 0) break;
+      out += String.fromCharCode(c);
+    }
+    return out;
+  };
+
+  let segOffset = 2;
+  while ((segOffset + 4) < view.byteLength){
+    if (view.getUint8(segOffset) !== 0xFF){
+      segOffset += 1;
+      continue;
+    }
+    const marker = view.getUint8(segOffset + 1);
+    if (marker === 0xDA || marker === 0xD9) break;
+    const segLen = view.getUint16(segOffset + 2, false);
+    if (!segLen || (segOffset + 2 + segLen) > view.byteLength) break;
+    if (marker === 0xE1){
+      const exifStart = segOffset + 4;
+      if (readAscii(exifStart, 6) !== "Exif") {
+        segOffset += 2 + segLen;
+        continue;
+      }
+      const tiffStart = exifStart + 6;
+      const byteOrder = readAscii(tiffStart, 2);
+      const littleEndian = byteOrder === "II";
+      if (!littleEndian && byteOrder !== "MM") return null;
+      const get16 = (off) => {
+        if ((off + 2) > view.byteLength) return null;
+        return view.getUint16(off, littleEndian);
+      };
+      const get32 = (off) => {
+        if ((off + 4) > view.byteLength) return null;
+        return view.getUint32(off, littleEndian);
+      };
+      if (get16(tiffStart + 2) !== 0x002A) return null;
+      const ifd0Rel = get32(tiffStart + 4);
+      if (ifd0Rel == null) return null;
+      const ifd0 = tiffStart + ifd0Rel;
+      const ifd0Count = get16(ifd0);
+      if (ifd0Count == null) return null;
+      let gpsIfdRel = null;
+      for (let i = 0; i < ifd0Count; i += 1){
+        const entry = ifd0 + 2 + (i * 12);
+        const tag = get16(entry);
+        if (tag === 0x8825){
+          gpsIfdRel = get32(entry + 8);
+          break;
+        }
+      }
+      if (!gpsIfdRel) return null;
+      const gpsIfd = tiffStart + gpsIfdRel;
+      const gpsCount = get16(gpsIfd);
+      if (gpsCount == null) return null;
+
+      const typeSize = (type) => ({
+        1: 1, // BYTE
+        2: 1, // ASCII
+        3: 2, // SHORT
+        4: 4, // LONG
+        5: 8, // RATIONAL
+      }[type] || 0);
+      const entryDataOffset = (entry, type, count) => {
+        const bytes = typeSize(type) * count;
+        if (!bytes) return null;
+        if (bytes <= 4) return entry + 8;
+        const rel = get32(entry + 8);
+        if (rel == null) return null;
+        return tiffStart + rel;
+      };
+      const readRationals = (offset, count) => {
+        const out = [];
+        for (let i = 0; i < count; i += 1){
+          const num = get32(offset + (i * 8));
+          const den = get32(offset + (i * 8) + 4);
+          if (num == null || den == null || !den) return null;
+          out.push(num / den);
+        }
+        return out;
+      };
+
+      let latRef = null;
+      let lngRef = null;
+      let latVals = null;
+      let lngVals = null;
+      for (let i = 0; i < gpsCount; i += 1){
+        const entry = gpsIfd + 2 + (i * 12);
+        const tag = get16(entry);
+        const type = get16(entry + 2);
+        const count = get32(entry + 4);
+        if (tag == null || type == null || count == null) continue;
+        const dataOffset = entryDataOffset(entry, type, count);
+        if (dataOffset == null) continue;
+        if (tag === 0x0001 && type === 2){
+          latRef = readAscii(dataOffset, count).trim().toUpperCase();
+        }
+        if (tag === 0x0002 && type === 5){
+          latVals = readRationals(dataOffset, count);
+        }
+        if (tag === 0x0003 && type === 2){
+          lngRef = readAscii(dataOffset, count).trim().toUpperCase();
+        }
+        if (tag === 0x0004 && type === 5){
+          lngVals = readRationals(dataOffset, count);
+        }
+      }
+      if (!latVals || !lngVals || latVals.length < 3 || lngVals.length < 3) return null;
+      let lat = latVals[0] + (latVals[1] / 60) + (latVals[2] / 3600);
+      let lng = lngVals[0] + (lngVals[1] / 60) + (lngVals[2] / 3600);
+      if (latRef === "S") lat *= -1;
+      if (lngRef === "W") lng *= -1;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+      return { lat, lng };
+    }
+    segOffset += 2 + segLen;
+  }
+  return null;
+}
+
+async function extractExifGps(blob){
+  try{
+    const buffer = await blob.arrayBuffer();
+    return parseExifGpsFromArrayBuffer(buffer);
+  } catch {
+    return null;
+  }
+}
+
 async function uploadSiteMediaForSite(file, site, gps, capturedAt){
   if (!site || !file) return null;
   const uploadPath = await uploadProofPhoto(file, site.id, "site-media");
@@ -5589,6 +5736,23 @@ async function ocrImageTopRight(blob){
   const cropH = Math.floor(bitmap.height * 0.35);
   const sx = bitmap.width - cropW;
   const sy = 0;
+  canvas.width = cropW;
+  canvas.height = cropH;
+  ctx.filter = "contrast(1.4) grayscale(1)";
+  ctx.drawImage(bitmap, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
+  const { data } = await Tesseract.recognize(canvas, "eng");
+  return data?.text || "";
+}
+
+async function ocrImageBottomRight(blob){
+  const Tesseract = await loadTesseract();
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  const cropW = Math.floor(bitmap.width * 0.45);
+  const cropH = Math.floor(bitmap.height * 0.42);
+  const sx = bitmap.width - cropW;
+  const sy = bitmap.height - cropH;
   canvas.width = cropW;
   canvas.height = cropH;
   ctx.filter = "contrast(1.4) grayscale(1)";
@@ -5635,11 +5799,18 @@ async function confirmImportTestResults(){
   const input = $("testResultsInput");
   const summary = $("testResultsSummary");
   const file = input?.files?.[0] || null;
+  const setSummary = (msg) => {
+    if (summary) summary.textContent = msg;
+  };
   if (!file){
     toast("File required", "Choose a ZIP file.");
     return;
   }
+  setSummary("Preparing import...");
+  setSummary("Loading ZIP parser...");
   const JSZip = await loadJsZip();
+  setSummary("Loading OCR engine (first run can take up to 30 seconds)...");
+  await loadTesseract();
   const zip = await JSZip.loadAsync(file);
   const entries = Object.values(zip.files || {}).filter((f) => !f.dir);
   const images = entries.filter((f) => /\.(png|jpe?g)$/i.test(f.name));
@@ -5648,33 +5819,80 @@ async function confirmImportTestResults(){
     return;
   }
   toast("Import started", `Processing ${images.length} images...`);
+  setSummary(`Starting import: 0/${images.length} processed.`);
   let matched = 0;
   let skipped = 0;
   let skippedNoSignal = 0;
   let skippedNoMatch = 0;
-  for (const entry of images){
+  const skippedDebugRows = [];
+  const progress = {
+    current: 0,
+    total: images.length,
+    phase: "Initializing...",
+  };
+  const renderProgress = () => {
+    setSummary(`[${progress.current}/${progress.total}] ${progress.phase} | Attached ${matched}, skipped ${skipped}`);
+  };
+  renderProgress();
+  const heartbeat = setInterval(renderProgress, 1500);
+  for (const [index, entry] of images.entries()){
+    progress.current = index + 1;
+    const fileName = entry.name.split("/").pop() || `test-result-${index + 1}.png`;
+    progress.phase = `Reading ${fileName}`;
+    renderProgress();
     try{
       const blob = await entry.async("blob");
+      let gpsSource = null;
       let text = await ocrImageTopRight(blob);
       if (isDebug) dlog("[test-results] OCR text (top-right):", text);
+      const bottomRightText = await ocrImageBottomRight(blob);
+      if (isDebug) dlog("[test-results] OCR text (bottom-right):", bottomRightText);
+      text = `${text}\n${bottomRightText}`;
       let gps = extractLatLng(text);
       let tokens = extractLocationTokens(text);
+      if (gps){
+        gpsSource = "ocr";
+      }
       if (!gps && !tokens.length){
+        progress.phase = `Scanning full frame (${fileName})`;
+        renderProgress();
         const fullText = await ocrImageFullFrame(blob);
         text = `${text}\n${fullText}`;
         if (isDebug) dlog("[test-results] OCR text (full):", fullText);
         gps = extractLatLng(text);
         tokens = extractLocationTokens(text);
+        if (gps){
+          gpsSource = "ocr-full";
+        }
+      }
+      if (!gps){
+        const exifGps = await extractExifGps(blob);
+        if (exifGps){
+          gps = exifGps;
+          gpsSource = "exif";
+        }
       }
       if (!gps && !tokens.length){
         skipped += 1;
         skippedNoSignal += 1;
+        skippedDebugRows.push({
+          file_name: fileName,
+          reason: "missing_gps_and_tokens",
+          gps_source: gpsSource || "",
+          parsed_lat: "",
+          parsed_lng: "",
+          nearest_site: "",
+          nearest_distance_km: "",
+          tokens: "",
+          ocr_excerpt: String(text || "").replace(/\s+/g, " ").trim().slice(0, 280),
+        });
         continue;
       }
       let target = null;
+      let nearest = null;
       if (gps){
-        const nearest = findNearestSiteByGps(gps.lat, gps.lng);
-        if (nearest && nearest.distanceKm < 0.25){
+        nearest = findNearestSiteByGps(gps.lat, gps.lng);
+        if (nearest && nearest.distanceKm <= TEST_RESULTS_GPS_MATCH_RADIUS_KM){
           target = nearest.site;
         }
       }
@@ -5687,24 +5905,65 @@ async function confirmImportTestResults(){
       if (!target){
         skipped += 1;
         skippedNoMatch += 1;
+        skippedDebugRows.push({
+          file_name: fileName,
+          reason: "no_site_match",
+          gps_source: gpsSource || "",
+          parsed_lat: gps?.lat ?? "",
+          parsed_lng: gps?.lng ?? "",
+          nearest_site: nearest?.site?.name || "",
+          nearest_distance_km: nearest?.distanceKm != null ? Number(nearest.distanceKm).toFixed(4) : "",
+          tokens: tokens.join(" | "),
+          ocr_excerpt: String(text || "").replace(/\s+/g, " ").trim().slice(0, 280),
+        });
         continue;
       }
-      const fileName = entry.name.split("/").pop() || "test-result.png";
+      progress.phase = `Uploading ${fileName} -> ${target.name || target.id}`;
+      renderProgress();
       const fileObj = new File([blob], fileName, { type: blob.type || "image/png" });
       await uploadSiteMediaForSite(fileObj, target, gps, new Date().toISOString());
       matched += 1;
     } catch (err){
       skipped += 1;
-      if (summary) summary.textContent = `Last error: ${err.message || err}`;
+      skippedDebugRows.push({
+        file_name: entry.name.split("/").pop() || `test-result-${index + 1}.png`,
+        reason: "exception",
+        gps_source: "",
+        parsed_lat: "",
+        parsed_lng: "",
+        nearest_site: "",
+        nearest_distance_km: "",
+        tokens: "",
+        ocr_excerpt: String(err?.message || err || "").slice(0, 280),
+      });
+      setSummary(`Last error: ${err.message || err}`);
     }
   }
+  clearInterval(heartbeat);
   const details = [];
   if (skippedNoSignal) details.push(`${skippedNoSignal} missing GPS/text`);
   if (skippedNoMatch) details.push(`${skippedNoMatch} no site match`);
   const detailText = details.length ? ` (${details.join(", ")})` : "";
   const finalText = `Attached ${matched} images. Skipped ${skipped}.${detailText}`;
   toast("Import complete", finalText);
-  if (summary) summary.textContent = finalText;
+  setSummary(finalText);
+  if (skippedDebugRows.length){
+    const header = [
+      "file_name",
+      "reason",
+      "gps_source",
+      "parsed_lat",
+      "parsed_lng",
+      "nearest_site",
+      "nearest_distance_km",
+      "tokens",
+      "ocr_excerpt",
+    ];
+    const csv = [header.join(",")]
+      .concat(skippedDebugRows.map((row) => header.map((key) => escapeCsv(row[key])).join(",")))
+      .join("\n");
+    downloadFile(`test-results-debug-${Date.now()}.csv`, csv, "text/csv");
+  }
   await loadProjectSites(state.activeProject.id);
 }
 
