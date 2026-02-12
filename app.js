@@ -5824,6 +5824,7 @@ async function confirmImportTestResults(){
   let skipped = 0;
   let skippedNoSignal = 0;
   let skippedNoMatch = 0;
+  const attachedDebugRows = [];
   const skippedDebugRows = [];
   const progress = {
     current: 0,
@@ -5921,8 +5922,20 @@ async function confirmImportTestResults(){
       progress.phase = `Uploading ${fileName} -> ${target.name || target.id}`;
       renderProgress();
       const fileObj = new File([blob], fileName, { type: blob.type || "image/png" });
-      await uploadSiteMediaForSite(fileObj, target, gps, new Date().toISOString());
+      const uploadPath = await uploadSiteMediaForSite(fileObj, target, gps, new Date().toISOString());
       matched += 1;
+      attachedDebugRows.push({
+        file_name: fileName,
+        site_name: target.name || "",
+        site_id: target.id || "",
+        gps_source: gpsSource || "",
+        parsed_lat: gps?.lat ?? "",
+        parsed_lng: gps?.lng ?? "",
+        nearest_site: nearest?.site?.name || "",
+        nearest_distance_km: nearest?.distanceKm != null ? Number(nearest.distanceKm).toFixed(4) : "",
+        tokens: tokens.join(" | "),
+        media_path: uploadPath || "",
+      });
     } catch (err){
       skipped += 1;
       skippedDebugRows.push({
@@ -5947,6 +5960,24 @@ async function confirmImportTestResults(){
   const finalText = `Attached ${matched} images. Skipped ${skipped}.${detailText}`;
   toast("Import complete", finalText);
   setSummary(finalText);
+  if (attachedDebugRows.length){
+    const attachedHeader = [
+      "file_name",
+      "site_name",
+      "site_id",
+      "gps_source",
+      "parsed_lat",
+      "parsed_lng",
+      "nearest_site",
+      "nearest_distance_km",
+      "tokens",
+      "media_path",
+    ];
+    const attachedCsv = [attachedHeader.join(",")]
+      .concat(attachedDebugRows.map((row) => attachedHeader.map((key) => escapeCsv(row[key])).join(",")))
+      .join("\n");
+    downloadFile(`test-results-attached-${Date.now()}.csv`, attachedCsv, "text/csv");
+  }
   if (skippedDebugRows.length){
     const header = [
       "file_name",
