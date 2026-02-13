@@ -4412,7 +4412,7 @@ async function captureNoAccessGps(timeoutMs = 9000){
   });
 }
 
-function buildNoAccessProofMessage(workOrder, proof){
+function buildWorkOrderNoAccessProofMessage(workOrder, proof){
   const capturedAt = proof?.captured_at ? new Date(proof.captured_at) : new Date();
   const when = Number.isNaN(capturedAt.getTime()) ? new Date().toLocaleString() : capturedAt.toLocaleString();
   const customer = workOrder?.customer_label || "Customer";
@@ -4441,22 +4441,74 @@ function buildNoAccessProofMessage(workOrder, proof){
   return lines.join("\n");
 }
 
-async function postNoAccessProofToApp(workOrder, proof){
-  const body = buildNoAccessProofMessage(workOrder, proof);
+function buildSiteNoAccessProofMessage(site, proof){
+  const capturedAt = proof?.captured_at ? new Date(proof.captured_at) : new Date();
+  const when = Number.isNaN(capturedAt.getTime()) ? new Date().toLocaleString() : capturedAt.toLocaleString();
+  const reporter = state.profile?.display_name || state.user?.email || state.user?.id || "Unknown";
+  const notes = String(proof?.notes || "").trim();
+  const lat = Number.isFinite(Number(proof?.gps?.lat))
+    ? Number(proof.gps.lat)
+    : Number.isFinite(Number(site?.gps_lat ?? site?.lat))
+      ? Number(site?.gps_lat ?? site?.lat)
+      : null;
+  const lng = Number.isFinite(Number(proof?.gps?.lng))
+    ? Number(proof.gps.lng)
+    : Number.isFinite(Number(site?.gps_lng ?? site?.lng))
+      ? Number(site?.gps_lng ?? site?.lng)
+      : null;
+  const acc = Number.isFinite(Number(proof?.gps?.accuracy_m)) ? Math.round(Number(proof.gps.accuracy_m)) : null;
+  const gpsLine = lat != null && lng != null
+    ? `${lat.toFixed(6)}, ${lng.toFixed(6)}${acc != null ? ` (+/-${acc}m)` : ""}`
+    : "Not captured";
+  const mapLink = lat != null && lng != null ? `https://maps.google.com/?q=${lat},${lng}` : "";
+  const siteName = getSiteDisplayName(site || {});
+  const lines = [
+    "NO ACCESS PROOF",
+    `Project: ${state.activeProject?.name || "N/A"}${state.activeProject?.job_number ? ` (Job ${state.activeProject.job_number})` : ""}`,
+    `Location: ${siteName || "N/A"}`,
+    `Site ID: ${site?.id || "N/A"}`,
+    `Captured At: ${when}`,
+    `Reported By: ${reporter}`,
+    `Notes: ${notes || "N/A"}`,
+    `GPS: ${gpsLine}`,
+  ];
+  if (mapLink) lines.push(`Map: ${mapLink}`);
+  return lines.join("\n");
+}
+
+async function postNoAccessProofMessageToApp(body, projectId){
+  if (!state.messagesEnabled || !state.features.messages){
+    return { posted: false, body, missingMessagesTable: true };
+  }
   if (!state.client || !state.user){
     return { posted: false, body };
   }
   const payload = {
-    project_id: state.activeProject?.id || workOrder?.project_id || null,
+    project_id: projectId || state.activeProject?.id || null,
     sender_id: state.user.id,
     body,
     priority: 2,
   };
   const { error } = await state.client.from("messages").insert(payload);
   if (error){
+    if (isMissingTable(error)){
+      state.features.messages = false;
+      disableMessagesModule("missing_table");
+      return { posted: false, body, missingMessagesTable: true };
+    }
     return { posted: false, body, error };
   }
   return { posted: true, body };
+}
+
+async function postWorkOrderNoAccessProofToApp(workOrder, proof){
+  const body = buildWorkOrderNoAccessProofMessage(workOrder, proof);
+  return postNoAccessProofMessageToApp(body, state.activeProject?.id || workOrder?.project_id || null);
+}
+
+async function postSiteNoAccessProofToApp(site, proof){
+  const body = buildSiteNoAccessProofMessage(site, proof);
+  return postNoAccessProofMessageToApp(body, state.activeProject?.id || site?.project_id || null);
 }
 
 async function reportNoAccess(workOrderId){
@@ -4510,7 +4562,7 @@ async function updateWorkOrderStatus(workOrderId, nextStatus, options = {}){
 
   if (nextStatus === "BLOCKED" && options.noAccessProof){
     try{
-      const result = await postNoAccessProofToApp(
+      const result = await postWorkOrderNoAccessProofToApp(
         current || { id: workOrderId, project_id: state.activeProject?.id || null },
         options.noAccessProof
       );
@@ -4519,6 +4571,8 @@ async function updateWorkOrderStatus(workOrderId, nextStatus, options = {}){
       }
       if (result.posted){
         toast("Proof posted", "No-access proof posted to app messages. Copied for easy sharing.");
+      } else if (result.missingMessagesTable){
+        toast("Proof captured", "Messages module is not installed in this environment. Proof copied for manual sharing.");
       } else {
         const reason = result.error?.message ? ` (${result.error.message})` : "";
         toast("Proof captured", `No-access proof captured locally${reason}. Copied for manual sharing.`);
@@ -4530,6 +4584,48 @@ async function updateWorkOrderStatus(workOrderId, nextStatus, options = {}){
   await loadAssignedWorkOrders();
   await loadDispatchWorkOrders();
 }
+
+SpecCom.helpers.reportNoAccessFromPinOverview = async function(){
+  const site = state.activeSite;
+  if (!site){
+    toast("Location required", "Select a location first.");
+    return;
+  }
+  if (!state.activeProject?.id){
+    toast("Project required", "Select a project first.");
+    return;
+  }
+  const siteName = getSiteDisplayName(site);
+  const notes = prompt(`No-access proof notes for ${siteName} (required):`) || "";
+  const trimmed = String(notes || "").trim();
+  if (!trimmed){
+    toast("Proof required", "Enter no-access notes before submitting.");
+    return;
+  }
+  const proof = {
+    notes: trimmed,
+    gps: await captureNoAccessGps(),
+    captured_at: new Date().toISOString(),
+  };
+  try{
+    const result = await postSiteNoAccessProofToApp(site, proof);
+    if (navigator?.clipboard?.writeText){
+      navigator.clipboard.writeText(result.body).catch(() => {});
+    }
+    if (result.posted){
+      toast("Proof posted", "No-access proof posted to app messages. Copied for easy sharing.");
+      await loadMessages();
+      renderMessages();
+    } else if (result.missingMessagesTable){
+      toast("Proof captured", "Messages module is not installed in this environment. Proof copied for manual sharing.");
+    } else {
+      const reason = result.error?.message ? ` (${result.error.message})` : "";
+      toast("Proof captured", `No-access proof captured locally${reason}. Copied for manual sharing.`);
+    }
+  } catch (err){
+    toast("Proof captured", err?.message || "No-access proof captured. Share manually.");
+  }
+};
 
 async function startWorkOrder(workOrderId){
   if (!state.client || !state.user) return;
@@ -8193,7 +8289,8 @@ SpecCom.helpers.ensurePinOverviewModal = function(){
         </div>
       </div>
       <div id="pinOverviewPhotos" class="pin-overview-photo-grid"></div>
-      <div class="row" style="justify-content:center;">
+      <div class="row" style="justify-content:center; gap:8px; flex-wrap:wrap;">
+        <button id="btnPinOverviewNoAccess" class="btn secondary" type="button">Report No Access</button>
         <button id="btnPinOverviewClose" class="btn ghost" type="button">Close Overview</button>
       </div>
     </div>
@@ -8207,6 +8304,12 @@ SpecCom.helpers.ensurePinOverviewModal = function(){
   if (saveManualBtn){
     saveManualBtn.addEventListener("click", async () => {
       await SpecCom.helpers.savePinOverviewManualDetails();
+    });
+  }
+  const noAccessBtn = modal.querySelector("#btnPinOverviewNoAccess");
+  if (noAccessBtn){
+    noAccessBtn.addEventListener("click", async () => {
+      await SpecCom.helpers.reportNoAccessFromPinOverview();
     });
   }
   modal.addEventListener("click", (e) => {
@@ -8249,6 +8352,7 @@ SpecCom.helpers.renderPinOverview = function(){
   const manualLngInput = modal.querySelector("#pinOverviewGpsLngInput");
   const manualNotesInput = modal.querySelector("#pinOverviewNotesInput");
   const saveManualBtn = modal.querySelector("#btnPinOverviewSaveManual");
+  const noAccessBtn = modal.querySelector("#btnPinOverviewNoAccess");
   const photosEl = modal.querySelector("#pinOverviewPhotos");
   const canManualProofEdit = SpecCom.helpers.isRoot() || isOwner();
   const site = state.activeSite || null;
@@ -8271,6 +8375,7 @@ SpecCom.helpers.renderPinOverview = function(){
     if (manualLngInput) manualLngInput.value = "";
     if (manualNotesInput) manualNotesInput.value = "";
     if (saveManualBtn) saveManualBtn.disabled = true;
+    if (noAccessBtn) noAccessBtn.disabled = true;
     if (photosEl) photosEl.innerHTML = "";
     return;
   }
@@ -8346,6 +8451,9 @@ SpecCom.helpers.renderPinOverview = function(){
   }
   if (saveManualBtn){
     saveManualBtn.disabled = !canManualProofEdit || site.is_pending;
+  }
+  if (noAccessBtn){
+    noAccessBtn.disabled = site.is_pending || !state.activeProject?.id;
   }
 
   if (photosEl){
