@@ -106,6 +106,7 @@ const state = {
     busy: false,
     siteMap: new Map(),
     importPreview: null,
+    billingWindow: null,
   },
   workCodes: [],
   rateCards: [],
@@ -153,6 +154,9 @@ const state = {
     pendingLatLng: null,
     importPreviewMarkers: [],
   },
+  pinOverview: {
+    open: false,
+  },
   technician: {
     timesheet: null,
     events: [],
@@ -169,7 +173,9 @@ const state = {
   },
   importPreview: {
     projectId: null,
+    rawRows: [],
     rows: [],
+    validation: null,
   },
   testResultsImportRunning: false,
   labor: {
@@ -1213,6 +1219,7 @@ function applyI18n(root = document){
 
 async function getPublicOrSignedUrl(bucket, storagePath){
   if (!storagePath || !state.client) return "";
+  if (/^https?:\/\//i.test(String(storagePath))) return String(storagePath);
   const cached = state.storageUrlCache.get(storagePath);
   if (cached && cached.expiresAt > Date.now()){
     return cached.url;
@@ -1368,8 +1375,9 @@ function reportErrorToast(title, error){
 
 function nowISO(){ return new Date().toISOString(); }
 
-const DEFAULT_TERMINAL_PORTS = 2;
+const DEFAULT_TERMINAL_PORTS = 4;
 const MAX_TERMINAL_PORTS = 8;
+const FIXED_LOCATION_PHOTO_SLOTS = 8;
 const DEFAULT_RATE_CARD_NAME = String(
   (window.__ENV && window.__ENV.DEFAULT_RATE_CARD_NAME)
   || (window.ENV && window.ENV.DEFAULT_RATE_CARD_NAME)
@@ -1418,17 +1426,17 @@ function normalizeTerminalPorts(value){
   return Math.min(MAX_TERMINAL_PORTS, Math.max(1, parsed));
 }
 
-function requiredSlotsForPorts(ports){
-  const count = normalizeTerminalPorts(ports);
+function getFixedPhotoSlots(){
   const slots = [];
-  for (let i = 1; i <= count; i += 1){
-    slots.push(`port_${i}`);
+  for (let i = 1; i <= FIXED_LOCATION_PHOTO_SLOTS; i += 1){
+    slots.push(`photo_${i}`);
   }
-  slots.push("splice_completion");
   return slots;
 }
 
 function getSlotLabel(slotKey){
+  const photoMatch = String(slotKey || "").match(/^photo_(\d+)$/);
+  if (photoMatch) return `Photo ${photoMatch[1]}`;
   if (slotKey === "splice_completion") return "Splice completion";
   const match = String(slotKey || "").match(/^port_(\d+)$/);
   if (match) return `Port ${match[1]}`;
@@ -1436,7 +1444,7 @@ function getSlotLabel(slotKey){
 }
 
 function getRequiredSlotsForLocation(loc){
-  return requiredSlotsForPorts(loc?.terminal_ports ?? DEFAULT_TERMINAL_PORTS);
+  return getFixedPhotoSlots();
 }
 
 function countRequiredSlotUploads(loc){
@@ -1450,7 +1458,7 @@ function countRequiredSlotUploads(loc){
   required.forEach((slot) => {
     if (photos[slot]) uploaded += 1;
   });
-  return { uploaded, required: required.length };
+  return { uploaded, required: 0 };
 }
 
 function hasAllRequiredSlotPhotos(loc){
@@ -1458,8 +1466,7 @@ function hasAllRequiredSlotPhotos(loc){
   if (SINGLE_PROOF_PHOTO_MODE){
     return Object.keys(photos).length > 0;
   }
-  const required = getRequiredSlotsForLocation(loc);
-  return required.length > 0 && required.every((slot) => Boolean(photos[slot]));
+  return true;
 }
 
 function getSpliceLocationDefaultName(index){
@@ -1564,15 +1571,10 @@ function getSortedSpliceLocations(node){
 }
 
 function getBackfillSlotKey(loc, photoType){
-  if (photoType === "splice_complete") return "splice_completion";
   const photos = loc?.photosBySlot || {};
-  const requiredPorts = getRequiredSlotsForLocation(loc).filter(slot => slot.startsWith("port_"));
-  const missingRequired = requiredPorts.find(slot => !photos[slot]);
+  const requiredSlots = getRequiredSlotsForLocation(loc);
+  const missingRequired = requiredSlots.find(slot => !photos[slot]);
   if (missingRequired) return missingRequired;
-  for (let i = 1; i <= MAX_TERMINAL_PORTS; i += 1){
-    const slot = `port_${i}`;
-    if (!photos[slot]) return slot;
-  }
   return null;
 }
 
@@ -1601,6 +1603,25 @@ function setEnvWarning(){
     banner.style.display = "none";
     banner.textContent = "";
   }
+}
+
+function getWeeklyBillingWindow(referenceDate = new Date()){
+  const ref = referenceDate instanceof Date ? new Date(referenceDate.getTime()) : new Date(referenceDate);
+  const start = new Date(ref.getTime());
+  const dayOfWeek = start.getDay(); // 0 = Sunday
+  start.setDate(start.getDate() - dayOfWeek);
+  start.setHours(0, 1, 0, 0); // Sunday 12:01 AM
+  const end = new Date(start.getTime());
+  end.setDate(end.getDate() + 7);
+  end.setMilliseconds(end.getMilliseconds() - 1); // Saturday 11:59:59.999 PM
+  return { start, end };
+}
+
+function formatBillingWindowLabel(window){
+  if (!window?.start || !window?.end) return "";
+  const startLabel = window.start.toLocaleString();
+  const endLabel = window.end.toLocaleString();
+  return `${startLabel} to ${endLabel}`;
 }
 
 function setAuthButtonsDisabled(disabled){
@@ -1871,19 +1892,55 @@ function openImportLocationsModal(rows, project){
   const modal = $("importLocationsModal");
   const summary = $("importLocationsSummary");
   const list = $("importLocationsList");
+  const confirmBtn = $("btnImportLocationsConfirm");
+  const validation = state.importPreview.validation || null;
+  const errorsBtn = $("btnImportLocationsErrors");
   if (!modal || !summary || !list) return;
   const projectName = project?.name || "Project";
-  summary.textContent = `You are about to import ${rows.length} locations into Project ${projectName}.`;
-  list.innerHTML = rows
+  const validRows = validation?.validRows || rows;
+  const errors = validation?.errors || [];
+  const warnings = validation?.warnings || [];
+  summary.textContent = `Project ${projectName}: ${validRows.length} ready, ${errors.length} errors, ${warnings.length} warnings.`;
+  list.innerHTML = "";
+  if (errors.length){
+    list.innerHTML += errors
+      .slice(0, 60)
+      .map((entry) => `<div class="muted small">[ERROR] Row ${escapeHtml(entry.row)}: ${escapeHtml(entry.reason)}</div>`)
+      .join("");
+  }
+  if (warnings.length){
+    list.innerHTML += warnings
+      .slice(0, 60)
+      .map((entry) => `<div class="muted small">[WARN] Row ${escapeHtml(entry.row)}: ${escapeHtml(entry.reason)}</div>`)
+      .join("");
+  }
+  if (!errors.length){
+    list.innerHTML = rows
     .slice(0, 50)
     .map((row) => {
       const lat = Number(row.latitude).toFixed(6);
       const lng = Number(row.longitude).toFixed(6);
-      return `<div class="muted small">• ${escapeHtml(row.location_name)} (${lat}, ${lng})</div>`;
+      const codeCount = Array.isArray(row.billing_codes) ? row.billing_codes.length : 0;
+      const photoCount = Array.isArray(row.photo_urls) ? row.photo_urls.length : 0;
+      const extras = [];
+      if (codeCount) extras.push(`${codeCount} codes`);
+      if (photoCount) extras.push(`${photoCount} photos`);
+      const extraText = extras.length ? ` | ${extras.join(" | ")}` : "";
+      return `<div class="muted small">* ${escapeHtml(row.location_name)} (${lat}, ${lng})${escapeHtml(extraText)}</div>`;
     })
     .join("");
-  if (rows.length > 50){
-    list.innerHTML += `<div class="muted small">…and ${rows.length - 50} more</div>`;
+  }
+  if (validRows.length > 50){
+    list.innerHTML += `<div class="muted small">...and ${validRows.length - 50} more</div>`;
+  }
+  if (confirmBtn){
+    confirmBtn.disabled = Boolean(errors.length) || !validRows.length;
+    confirmBtn.title = confirmBtn.disabled ? "Fix import errors before confirming." : "";
+  }
+  if (errorsBtn){
+    const hasIssues = errors.length > 0 || warnings.length > 0;
+    errorsBtn.disabled = !hasIssues;
+    errorsBtn.title = hasIssues ? "" : "No validation issues.";
   }
   modal.style.display = "";
 }
@@ -1892,13 +1949,20 @@ function closeImportLocationsModal(){
   const modal = $("importLocationsModal");
   if (!modal) return;
   modal.style.display = "none";
+  state.importPreview.rawRows = [];
+  state.importPreview.validation = null;
 }
 
 async function confirmImportLocations(){
-  const rows = state.importPreview.rows || [];
+  const rows = state.importPreview.validation?.validRows || state.importPreview.rows || [];
   const projectId = state.importPreview.projectId;
+  const hasErrors = (state.importPreview.validation?.errors || []).length > 0;
   if (!rows.length || !projectId){
     closeImportLocationsModal();
+    return;
+  }
+  if (hasErrors){
+    toast("Import blocked", "Fix validation errors before confirming import.", "error");
     return;
   }
   const client = await supabaseReady;
@@ -1942,6 +2006,7 @@ SpecCom.helpers.resetInvoiceAgentState = function(){
   state.invoiceAgent.busy = false;
   state.invoiceAgent.siteMap = new Map();
   state.invoiceAgent.importPreview = null;
+  state.invoiceAgent.billingWindow = null;
 };
 
 SpecCom.helpers.isInvoiceAgentAllowed = function(){
@@ -2034,9 +2099,11 @@ SpecCom.helpers.loadInvoiceAgentCandidates = async function(){
     return;
   }
   const siteIds = sites.map((site) => site.id);
+  const billingWindow = getWeeklyBillingWindow(new Date());
+  state.invoiceAgent.billingWindow = billingWindow;
   const { data: entries, error } = await state.client
     .from("site_entries")
-    .select("site_id, description, quantity")
+    .select("site_id, description, quantity, created_at")
     .in("site_id", siteIds);
   if (error){
     toast("Load failed", error.message || "Failed to load site entries.");
@@ -2046,6 +2113,9 @@ SpecCom.helpers.loadInvoiceAgentCandidates = async function(){
   }
   const entryMap = new Map();
   (entries || []).forEach((row) => {
+    const createdAt = row.created_at ? new Date(row.created_at) : null;
+    if (!createdAt || Number.isNaN(createdAt.getTime())) return;
+    if (createdAt < billingWindow.start || createdAt > billingWindow.end) return;
     const code = String(row.description || "").trim();
     const qty = Number(row.quantity || 0);
     if (!code || !Number.isFinite(qty) || qty <= 0) return;
@@ -2091,7 +2161,9 @@ SpecCom.helpers.renderInvoiceAgentModal = function(){
   if (!candidates.length){
     summary.textContent = t("invoiceAgentNoEligible");
   } else {
-    summary.textContent = `${eligible.length} eligible sites ready for invoice generation.` + (fromName && toName ? ` (${fromName} â†’ ${toName})` : "");
+    const billingWindowText = formatBillingWindowLabel(state.invoiceAgent.billingWindow);
+    const weekText = billingWindowText ? `Billing week (${billingWindowText})` : "Billing week";
+    summary.textContent = `${weekText}: ${eligible.length}/${candidates.length} eligible sites.` + (fromName && toName ? ` (${fromName} -> ${toName})` : "");
   }
   if (!candidates.length){
     list.innerHTML = "";
@@ -2460,6 +2532,171 @@ function buildItemsFromRow(row){
   return items;
 }
 
+function splitImportList(raw){
+  return String(raw || "")
+    .split(/[,\n;|]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function buildBillingCodesFromRow(row){
+  const set = new Set();
+  Object.keys(row || {}).forEach((key) => {
+    const lower = String(key || "").trim().toLowerCase();
+    if (/^(billing_)?code_\d+$/.test(lower) || /^work_code_\d+$/.test(lower)){
+      const value = String(row[key] || "").trim();
+      if (value) set.add(value);
+      return;
+    }
+    if (["billing_codes", "billing_code", "codes", "work_codes"].includes(lower)){
+      splitImportList(row[key]).forEach((code) => set.add(code));
+    }
+  });
+  return Array.from(set);
+}
+
+function buildPhotoUrlsFromRow(row){
+  const set = new Set();
+  Object.keys(row || {}).forEach((key) => {
+    const lower = String(key || "").trim().toLowerCase();
+    if (/^(photo|image)(_url)?_\d+$/.test(lower)){
+      const value = String(row[key] || "").trim();
+      if (/^https?:\/\//i.test(value)) set.add(value);
+      return;
+    }
+    if (["photo_urls", "photos", "image_urls"].includes(lower)){
+      splitImportList(row[key]).forEach((url) => {
+        if (/^https?:\/\//i.test(url)) set.add(url);
+      });
+    }
+  });
+  return Array.from(set);
+}
+
+function validateLocationImportRows(rows){
+  const errors = [];
+  const warnings = [];
+  const validRows = [];
+  (rows || []).forEach((row) => {
+    const rowId = row?.__rowNumber ?? "?";
+    const name = String(row?.location_name || "").trim();
+    const lat = Number(row?.latitude);
+    const lng = Number(row?.longitude);
+    if (!name){
+      errors.push({ row: rowId, reason: "Missing location_name." });
+      return;
+    }
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90){
+      errors.push({ row: rowId, reason: "Latitude must be between -90 and 90." });
+      return;
+    }
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180){
+      errors.push({ row: rowId, reason: "Longitude must be between -180 and 180." });
+      return;
+    }
+
+    const next = {
+      ...row,
+      location_name: name,
+      latitude: lat,
+      longitude: lng,
+      notes: row?.notes ? String(row.notes).trim() : null,
+      items: Array.isArray(row?.items) ? row.items : [],
+      billing_codes: Array.isArray(row?.billing_codes) ? row.billing_codes : [],
+      photo_urls: Array.isArray(row?.photo_urls) ? row.photo_urls : [],
+    };
+
+    next.billing_codes = Array.from(new Set(
+      next.billing_codes.map((code) => String(code || "").trim()).filter(Boolean)
+    ));
+
+    const goodPhotoUrls = [];
+    next.photo_urls.forEach((url) => {
+      const normalized = String(url || "").trim();
+      if (!normalized) return;
+      if (!/^https?:\/\//i.test(normalized)){
+        warnings.push({ row: rowId, reason: `Ignored non-URL photo value: ${normalized}` });
+        return;
+      }
+      goodPhotoUrls.push(normalized);
+    });
+    next.photo_urls = Array.from(new Set(goodPhotoUrls));
+
+    if (!next.items.length && !next.billing_codes.length){
+      warnings.push({ row: rowId, reason: "No items or billing codes found." });
+    }
+    validRows.push(next);
+  });
+  return { errors, warnings, validRows };
+}
+
+function downloadLocationImportTemplate(){
+  const headers = [
+    "location_name",
+    "latitude",
+    "longitude",
+    "progress_notes",
+    "billing_codes",
+    "photo_urls",
+    "item_1",
+    "qty_1",
+    "item_2",
+    "qty_2",
+    "finish_date",
+    "map_url",
+    "gps_status",
+  ];
+  const sample = [
+    "Task 1704",
+    "34.145700",
+    "-106.892300",
+    "Crew on-site. Fiber prep complete. Ready for closeout review.",
+    "HAF0(PCOT)LO, HxFO(1X4)PCOT(70/30)MO",
+    "https://example.com/photo1.jpg|https://example.com/photo2.jpg",
+    "HAF0(PCOT)LO",
+    "1",
+    "HxFO(1X4)PCOT(70/30)MO",
+    "1",
+    "2026-01-11",
+    "",
+    "",
+  ];
+  const csv = [headers.map(escapeCsv).join(","), sample.map(escapeCsv).join(",")].join("\n");
+  downloadFile("locations-import-template.csv", csv, "text/csv");
+}
+
+function downloadLocationImportErrorReport(){
+  const validation = state.importPreview.validation || { errors: [], warnings: [] };
+  const rawRows = state.importPreview.rawRows || [];
+  const rawByRow = new Map(rawRows.map((row) => [String(row.__rowNumber ?? ""), row]));
+  const issues = []
+    .concat((validation.errors || []).map((entry) => ({ ...entry, level: "ERROR" })))
+    .concat((validation.warnings || []).map((entry) => ({ ...entry, level: "WARN" })));
+  if (!issues.length){
+    toast("No issues", "No validation issues to export.");
+    return;
+  }
+  const header = ["level", "row", "reason", "location_name", "latitude", "longitude", "billing_codes", "photo_urls"];
+  const lines = [header.map(escapeCsv).join(",")];
+  issues.forEach((issue) => {
+    const rowKey = String(issue.row ?? "");
+    const source = rawByRow.get(rowKey) || {};
+    const billingCodes = Array.isArray(source.billing_codes) ? source.billing_codes.join(" | ") : "";
+    const photoUrls = Array.isArray(source.photo_urls) ? source.photo_urls.join(" | ") : "";
+    lines.push([
+      issue.level,
+      rowKey,
+      issue.reason || "",
+      source.location_name || "",
+      source.latitude ?? "",
+      source.longitude ?? "",
+      billingCodes,
+      photoUrls,
+    ].map(escapeCsv).join(","));
+  });
+  downloadFile("locations-import-error-report.csv", lines.join("\n"), "text/csv");
+}
+
 function validateImportRows(rows){
   const invalidRows = [];
   rows.forEach((r) => {
@@ -2522,7 +2759,7 @@ function focusSiteOnMap(siteId){
       weight: 2,
     });
     targetMarker.addTo(state.map.instance);
-    targetMarker.on("click", () => setActiveSite(site.id));
+    targetMarker.on("click", () => setActiveSite(site.id, { openOverview: true }));
     const time = site.created_at ? new Date(site.created_at).toLocaleTimeString() : "-";
     const pendingLabel = site.is_pending ? ` • ${t("siteStatusPending")}` : "";
     targetMarker.bindPopup(`<b>${escapeHtml(getSiteDisplayName(site))}</b>${pendingLabel}<br>${escapeHtml(time)}`);
@@ -2600,7 +2837,7 @@ function updateMapMarkers(rows){
         weight: 2,
       });
       marker.addTo(state.map.instance);
-      marker.on("click", () => setActiveSite(id));
+      marker.on("click", () => setActiveSite(id, { openOverview: true }));
       markers.set(id, marker);
     } else {
       marker.setLatLng(markerCoords);
@@ -4467,30 +4704,33 @@ async function handleLocationImport(file){
   }
   dlog("Parsed rows:", rows);
 
-  const invalidRows = validateImportRows(rows);
-  if (invalidRows.length){
-    toast("Invalid CSV format", `Invalid rows: ${invalidRows.join(", ")}`);
-    return;
-  }
-
   const normalized = rows.map((row) => ({
     location_name: String(row.location_name).trim(),
     latitude: Number.parseFloat(row.latitude),
     longitude: Number.parseFloat(row.longitude),
+    notes: row.progress_notes
+      ? String(row.progress_notes).trim()
+      : (row.notes ? String(row.notes).trim() : null),
     finish_date: row.finish_date ? String(row.finish_date).trim() : null,
     map_url: row.map_url ? String(row.map_url).trim() : null,
     gps_status: row.gps_status ? String(row.gps_status).trim() : null,
     items: buildItemsFromRow(row),
+    billing_codes: buildBillingCodesFromRow(row),
+    photo_urls: buildPhotoUrlsFromRow(row),
     __rowNumber: row.__rowNumber,
   }));
 
+  const validation = validateLocationImportRows(normalized);
+
   state.importPreview.projectId = activeProjectId;
-  state.importPreview.rows = normalized;
+  state.importPreview.rawRows = normalized;
+  state.importPreview.rows = validation.validRows;
+  state.importPreview.validation = validation;
 
   clearImportPreviewMarkers();
   ensureMap();
   if (state.map.instance && window.L){
-    state.map.importPreviewMarkers = normalized.map((row) => {
+    state.map.importPreviewMarkers = validation.validRows.map((row) => {
       const lat = row.latitude;
       const lng = row.longitude;
       const marker = window.L.circleMarker([lat, lng], {
@@ -4505,7 +4745,7 @@ async function handleLocationImport(file){
     });
   }
 
-  openImportLocationsModal(normalized, state.activeProject);
+  openImportLocationsModal(validation.validRows, state.activeProject);
 }
 
 async function importLocationsFile(file){
@@ -7347,7 +7587,7 @@ function renderSiteList(){
   }).join("");
 }
 
-async function setActiveSite(siteId){
+async function setActiveSite(siteId, { openOverview = false } = {}){
   const site = getVisibleSites().find((row) => row.id === siteId) || null;
   state.activeSite = site;
   state.siteMedia = [];
@@ -7355,6 +7595,10 @@ async function setActiveSite(siteId){
   state.siteEntries = [];
   renderSiteList();
   renderSitePanel();
+  if (openOverview){
+    SpecCom.helpers.openPinOverview();
+    SpecCom.helpers.renderPinOverview();
+  }
   if (!site || site.is_pending) return;
   await Promise.all([
     loadSiteMedia(site.id),
@@ -7362,6 +7606,9 @@ async function setActiveSite(siteId){
     loadSiteEntries(site.id),
   ]);
   renderSitePanel();
+  if (openOverview){
+    SpecCom.helpers.renderPinOverview();
+  }
 }
 
 function closeSitePanel(){
@@ -7369,9 +7616,341 @@ function closeSitePanel(){
   state.siteMedia = [];
   state.siteCodes = [];
   state.siteEntries = [];
+  SpecCom.helpers.closePinOverview();
   renderSiteList();
   renderSitePanel();
 }
+
+SpecCom.helpers.ensurePinOverviewModal = function(){
+  let modal = document.getElementById("pinOverviewModal");
+  if (modal) return modal;
+  modal = document.createElement("div");
+  modal.id = "pinOverviewModal";
+  modal.className = "modal pin-overview-modal";
+  modal.style.display = "none";
+  modal.innerHTML = `
+    <div class="card modal-card pin-overview-card">
+      <div class="pin-overview-top">
+        <div class="pin-overview-title">Task Overview</div>
+      </div>
+      <div class="pin-overview-head">
+        <div>
+          <div id="pinOverviewTaskNumber" class="pin-overview-task-number">-</div>
+          <div id="pinOverviewTaskRef" class="pin-overview-task-ref muted small">Task @ -</div>
+        </div>
+        <div id="pinOverviewStatus" class="pin-overview-status">PENDING</div>
+      </div>
+      <div class="pin-overview-meta">
+        <div>
+          <div class="muted tiny">DATE CREATED</div>
+          <div id="pinOverviewDateCreated">-</div>
+        </div>
+        <div>
+          <div class="muted tiny">LAST UPDATED</div>
+          <div id="pinOverviewDateUpdated">-</div>
+        </div>
+      </div>
+      <div class="pin-overview-section">
+        <div class="muted tiny">WORK TYPE</div>
+        <div id="pinOverviewWorkType" class="pin-overview-work-list"></div>
+      </div>
+      <div class="pin-overview-section">
+        <div class="muted tiny">GPS COORDINATES</div>
+        <div id="pinOverviewGps" class="pin-overview-inline-value">-</div>
+      </div>
+      <div class="pin-overview-section">
+        <div class="muted tiny">PROGRESS REPORT NOTES</div>
+        <div id="pinOverviewNotes" class="pin-overview-notes">-</div>
+      </div>
+      <div id="pinOverviewManualEditor" class="pin-overview-manual-editor" style="display:none;">
+        <div class="muted tiny">MANUAL ENTRY (ROOT/OWNER ONLY)</div>
+        <div class="row" style="margin-top:8px;">
+          <input id="pinOverviewGpsLatInput" class="input compact" type="number" step="any" placeholder="GPS Lat" />
+          <input id="pinOverviewGpsLngInput" class="input compact" type="number" step="any" placeholder="GPS Lng" />
+        </div>
+        <textarea id="pinOverviewNotesInput" class="input" rows="3" placeholder="Progress report notes"></textarea>
+        <div class="row" style="justify-content:flex-end; margin-top:8px;">
+          <button id="btnPinOverviewSaveManual" class="btn secondary" type="button">Save details</button>
+        </div>
+      </div>
+      <div id="pinOverviewPhotos" class="pin-overview-photo-grid"></div>
+      <div class="row" style="justify-content:center;">
+        <button id="btnPinOverviewClose" class="btn ghost" type="button">Close Overview</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  const closeBtn = modal.querySelector("#btnPinOverviewClose");
+  if (closeBtn){
+    closeBtn.addEventListener("click", () => SpecCom.helpers.closePinOverview());
+  }
+  const saveManualBtn = modal.querySelector("#btnPinOverviewSaveManual");
+  if (saveManualBtn){
+    saveManualBtn.addEventListener("click", async () => {
+      await SpecCom.helpers.savePinOverviewManualDetails();
+    });
+  }
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) SpecCom.helpers.closePinOverview();
+  });
+  if (!SpecCom.helpers._pinOverviewKeyListener){
+    SpecCom.helpers._pinOverviewKeyListener = true;
+    document.addEventListener("keydown", (e) => {
+      if (!state.pinOverview.open) return;
+      if (e.key === "Escape") SpecCom.helpers.closePinOverview();
+    });
+  }
+  return modal;
+};
+
+SpecCom.helpers.openPinOverview = function(){
+  const modal = SpecCom.helpers.ensurePinOverviewModal();
+  modal.style.display = "";
+  state.pinOverview.open = true;
+};
+
+SpecCom.helpers.closePinOverview = function(){
+  const modal = document.getElementById("pinOverviewModal");
+  if (modal) modal.style.display = "none";
+  state.pinOverview.open = false;
+};
+
+SpecCom.helpers.renderPinOverview = function(){
+  const modal = SpecCom.helpers.ensurePinOverviewModal();
+  const taskNumber = modal.querySelector("#pinOverviewTaskNumber");
+  const taskRef = modal.querySelector("#pinOverviewTaskRef");
+  const statusEl = modal.querySelector("#pinOverviewStatus");
+  const dateCreatedEl = modal.querySelector("#pinOverviewDateCreated");
+  const dateUpdatedEl = modal.querySelector("#pinOverviewDateUpdated");
+  const workTypeEl = modal.querySelector("#pinOverviewWorkType");
+  const gpsEl = modal.querySelector("#pinOverviewGps");
+  const notesEl = modal.querySelector("#pinOverviewNotes");
+  const manualEditor = modal.querySelector("#pinOverviewManualEditor");
+  const manualLatInput = modal.querySelector("#pinOverviewGpsLatInput");
+  const manualLngInput = modal.querySelector("#pinOverviewGpsLngInput");
+  const manualNotesInput = modal.querySelector("#pinOverviewNotesInput");
+  const saveManualBtn = modal.querySelector("#btnPinOverviewSaveManual");
+  const photosEl = modal.querySelector("#pinOverviewPhotos");
+  const canManualProofEdit = SpecCom.helpers.isRoot() || isOwner();
+  const site = state.activeSite || null;
+  if (manualEditor){
+    manualEditor.style.display = canManualProofEdit ? "" : "none";
+  }
+  if (!site){
+    if (taskNumber) taskNumber.textContent = "-";
+    if (taskRef) taskRef.textContent = "Task @ -";
+    if (statusEl){
+      statusEl.textContent = "PENDING";
+      statusEl.classList.remove("is-complete");
+    }
+    if (dateCreatedEl) dateCreatedEl.textContent = "-";
+    if (dateUpdatedEl) dateUpdatedEl.textContent = "-";
+    if (workTypeEl) workTypeEl.innerHTML = `<div class="muted small">-</div>`;
+    if (gpsEl) gpsEl.textContent = "-";
+    if (notesEl) notesEl.textContent = "-";
+    if (manualLatInput) manualLatInput.value = "";
+    if (manualLngInput) manualLngInput.value = "";
+    if (manualNotesInput) manualNotesInput.value = "";
+    if (saveManualBtn) saveManualBtn.disabled = true;
+    if (photosEl) photosEl.innerHTML = "";
+    return;
+  }
+
+  const idLabel = String(site.id || "").slice(0, 4).toUpperCase();
+  const nameLabel = String(getSiteDisplayName(site) || "").trim();
+  const numericMatch = nameLabel.match(/\d+/);
+  const primaryTask = numericMatch ? numericMatch[0] : (idLabel || "0000");
+  if (taskNumber) taskNumber.textContent = primaryTask;
+  if (taskRef) taskRef.textContent = `Task @ ${idLabel || primaryTask}`;
+
+  const isComplete = SpecCom.helpers.getSiteCompletionState(site) && !site.is_pending;
+  if (statusEl){
+    statusEl.textContent = isComplete ? "COMPLETED" : "PENDING";
+    statusEl.classList.toggle("is-complete", isComplete);
+  }
+
+  const createdAt = site.created_at ? new Date(site.created_at) : null;
+  const updatedAt = site.updated_at ? new Date(site.updated_at) : createdAt;
+  if (dateCreatedEl){
+    dateCreatedEl.textContent = createdAt && Number.isFinite(createdAt.getTime())
+      ? createdAt.toLocaleDateString()
+      : "-";
+  }
+  if (dateUpdatedEl){
+    dateUpdatedEl.textContent = updatedAt && Number.isFinite(updatedAt.getTime())
+      ? updatedAt.toLocaleDateString()
+      : "-";
+  }
+
+  if (workTypeEl){
+    const fromEntries = (state.siteEntries || []).map((row) => ({
+      label: String(row.description || "").trim(),
+      qty: Number.isFinite(Number(row.quantity)) ? Number(row.quantity) : 1,
+    })).filter((row) => row.label);
+    const fromCodes = (state.siteCodes || []).map((row) => ({
+      label: String(row.code || "").trim(),
+      qty: 1,
+    })).filter((row) => row.label);
+    const items = fromEntries.length ? fromEntries : fromCodes;
+    if (!items.length){
+      workTypeEl.innerHTML = `<div class="muted small">-</div>`;
+    } else {
+      workTypeEl.innerHTML = items.map((row) => (
+        `<div class="pin-overview-work-item"><span>${escapeHtml(row.label)}</span><span>x${escapeHtml(row.qty)}</span></div>`
+      )).join("");
+    }
+  }
+
+  if (gpsEl){
+    const coords = getSiteCoords(site);
+    gpsEl.textContent = coords ? `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : "-";
+  }
+
+  if (notesEl){
+    const notes = String(site.notes || "").trim();
+    notesEl.textContent = notes || "-";
+  }
+  if (manualLatInput || manualLngInput){
+    const coords = getSiteCoords(site);
+    if (manualLatInput){
+      manualLatInput.value = coords ? String(coords.lat) : "";
+      manualLatInput.disabled = !canManualProofEdit || site.is_pending;
+    }
+    if (manualLngInput){
+      manualLngInput.value = coords ? String(coords.lng) : "";
+      manualLngInput.disabled = !canManualProofEdit || site.is_pending;
+    }
+  }
+  if (manualNotesInput){
+    manualNotesInput.value = String(site.notes || "");
+    manualNotesInput.disabled = !canManualProofEdit || site.is_pending;
+  }
+  if (saveManualBtn){
+    saveManualBtn.disabled = !canManualProofEdit || site.is_pending;
+  }
+
+  if (photosEl){
+    const items = state.siteMedia || [];
+    if (!items.length){
+      photosEl.innerHTML = `<div class="muted small">No photos yet.</div>`;
+    } else {
+      photosEl.innerHTML = items.map((item, idx) => (
+        `<button class="pin-overview-photo-card" type="button" data-action="openOverviewMedia" data-index="${idx}">
+          ${item.previewUrl ? `<img src="${item.previewUrl}" alt="task photo ${idx + 1}" />` : ""}
+        </button>`
+      )).join("");
+    }
+    if (!photosEl.dataset.bound){
+      photosEl.dataset.bound = "1";
+      photosEl.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-action='openOverviewMedia']");
+        if (!btn) return;
+        const idx = Number(btn.dataset.index);
+        if (!Number.isFinite(idx)) return;
+        SpecCom.helpers.openMediaViewer(idx);
+      });
+    }
+  }
+};
+
+SpecCom.helpers.savePinOverviewManualDetails = async function(){
+  const site = state.activeSite;
+  if (!site || site.is_pending) return;
+  if (!(SpecCom.helpers.isRoot() || isOwner())){
+    toast("Permission denied", "Only ROOT or OWNER can manually edit GPS and progress notes.", "error");
+    return;
+  }
+  const latRaw = String($("pinOverviewGpsLatInput")?.value || "").trim();
+  const lngRaw = String($("pinOverviewGpsLngInput")?.value || "").trim();
+  const notes = String($("pinOverviewNotesInput")?.value || "").trim();
+  const hasLat = latRaw !== "";
+  const hasLng = lngRaw !== "";
+  if (hasLat !== hasLng){
+    toast("GPS invalid", "Enter both latitude and longitude, or leave both empty.", "error");
+    return;
+  }
+  const hasGps = hasLat && hasLng;
+  const latNum = hasGps ? Number(latRaw) : null;
+  const lngNum = hasGps ? Number(lngRaw) : null;
+  if (hasGps && (!Number.isFinite(latNum) || !Number.isFinite(lngNum))){
+    toast("GPS invalid", "Enter valid numeric latitude/longitude.", "error");
+    return;
+  }
+
+  if (isDemo){
+    state.demo.sites = (state.demo.sites || []).map((row) => {
+      if (row.id !== site.id) return row;
+      const next = { ...row, notes };
+      if (hasGps){
+        next.gps_lat = latNum;
+        next.gps_lng = lngNum;
+      }
+      return next;
+    });
+    state.projectSites = (state.projectSites || []).map((row) => {
+      if (row.id !== site.id) return row;
+      const next = { ...row, notes };
+      if (hasGps){
+        next.gps_lat = latNum;
+        next.gps_lng = lngNum;
+      }
+      return next;
+    });
+    state.activeSite = (state.projectSites || []).find((row) => row.id === site.id) || state.activeSite;
+    updateMapMarkers(getVisibleSites());
+    renderSitePanel();
+    toast("Saved", "Manual details updated.");
+    return;
+  }
+
+  if (!state.client){
+    toast("Update failed", "Client not ready.", "error");
+    return;
+  }
+
+  const payload = { notes };
+  if (hasGps){
+    payload.gps_lat = latNum;
+    payload.gps_lng = lngNum;
+  }
+
+  let res = await state.client
+    .from("sites")
+    .update(payload)
+    .eq("id", site.id)
+    .select("id")
+    .single();
+  if (res.error && hasGps && isMissingGpsColumnError(res.error)){
+    const legacyPayload = { ...payload, lat: latNum, lng: lngNum };
+    delete legacyPayload.gps_lat;
+    delete legacyPayload.gps_lng;
+    res = await state.client
+      .from("sites")
+      .update(legacyPayload)
+      .eq("id", site.id)
+      .select("id")
+      .single();
+  }
+  if (res.error){
+    toast("Update failed", res.error.message, "error");
+    return;
+  }
+
+  const siteRes = await fetchSiteById(site.id);
+  if (siteRes.error){
+    toast("Refresh failed", siteRes.error.message, "error");
+    return;
+  }
+  if (siteRes.data){
+    state.projectSites = (state.projectSites || []).filter((row) => row.id !== siteRes.data.id).concat(siteRes.data);
+    state.activeSite = siteRes.data;
+  }
+  if (hasGps){
+    updateMapMarkers(getVisibleSites());
+  }
+  renderSitePanel();
+  toast("Saved", "Manual details updated.");
+};
 
 function renderSitePanel(){
   const subtitle = $("sitePanelSubtitle");
@@ -7390,6 +7969,7 @@ function renderSitePanel(){
   const saveNotesBtn = $("btnSaveNotes");
   const editLocationBtn = $("btnEditSiteLocation");
   const isRoot = SpecCom.helpers.isRoot();
+  const canManualProofEdit = isRoot || isOwner();
 
   const site = state.activeSite;
   const isPending = Boolean(site?.is_pending);
@@ -7408,13 +7988,13 @@ function renderSitePanel(){
   if (codesInput) codesInput.disabled = disabled;
   if (entryDesc) entryDesc.disabled = disabled;
   if (entryQty) entryQty.disabled = disabled;
-  if (notesInput) notesInput.disabled = disabled;
+  if (notesInput) notesInput.disabled = disabled || !canManualProofEdit;
   if (siteNameInput) siteNameInput.disabled = disabled;
   if (saveNameBtn) saveNameBtn.disabled = disabled;
   if (saveCodesBtn) saveCodesBtn.disabled = disabled;
   if (addEntryBtn) addEntryBtn.disabled = disabled;
-  if (saveNotesBtn) saveNotesBtn.disabled = disabled;
-  if (editLocationBtn) editLocationBtn.disabled = disabled;
+  if (saveNotesBtn) saveNotesBtn.disabled = disabled || !canManualProofEdit;
+  if (editLocationBtn) editLocationBtn.disabled = disabled || !canManualProofEdit;
 
   const nameRow = siteNameInput?.closest(".row");
   if (nameRow && !document.getElementById("btnDeleteSite")){
@@ -7438,8 +8018,13 @@ function renderSitePanel(){
   if (notesInput) notesInput.value = site?.notes || "";
   if (siteNameInput) siteNameInput.value = site?.name || "";
   if (editLocationBtn){
+    editLocationBtn.style.display = canManualProofEdit ? "" : "none";
     editLocationBtn.onclick = () => {
       if (!site || isPending) return;
+      if (!canManualProofEdit){
+        toast("Permission denied", "Only ROOT or OWNER can manually edit GPS and progress notes.", "error");
+        return;
+      }
       ensureMap();
       state.map.dropPinMode = true;
       state.map.pinTargetSiteId = site.id;
@@ -7492,6 +8077,9 @@ function renderSitePanel(){
         `;
       }).join("");
     }
+  }
+  if (state.pinOverview.open){
+    SpecCom.helpers.renderPinOverview();
   }
 }
 
@@ -7555,7 +8143,9 @@ async function loadSiteMedia(siteId){
   const rows = data || [];
   const withUrls = [];
   for (const row of rows){
-    const previewUrl = row.media_path ? await getPublicOrSignedUrl("proof-photos", row.media_path) : "";
+    const previewUrl = row.media_path
+      ? (/^https?:\/\//i.test(String(row.media_path)) ? String(row.media_path) : await getPublicOrSignedUrl("proof-photos", row.media_path))
+      : "";
     withUrls.push({ ...row, previewUrl });
   }
   state.siteMedia = withUrls;
@@ -7600,6 +8190,10 @@ async function loadSiteEntries(siteId){
 async function saveSiteNotes(){
   const site = state.activeSite;
   if (!site || site.is_pending) return;
+  if (!(SpecCom.helpers.isRoot() || isOwner())){
+    toast("Permission denied", "Only ROOT or OWNER can manually edit GPS and progress notes.", "error");
+    return;
+  }
   const notes = $("siteNotesInput")?.value || "";
   if (isDemo){
     const demoSite = (state.demo.sites || []).find((row) => row.id === site.id);
@@ -7923,6 +8517,11 @@ async function createSiteFromMapClick(coords, siteName){
 
 async function updateSiteLocationFromMapClick(siteId, coords){
   if (!siteId){
+    clearPendingPinMarker();
+    return;
+  }
+  if (!(SpecCom.helpers.isRoot() || isOwner())){
+    toast("Permission denied", "Only ROOT or OWNER can manually edit GPS and progress notes.", "error");
     clearPendingPinMarker();
     return;
   }
@@ -8750,7 +9349,7 @@ function renderLocations(){
         <div>
           ${nameHtml}
           <div class="muted small">${escapeHtml(r.id)}</div>
-          ${SINGLE_PROOF_PHOTO_MODE ? "" : `<div class="muted small">Photos: <b>${counts.uploaded}/${counts.required}</b> required</div>`}
+          ${SINGLE_PROOF_PHOTO_MODE ? "" : `<div class="muted small">Photos uploaded: <b>${counts.uploaded}/${FIXED_LOCATION_PHOTO_SLOTS}</b></div>`}
           <div class="muted small">Work codes logged here: <b>${escapeHtml(workCodesLabel)}</b></div>
         </div>
         <div>
@@ -8772,13 +9371,13 @@ function renderLocations(){
             <option value="custom" ${portValue === "custom" ? "selected" : ""}>Custom</option>
           </select>
           <input class="input" type="number" min="1" max="8" step="1" data-action="portsCustom" data-id="${r.id}" value="${customValue}" ${customStyle} style="width:120px; flex:0 0 auto;" />
-          ${SINGLE_PROOF_PHOTO_MODE ? "" : '<div class="muted small">Required = ports + 1 completion.</div>'}
+          ${SINGLE_PROOF_PHOTO_MODE ? "" : `<div class="muted small">Photo slots available: ${FIXED_LOCATION_PHOTO_SLOTS} per location.</div>`}
         </div>
         <div class="row" style="justify-content:flex-end;">
           <button class="btn ghost" data-action="cancelPorts" data-id="${r.id}" ${disableActions ? "disabled" : ""}>Cancel</button>
           <button class="btn secondary" data-action="savePorts" data-id="${r.id}" ${disableActions ? "disabled" : ""}>Save ports</button>
         </div>
-        ${SINGLE_PROOF_PHOTO_MODE ? "" : '<div class="muted small">Required photos update after Save.</div>'}
+        ${SINGLE_PROOF_PHOTO_MODE ? "" : '<div class="muted small">Photo slots stay fixed at 8.</div>'}
       ` : `
         <div class="row" style="align-items:center; justify-content:space-between;">
           <div class="muted small">Ports required: <b>${activePorts}</b></div>
@@ -9702,7 +10301,7 @@ async function handleBackfillPhotoUpload(photoType, file){
   }
   const slotKey = getBackfillSlotKey(loc, photoType);
   if (!slotKey){
-    toast("Slots full", "All port slots already have photos. Use the slot grid to retake.");
+    toast("Slots full", "All 8 photo slots already have photos. Use the slot grid to retake.");
     return;
   }
   const previewUrl = URL.createObjectURL(file);
@@ -10807,8 +11406,7 @@ function getLocationRequiredPhotos(loc, projectId){
   if (rule && Number.isFinite(rule.required_photos)){
     return Math.max(0, rule.required_photos);
   }
-  const slots = requiredSlotsForPorts(loc?.terminal_ports ?? DEFAULT_TERMINAL_PORTS);
-  return slots.length;
+  return 0;
 }
 
 function getLocationProofUploaded(loc){
@@ -12533,6 +13131,14 @@ function wireUI(){
   if (importConfirmBtn){
     importConfirmBtn.addEventListener("click", () => confirmImportLocations());
   }
+  const importTemplateBtn = $("btnImportLocationsTemplate");
+  if (importTemplateBtn){
+    importTemplateBtn.addEventListener("click", () => downloadLocationImportTemplate());
+  }
+  const importErrorsBtn = $("btnImportLocationsErrors");
+  if (importErrorsBtn){
+    importErrorsBtn.addEventListener("click", () => downloadLocationImportErrorReport());
+  }
   const grantAccessCloseBtn = $("btnGrantAccessClose");
   if (grantAccessCloseBtn){
     grantAccessCloseBtn.addEventListener("click", () => closeGrantAccessModal());
@@ -12780,3 +13386,4 @@ wireUI();
 applyI18n();
 syncLanguageControls();
 initAuth();
+
