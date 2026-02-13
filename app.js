@@ -133,6 +133,10 @@ const state = {
   materialCatalog: [],
   projects: [],
   messages: [],
+  messageRecipients: [],
+  messageIdentityMap: new Map(),
+  messageFilter: "all",
+  messageMode: "project",
   dpr: {
     reportId: null,
     projectId: null,
@@ -292,6 +296,17 @@ const I18N = {
     messagesEmpty: "No messages yet.",
     messagePlaceholder: "Write a message...",
     sendMessage: "Send",
+    messagesFilterAll: "All",
+    messagesFilterProject: "Project",
+    messagesFilterDirect: "Direct",
+    messagesFilterGlobal: "Global",
+    messageModeProject: "Project chat",
+    messageModeDirect: "Direct message",
+    messageModeGlobal: "Global notice",
+    messageRecipientPlaceholder: "Select recipient",
+    messageDirectTo: "To {name}",
+    messageProjectTag: "Project",
+    messageDirectTag: "Direct",
     menuTitle: "Menu",
     menuNavTitle: "Navigation",
     menuSettingsTitle: "Settings",
@@ -609,6 +624,17 @@ const I18N = {
     messagesEmpty: "Aun no hay mensajes.",
     messagePlaceholder: "Escribe un mensaje...",
     sendMessage: "Enviar",
+    messagesFilterAll: "Todos",
+    messagesFilterProject: "Proyecto",
+    messagesFilterDirect: "Directo",
+    messagesFilterGlobal: "Global",
+    messageModeProject: "Chat de proyecto",
+    messageModeDirect: "Mensaje directo",
+    messageModeGlobal: "Aviso global",
+    messageRecipientPlaceholder: "Seleccionar receptor",
+    messageDirectTo: "Para {name}",
+    messageProjectTag: "Proyecto",
+    messageDirectTag: "Directo",
     menuTitle: "Menu",
     menuNavTitle: "Navegacion",
     menuSettingsTitle: "Configuracion",
@@ -3117,6 +3143,7 @@ function refreshLanguageSensitiveUI(){
   renderDispatchWarnings();
   syncDispatchStatusFilter();
   renderProjectsList();
+  applyMessagesUiLabels();
   renderMessages();
   renderDprMetrics();
   renderDprProjectOptions();
@@ -5696,8 +5723,11 @@ function openMessagesModal(){
   if (!state.features.messages || !state.messagesEnabled) return;
   const modal = $("messagesModal");
   if (!modal) return;
-  loadMessages().then(() => {
+  loadMessages().then(async () => {
     if (!state.messagesEnabled) return;
+    await loadMessageRecipients();
+    applyMessagesUiLabels();
+    syncMessageComposerMode();
     renderMessages();
     markMessagesRead();
     modal.style.display = "";
@@ -7135,6 +7165,105 @@ async function saveDailyProgressComments(){
 
 const MESSAGE_READ_KEY = "messages_last_read_";
 
+function getMessageIdentityLabel(userId){
+  if (!userId) return t("messageSenderUnknown");
+  if (userId === state.user?.id) return t("messageSenderYou");
+  return state.messageIdentityMap.get(userId) || String(userId).slice(0, 8);
+}
+
+function setMessagesFilter(filter = "all"){
+  state.messageFilter = ["all", "project", "direct", "global"].includes(filter) ? filter : "all";
+  document.querySelectorAll("#messagesModal [data-filter]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.filter === state.messageFilter);
+  });
+  renderMessages();
+}
+
+function syncMessageComposerMode(){
+  const modeSelect = $("messageMode");
+  const recipientSelect = $("messageRecipient");
+  if (!modeSelect || !recipientSelect) return;
+  if (!state.activeProject && modeSelect.value === "project"){
+    modeSelect.value = SpecCom.helpers.isRoot() || SpecCom.helpers.isSupport() ? "global" : "direct";
+  }
+  state.messageMode = modeSelect.value || "project";
+  const showRecipient = state.messageMode === "direct";
+  recipientSelect.style.display = showRecipient ? "" : "none";
+}
+
+function renderMessageRecipients(){
+  const recipientSelect = $("messageRecipient");
+  if (!recipientSelect) return;
+  const current = recipientSelect.value;
+  const options = ['<option value="">' + escapeHtml(t("messageRecipientPlaceholder")) + "</option>"]
+    .concat((state.messageRecipients || []).map((row) => `<option value="${row.id}">${escapeHtml(row.name)}</option>`));
+  recipientSelect.innerHTML = options.join("");
+  if (current && (state.messageRecipients || []).some((row) => row.id === current)){
+    recipientSelect.value = current;
+  }
+}
+
+function applyMessagesUiLabels(){
+  const allBtn = $("btnMessagesFilterAll");
+  const projectBtn = $("btnMessagesFilterProject");
+  const directBtn = $("btnMessagesFilterDirect");
+  const globalBtn = $("btnMessagesFilterGlobal");
+  if (allBtn) allBtn.textContent = t("messagesFilterAll");
+  if (projectBtn) projectBtn.textContent = t("messagesFilterProject");
+  if (directBtn) directBtn.textContent = t("messagesFilterDirect");
+  if (globalBtn) globalBtn.textContent = t("messagesFilterGlobal");
+  const modeSelect = $("messageMode");
+  if (modeSelect){
+    const opts = Array.from(modeSelect.options || []);
+    if (opts[0]) opts[0].text = t("messageModeProject");
+    if (opts[1]) opts[1].text = t("messageModeDirect");
+    if (opts[2]) opts[2].text = t("messageModeGlobal");
+  }
+  renderMessageRecipients();
+}
+
+async function loadMessageRecipients(){
+  state.messageRecipients = [];
+  state.messageIdentityMap = new Map();
+  if (!state.client || !state.user || !state.activeProject?.id){
+    renderMessageRecipients();
+    return;
+  }
+  const { data: rows, error } = await state.client
+    .from("project_members")
+    .select("user_id")
+    .eq("project_id", state.activeProject.id);
+  if (error){
+    renderMessageRecipients();
+    return;
+  }
+  const ids = Array.from(new Set((rows || []).map((r) => r.user_id).filter(Boolean)));
+  if (!ids.length){
+    renderMessageRecipients();
+    return;
+  }
+  let names = [];
+  const { data: profileRows } = await state.client
+    .from("profiles")
+    .select("id, display_name")
+    .in("id", ids);
+  names = profileRows || [];
+  const nameMap = new Map();
+  names.forEach((row) => {
+    const label = String(row.display_name || "").trim() || String(row.id).slice(0, 8);
+    nameMap.set(row.id, label);
+  });
+  ids.forEach((id) => {
+    const label = id === state.user?.id ? t("messageSenderYou") : (nameMap.get(id) || String(id).slice(0, 8));
+    state.messageIdentityMap.set(id, label);
+  });
+  state.messageRecipients = ids
+    .filter((id) => id !== state.user?.id)
+    .map((id) => ({ id, name: state.messageIdentityMap.get(id) || String(id).slice(0, 8) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  renderMessageRecipients();
+}
+
 function disableMessagesModule(reason = "missing_table"){
   if (!state.messagesEnabled) return;
   state.messagesEnabled = false;
@@ -7164,6 +7293,7 @@ function setLastMessageReadAt(projectId, iso){
 function countUnreadMessages(){
   const lastRead = getLastMessageReadAt(state.activeProject?.id || null);
   return (state.messages || []).filter((msg) => {
+    if (msg.sender_id === state.user?.id) return false;
     const stamp = Date.parse(msg.created_at || "");
     return Number.isFinite(stamp) && stamp > lastRead;
   }).length;
@@ -7255,23 +7385,39 @@ function renderMessages(){
       scope.textContent = t("messagesScopeProject", { name: state.activeProject.name || "Project" });
     }
   }
-  if (!state.messages?.length){
+  const filtered = (state.messages || []).filter((msg) => {
+    const isGlobal = !msg.project_id;
+    const isDirect = Boolean(msg.recipient_id);
+    const isProject = Boolean(msg.project_id);
+    if (state.messageFilter === "project") return isProject && !isDirect;
+    if (state.messageFilter === "direct") return isDirect;
+    if (state.messageFilter === "global") return isGlobal;
+    return true;
+  });
+  if (!filtered.length){
     list.innerHTML = "";
     if (empty) empty.style.display = "";
     return;
   }
   if (empty) empty.style.display = "none";
-  list.innerHTML = state.messages.map((msg) => {
-    const sender = msg.sender_id === state.user?.id
-      ? t("messageSenderYou")
-      : (msg.sender_id ? String(msg.sender_id).slice(0, 8) : t("messageSenderUnknown"));
+  list.innerHTML = filtered.map((msg) => {
+    const sender = getMessageIdentityLabel(msg.sender_id);
+    const outgoing = msg.sender_id === state.user?.id;
     const time = msg.created_at ? new Date(msg.created_at).toLocaleString() : "";
-    const scopeLabel = msg.project_id ? "" : t("globalLabel");
+    const scopeLabel = msg.project_id ? t("messageProjectTag") : t("globalLabel");
+    const directLabel = msg.recipient_id ? t("messageDirectTag") : "";
+    const recipientLabel = msg.recipient_id
+      ? t("messageDirectTo", { name: getMessageIdentityLabel(msg.recipient_id) })
+      : "";
     const body = escapeHtml(msg.body || "").replace(/\n/g, "<br>");
-    const metaParts = [scopeLabel, sender, time].filter(Boolean);
+    const metaParts = [sender, recipientLabel, time].filter(Boolean);
     return `
-      <div class="message-card">
-        <div class="message-meta">${escapeHtml(metaParts.join(" | "))}</div>
+      <div class="message-card ${outgoing ? "outgoing" : "incoming"}">
+        <div class="message-meta">
+          ${scopeLabel ? `<span class="message-chip">${escapeHtml(scopeLabel)}</span>` : ""}
+          ${directLabel ? `<span class="message-chip">${escapeHtml(directLabel)}</span>` : ""}
+          <span>${escapeHtml(metaParts.join(" | "))}</span>
+        </div>
         <div>${body}</div>
       </div>
     `;
@@ -7284,17 +7430,34 @@ async function sendMessage(){
     return;
   }
   const input = $("messageInput");
+  const modeSelect = $("messageMode");
+  const recipientSelect = $("messageRecipient");
   const text = input?.value.trim();
   if (!text){
     toast("Message required", "Write a message.");
     return;
   }
+  const mode = modeSelect?.value || "project";
+  const recipientId = recipientSelect?.value || null;
+  if (mode === "direct" && !recipientId){
+    toast("Recipient required", "Select a recipient for direct message.");
+    return;
+  }
+  if (mode === "project" && !state.activeProject?.id){
+    toast("Project required", "Select a project for project chat.");
+    return;
+  }
+  if (mode === "global" && !(SpecCom.helpers.isRoot() || SpecCom.helpers.isSupport())){
+    toast("Not allowed", "Only ROOT or SUPPORT can send global notices.");
+    return;
+  }
   if (isDemo){
-    const projectId = state.activeProject?.id || null;
+    const projectId = mode === "project" ? (state.activeProject?.id || null) : null;
     const row = {
       id: `demo-message-${Date.now()}`,
       project_id: projectId,
       sender_id: state.user?.id || "demo-user",
+      recipient_id: mode === "direct" ? recipientId : null,
       body: text,
       created_at: new Date().toISOString(),
     };
@@ -7311,8 +7474,9 @@ async function sendMessage(){
     return;
   }
   const payload = {
-    project_id: state.activeProject?.id || null,
+    project_id: mode === "project" ? (state.activeProject?.id || null) : null,
     sender_id: state.user.id,
+    recipient_id: mode === "direct" ? recipientId : null,
     body: text,
   };
   const { error } = await state.client
@@ -13108,6 +13272,24 @@ function wireUI(){
   if (sendMessageBtn){
     sendMessageBtn.addEventListener("click", () => sendMessage());
   }
+  const messageInput = $("messageInput");
+  if (messageInput){
+    messageInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey){
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+  }
+  const messageMode = $("messageMode");
+  if (messageMode){
+    messageMode.addEventListener("change", () => syncMessageComposerMode());
+  }
+  const messageFilters = document.querySelectorAll("#messagesModal [data-filter]");
+  messageFilters.forEach((btn) => {
+    btn.addEventListener("click", () => setMessagesFilter(btn.dataset.filter || "all"));
+  });
+  setMessagesFilter(state.messageFilter);
   const menuBtn = $("btnMenu");
   if (menuBtn){
     menuBtn.addEventListener("click", () => openMenuModal());

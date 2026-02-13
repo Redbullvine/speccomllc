@@ -1395,9 +1395,31 @@ a{color:inherit; text-decoration:none;}
   padding:10px 12px;
   background: rgba(7,26,43,.5);
 }
+.message-card.outgoing{
+  border-color: rgba(61,116,216,.75);
+  background: rgba(49,110,214,.28);
+  margin-left: 32px;
+}
+.message-card.incoming{
+  margin-right: 32px;
+}
 .message-meta{
   color:var(--muted);
   font-size:12px;
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  align-items:center;
+  margin-bottom:4px;
+}
+.message-chip{
+  border:1px solid rgba(27,59,90,.5);
+  border-radius:999px;
+  padding:2px 8px;
+  font-size:11px;
+  font-weight:800;
+  color: var(--muted);
+  background: rgba(7,26,43,.45);
 }
 .segmented{
   display:flex;
