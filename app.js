@@ -4381,7 +4381,111 @@ async function insertWorkOrderEvent(workOrderId, eventType, payload = {}){
     });
 }
 
-async function updateWorkOrderStatus(workOrderId, nextStatus){
+async function captureNoAccessGps(timeoutMs = 9000){
+  if (state.lastGPS && Number.isFinite(state.lastGPS.lat) && Number.isFinite(state.lastGPS.lng)){
+    return { ...state.lastGPS };
+  }
+  if (!navigator?.geolocation){
+    return null;
+  }
+  return await new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const gps = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy_m: pos.coords.accuracy,
+        };
+        state.lastGPS = gps;
+        finish(gps);
+      },
+      () => finish(null),
+      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 15000 }
+    );
+    setTimeout(() => finish(null), timeoutMs + 400);
+  });
+}
+
+function buildNoAccessProofMessage(workOrder, proof){
+  const capturedAt = proof?.captured_at ? new Date(proof.captured_at) : new Date();
+  const when = Number.isNaN(capturedAt.getTime()) ? new Date().toLocaleString() : capturedAt.toLocaleString();
+  const customer = workOrder?.customer_label || "Customer";
+  const address = workOrder?.address || "N/A";
+  const reporter = state.profile?.display_name || state.user?.email || state.user?.id || "Unknown";
+  const notes = String(proof?.notes || "").trim();
+  const lat = Number.isFinite(Number(proof?.gps?.lat)) ? Number(proof.gps.lat) : null;
+  const lng = Number.isFinite(Number(proof?.gps?.lng)) ? Number(proof.gps.lng) : null;
+  const acc = Number.isFinite(Number(proof?.gps?.accuracy_m)) ? Math.round(Number(proof.gps.accuracy_m)) : null;
+  const gpsLine = lat != null && lng != null
+    ? `${lat.toFixed(6)}, ${lng.toFixed(6)}${acc != null ? ` (+/-${acc}m)` : ""}`
+    : "Not captured";
+  const mapLink = lat != null && lng != null ? `https://maps.google.com/?q=${lat},${lng}` : "";
+  const lines = [
+    "NO ACCESS PROOF",
+    `Project: ${state.activeProject?.name || "N/A"}${state.activeProject?.job_number ? ` (Job ${state.activeProject.job_number})` : ""}`,
+    `Work Order ID: ${workOrder?.id || "N/A"}`,
+    `Customer: ${customer}`,
+    `Address: ${address}`,
+    `Captured At: ${when}`,
+    `Reported By: ${reporter}`,
+    `Notes: ${notes || "N/A"}`,
+    `GPS: ${gpsLine}`,
+  ];
+  if (mapLink) lines.push(`Map: ${mapLink}`);
+  return lines.join("\n");
+}
+
+async function postNoAccessProofToApp(workOrder, proof){
+  const body = buildNoAccessProofMessage(workOrder, proof);
+  if (!state.client || !state.user){
+    return { posted: false, body };
+  }
+  const payload = {
+    project_id: state.activeProject?.id || workOrder?.project_id || null,
+    sender_id: state.user.id,
+    body,
+    priority: 2,
+  };
+  const { error } = await state.client.from("messages").insert(payload);
+  if (error){
+    return { posted: false, body, error };
+  }
+  return { posted: true, body };
+}
+
+async function reportNoAccess(workOrderId){
+  const workOrder = (state.workOrders.assigned || []).find((r) => r.id === workOrderId)
+    || (state.workOrders.dispatch || []).find((r) => r.id === workOrderId);
+  const customer = workOrder?.customer_label || "work order";
+  const notes = prompt(`No-access proof notes for ${customer} (required):`) || "";
+  const trimmed = String(notes || "").trim();
+  if (!trimmed){
+    toast("Proof required", "Enter no-access notes before blocking.");
+    return;
+  }
+  const gps = await captureNoAccessGps();
+  await updateWorkOrderStatus(workOrderId, "BLOCKED", {
+    eventPayload: {
+      reason: "NO_ACCESS",
+      proof_notes: trimmed,
+      proof_gps: gps || null,
+      proof_captured_at: new Date().toISOString(),
+    },
+    noAccessProof: {
+      notes: trimmed,
+      gps,
+      captured_at: new Date().toISOString(),
+    },
+  });
+}
+
+async function updateWorkOrderStatus(workOrderId, nextStatus, options = {}){
   if (!state.client || !state.user) return;
   if (isDemoUser()){
     toast("Demo restriction", t("availableInProduction"));
@@ -4397,7 +4501,32 @@ async function updateWorkOrderStatus(workOrderId, nextStatus){
     toast("Status update failed", error.message);
     return;
   }
-  await insertWorkOrderEvent(workOrderId, "STATUS_CHANGE", { from: current?.status || null, to: nextStatus });
+  const payload = {
+    from: current?.status || null,
+    to: nextStatus,
+    ...(options.eventPayload || {}),
+  };
+  await insertWorkOrderEvent(workOrderId, "STATUS_CHANGE", payload);
+
+  if (nextStatus === "BLOCKED" && options.noAccessProof){
+    try{
+      const result = await postNoAccessProofToApp(
+        current || { id: workOrderId, project_id: state.activeProject?.id || null },
+        options.noAccessProof
+      );
+      if (navigator?.clipboard?.writeText){
+        navigator.clipboard.writeText(result.body).catch(() => {});
+      }
+      if (result.posted){
+        toast("Proof posted", "No-access proof posted to app messages. Copied for easy sharing.");
+      } else {
+        const reason = result.error?.message ? ` (${result.error.message})` : "";
+        toast("Proof captured", `No-access proof captured locally${reason}. Copied for manual sharing.`);
+      }
+    } catch (proofErr){
+      toast("Proof captured", proofErr.message || "No-access proof captured. Share manually.");
+    }
+  }
   await loadAssignedWorkOrders();
   await loadDispatchWorkOrders();
 }
@@ -13106,7 +13235,7 @@ function wireUI(){
       if (action === "woEnRoute") updateWorkOrderStatus(id, "EN_ROUTE");
       else if (action === "woOnSite") updateWorkOrderStatus(id, "ON_SITE");
       else if (action === "woStart") startWorkOrder(id);
-      else if (action === "woBlocked") updateWorkOrderStatus(id, "BLOCKED");
+      else if (action === "woBlocked") reportNoAccess(id);
       else if (action === "woComplete") completeWorkOrder(id);
     });
   }
@@ -13121,7 +13250,7 @@ function wireUI(){
       if (action === "woEnRoute") updateWorkOrderStatus(id, "EN_ROUTE");
       else if (action === "woOnSite") updateWorkOrderStatus(id, "ON_SITE");
       else if (action === "woStart") startWorkOrder(id);
-      else if (action === "woBlocked") updateWorkOrderStatus(id, "BLOCKED");
+      else if (action === "woBlocked") reportNoAccess(id);
       else if (action === "woComplete") completeWorkOrder(id);
     });
   }
