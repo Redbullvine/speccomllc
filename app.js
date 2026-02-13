@@ -2529,7 +2529,56 @@ function buildItemsFromRow(row){
     const qty = qtyRaw == null || qtyRaw === "" ? null : Number(qtyRaw);
     items.push({ item, qty: Number.isFinite(qty) ? qty : null });
   });
+  if (!items.length){
+    const codesRaw = String(row?.codes || row?.codes_raw || "").trim();
+    if (codesRaw){
+      codesRaw.split(",").forEach((part) => {
+        const value = String(part || "").trim();
+        if (!value) return;
+        const match = value.match(/^(.*?)\s*\[(\d+(?:\.\d+)?)\]\s*$/);
+        const item = match ? String(match[1] || "").trim() : value;
+        const qty = match ? Number(match[2]) : 1;
+        if (!item) return;
+        items.push({ item, qty: Number.isFinite(qty) ? qty : 1 });
+      });
+    }
+  }
   return items;
+}
+
+function extractEnclosureToken(text){
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  const direct = raw.match(/^\d+(?:\/@[\w.]+)?$/);
+  if (direct) return direct[0];
+  const token = raw.match(/\b(\d+(?:\/@[\w.]+)?)\b/);
+  return token ? token[1] : "";
+}
+
+function getImportCoordsLookup(){
+  const map = new Map();
+  const rows = getVisibleSites();
+  rows.forEach((site) => {
+    const coords = getSiteCoords(site);
+    if (!coords) return;
+    const name = String(site?.name || "").trim();
+    const display = String(getSiteDisplayName(site) || "").trim();
+    const enclosure = extractEnclosureToken(name) || extractEnclosureToken(display);
+    const keys = [name, display, enclosure]
+      .map((v) => String(v || "").trim().toLowerCase())
+      .filter(Boolean);
+    keys.forEach((key) => {
+      if (!map.has(key)) map.set(key, coords);
+    });
+  });
+  return map;
+}
+
+function parseLatLngCandidate(value){
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const num = Number.parseFloat(text);
+  return Number.isFinite(num) ? num : null;
 }
 
 function splitImportList(raw){
@@ -2577,21 +2626,50 @@ function validateLocationImportRows(rows){
   const errors = [];
   const warnings = [];
   const validRows = [];
+  const coordsLookup = getImportCoordsLookup();
   (rows || []).forEach((row) => {
     const rowId = row?.__rowNumber ?? "?";
-    const name = String(row?.location_name || "").trim();
-    const lat = Number(row?.latitude);
-    const lng = Number(row?.longitude);
+    const name = String(
+      row?.location_name || row?.enclosure || row?.name || row?.drop_number || ""
+    ).trim();
+    let lat = parseLatLngCandidate(row?.latitude ?? row?.lat);
+    let lng = parseLatLngCandidate(row?.longitude ?? row?.lng);
+    const latValid = Number.isFinite(lat) && lat >= -90 && lat <= 90;
+    const lngValid = Number.isFinite(lng) && lng >= -180 && lng <= 180;
     if (!name){
       errors.push({ row: rowId, reason: "Missing location_name." });
       return;
     }
+    if (!latValid || !lngValid){
+      const enclosure = String(row?.enclosure || extractEnclosureToken(name)).trim();
+      const externalRef = String(row?.external_ref || "").trim();
+      const keys = [
+        name,
+        enclosure,
+        externalRef,
+        externalRef.includes("|") ? externalRef.split("|").pop() : "",
+      ]
+        .map((v) => String(v || "").trim().toLowerCase())
+        .filter(Boolean);
+      let matchedCoords = null;
+      for (const key of keys){
+        if (coordsLookup.has(key)){
+          matchedCoords = coordsLookup.get(key);
+          break;
+        }
+      }
+      if (matchedCoords){
+        lat = matchedCoords.lat;
+        lng = matchedCoords.lng;
+        warnings.push({ row: rowId, reason: "Coordinates auto-filled from existing project site match." });
+      }
+    }
     if (!Number.isFinite(lat) || lat < -90 || lat > 90){
-      errors.push({ row: rowId, reason: "Latitude must be between -90 and 90." });
+      errors.push({ row: rowId, reason: "Latitude must be between -90 and 90 (or match an existing site)." });
       return;
     }
     if (!Number.isFinite(lng) || lng < -180 || lng > 180){
-      errors.push({ row: rowId, reason: "Longitude must be between -180 and 180." });
+      errors.push({ row: rowId, reason: "Longitude must be between -180 and 180 (or match an existing site)." });
       return;
     }
 
