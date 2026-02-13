@@ -455,7 +455,7 @@ const I18N = {
     pinDroppedBody: "Site created from map pin.",
       pinQueuedTitle: "Pin queued",
       pinQueuedBody: "Offline pin saved. Sync will run when online.",
-      importLocations: "Import Locations (Excel/CSV/PDF/KMZ)",
+      importLocations: "Import Locations (KMZ)",
       invoiceAgentAction: "Invoice Agent",
       invoiceAgentTitle: "Invoice Agent",
       invoiceAgentSubtitle: "Generate draft invoices from completed sites with billing entries.",
@@ -783,7 +783,7 @@ const I18N = {
     pinDroppedBody: "Sitio creado desde un pin del mapa.",
       pinQueuedTitle: "Pin en cola",
       pinQueuedBody: "Pin sin conexión guardado. Se sincronizará al estar en línea.",
-      importLocations: "Importar ubicaciones (Excel/CSV/PDF/KMZ)",
+      importLocations: "Importar ubicaciones (KMZ)",
       invoiceAgentAction: "Agente de facturación",
       invoiceAgentTitle: "Agente de facturación",
       invoiceAgentSubtitle: "Genera facturas borrador desde ubicaciones completas con entradas de facturación.",
@@ -4766,22 +4766,6 @@ function findHeaderIndex(headers, names){
 
 async function readLocationImportRows(file){
   const name = String(file?.name || "").toLowerCase();
-  const type = String(file?.type || "").toLowerCase();
-  if (name.endsWith(".csv") || type.includes("csv")){
-    const text = await file.text();
-    return parseCsv(text);
-  }
-  if (name.endsWith(".xlsx") || type.includes("sheet") || type.includes("excel")){
-    if (!window.XLSX){
-      throw new Error("XLSX parser unavailable. Refresh and try again.");
-    }
-    const data = await file.arrayBuffer();
-    const workbook = window.XLSX.read(data, { type: "array" });
-    const sheetName = workbook.SheetNames?.[0];
-    if (!sheetName) return [];
-    const sheet = workbook.Sheets[sheetName];
-    return window.XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
-  }
   if (name.endsWith(".kmz")){
     const parsed = await parseKmzFile(file);
     if (!parsed.length) return [];
@@ -4800,7 +4784,7 @@ async function readLocationImportRows(file){
     ]);
     return [headers, ...gridRows];
   }
-  throw new Error("Unsupported file type. Upload .csv, .xlsx, or .kmz.");
+  throw new Error("Unsupported file type. Upload .kmz.");
 }
 
 async function resolveUserIdByIdentifier(identifier){
@@ -4955,16 +4939,10 @@ async function handleLocationImport(file){
   const name = file.name.toLowerCase();
   let rows = [];
   try{
-    if (name.endsWith(".csv")){
-      rows = await parseCsvFile(file);
-    } else if (name.endsWith(".xlsx") || name.endsWith(".xls")){
-      rows = await parseXlsxFile(file);
-    } else if (name.endsWith(".kmz")){
+    if (name.endsWith(".kmz")){
       rows = await parseKmzFile(file);
-    } else if (name.endsWith(".pdf")){
-      rows = await parsePdfFile(file);
     } else {
-      toast("Import error", "Unsupported file type. Upload CSV, XLSX, PDF, or KMZ.");
+      toast("Import error", "Unsupported file type. Upload KMZ.");
       return;
     }
   } catch (error){
