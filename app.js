@@ -2495,6 +2495,10 @@ async function parsePdfFile(file){
     const pageText = content.items.map((item) => item.str).join(" ");
     text += `${pageText}\n`;
   }
+  const wiredRows = parseWiredProductionPdfText(text);
+  if (wiredRows.length){
+    return wiredRows;
+  }
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (!lines.length) return [];
   const headerLine = lines[0];
@@ -2514,6 +2518,58 @@ async function parsePdfFile(file){
     row.__rowNumber = idx + 2;
     return row;
   });
+}
+
+function parseWiredProductionPdfText(text){
+  const src = String(text || "");
+  if (!/\bJob\/Map\b/i.test(src) || !/\bEnclosure\b/i.test(src) || !/\bCodes\b/i.test(src)){
+    return [];
+  }
+  const stopAt = src.search(/\bProduction Summary\b/i);
+  const body = (stopAt >= 0 ? src.slice(0, stopAt) : src).replace(/\s+/g, " ").trim();
+  if (!body) return [];
+  const rowPattern = /([A-Za-z0-9]{20})\s+(.+?)\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+([\s\S]*?)(?=([A-Za-z0-9]{20}\s+)|$)/g;
+  const rows = [];
+  let match;
+  while ((match = rowPattern.exec(body))){
+    const jobMap = String(match[1] || "").trim();
+    const preDate = String(match[2] || "").trim();
+    const prodDate = String(match[3] || "").trim();
+    const payload = String(match[4] || "").trim();
+    if (!jobMap || !preDate || !prodDate) continue;
+
+    const enclosureMatch = preDate.match(/^(\d+(?:\/@[A-Za-z0-9.]+)?(?:\s*-\s*RE\s*ENTRY)?)\b/i);
+    const enclosure = enclosureMatch ? enclosureMatch[1].replace(/\s+/g, " ").trim() : preDate.split(/\s+/)[0];
+    const tech = enclosureMatch ? preDate.slice(enclosureMatch[0].length).trim() : preDate.split(/\s+/).slice(1).join(" ");
+
+    // Keep only code-like fragments ending in [qty], drop wrapped names/test markers.
+    const codes = [];
+    const codePattern = /([^,\n]+?)\s*\[(\d+(?:\.\d+)?)\]/g;
+    let codeMatch;
+    while ((codeMatch = codePattern.exec(payload))){
+      const code = String(codeMatch[1] || "").trim().replace(/\s+/g, " ");
+      const qty = Number(codeMatch[2]);
+      if (!code) continue;
+      codes.push({ item: code, qty: Number.isFinite(qty) ? qty : 1 });
+    }
+    if (!codes.length){
+      continue;
+    }
+    const billingCodes = Array.from(new Set(codes.map((item) => item.item)));
+    rows.push({
+      location_name: enclosure || `${jobMap}|${prodDate}`,
+      enclosure,
+      job_map: jobMap,
+      external_ref: `${jobMap}|${enclosure}`,
+      production_date: prodDate,
+      tech,
+      codes_raw: payload,
+      billing_codes: billingCodes,
+      items: codes,
+      __rowNumber: rows.length + 2,
+    });
+  }
+  return rows;
 }
 
 function buildItemsFromRow(row){
@@ -4792,7 +4848,7 @@ async function handleLocationImport(file){
     finish_date: row.finish_date ? String(row.finish_date).trim() : null,
     map_url: row.map_url ? String(row.map_url).trim() : null,
     gps_status: row.gps_status ? String(row.gps_status).trim() : null,
-    items: buildItemsFromRow(row),
+    items: Array.isArray(row.items) ? row.items : buildItemsFromRow(row),
     billing_codes: buildBillingCodesFromRow(row),
     photo_urls: buildPhotoUrlsFromRow(row),
     __rowNumber: row.__rowNumber,
