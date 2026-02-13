@@ -7501,9 +7501,14 @@ function renderMessageRecipients(){
   const recipientSelect = $("messageRecipient");
   if (!recipientSelect) return;
   const current = recipientSelect.value;
+  const recipients = state.messageRecipients || [];
   const options = ['<option value="">' + escapeHtml(t("messageRecipientPlaceholder")) + "</option>"]
-    .concat((state.messageRecipients || []).map((row) => `<option value="${row.id}">${escapeHtml(row.name)}</option>`));
+    .concat(recipients.map((row) => `<option value="${row.id}">${escapeHtml(row.name)}</option>`));
+  if (!recipients.length){
+    options.push(`<option value="" disabled>${escapeHtml("No recipients available")}</option>`);
+  }
   recipientSelect.innerHTML = options.join("");
+  recipientSelect.disabled = !recipients.length;
   if (current && (state.messageRecipients || []).some((row) => row.id === current)){
     recipientSelect.value = current;
   }
@@ -7531,29 +7536,50 @@ function applyMessagesUiLabels(){
 async function loadMessageRecipients(){
   state.messageRecipients = [];
   state.messageIdentityMap = new Map();
-  if (!state.client || !state.user || !state.activeProject?.id){
+  if (!state.client || !state.user){
     renderMessageRecipients();
     return;
   }
-  const { data: rows, error } = await state.client
-    .from("project_members")
-    .select("user_id")
-    .eq("project_id", state.activeProject.id);
-  if (error){
-    renderMessageRecipients();
-    return;
+  let ids = [];
+  if (state.activeProject?.id){
+    const { data: rows } = await state.client
+      .from("project_members")
+      .select("user_id")
+      .eq("project_id", state.activeProject.id);
+    ids = Array.from(new Set((rows || []).map((r) => r.user_id).filter(Boolean)));
   }
-  const ids = Array.from(new Set((rows || []).map((r) => r.user_id).filter(Boolean)));
+
   if (!ids.length){
-    renderMessageRecipients();
-    return;
+    const fromMessages = new Set();
+    (state.messages || []).forEach((msg) => {
+      if (msg?.sender_id) fromMessages.add(msg.sender_id);
+      if (msg?.recipient_id) fromMessages.add(msg.recipient_id);
+    });
+    ids = Array.from(fromMessages).filter(Boolean);
   }
+
+  if (!ids.length && state.profile?.org_id){
+    const { data: orgProfiles } = await state.client
+      .from("profiles")
+      .select("id, display_name")
+      .eq("org_id", state.profile.org_id)
+      .limit(200);
+    const seed = orgProfiles || [];
+    ids = seed.map((row) => row.id).filter(Boolean);
+    seed.forEach((row) => {
+      const label = String(row.display_name || "").trim() || String(row.id || "").slice(0, 8);
+      if (row.id) state.messageIdentityMap.set(row.id, label);
+    });
+  }
+
   let names = [];
-  const { data: profileRows } = await state.client
-    .from("profiles")
-    .select("id, display_name")
-    .in("id", ids);
-  names = profileRows || [];
+  if (ids.length){
+    const { data: profileRows } = await state.client
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", ids);
+    names = profileRows || [];
+  }
   const nameMap = new Map();
   names.forEach((row) => {
     const label = String(row.display_name || "").trim() || String(row.id).slice(0, 8);
