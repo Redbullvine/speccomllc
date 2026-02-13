@@ -5511,13 +5511,15 @@ function updateProjectScopedControls(){
   const demoLocked = isDemoUser();
   const allowed = SpecCom.helpers.isRoot() || isPrivilegedRole();
   if (importBtn){
-    importBtn.style.display = hasProject ? "" : "none";
+    importBtn.style.display = "";
     if (SpecCom.helpers.isRoot()){
-      importBtn.disabled = false;
-      importBtn.title = "";
+      importBtn.disabled = !hasProject;
+      importBtn.title = hasProject ? "" : "Select a project first.";
     } else {
-      importBtn.disabled = !allowed || demoLocked;
-      if (demoLocked){
+      importBtn.disabled = !hasProject || !allowed || demoLocked;
+      if (!hasProject){
+        importBtn.title = "Select a project first.";
+      } else if (demoLocked){
         importBtn.title = t("availableInProduction");
       } else if (!allowed){
         importBtn.title = "Admin or Project Manager required.";
