@@ -4467,13 +4467,67 @@ function buildSiteNoAccessProofMessage(site, proof){
     `Project: ${state.activeProject?.name || "N/A"}${state.activeProject?.job_number ? ` (Job ${state.activeProject.job_number})` : ""}`,
     `Location: ${siteName || "N/A"}`,
     `Site ID: ${site?.id || "N/A"}`,
+    proof?.attempt_label && Number.isFinite(Number(proof?.attempt_number))
+      ? `Attempt: ${proof.attempt_label} (${proof.attempt_number}/3)`
+      : null,
     `Captured At: ${when}`,
     `Reported By: ${reporter}`,
     `Notes: ${notes || "N/A"}`,
     `GPS: ${gpsLine}`,
-  ];
+  ].filter(Boolean);
   if (mapLink) lines.push(`Map: ${mapLink}`);
   return lines.join("\n");
+}
+
+function getNoAccessAttemptLabel(attemptNumber){
+  if (attemptNumber === 1) return "First";
+  if (attemptNumber === 2) return "Second";
+  if (attemptNumber === 3) return "Third";
+  return `${attemptNumber}th`;
+}
+
+async function getNoAccessAttemptNumberForSite(site){
+  if (!site?.id || !state.activeProject?.id || !state.client || !state.messagesEnabled || !state.features.messages){
+    return 1;
+  }
+  try{
+    const { data, error } = await state.client
+      .from("messages")
+      .select("id")
+      .eq("project_id", state.activeProject.id)
+      .ilike("body", "%NO ACCESS PROOF%")
+      .ilike("body", `%Site ID: ${site.id}%`);
+    if (error) return 1;
+    const count = Array.isArray(data) ? data.length : 0;
+    return count + 1;
+  } catch {
+    return 1;
+  }
+}
+
+async function saveNoAccessProofToSiteNotes(site, messageBody){
+  if (!site?.id || !state.client || site.is_pending) return false;
+  const existing = String(site.notes || "").trim();
+  const nextNotes = existing
+    ? `${existing}\n\n${messageBody}`
+    : messageBody;
+  const { error } = await state.client
+    .from("sites")
+    .update({ notes: nextNotes })
+    .eq("id", site.id);
+  if (error) return false;
+  site.notes = nextNotes;
+  const match = (state.projectSites || []).find((row) => row.id === site.id);
+  if (match) match.notes = nextNotes;
+  if (state.activeSite?.id === site.id){
+    state.activeSite.notes = nextNotes;
+    if (state.pinOverview.open){
+      SpecCom.helpers.renderPinOverview();
+    } else {
+      renderSitePanel();
+    }
+  }
+  return true;
 }
 
 async function postNoAccessProofMessageToApp(body, projectId){
@@ -4602,28 +4656,53 @@ SpecCom.helpers.reportNoAccessFromPinOverview = async function(){
     toast("Proof required", "Enter no-access notes before submitting.");
     return;
   }
+  const attemptNumber = await getNoAccessAttemptNumberForSite(site);
+  const attemptLabel = getNoAccessAttemptLabel(attemptNumber);
   const proof = {
     notes: trimmed,
     gps: await captureNoAccessGps(),
     captured_at: new Date().toISOString(),
+    attempt_number: attemptNumber,
+    attempt_label: attemptLabel,
   };
+  const messageWithAttempt = buildSiteNoAccessProofMessage(site, proof);
   try{
-    const result = await postSiteNoAccessProofToApp(site, proof);
+    const result = await postNoAccessProofMessageToApp(
+      messageWithAttempt,
+      state.activeProject?.id || site?.project_id || null
+    );
     if (navigator?.clipboard?.writeText){
-      navigator.clipboard.writeText(result.body).catch(() => {});
+      navigator.clipboard.writeText(messageWithAttempt).catch(() => {});
     }
     if (result.posted){
-      toast("Proof posted", "No-access proof posted to app messages. Copied for easy sharing.");
+      toast("Proof posted", `${attemptLabel} attempt saved to app messages. Copied for easy sharing.`);
       await loadMessages();
       renderMessages();
     } else if (result.missingMessagesTable){
-      toast("Proof captured", "Messages module is not installed in this environment. Proof copied for manual sharing.");
+      const savedToNotes = await saveNoAccessProofToSiteNotes(site, messageWithAttempt);
+      toast(
+        "Proof captured",
+        savedToNotes
+          ? `${attemptLabel} attempt saved in site notes. Messages module missing; copied for sharing.`
+          : "Messages module is not installed in this environment. Proof copied for manual sharing."
+      );
     } else {
+      const savedToNotes = await saveNoAccessProofToSiteNotes(site, messageWithAttempt);
       const reason = result.error?.message ? ` (${result.error.message})` : "";
-      toast("Proof captured", `No-access proof captured locally${reason}. Copied for manual sharing.`);
+      toast(
+        "Proof captured",
+        savedToNotes
+          ? `${attemptLabel} attempt saved in site notes${reason}. Copied for manual sharing.`
+          : `No-access proof captured locally${reason}. Copied for manual sharing.`
+      );
     }
   } catch (err){
-    toast("Proof captured", err?.message || "No-access proof captured. Share manually.");
+    const savedToNotes = await saveNoAccessProofToSiteNotes(site, messageWithAttempt);
+    if (savedToNotes){
+      toast("Proof captured", `${attemptLabel} attempt saved in site notes. ${err?.message || "Share manually."}`);
+    } else {
+      toast("Proof captured", err?.message || "No-access proof captured. Share manually.");
+    }
   }
 };
 
