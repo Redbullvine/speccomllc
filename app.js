@@ -455,7 +455,7 @@ const I18N = {
     pinDroppedBody: "Site created from map pin.",
       pinQueuedTitle: "Pin queued",
       pinQueuedBody: "Offline pin saved. Sync will run when online.",
-      importLocations: "Import Locations (Excel/CSV)",
+      importLocations: "Import Locations (Excel/CSV/PDF/KMZ)",
       invoiceAgentAction: "Invoice Agent",
       invoiceAgentTitle: "Invoice Agent",
       invoiceAgentSubtitle: "Generate draft invoices from completed sites with billing entries.",
@@ -783,7 +783,7 @@ const I18N = {
     pinDroppedBody: "Sitio creado desde un pin del mapa.",
       pinQueuedTitle: "Pin en cola",
       pinQueuedBody: "Pin sin conexión guardado. Se sincronizará al estar en línea.",
-      importLocations: "Importar ubicaciones (Excel/CSV)",
+      importLocations: "Importar ubicaciones (Excel/CSV/PDF/KMZ)",
       invoiceAgentAction: "Agente de facturación",
       invoiceAgentTitle: "Agente de facturación",
       invoiceAgentSubtitle: "Genera facturas borrador desde ubicaciones completas con entradas de facturación.",
@@ -2544,6 +2544,89 @@ async function parsePdfFile(file){
     row.__rowNumber = idx + 2;
     return row;
   });
+}
+
+function stripHtmlTags(value){
+  return String(value || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function parseKmlCoordinateText(coordText){
+  const raw = String(coordText || "").trim();
+  if (!raw) return null;
+  const parts = raw.split(/\s+/).filter(Boolean);
+  for (const part of parts){
+    const fields = part.split(",");
+    if (fields.length < 2) continue;
+    const lng = Number.parseFloat(fields[0]);
+    const lat = Number.parseFloat(fields[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
+    return { lat, lng };
+  }
+  return null;
+}
+
+function parseKmlText(kmlText){
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(String(kmlText || ""), "application/xml");
+  if (xml.getElementsByTagName("parsererror").length){
+    throw new Error("Invalid KML inside KMZ.");
+  }
+  const placemarks = Array.from(xml.getElementsByTagName("Placemark"));
+  const rows = [];
+  placemarks.forEach((placemark, idx) => {
+    const name = placemark.getElementsByTagName("name")[0]?.textContent?.trim() || `KMZ Point ${idx + 1}`;
+    const descriptionRaw = placemark.getElementsByTagName("description")[0]?.textContent || "";
+    const description = stripHtmlTags(descriptionRaw);
+
+    let coordText = "";
+    const pointNode = placemark.getElementsByTagName("Point")[0];
+    if (pointNode){
+      coordText = pointNode.getElementsByTagName("coordinates")[0]?.textContent || "";
+    }
+    if (!coordText){
+      coordText = placemark.getElementsByTagName("coordinates")[0]?.textContent || "";
+    }
+    const coords = parseKmlCoordinateText(coordText);
+    if (!coords) return;
+
+    const row = {
+      location_name: name,
+      latitude: coords.lat,
+      longitude: coords.lng,
+      notes: description || null,
+      __rowNumber: rows.length + 2,
+    };
+
+    const dataNodes = Array.from(placemark.getElementsByTagName("Data"));
+    dataNodes.forEach((node) => {
+      const key = SpecCom.helpers.normalizeImportHeader(node.getAttribute("name"));
+      const value = node.getElementsByTagName("value")[0]?.textContent?.trim();
+      if (key && value) row[key] = value;
+    });
+    const simpleNodes = Array.from(placemark.getElementsByTagName("SimpleData"));
+    simpleNodes.forEach((node) => {
+      const key = SpecCom.helpers.normalizeImportHeader(node.getAttribute("name"));
+      const value = node.textContent?.trim();
+      if (key && value) row[key] = value;
+    });
+
+    rows.push(row);
+  });
+  return rows;
+}
+
+async function parseKmzFile(file){
+  const JSZip = await loadJsZip();
+  const zip = await JSZip.loadAsync(file);
+  const entries = Object.values(zip.files || {}).filter((entry) => !entry.dir);
+  const kmlEntries = entries.filter((entry) => String(entry.name || "").toLowerCase().endsWith(".kml"));
+  if (!kmlEntries.length){
+    throw new Error("KMZ does not contain a .kml file.");
+  }
+  const preferred = kmlEntries.find((entry) => String(entry.name || "").toLowerCase().endsWith("doc.kml")) || kmlEntries[0];
+  const kmlText = await preferred.async("text");
+  return parseKmlText(kmlText);
 }
 
 function parseWiredProductionPdfText(text){
@@ -4699,7 +4782,25 @@ async function readLocationImportRows(file){
     const sheet = workbook.Sheets[sheetName];
     return window.XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
   }
-  throw new Error("Unsupported file type. Upload .csv or .xlsx.");
+  if (name.endsWith(".kmz")){
+    const parsed = await parseKmzFile(file);
+    if (!parsed.length) return [];
+    const headers = ["location_name", "latitude", "longitude", "notes", "billing_codes", "photo_urls", "progress_notes", "finish_date", "map_url", "gps_status"];
+    const gridRows = parsed.map((row) => [
+      row.location_name || "",
+      row.latitude ?? "",
+      row.longitude ?? "",
+      row.notes || "",
+      Array.isArray(row.billing_codes) ? row.billing_codes.join("|") : (row.billing_codes || row.billing_code || ""),
+      Array.isArray(row.photo_urls) ? row.photo_urls.join("|") : (row.photo_urls || ""),
+      row.progress_notes || "",
+      row.finish_date || "",
+      row.map_url || "",
+      row.gps_status || "",
+    ]);
+    return [headers, ...gridRows];
+  }
+  throw new Error("Unsupported file type. Upload .csv, .xlsx, or .kmz.");
 }
 
 async function resolveUserIdByIdentifier(identifier){
@@ -4858,10 +4959,12 @@ async function handleLocationImport(file){
       rows = await parseCsvFile(file);
     } else if (name.endsWith(".xlsx") || name.endsWith(".xls")){
       rows = await parseXlsxFile(file);
+    } else if (name.endsWith(".kmz")){
+      rows = await parseKmzFile(file);
     } else if (name.endsWith(".pdf")){
       rows = await parsePdfFile(file);
     } else {
-      toast("Import error", "Unsupported file type.");
+      toast("Import error", "Unsupported file type. Upload CSV, XLSX, PDF, or KMZ.");
       return;
     }
   } catch (error){
