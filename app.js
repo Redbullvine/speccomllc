@@ -5451,7 +5451,7 @@ function setWhoami(){
   const authed = isDemo || Boolean(state.user);
   const signOutBtn = $("btnSignOut");
   if (signOutBtn) signOutBtn.style.display = authed ? "" : "none";
-  ["btnProjects", "btnMenu", "btnOpenProjects"].forEach((id) => {
+  ["btnProjects", "btnMenu", "btnOpenProjects", "btnMapToggle"].forEach((id) => {
     const el = $(id);
     if (el) el.style.display = authed ? "" : "none";
   });
