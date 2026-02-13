@@ -3134,8 +3134,17 @@ function isDemoUser(){
 }
 
 SpecCom.helpers.isRoot = function(){
-  const roleCode = state.profile?.role_code || state.profile?.role || "";
+  const roleCode = getRoleCode();
   return String(roleCode || "").toUpperCase() === "ROOT";
+};
+
+SpecCom.helpers.isSupport = function(){
+  const roleCode = getRoleCode();
+  return String(roleCode || "").toUpperCase() === "SUPPORT";
+};
+
+SpecCom.helpers.isPlatformAdmin = function(){
+  return SpecCom.helpers.isRoot() || SpecCom.helpers.isSupport();
 };
 
 function isBillingManager(){
@@ -5709,7 +5718,7 @@ function openMenuModal(){
   }
   syncMenuLanguageToggle();
   const grantBtn = $("btnGrantProjectAccess");
-  if (grantBtn) grantBtn.style.display = SpecCom.helpers.isRoot() ? "" : "none";
+  if (grantBtn) grantBtn.style.display = SpecCom.helpers.isPlatformAdmin() ? "" : "none";
   const priceBtn = $("btnImportPriceSheet");
   if (priceBtn) priceBtn.style.display = SpecCom.helpers.isRoot() ? "" : "none";
   const stakingBtn = $("btnCreateProjectFromStaking");
@@ -6646,8 +6655,8 @@ async function confirmImportPriceSheet(){
 }
 
 function openGrantAccessModal(){
-  if (!SpecCom.helpers.isRoot()){
-    toast("Not allowed", "Only ROOT can grant project access.");
+  if (!SpecCom.helpers.isPlatformAdmin()){
+    toast("Not allowed", "Only ROOT or SUPPORT can grant project access.");
     return;
   }
   const modal = $("grantAccessModal");
@@ -6679,8 +6688,8 @@ function normalizeRoleForGrant(role){
 }
 
 async function confirmGrantAccess(){
-  if (!SpecCom.helpers.isRoot()){
-    toast("Not allowed", "Only ROOT can grant project access.");
+  if (!SpecCom.helpers.isPlatformAdmin()){
+    toast("Not allowed", "Only ROOT or SUPPORT can grant project access.");
     return;
   }
   if (!state.activeProject){
