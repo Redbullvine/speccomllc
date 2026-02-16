@@ -180,6 +180,7 @@ const state = {
     rawRows: [],
     rows: [],
     validation: null,
+    preview: null,
   },
   testResultsImportRunning: false,
   labor: {
@@ -1404,6 +1405,17 @@ function getErrorMessage(error){
   return error.message || error.hint || error.details || String(error);
 }
 
+function getDetailedErrorMessage(error){
+  if (!error) return "Unknown error";
+  const parts = [];
+  if (error.message) parts.push(String(error.message));
+  if (error.details && String(error.details) !== String(error.message)) parts.push(String(error.details));
+  if (error.hint) parts.push(`Hint: ${error.hint}`);
+  if (error.code) parts.push(`Code: ${error.code}`);
+  if (error.status) parts.push(`Status: ${error.status}`);
+  return parts.join(" | ") || getErrorMessage(error);
+}
+
 function isRpc404(error){
   return error?.status === 404 || String(error?.message || "").includes("404");
 }
@@ -1424,7 +1436,7 @@ function toast(title, body, variant){
 }
 
 function reportErrorToast(title, error){
-  const message = error?.message || (typeof error === "string" ? error : JSON.stringify(error)) || "Unknown error";
+  const message = typeof error === "string" ? error : getDetailedErrorMessage(error);
   toast(title, message, "error");
   console.error(error);
 }
@@ -1944,6 +1956,120 @@ function clearImportPreviewMarkers(){
   state.map.importPreviewMarkers = [];
 }
 
+const IMPORT_PREVIEW_MAX_MARKERS = 600;
+const IMPORT_PREVIEW_MIN_PRECISION = 2;
+
+function aggregateImportPreviewRows(rows, maxMarkers = IMPORT_PREVIEW_MAX_MARKERS){
+  const cleanRows = (rows || []).filter((row) => Number.isFinite(Number(row.latitude)) && Number.isFinite(Number(row.longitude)));
+  if (!cleanRows.length){
+    return { points: [], clustered: false, precision: null };
+  }
+  if (cleanRows.length <= maxMarkers){
+    return {
+      points: cleanRows.map((row) => ({
+        lat: Number(row.latitude),
+        lng: Number(row.longitude),
+        count: 1,
+        sampleNames: [String(row.location_name || "Unnamed")],
+        row,
+      })),
+      clustered: false,
+      precision: null,
+    };
+  }
+
+  let precision = 5;
+  let points = [];
+  for (; precision >= IMPORT_PREVIEW_MIN_PRECISION; precision -= 1){
+    const buckets = new Map();
+    cleanRows.forEach((row) => {
+      const lat = Number(row.latitude);
+      const lng = Number(row.longitude);
+      const key = `${lat.toFixed(precision)}|${lng.toFixed(precision)}`;
+      if (!buckets.has(key)){
+        buckets.set(key, {
+          latSum: 0,
+          lngSum: 0,
+          count: 0,
+          sampleNames: [],
+          row,
+        });
+      }
+      const bucket = buckets.get(key);
+      bucket.latSum += lat;
+      bucket.lngSum += lng;
+      bucket.count += 1;
+      if (bucket.sampleNames.length < 3){
+        bucket.sampleNames.push(String(row.location_name || "Unnamed"));
+      }
+    });
+    if (buckets.size <= maxMarkers || precision === IMPORT_PREVIEW_MIN_PRECISION){
+      points = Array.from(buckets.values()).map((bucket) => ({
+        lat: bucket.latSum / bucket.count,
+        lng: bucket.lngSum / bucket.count,
+        count: bucket.count,
+        sampleNames: bucket.sampleNames,
+        row: bucket.row,
+      }));
+      break;
+    }
+  }
+
+  return { points, clustered: true, precision };
+}
+
+function buildImportPreviewPopup(point){
+  if (!point) return "<div class=\"muted small\">Preview point</div>";
+  if ((point.count || 0) > 1){
+    const names = (point.sampleNames || []).map((name) => escapeHtml(name)).join(", ");
+    return `
+      <div style="font-weight:700;">${point.count} locations in this area</div>
+      <div class="muted small">${names}${point.count > (point.sampleNames || []).length ? ", ..." : ""}</div>
+    `;
+  }
+  const row = point.row || {};
+  const lat = Number(row.latitude);
+  const lng = Number(row.longitude);
+  const codeCount = Array.isArray(row.billing_codes) ? row.billing_codes.length : 0;
+  const photoCount = Array.isArray(row.photo_urls) ? row.photo_urls.length : 0;
+  return `
+    <div style="font-weight:700;">${escapeHtml(row.location_name || "Unnamed")}</div>
+    <div class="muted small">${Number.isFinite(lat) ? lat.toFixed(6) : "-"}, ${Number.isFinite(lng) ? lng.toFixed(6) : "-"}</div>
+    <div class="muted small">${codeCount} codes | ${photoCount} photos</div>
+  `;
+}
+
+function renderImportPreviewMarkers(rows){
+  clearImportPreviewMarkers();
+  ensureMap();
+  if (!state.map.instance || !window.L){
+    return { totalRows: rows?.length || 0, shownMarkers: 0, clustered: false, precision: null };
+  }
+  const { points, clustered, precision } = aggregateImportPreviewRows(rows);
+  state.map.importPreviewMarkers = points.map((point) => {
+    const count = point.count || 1;
+    const marker = window.L.circleMarker([point.lat, point.lng], {
+      radius: count > 1 ? Math.min(14, 6 + Math.log(count + 1) * 2.4) : 6,
+      color: "#f97316",
+      fillColor: "#f97316",
+      fillOpacity: count > 1 ? 0.92 : 0.85,
+      weight: count > 1 ? 2.5 : 2,
+      interactive: true,
+      bubblingMouseEvents: false,
+    });
+    marker.bindPopup(buildImportPreviewPopup(point));
+    marker.on("click", () => marker.openPopup());
+    marker.addTo(state.map.instance);
+    return marker;
+  });
+  return {
+    totalRows: rows?.length || 0,
+    shownMarkers: points.length,
+    clustered,
+    precision: clustered ? precision : null,
+  };
+}
+
 function openImportLocationsModal(rows, project){
   const modal = $("importLocationsModal");
   const summary = $("importLocationsSummary");
@@ -1956,7 +2082,11 @@ function openImportLocationsModal(rows, project){
   const validRows = validation?.validRows || rows;
   const errors = validation?.errors || [];
   const warnings = validation?.warnings || [];
-  summary.textContent = `Project ${projectName}: ${validRows.length} ready, ${errors.length} errors, ${warnings.length} warnings.`;
+  const preview = state.importPreview.preview || null;
+  const previewNote = preview
+    ? ` Preview: ${preview.shownMarkers} marker${preview.shownMarkers === 1 ? "" : "s"} for ${preview.totalRows} row${preview.totalRows === 1 ? "" : "s"}${preview.clustered ? " (grouped)" : ""}.`
+    : "";
+  summary.textContent = `Project ${projectName}: ${validRows.length} ready, ${errors.length} errors, ${warnings.length} warnings.${previewNote}`;
   list.innerHTML = "";
   if (errors.length){
     list.innerHTML += errors
@@ -2005,8 +2135,10 @@ function closeImportLocationsModal(){
   const modal = $("importLocationsModal");
   if (!modal) return;
   modal.style.display = "none";
+  clearImportPreviewMarkers();
   state.importPreview.rawRows = [];
   state.importPreview.validation = null;
+  state.importPreview.preview = null;
 }
 
 async function confirmImportLocations(){
@@ -2031,7 +2163,12 @@ async function confirmImportLocations(){
     p_sites: rows,
   });
   if (error){
-    toast("Import failed", error.message || "Import failed.");
+    const message = getDetailedErrorMessage(error);
+    toast("Import failed", message, "error");
+    const summary = $("importLocationsSummary");
+    const list = $("importLocationsList");
+    if (summary) summary.textContent = "Import failed. Review the server error below.";
+    if (list) list.innerHTML = `<div class="muted small">[SERVER] ${escapeHtml(message)}</div>`;
     return;
   }
   const imported = data?.imported ?? 0;
@@ -2624,27 +2761,44 @@ function parseKmlText(kmlText){
   }
   const placemarks = Array.from(xml.getElementsByTagName("Placemark"));
   const rows = [];
+
+  const getDirectName = (node) => {
+    if (!node) return "";
+    const children = Array.from(node.children || []);
+    const nameNode = children.find((child) => String(child.localName || child.nodeName || "").toLowerCase() === "name");
+    return String(nameNode?.textContent || "").trim();
+  };
+  const getLayerName = (placemark) => {
+    let current = placemark?.parentElement || null;
+    while (current){
+      const local = String(current.localName || current.nodeName || "").toLowerCase();
+      if (local === "folder" || local === "document"){
+        const name = getDirectName(current);
+        if (name) return name;
+      }
+      current = current.parentElement;
+    }
+    return "";
+  };
+
   placemarks.forEach((placemark, idx) => {
     const name = placemark.getElementsByTagName("name")[0]?.textContent?.trim() || `KMZ Point ${idx + 1}`;
     const descriptionRaw = placemark.getElementsByTagName("description")[0]?.textContent || "";
     const description = stripHtmlTags(descriptionRaw);
 
-    let coordText = "";
     const pointNode = placemark.getElementsByTagName("Point")[0];
-    if (pointNode){
-      coordText = pointNode.getElementsByTagName("coordinates")[0]?.textContent || "";
-    }
-    if (!coordText){
-      coordText = placemark.getElementsByTagName("coordinates")[0]?.textContent || "";
-    }
+    if (!pointNode) return;
+    const coordText = pointNode.getElementsByTagName("coordinates")[0]?.textContent || "";
     const coords = parseKmlCoordinateText(coordText);
     if (!coords) return;
+    const layerName = getLayerName(placemark);
 
     const row = {
       location_name: name,
       latitude: coords.lat,
       longitude: coords.lng,
       notes: description || null,
+      __kml_layer: layerName || null,
       __rowNumber: rows.length + 2,
     };
 
@@ -2663,7 +2817,9 @@ function parseKmlText(kmlText){
 
     rows.push(row);
   });
-  return rows;
+
+  const serviceLocationRows = rows.filter((row) => /service\s*location/i.test(String(row.__kml_layer || "")));
+  return serviceLocationRows.length ? serviceLocationRows : rows;
 }
 
 function decodeKmzTextBytes(bytes){
@@ -5367,24 +5523,7 @@ async function handleLocationImport(file){
   state.importPreview.rawRows = normalized;
   state.importPreview.rows = validation.validRows;
   state.importPreview.validation = validation;
-
-  clearImportPreviewMarkers();
-  ensureMap();
-  if (state.map.instance && window.L){
-    state.map.importPreviewMarkers = validation.validRows.map((row) => {
-      const lat = row.latitude;
-      const lng = row.longitude;
-      const marker = window.L.circleMarker([lat, lng], {
-        radius: 6,
-        color: "#f97316",
-        fillColor: "#f97316",
-        fillOpacity: 0.85,
-        weight: 2,
-      });
-      marker.addTo(state.map.instance);
-      return marker;
-    });
-  }
+  state.importPreview.preview = renderImportPreviewMarkers(validation.validRows);
 
   openImportLocationsModal(validation.validRows, state.activeProject);
 }
