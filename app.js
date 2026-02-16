@@ -499,6 +499,7 @@ const I18N = {
     languageLabel: "Language",
     languageOptionEnglish: "English",
     languageOptionSpanish: "Spanish",
+    languageOptionPortuguese: "Portuguese",
     languageHelp: "Changes apply immediately and sync to your profile.",
     saveLanguage: "Save language",
     selectProjectNodes: "Select a project to see sites.",
@@ -827,6 +828,7 @@ const I18N = {
     languageLabel: "Idioma",
     languageOptionEnglish: "Inglés",
     languageOptionSpanish: "Español",
+    languageOptionPortuguese: "Portugues",
     languageHelp: "Los cambios aplican al instante y se guardan en tu perfil.",
     saveLanguage: "Guardar idioma",
     selectProjectNodes: "Selecciona un proyecto para ver sitios.",
@@ -926,8 +928,34 @@ const I18N = {
 
 function normalizeLanguage(value){
   const lang = String(value || "").toLowerCase();
-  return lang === "es" ? "es" : "en";
+  if (lang === "es") return "es";
+  if (lang === "pt") return "pt";
+  return "en";
 }
+
+I18N.pt = {
+  ...I18N.en,
+  brandSubtitle: "Verificacao em campo, documentacao e controle de faturamento",
+  authTitle: "Entrar no SpecCom",
+  authSubtitle: "Bem-vindo de volta.",
+  projectsNav: "Projetos",
+  messagesNav: "Mensagens",
+  mapToggle: "Mapa",
+  menuTitle: "Menu",
+  menuNavTitle: "Navegacao",
+  menuSettingsTitle: "Configuracoes",
+  menuAboutTitle: "Sobre",
+  dailyReportTitle: "Relatorio Diario",
+  settingsTitle: "Configuracoes",
+  languageLabel: "Idioma",
+  languageOptionEnglish: "Ingles",
+  languageOptionSpanish: "Espanhol",
+  languageOptionPortuguese: "Portugues",
+  saveLanguage: "Salvar idioma",
+  signIn: "Entrar",
+  signOut: "Sair",
+  roleLabel: "Funcao",
+};
 
 function getTodayDate(){
   return new Date().toISOString().slice(0, 10);
@@ -3276,11 +3304,11 @@ function isOwnerOrAdmin(){
 
 function isPrivilegedRole(roleCode = getRoleCode()){
   if (SpecCom.helpers.isRoot()) return true;
-  return roleCode === ROLES.ADMIN || roleCode === ROLES.PROJECT_MANAGER || roleCode === ROLES.OWNER;
+  return roleCode === ROLES.ADMIN || roleCode === ROLES.PROJECT_MANAGER || roleCode === ROLES.OWNER || roleCode === ROLES.SUPPORT;
 }
 
 function isFieldRole(roleCode = getRoleCode()){
-  return roleCode === ROLES.USER_LEVEL_1 || roleCode === ROLES.USER_LEVEL_2 || roleCode === ROLES.SUPPORT;
+  return roleCode === ROLES.USER_LEVEL_1 || roleCode === ROLES.USER_LEVEL_2;
 }
 
 function canViewLabor(){
@@ -9449,8 +9477,8 @@ async function completeNode(nodeId){
   const canComplete = SpecCom.helpers.isRoot()
     ? true
     : (BUILD_MODE
-      ? (roleCode === "ADMIN" || roleCode === "PROJECT_MANAGER")
-      : (roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN"));
+      ? (roleCode === "ADMIN" || roleCode === "PROJECT_MANAGER" || roleCode === "SUPPORT")
+      : (roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN" || roleCode === "SUPPORT"));
   if (!canComplete){
     toast("Not allowed", "Only Admin or Project Manager can complete a site.");
     return;
@@ -10002,7 +10030,7 @@ async function saveCurrentProjectPreference(projectId){
 
 function canSeedDemo(){
   const roleCode = getRoleCode();
-  return SpecCom.helpers.isRoot() || roleCode === "ADMIN" || roleCode === "PROJECT_MANAGER";
+  return SpecCom.helpers.isRoot() || roleCode === "ADMIN" || roleCode === "PROJECT_MANAGER" || roleCode === "SUPPORT";
 }
 
 async function seedDemoNode(){
@@ -12166,7 +12194,7 @@ function getRemainingForItem(item){
 
 function updateAlertsBadge(){
   const roleCode = getRoleCode();
-  const canSeeAlerts = SpecCom.helpers.isRoot() || roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN";
+  const canSeeAlerts = SpecCom.helpers.isRoot() || roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN" || roleCode === "SUPPORT";
   const openAlerts = canSeeAlerts ? (state.alerts || []).filter(a => a.status === "open") : [];
   const count = openAlerts.length;
   const badge = $("alertsBadge");
@@ -12233,7 +12261,7 @@ async function loadSplicePhotos(nodeId, locs){
 
 function renderAlerts(){
   const roleCode = getRoleCode();
-  const canSeeAlerts = SpecCom.helpers.isRoot() || roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN";
+  const canSeeAlerts = SpecCom.helpers.isRoot() || roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN" || roleCode === "SUPPORT";
   const list = canSeeAlerts ? (state.alerts || []) : [];
   const targets = [$("alertsFeed"), $("alertsFeedFull")].filter(Boolean);
   if (!targets.length) return;
@@ -12941,10 +12969,11 @@ async function createInvoice(){
 
   // Minimal demo invoice routing
   let to = null;
-  if (roleCode === ROLES.USER_LEVEL_1 || roleCode === ROLES.USER_LEVEL_2 || roleCode === ROLES.SUPPORT) to = ROLES.PROJECT_MANAGER;
+  if (roleCode === ROLES.USER_LEVEL_1 || roleCode === ROLES.USER_LEVEL_2) to = ROLES.PROJECT_MANAGER;
+  else if (roleCode === ROLES.SUPPORT) to = ROLES.OWNER;
   else if (roleCode === ROLES.PROJECT_MANAGER) to = ROLES.ADMIN;
   else if (roleCode === ROLES.ADMIN) to = ROLES.OWNER;
-  else if (roleCode === ROLES.OWNER) to = ROLES.PROJECT_MANAGER;
+  else if (roleCode === ROLES.OWNER || roleCode === ROLES.ROOT) to = ROLES.PROJECT_MANAGER;
   else to = ROLES.PROJECT_MANAGER;
 
   if (isDemo){
@@ -12961,7 +12990,7 @@ async function createInvoice(){
     return;
   }
 
-  if (roleCode === ROLES.USER_LEVEL_1 || roleCode === ROLES.USER_LEVEL_2 || roleCode === ROLES.SUPPORT){
+  if (roleCode === ROLES.USER_LEVEL_1 || roleCode === ROLES.USER_LEVEL_2){
     const { error } = await state.client
       .from("sub_invoices")
       .insert({ node_id: node.id, status: "Draft" });
@@ -12969,7 +12998,7 @@ async function createInvoice(){
       toast("Invoice error", error.message);
       return;
     }
-  } else if (roleCode === ROLES.PROJECT_MANAGER || roleCode === ROLES.OWNER || roleCode === ROLES.ADMIN){
+  } else if (roleCode === ROLES.PROJECT_MANAGER || roleCode === ROLES.OWNER || roleCode === ROLES.ADMIN || roleCode === ROLES.SUPPORT || roleCode === ROLES.ROOT){
     const { error } = await state.client
       .from("prime_invoices")
       .insert({ node_id: node.id, status: "Draft" });
