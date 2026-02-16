@@ -2607,6 +2607,19 @@ function parseKmlText(kmlText){
     }
   }
   if (xml.getElementsByTagName("parsererror").length){
+    // Some KMZ exports include xsi:schemaLocation but omit xmlns:xsi on <kml>.
+    // Auto-heal that namespace declaration so otherwise-valid KML can parse.
+    if (raw.includes("xsi:schemaLocation") && !raw.includes("xmlns:xsi")){
+      const healed = raw.replace(
+        /<kml\b([^>]*)>/i,
+        '<kml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"$1>'
+      );
+      if (healed !== raw){
+        xml = parser.parseFromString(healed, "application/xml");
+      }
+    }
+  }
+  if (xml.getElementsByTagName("parsererror").length){
     throw new Error("Invalid KML inside KMZ.");
   }
   const placemarks = Array.from(xml.getElementsByTagName("Placemark"));
@@ -2653,6 +2666,30 @@ function parseKmlText(kmlText){
   return rows;
 }
 
+function decodeKmzTextBytes(bytes){
+  if (!bytes || !bytes.length) return "";
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  // BOM-aware decoding for KMZ KML files exported as UTF-8/UTF-16.
+  if (view.length >= 2){
+    if (view[0] === 0xFF && view[1] === 0xFE){
+      return new TextDecoder("utf-16le").decode(view);
+    }
+    if (view[0] === 0xFE && view[1] === 0xFF){
+      // Decode as LE after swapping bytes for BE payload.
+      const swapped = new Uint8Array(view.length - (view.length % 2));
+      for (let i = 0; i + 1 < view.length; i += 2){
+        swapped[i] = view[i + 1];
+        swapped[i + 1] = view[i];
+      }
+      return new TextDecoder("utf-16le").decode(swapped);
+    }
+  }
+  if (view.length >= 3 && view[0] === 0xEF && view[1] === 0xBB && view[2] === 0xBF){
+    return new TextDecoder("utf-8").decode(view);
+  }
+  return new TextDecoder("utf-8").decode(view);
+}
+
 async function parseKmzFile(file){
   const JSZip = await loadJsZip();
   const zip = await JSZip.loadAsync(file);
@@ -2666,7 +2703,8 @@ async function parseKmzFile(file){
   let lastError = null;
   for (const entry of ordered){
     try{
-      const kmlText = await entry.async("text");
+      const kmlBytes = await entry.async("uint8array");
+      const kmlText = decodeKmzTextBytes(kmlBytes);
       const rows = parseKmlText(kmlText);
       if (rows.length) return rows;
     } catch (err){
