@@ -554,6 +554,7 @@ const I18N = {
     briefDescriptionTitle: "Brief description",
     editCodesLabel: "Edit",
     saveLabel: "Save",
+    closeLabel: "Close",
     cancelLabel: "Cancel",
     noneLabel: "None",
     codesPlaceholder: "Enter codes separated by commas",
@@ -883,6 +884,7 @@ const I18N = {
     briefDescriptionTitle: "Descripción breve",
     editCodesLabel: "Editar",
     saveLabel: "Guardar",
+    closeLabel: "Cerrar",
     cancelLabel: "Cancelar",
     noneLabel: "Ninguno",
     codesPlaceholder: "Ingresa códigos separados por comas",
@@ -2596,7 +2598,14 @@ function parseKmlCoordinateText(coordText){
 
 function parseKmlText(kmlText){
   const parser = new DOMParser();
-  const xml = parser.parseFromString(String(kmlText || ""), "application/xml");
+  const raw = String(kmlText || "");
+  let xml = parser.parseFromString(raw, "application/xml");
+  if (xml.getElementsByTagName("parsererror").length){
+    const firstTag = raw.indexOf("<");
+    if (firstTag > 0){
+      xml = parser.parseFromString(raw.slice(firstTag), "application/xml");
+    }
+  }
   if (xml.getElementsByTagName("parsererror").length){
     throw new Error("Invalid KML inside KMZ.");
   }
@@ -2653,8 +2662,19 @@ async function parseKmzFile(file){
     throw new Error("KMZ does not contain a .kml file.");
   }
   const preferred = kmlEntries.find((entry) => String(entry.name || "").toLowerCase().endsWith("doc.kml")) || kmlEntries[0];
-  const kmlText = await preferred.async("text");
-  return parseKmlText(kmlText);
+  const ordered = [preferred, ...kmlEntries.filter((entry) => entry !== preferred)];
+  let lastError = null;
+  for (const entry of ordered){
+    try{
+      const kmlText = await entry.async("text");
+      const rows = parseKmlText(kmlText);
+      if (rows.length) return rows;
+    } catch (err){
+      lastError = err;
+    }
+  }
+  if (lastError) throw lastError;
+  throw new Error("KMZ contains KML files but no valid placemarks were found.");
 }
 
 function parseWiredProductionPdfText(text){
