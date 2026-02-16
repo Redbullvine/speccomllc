@@ -135,8 +135,8 @@ const state = {
   messages: [],
   messageRecipients: [],
   messageIdentityMap: new Map(),
-  messageFilter: "all",
-  messageMode: "project",
+  messageFilter: "board",
+  messageMode: "board",
   dpr: {
     reportId: null,
     projectId: null,
@@ -297,16 +297,16 @@ const I18N = {
     messagesEmpty: "No messages yet.",
     messagePlaceholder: "Write a message...",
     sendMessage: "Send",
-    messagesFilterAll: "All",
-    messagesFilterProject: "Project",
+    messagesFilterAll: "Main Board",
+    messagesFilterProject: "Main Board",
     messagesFilterDirect: "Direct",
-    messagesFilterGlobal: "Global",
-    messageModeProject: "Project chat",
+    messagesFilterGlobal: "Main Board",
+    messageModeProject: "Main Board",
     messageModeDirect: "Direct message",
-    messageModeGlobal: "Global notice",
+    messageModeGlobal: "Main Board",
     messageRecipientPlaceholder: "Select recipient",
     messageDirectTo: "To {name}",
-    messageProjectTag: "Project",
+    messageProjectTag: "Board",
     messageDirectTag: "Direct",
     menuTitle: "Menu",
     menuNavTitle: "Navigation",
@@ -326,9 +326,9 @@ const I18N = {
     dprMetricWorkOrders: "Work orders completed today",
     dprMetricBlocked: "Blocked items today",
     aboutCopy: "SpecCom turns field chaos into a single, intelligent workflow -- accelerating documentation, tightening project coordination, and protecting margins with fewer surprises. The result is less rework, clearer accountability, and faster paths from job done to money in.",
-    messagesScopeProject: "Project: {name}",
-    messagesScopeGlobal: "Global messages",
-    messagesScopeNone: "No project selected. Global messages only.",
+    messagesScopeProject: "Main Board (Org)",
+    messagesScopeGlobal: "Main Board (Org)",
+    messagesScopeNone: "Main Board (Org)",
     messageSenderYou: "You",
     messageSenderUnknown: "User",
     globalLabel: "Global",
@@ -627,16 +627,16 @@ const I18N = {
     messagesEmpty: "Aun no hay mensajes.",
     messagePlaceholder: "Escribe un mensaje...",
     sendMessage: "Enviar",
-    messagesFilterAll: "Todos",
-    messagesFilterProject: "Proyecto",
+    messagesFilterAll: "Tablon",
+    messagesFilterProject: "Tablon",
     messagesFilterDirect: "Directo",
-    messagesFilterGlobal: "Global",
-    messageModeProject: "Chat de proyecto",
+    messagesFilterGlobal: "Tablon",
+    messageModeProject: "Tablon",
     messageModeDirect: "Mensaje directo",
-    messageModeGlobal: "Aviso global",
+    messageModeGlobal: "Tablon",
     messageRecipientPlaceholder: "Seleccionar receptor",
     messageDirectTo: "Para {name}",
-    messageProjectTag: "Proyecto",
+    messageProjectTag: "Tablon",
     messageDirectTag: "Directo",
     menuTitle: "Menu",
     menuNavTitle: "Navegacion",
@@ -656,9 +656,9 @@ const I18N = {
     dprMetricWorkOrders: "Ordenes completadas hoy",
     dprMetricBlocked: "Bloqueos hoy",
     aboutCopy: "SpecCom transforma el caos de campo en un flujo inteligente -- acelera la documentacion, alinea la coordinacion del proyecto y protege el margen con menos sorpresas. El resultado es menos retrabajo, mas claridad y un camino mas rapido de trabajo completado a dinero cobrado.",
-    messagesScopeProject: "Proyecto: {name}",
-    messagesScopeGlobal: "Mensajes globales",
-    messagesScopeNone: "Sin proyecto seleccionado. Solo mensajes globales.",
+    messagesScopeProject: "Tablon principal (Org)",
+    messagesScopeGlobal: "Tablon principal (Org)",
+    messagesScopeNone: "Tablon principal (Org)",
     messageSenderYou: "Tu",
     messageSenderUnknown: "Usuario",
     globalLabel: "Global",
@@ -7781,11 +7781,14 @@ function getMessageIdentityLabel(userId){
   return state.messageIdentityMap.get(userId) || String(userId).slice(0, 8);
 }
 
-function setMessagesFilter(filter = "all"){
-  state.messageFilter = ["all", "project", "direct", "global"].includes(filter) ? filter : "all";
+function setMessagesFilter(filter = "board"){
+  state.messageFilter = ["board", "direct"].includes(filter) ? filter : "board";
   document.querySelectorAll("#messagesModal [data-filter]").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.filter === state.messageFilter);
   });
+  const modeSelect = $("messageMode");
+  if (modeSelect) modeSelect.value = state.messageFilter;
+  syncMessageComposerMode();
   renderMessages();
 }
 
@@ -7793,10 +7796,10 @@ function syncMessageComposerMode(){
   const modeSelect = $("messageMode");
   const recipientSelect = $("messageRecipient");
   if (!modeSelect || !recipientSelect) return;
-  if (!state.activeProject && modeSelect.value === "project"){
-    modeSelect.value = SpecCom.helpers.isRoot() || SpecCom.helpers.isSupport() ? "global" : "direct";
+  if (!["board", "direct"].includes(modeSelect.value)){
+    modeSelect.value = state.messageFilter === "direct" ? "direct" : "board";
   }
-  state.messageMode = modeSelect.value || "project";
+  state.messageMode = modeSelect.value || "board";
   const showRecipient = state.messageMode === "direct";
   recipientSelect.style.display = showRecipient ? "" : "none";
 }
@@ -7819,20 +7822,15 @@ function renderMessageRecipients(){
 }
 
 function applyMessagesUiLabels(){
-  const allBtn = $("btnMessagesFilterAll");
-  const projectBtn = $("btnMessagesFilterProject");
+  const boardBtn = $("btnMessagesFilterBoard");
   const directBtn = $("btnMessagesFilterDirect");
-  const globalBtn = $("btnMessagesFilterGlobal");
-  if (allBtn) allBtn.textContent = t("messagesFilterAll");
-  if (projectBtn) projectBtn.textContent = t("messagesFilterProject");
+  if (boardBtn) boardBtn.textContent = t("messagesFilterProject");
   if (directBtn) directBtn.textContent = t("messagesFilterDirect");
-  if (globalBtn) globalBtn.textContent = t("messagesFilterGlobal");
   const modeSelect = $("messageMode");
   if (modeSelect){
     const opts = Array.from(modeSelect.options || []);
     if (opts[0]) opts[0].text = t("messageModeProject");
     if (opts[1]) opts[1].text = t("messageModeDirect");
-    if (opts[2]) opts[2].text = t("messageModeGlobal");
   }
   renderMessageRecipients();
 }
@@ -7844,59 +7842,31 @@ async function loadMessageRecipients(){
     renderMessageRecipients();
     return;
   }
-  let ids = [];
-  if (state.activeProject?.id){
-    const { data: rows } = await state.client
-      .from("project_members")
-      .select("user_id")
-      .eq("project_id", state.activeProject.id);
-    ids = Array.from(new Set((rows || []).map((r) => r.user_id).filter(Boolean)));
+  state.messageIdentityMap.set(state.user.id, t("messageSenderYou"));
+  if (!state.profile?.org_id && !SpecCom.helpers.isRoot()){
+    renderMessageRecipients();
+    return;
   }
-
-  if (!ids.length){
-    const fromMessages = new Set();
-    (state.messages || []).forEach((msg) => {
-      if (msg?.sender_id) fromMessages.add(msg.sender_id);
-      if (msg?.recipient_id) fromMessages.add(msg.recipient_id);
-    });
-    ids = Array.from(fromMessages).filter(Boolean);
+  let query = state.client
+    .from("profiles")
+    .select("id, display_name")
+    .neq("id", state.user.id)
+    .limit(500);
+  if (!SpecCom.helpers.isRoot()){
+    query = query.eq("org_id", state.profile.org_id);
   }
-
-  if (!ids.length && state.profile?.org_id){
-    const { data: orgProfiles } = await state.client
-      .from("profiles")
-      .select("id, display_name")
-      .eq("org_id", state.profile.org_id)
-      .limit(200);
-    const seed = orgProfiles || [];
-    ids = seed.map((row) => row.id).filter(Boolean);
-    seed.forEach((row) => {
-      const label = String(row.display_name || "").trim() || String(row.id || "").slice(0, 8);
-      if (row.id) state.messageIdentityMap.set(row.id, label);
-    });
+  const { data, error } = await query;
+  if (error){
+    toast("Messages load error", error.message);
+    renderMessageRecipients();
+    return;
   }
-
-  let names = [];
-  if (ids.length){
-    const { data: profileRows } = await state.client
-      .from("profiles")
-      .select("id, display_name")
-      .in("id", ids);
-    names = profileRows || [];
-  }
-  const nameMap = new Map();
-  names.forEach((row) => {
-    const label = String(row.display_name || "").trim() || String(row.id).slice(0, 8);
-    nameMap.set(row.id, label);
-  });
-  ids.forEach((id) => {
-    const label = id === state.user?.id ? t("messageSenderYou") : (nameMap.get(id) || String(id).slice(0, 8));
-    state.messageIdentityMap.set(id, label);
-  });
-  state.messageRecipients = ids
-    .filter((id) => id !== state.user?.id)
-    .map((id) => ({ id, name: state.messageIdentityMap.get(id) || String(id).slice(0, 8) }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const recipients = (data || []).map((row) => {
+    const label = String(row.display_name || "").trim() || String(row.id || "").slice(0, 8);
+    if (row.id) state.messageIdentityMap.set(row.id, label);
+    return { id: row.id, name: label };
+  }).filter((row) => row.id);
+  state.messageRecipients = recipients.sort((a, b) => a.name.localeCompare(b.name));
   renderMessageRecipients();
 }
 
@@ -7912,22 +7882,23 @@ function disableMessagesModule(reason = "missing_table"){
   if (modal) modal.style.display = "none";
 }
 
-function getMessageReadKey(projectId){
-  return `${MESSAGE_READ_KEY}${projectId || "global"}`;
+function getMessageReadKey(filter){
+  const orgKey = state.profile?.org_id || "global";
+  return `${MESSAGE_READ_KEY}${orgKey}_${filter || "board"}`;
 }
 
-function getLastMessageReadAt(projectId){
-  const raw = safeLocalStorageGet(getMessageReadKey(projectId));
+function getLastMessageReadAt(filter){
+  const raw = safeLocalStorageGet(getMessageReadKey(filter));
   const parsed = raw ? Date.parse(raw) : 0;
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function setLastMessageReadAt(projectId, iso){
-  safeLocalStorageSet(getMessageReadKey(projectId), iso);
+function setLastMessageReadAt(filter, iso){
+  safeLocalStorageSet(getMessageReadKey(filter), iso);
 }
 
 function countUnreadMessages(){
-  const lastRead = getLastMessageReadAt(state.activeProject?.id || null);
+  const lastRead = getLastMessageReadAt(state.messageFilter);
   return (state.messages || []).filter((msg) => {
     if (msg.sender_id === state.user?.id) return false;
     const stamp = Date.parse(msg.created_at || "");
@@ -7956,7 +7927,7 @@ function updateMessagesBadge(){
 function markMessagesRead(){
   const latest = state.messages?.[0]?.created_at;
   if (!latest) return;
-  setLastMessageReadAt(state.activeProject?.id || null, latest);
+  setLastMessageReadAt(state.messageFilter, latest);
   updateMessagesBadge();
 }
 
@@ -7964,8 +7935,12 @@ async function loadMessages(){
   if (!state.messagesEnabled || !state.features.messages) return;
   if (!state.storageAvailable && !isDemo) return;
   if (isDemo){
-    const projectId = state.activeProject?.id || null;
-    state.messages = (state.demo.messages || []).filter((msg) => msg.project_id === projectId || msg.project_id == null);
+    const list = state.demo.messages || [];
+    state.messages = list.filter((msg) => {
+      const channel = msg.channel || (msg.recipient_id ? "DM" : "BOARD");
+      if (state.messageFilter === "board") return channel === "BOARD";
+      return channel === "DM" && (msg.sender_id === state.user?.id || msg.recipient_id === state.user?.id);
+    });
     updateMessagesBadge();
     return;
   }
@@ -7974,17 +7949,27 @@ async function loadMessages(){
     updateMessagesBadge();
     return;
   }
-  const activeProjectId = typeof state.activeProject?.id === "string" && state.activeProject.id.trim()
-    ? state.activeProject.id.trim()
-    : null;
+  if (!SpecCom.helpers.isRoot() && !state.profile?.org_id){
+    state.messages = [];
+    updateMessagesBadge();
+    return;
+  }
   let query = state.client
     .from("messages")
-    .select("id, project_id, sender_id, recipient_id, body, priority, is_read, created_at")
-    .order("created_at", { ascending: false });
-  if (activeProjectId){
-    query = query.or(`project_id.eq.${activeProjectId},project_id.is.null`);
+    .select("id, org_id, channel, sender_id, recipient_id, body, created_at")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (state.messageFilter === "board"){
+    if (state.profile?.org_id && !SpecCom.helpers.isRoot()){
+      query = query.eq("org_id", state.profile.org_id);
+    }
+    query = query.eq("channel", "BOARD");
   } else {
-    query = query.is("project_id", null);
+    if (state.profile?.org_id && !SpecCom.helpers.isRoot()){
+      query = query.eq("org_id", state.profile.org_id);
+    }
+    query = query.eq("channel", "DM");
+    query = query.or(`sender_id.eq.${state.user.id},recipient_id.eq.${state.user.id}`);
   }
   const { data, error } = await query;
   if (error){
@@ -8015,20 +8000,11 @@ function renderMessages(){
     return;
   }
   if (scope){
-    if (!state.activeProject){
-      scope.textContent = t("messagesScopeNone");
-    } else {
-      scope.textContent = t("messagesScopeProject", { name: state.activeProject.name || "Project" });
-    }
+    scope.textContent = state.messageFilter === "board" ? t("messagesScopeProject") : t("messagesFilterDirect");
   }
   const filtered = (state.messages || []).filter((msg) => {
-    const isGlobal = !msg.project_id;
-    const isDirect = Boolean(msg.recipient_id);
-    const isProject = Boolean(msg.project_id);
-    if (state.messageFilter === "project") return isProject && !isDirect;
-    if (state.messageFilter === "direct") return isDirect;
-    if (state.messageFilter === "global") return isGlobal;
-    return true;
+    if (state.messageFilter === "board") return msg.channel === "BOARD";
+    return msg.channel === "DM";
   });
   if (!filtered.length){
     list.innerHTML = "";
@@ -8040,8 +8016,7 @@ function renderMessages(){
     const sender = getMessageIdentityLabel(msg.sender_id);
     const outgoing = msg.sender_id === state.user?.id;
     const time = msg.created_at ? new Date(msg.created_at).toLocaleString() : "";
-    const scopeLabel = msg.project_id ? t("messageProjectTag") : t("globalLabel");
-    const directLabel = msg.recipient_id ? t("messageDirectTag") : "";
+    const scopeLabel = msg.channel === "BOARD" ? t("messageProjectTag") : t("messageDirectTag");
     const recipientLabel = msg.recipient_id
       ? t("messageDirectTo", { name: getMessageIdentityLabel(msg.recipient_id) })
       : "";
@@ -8051,7 +8026,6 @@ function renderMessages(){
       <div class="message-card ${outgoing ? "outgoing" : "incoming"}">
         <div class="message-meta">
           ${scopeLabel ? `<span class="message-chip">${escapeHtml(scopeLabel)}</span>` : ""}
-          ${directLabel ? `<span class="message-chip">${escapeHtml(directLabel)}</span>` : ""}
           <span>${escapeHtml(metaParts.join(" | "))}</span>
         </div>
         <div>${body}</div>
@@ -8073,25 +8047,27 @@ async function sendMessage(){
     toast("Message required", "Write a message.");
     return;
   }
-  const mode = modeSelect?.value || "project";
+  const mode = modeSelect?.value || "board";
   const recipientId = recipientSelect?.value || null;
   if (mode === "direct" && !recipientId){
     toast("Recipient required", "Select a recipient for direct message.");
     return;
   }
-  if (mode === "project" && !state.activeProject?.id){
-    toast("Project required", "Select a project for project chat.");
-    return;
-  }
-  if (mode === "global" && !(SpecCom.helpers.isRoot() || SpecCom.helpers.isSupport())){
-    toast("Not allowed", "Only ROOT or SUPPORT can send global notices.");
+  const roleCode = getRoleCode();
+  const canPostBoard = SpecCom.helpers.isRoot()
+    || roleCode === ROLES.OWNER
+    || roleCode === ROLES.ADMIN
+    || roleCode === ROLES.PROJECT_MANAGER
+    || roleCode === ROLES.SUPPORT;
+  if (mode === "board" && !canPostBoard){
+    toast("Not allowed", "Only Owner/Admin/PM/Support can post to Main Board.");
     return;
   }
   if (isDemo){
-    const projectId = mode === "project" ? (state.activeProject?.id || null) : null;
     const row = {
       id: `demo-message-${Date.now()}`,
-      project_id: projectId,
+      org_id: state.profile?.org_id || null,
+      channel: mode === "direct" ? "DM" : "BOARD",
       sender_id: state.user?.id || "demo-user",
       recipient_id: mode === "direct" ? recipientId : null,
       body: text,
@@ -8109,8 +8085,13 @@ async function sendMessage(){
     toast("Messages unavailable", "Sign in to send messages.");
     return;
   }
+  if (!SpecCom.helpers.isRoot() && !state.profile?.org_id){
+    toast("Messages unavailable", "Your profile is missing an organization.");
+    return;
+  }
   const payload = {
-    project_id: mode === "project" ? (state.activeProject?.id || null) : null,
+    org_id: state.profile?.org_id || null,
+    channel: mode === "direct" ? "DM" : "BOARD",
     sender_id: state.user.id,
     recipient_id: mode === "direct" ? recipientId : null,
     body: text,
@@ -13936,7 +13917,7 @@ function wireUI(){
   }
   const messageFilters = document.querySelectorAll("#messagesModal [data-filter]");
   messageFilters.forEach((btn) => {
-    btn.addEventListener("click", () => setMessagesFilter(btn.dataset.filter || "all"));
+    btn.addEventListener("click", () => setMessagesFilter(btn.dataset.filter || "board"));
   });
   setMessagesFilter(state.messageFilter);
   const menuBtn = $("btnMenu");
