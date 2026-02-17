@@ -1011,6 +1011,12 @@ a{color:inherit; text-decoration:none;}
   width:100%;
   justify-content:space-between;
 }
+.site-list mark{
+  background:#fde68a;
+  color:#111827;
+  border-radius:3px;
+  padding:0 2px;
+}
 .map-layout{
   display:grid;
   grid-template-columns: 1.6fr 1fr;

@@ -87,6 +87,20 @@
           <div id="projectInfoBody" class="project-info-body" style="margin-top:8px;"></div>
         </div>
         <div class="muted small" data-i18n="siteListTitle" style="margin-top:12px;">Sites</div>
+        <div class="row" style="margin-top:8px; gap:6px;">
+          <input
+            id="mapSearch"
+            class="input compact"
+            type="text"
+            placeholder="Search locations (name, address, ID, or lat,lng)"
+            data-i18n-placeholder="mapSearchPlaceholder"
+            aria-label="Search locations"
+            style="flex:1 1 auto;"
+          />
+          <button id="btnClearMapSearch" class="btn ghost small" type="button" style="display:none;">Clear</button>
+        </div>
+        <div id="siteSearchMeta" class="muted small" style="margin-top:6px;"></div>
+        <div id="siteSearchBanner" class="muted small" style="margin-top:6px; display:none;"></div>
         <div id="siteList" class="site-list" style="margin-top:8px;"></div>
       </aside>
 

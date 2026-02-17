@@ -150,6 +150,9 @@ const state = {
     instance: null,
     markers: new Map(),
     userNames: new Map(),
+    siteSearchIndex: new Map(),
+    searchDebounceId: null,
+    searchJumpKey: "",
     panelVisible: true,
     mobileSnap: 60,
     dropPinMode: false,
@@ -435,7 +438,7 @@ const I18N = {
       mapTitle: "Sites map",
       mapSubtitle: "Drop a pin to create a site and add documentation.",
       mapActiveOnly: "Active only (last 10 min)",
-      mapSearchPlaceholder: "Search by name",
+      mapSearchPlaceholder: "Search locations (name, address, ID, or lat,lng)",
       dropPin: "Drop Pin",
       dropPinNamePlaceholder: "Location name",
       siteListTitle: "Sites",
@@ -765,7 +768,7 @@ const I18N = {
       mapTitle: "Mapa de sitios",
       mapSubtitle: "Coloca un pin para crear un sitio y agregar documentación.",
       mapActiveOnly: "Solo activos (últimos 10 min)",
-      mapSearchPlaceholder: "Buscar por nombre",
+      mapSearchPlaceholder: "Buscar ubicaciones (nombre, direccion, ID, o lat,lng)",
       dropPin: "Colocar pin",
       dropPinNamePlaceholder: "Nombre de ubicación",
       siteListTitle: "Sitios",
@@ -3300,9 +3303,11 @@ async function loadLocationNames(userIds){
 
 function updateMapMarkers(rows){
   if (!state.map.instance) return;
+  const activeSearch = String(state.mapFilters.search || "").trim();
+  const renderRows = activeSearch ? getSiteSearchResultSet().rows : (rows || []);
   const markers = state.map.markers;
   const seen = new Set();
-  rows.forEach((row) => {
+  renderRows.forEach((row) => {
     const coords = getSiteCoords(row);
     if (!coords){
       debugLog("[map] missing coordinates", row);
@@ -3352,15 +3357,19 @@ async function refreshLocations(){
   }
   ensureMap();
   await loadProjectSites(state.activeProject?.id || null);
-  const rows = getVisibleSites();
+  const searchResult = getSiteSearchResultSet();
+  const rows = searchResult.rows;
   updateMapMarkers(rows);
+  updateSiteSearchUiSummary(searchResult);
   if (status){
     if (!state.activeProject){
       status.textContent = t("mapStatusNoProject");
     } else if (!rows.length){
-      status.textContent = t("mapStatusNoSites");
+      status.textContent = searchResult.rawQuery ? "No matching sites." : t("mapStatusNoSites");
     } else {
-      status.textContent = t("mapStatusSites", { count: rows.length });
+      status.textContent = searchResult.rawQuery
+        ? `${rows.length} match${rows.length === 1 ? "" : "es"}`
+        : t("mapStatusSites", { count: rows.length });
     }
   }
 }
@@ -8446,16 +8455,181 @@ function getVisibleSites(){
   return live.concat(pending);
 }
 
+function normalizeLocationSearchText(value){
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseLocationCoordinateQuery(raw){
+  const match = String(raw || "").trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  if (!match) return null;
+  const lat = Number.parseFloat(match[1]);
+  const lng = Number.parseFloat(match[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+}
+
+function getSiteSearchBlob(site){
+  if (!site?.id) return "";
+  const cacheKey = [
+    site.name || "",
+    site.notes || "",
+    site.id || "",
+    site.project_id || "",
+    site.gps_lat ?? site.lat ?? "",
+    site.gps_lng ?? site.lng ?? "",
+  ].join("|");
+  const cached = state.map.siteSearchIndex.get(site.id);
+  if (cached?.cacheKey === cacheKey) return cached.blob;
+  const blob = normalizeLocationSearchText([
+    site.name,
+    site.notes,
+    site.id,
+    site.project_id,
+    site.gps_lat,
+    site.gps_lng,
+    site.lat,
+    site.lng,
+  ].filter((v) => v != null && String(v).trim()).join(" "));
+  state.map.siteSearchIndex.set(site.id, { cacheKey, blob });
+  return blob;
+}
+
+function getNearestSitesToCoordinate(rows, coord, limit = 5){
+  const scored = (rows || []).map((site) => {
+    const coords = getSiteCoords(site);
+    if (!coords) return null;
+    return { site, distanceM: distanceMeters(coord, coords) };
+  }).filter(Boolean).sort((a, b) => a.distanceM - b.distanceM);
+  return scored.slice(0, Math.max(1, limit));
+}
+
+function getSiteSearchResultSet(){
+  const all = getVisibleSites();
+  const rawQuery = String(state.mapFilters.search || "").trim();
+  if (!rawQuery){
+    return {
+      rawQuery,
+      normalizedQuery: "",
+      coordQuery: null,
+      rows: all,
+      nearest: [],
+    };
+  }
+  const coordQuery = parseLocationCoordinateQuery(rawQuery);
+  if (coordQuery){
+    const nearest = getNearestSitesToCoordinate(all, coordQuery, 5);
+    return {
+      rawQuery,
+      normalizedQuery: "",
+      coordQuery,
+      rows: nearest.map((x) => x.site),
+      nearest,
+    };
+  }
+  const normalizedQuery = normalizeLocationSearchText(rawQuery);
+  const rows = all.filter((site) => getSiteSearchBlob(site).includes(normalizedQuery));
+  return {
+    rawQuery,
+    normalizedQuery,
+    coordQuery: null,
+    rows,
+    nearest: [],
+  };
+}
+
+function highlightLocationMatch(text, query){
+  const value = String(text || "");
+  const q = String(query || "").trim();
+  if (!value || !q || parseLocationCoordinateQuery(q)) return escapeHtml(value);
+  const lower = value.toLowerCase();
+  const qLower = q.toLowerCase();
+  const idx = lower.indexOf(qLower);
+  if (idx < 0) return escapeHtml(value);
+  const start = escapeHtml(value.slice(0, idx));
+  const hit = escapeHtml(value.slice(idx, idx + q.length));
+  const end = escapeHtml(value.slice(idx + q.length));
+  return `${start}<mark>${hit}</mark>${end}`;
+}
+
+function setSiteSearchBanner(message = ""){
+  const banner = $("siteSearchBanner");
+  if (!banner) return;
+  banner.textContent = message || "";
+  banner.style.display = message ? "" : "none";
+}
+
+function updateSiteSearchUiSummary(resultSet){
+  const clearBtn = $("btnClearMapSearch");
+  if (clearBtn){
+    clearBtn.style.display = resultSet.rawQuery ? "" : "none";
+  }
+  const meta = $("siteSearchMeta");
+  if (!meta) return;
+  if (!state.activeProject){
+    meta.textContent = "";
+    return;
+  }
+  const total = getVisibleSites().length;
+  if (!resultSet.rawQuery){
+    meta.textContent = `${total} site${total === 1 ? "" : "s"}`;
+    return;
+  }
+  meta.textContent = `${resultSet.rows.length} match${resultSet.rows.length === 1 ? "" : "es"}`;
+}
+
+function syncMapToSearchResults(resultSet){
+  if (!state.map.instance || !window.L) return;
+  const rows = resultSet.rows || [];
+  if (resultSet.coordQuery){
+    const key = `${resultSet.coordQuery.lat.toFixed(6)},${resultSet.coordQuery.lng.toFixed(6)}`;
+    if (state.map.searchJumpKey !== key){
+      state.map.searchJumpKey = key;
+      state.map.instance.setView([resultSet.coordQuery.lat, resultSet.coordQuery.lng], 18);
+    }
+    if (resultSet.nearest[0]){
+      const nearest = resultSet.nearest[0];
+      const siteName = getSiteDisplayName(nearest.site);
+      const meters = Math.round(nearest.distanceM);
+      setSiteSearchBanner(`Jumped to coordinate - nearest site: ${siteName} (${meters}m)`);
+      setActiveSite(nearest.site.id, { openOverview: true }).then(() => focusSiteOnMap(nearest.site.id));
+    } else {
+      setSiteSearchBanner("Jumped to coordinate - no nearby site found.");
+    }
+    return;
+  }
+  state.map.searchJumpKey = "";
+  setSiteSearchBanner("");
+  if (!rows.length) return;
+  const bounds = [];
+  rows.forEach((site) => {
+    const coords = getSiteCoords(site);
+    if (coords) bounds.push([coords.lat, coords.lng]);
+  });
+  if (!bounds.length) return;
+  if (bounds.length === 1){
+    state.map.instance.setView(bounds[0], Math.max(state.map.instance.getZoom() || 0, 17));
+    setActiveSite(rows[0].id, { openOverview: true }).then(() => focusSiteOnMap(rows[0].id));
+    return;
+  }
+  state.map.instance.fitBounds(window.L.latLngBounds(bounds), { padding: [24, 24], maxZoom: 16 });
+}
+
 async function loadProjectSites(projectId){
   if (isDemo){
     state.projectSites = (state.demo.sites || []).filter(s => !projectId || s.project_id === projectId);
     state.pendingSites = loadPendingSitesFromStorage();
+    state.map.siteSearchIndex.clear();
     renderSiteList();
     return;
   }
   if (!projectId){
     state.projectSites = [];
     state.pendingSites = loadPendingSitesFromStorage();
+    state.map.siteSearchIndex.clear();
     renderSiteList();
     return;
   }
@@ -8466,13 +8640,14 @@ async function loadProjectSites(projectId){
   }
   state.projectSites = data || [];
   state.pendingSites = loadPendingSitesFromStorage();
+  state.map.siteSearchIndex.clear();
   const visibleIds = new Set(getVisibleSites().map((site) => site.id));
   if (state.activeSite && !visibleIds.has(state.activeSite.id)){
     closeSitePanel();
   }
   renderSiteList();
   if (state.map.instance){
-    updateMapMarkers(getVisibleSites());
+    updateMapMarkers(getSiteSearchResultSet().rows);
   }
 }
 
@@ -8492,25 +8667,66 @@ function getNextSiteName(){
 function renderSiteList(){
   const wrap = $("siteList");
   if (!wrap) return;
+  const resultSet = getSiteSearchResultSet();
+  updateSiteSearchUiSummary(resultSet);
   if (!state.activeProject){
     wrap.innerHTML = `<div class="muted small">${t("mapStatusNoProject")}</div>`;
     return;
   }
-  const rows = getVisibleSites();
+  const rows = resultSet.rows;
   if (!rows.length){
-    wrap.innerHTML = `<div class="muted small">${t("mapStatusNoSites")}</div>`;
+    wrap.innerHTML = `<div class="muted small">${resultSet.rawQuery ? "No matching sites." : t("mapStatusNoSites")}</div>`;
     return;
   }
+  const rawSearch = String(state.mapFilters.search || "").trim();
   wrap.innerHTML = rows.map((site) => {
     const isActive = state.activeSite?.id === site.id;
     const status = site.is_pending ? ` <span class="muted small">(${t("siteStatusPending")})</span>` : "";
     const label = getSiteDisplayName(site);
     return `
       <button class="btn ${isActive ? "" : "secondary"} small" data-site-id="${site.id}">
-        <span>${escapeHtml(label)}${status}</span>
+        <span>${highlightLocationMatch(label, rawSearch)}${status}</span>
       </button>
     `;
   }).join("");
+}
+
+function scheduleLocationSearchRefresh({ syncMap = true } = {}){
+  if (state.map.searchDebounceId){
+    clearTimeout(state.map.searchDebounceId);
+  }
+  state.map.searchDebounceId = setTimeout(async () => {
+    state.map.searchDebounceId = null;
+    renderSiteList();
+    const resultSet = getSiteSearchResultSet();
+    if (state.map.instance){
+      updateMapMarkers(resultSet.rows);
+      if (syncMap){
+        syncMapToSearchResults(resultSet);
+      }
+    }
+  }, 300);
+}
+
+function clearLocationSearch(){
+  state.mapFilters.search = "";
+  const input = $("mapSearch");
+  if (input) input.value = "";
+  setSiteSearchBanner("");
+  state.map.searchJumpKey = "";
+  renderSiteList();
+  if (state.map.instance){
+    updateMapMarkers(getVisibleSites());
+  }
+}
+
+function focusFirstSearchResult(){
+  const resultSet = getSiteSearchResultSet();
+  if (!resultSet.rows.length) return;
+  const first = resultSet.rows[0];
+  setActiveSite(first.id, { openOverview: true }).then(() => {
+    focusSiteOnMap(first.id);
+  });
 }
 
 async function setActiveSite(siteId, { openOverview = false } = {}){
@@ -10164,6 +10380,11 @@ async function loadBillingLocations(projectId){
 function setActiveProjectById(id){
   const next = state.projects.find(p => p.id === id) || null;
   state.activeProject = next;
+  state.mapFilters.search = "";
+  const mapSearch = $("mapSearch");
+  if (mapSearch) mapSearch.value = "";
+  state.map.searchJumpKey = "";
+  setSiteSearchBanner("");
   saveCurrentProjectPreference(next?.id || null);
   renderProjects();
   loadProjectNodes(state.activeProject?.id || null);
@@ -14037,9 +14258,18 @@ function wireUI(){
   const mapSearch = $("mapSearch");
   if (mapSearch){
     mapSearch.addEventListener("input", (e) => {
-      state.mapFilters.search = e.target.value;
-      refreshLocations();
+      state.mapFilters.search = e.target.value || "";
+      scheduleLocationSearchRefresh({ syncMap: true });
     });
+    mapSearch.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      focusFirstSearchResult();
+    });
+  }
+  const clearMapSearchBtn = $("btnClearMapSearch");
+  if (clearMapSearchBtn){
+    clearMapSearchBtn.addEventListener("click", () => clearLocationSearch());
   }
   const dropPinBtn = $("btnDropPin");
   if (dropPinBtn){
