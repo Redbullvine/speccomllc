@@ -87,6 +87,20 @@
           <div id="projectInfoBody" class="project-info-body" style="margin-top:8px;"></div>
         </div>
         <div class="muted small" data-i18n="siteListTitle" style="margin-top:12px;">Sites</div>
+        <div class="row" style="margin-top:8px; gap:6px;">
+          <input
+            id="mapSearch"
+            class="input compact"
+            type="text"
+            placeholder="Search locations (name, address, ID, or lat,lng)"
+            data-i18n-placeholder="mapSearchPlaceholder"
+            aria-label="Search locations"
+            style="flex:1 1 auto;"
+          />
+          <button id="btnClearMapSearch" class="btn ghost small" type="button" style="display:none;">Clear</button>
+        </div>
+        <div id="siteSearchMeta" class="muted small" style="margin-top:6px;"></div>
+        <div id="siteSearchBanner" class="muted small" style="margin-top:6px; display:none;"></div>
         <div id="siteList" class="site-list" style="margin-top:8px;"></div>
       </aside>
 
@@ -359,6 +373,11 @@
                 <div class="muted small" data-i18n="mapSubtitle">Drop a pin to create a site and add documentation.</div>
               </div>
               <div class="row map-controls">
+                <label class="muted small" for="mapBasemapSelect">Basemap</label>
+                <select id="mapBasemapSelect" class="input compact" style="max-width:170px;">
+                  <option value="street">Street</option>
+                  <option value="satellite">Satellite</option>
+                </select>
                 <input id="dropPinName" class="input compact" placeholder="Site name" data-i18n-placeholder="dropPinNamePlaceholder" />
                 <button id="btnDropPin" class="btn" data-action="dropPin" data-i18n="dropPin">Drop Pin</button>
                 <button id="btnImportLocations" class="btn secondary" type="button" data-i18n="importLocations">Import Locations (KMZ)</button>
@@ -367,6 +386,20 @@
               </div>
             </div>
             <div id="mapLayout" class="map-layout">
+              <aside class="map-layer-shell">
+                <div class="map-layer-card">
+                  <div class="site-panel-title">Layers</div>
+                  <div class="muted small">Toggle map layers</div>
+                  <div id="mapLayerPanelBody" class="map-layer-list" style="margin-top:10px;">
+                    <label class="layer-toggle-row"><input id="mapLayerBoundary" type="checkbox" checked /> Project Boundary</label>
+                    <label class="layer-toggle-row"><input id="mapLayerPins" type="checkbox" checked /> Pins / Locations</label>
+                    <label class="layer-toggle-row"><input id="mapLayerSpans" type="checkbox" checked /> Spans / Paths</label>
+                    <label class="layer-toggle-row"><input id="mapLayerKmz" type="checkbox" checked /> KMZ Imports</label>
+                    <label class="layer-toggle-row"><input id="mapLayerPhotos" type="checkbox" /> Photos</label>
+                  </div>
+                  <div id="mapKmzGroupList" class="muted small" style="margin-top:10px;"></div>
+                </div>
+              </aside>
               <div id="mapShell" class="map-shell">
                 <div class="map-sheet-bar">
                   <button id="mapSheetHandle" class="map-sheet-handle" type="button" aria-label="Resize map"></button>
@@ -380,6 +413,27 @@
                 <div id="mapStatus" class="muted small" style="margin-top:10px;"></div>
               </div>
               <div class="site-panel-shell">
+                <div id="featureDrawerCard" class="feature-drawer-card">
+                  <div class="row" style="justify-content:space-between; align-items:flex-start;">
+                    <div>
+                      <div id="featureDrawerTitle" class="site-panel-title">Feature details</div>
+                      <div id="featureDrawerSubTitle" class="muted small">Select a map feature.</div>
+                    </div>
+                    <button id="btnFeatureDrawerClose" class="btn ghost small" type="button">Close</button>
+                  </div>
+                  <div id="featureDrawerPager" class="row" style="margin-top:8px; display:none; gap:8px;">
+                    <button id="btnFeaturePrev" class="btn ghost small" type="button">Prev</button>
+                    <div id="featureDrawerPagerText" class="muted small" style="align-self:center;">1/1</div>
+                    <button id="btnFeatureNext" class="btn ghost small" type="button">Next</button>
+                  </div>
+                  <div class="row feature-tabs" style="margin-top:10px;">
+                    <button class="btn ghost small is-active" type="button" data-feature-tab="summary">Summary</button>
+                    <button class="btn ghost small" type="button" data-feature-tab="photos">Photos</button>
+                    <button class="btn ghost small" type="button" data-feature-tab="billing">Billing</button>
+                    <button class="btn ghost small" type="button" data-feature-tab="notes">Notes</button>
+                  </div>
+                  <div id="featureDrawerBody" class="feature-drawer-body" style="margin-top:10px;"></div>
+                </div>
                 <div class="site-panel-card">
                   <div class="row" style="justify-content:space-between; align-items:center;">
                     <div>
@@ -626,19 +680,16 @@
         </div>
         <div id="messagesScope" class="muted small" style="margin-top:4px;"></div>
         <div class="segmented" style="margin-top:10px;">
-          <button id="btnMessagesFilterAll" class="segmented-btn active" type="button" data-filter="all">All</button>
-          <button id="btnMessagesFilterProject" class="segmented-btn" type="button" data-filter="project">Project</button>
-          <button id="btnMessagesFilterDirect" class="segmented-btn" type="button" data-filter="direct">Direct</button>
-          <button id="btnMessagesFilterGlobal" class="segmented-btn" type="button" data-filter="global">Global</button>
+          <button id="btnMessagesFilterBoard" class="segmented-btn active" type="button" data-filter="board">Main Board</button>
+          <button id="btnMessagesFilterDirect" class="segmented-btn" type="button" data-filter="direct">Direct Messages</button>
         </div>
         <div id="messagesList" class="messages-list" style="margin-top:10px;"></div>
         <div id="messagesEmpty" class="muted small" style="margin-top:10px; display:none;" data-i18n="messagesEmpty">No messages yet.</div>
         <div class="field-stack" style="margin-top:12px;">
           <div class="row" style="gap:8px; flex-wrap:wrap;">
             <select id="messageMode" class="input" style="min-width:190px; flex:1 1 220px;">
-              <option value="project">Project chat</option>
-              <option value="direct">Direct message</option>
-              <option value="global">Global notice</option>
+              <option value="board">Main Board</option>
+              <option value="direct">Direct Messages</option>
             </select>
             <select id="messageRecipient" class="input" style="min-width:220px; flex:1 1 220px; display:none;">
               <option value="">Select recipient</option>

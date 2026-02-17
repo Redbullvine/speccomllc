@@ -47,14 +47,9 @@ function getCacheHeaders(role) {
   };
 }
 
-function normalizeRole(user) {
-  const roleMeta = user?.app_metadata?.role_code
-    || user?.app_metadata?.role
-    || user?.user_metadata?.role
-    || "";
-  const role = String(roleMeta).trim().toUpperCase();
-
-  if (["ROOT", "OWNER", "ADMIN", "PROJECT_MANAGER"].includes(role)) return "admin";
+function normalizeRoleCode(roleCode) {
+  const role = String(roleCode || "").trim().toUpperCase();
+  if (["ROOT", "OWNER", "ADMIN", "PROJECT_MANAGER", "SUPPORT"].includes(role)) return "admin";
   if (["TECHNICIAN", "USER_LEVEL_I", "USER_LEVEL_1", "USER1"].includes(role)) return "technician";
   return "viewer";
 }
@@ -144,7 +139,20 @@ exports.handler = async (event) => {
   const user = data?.user || null;
   if (error || !user) return json(401, { error: "Invalid auth token" });
 
-  const role = normalizeRole(user);
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("role_code, role, org_id")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profileError || !profile) {
+    return json(403, { error: "Profile not found or inaccessible" });
+  }
+
+  const roleCode = String(profile.role_code || profile.role || "").trim().toUpperCase();
+  const role = normalizeRoleCode(roleCode);
+  const isRoot = roleCode === "ROOT";
+  const orgId = profile.org_id || null;
+
   const qs = event.queryStringParameters || {};
   const pageSize = parsePageSize(qs.page_size);
 
@@ -162,6 +170,32 @@ exports.handler = async (event) => {
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(pageSize + 1);
+
+  if (!isRoot) {
+    if (!orgId) return json(403, { error: "Missing org context" });
+    const { data: projectRows, error: projectError } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("org_id", orgId);
+    if (projectError) {
+      const status = /permission|rls|forbidden|not authorized/i.test(String(projectError.message || "")) ? 403 : 500;
+      return json(status, { error: projectError.message || "Failed to resolve org projects" });
+    }
+    const projectIds = (projectRows || []).map((row) => row.id).filter(Boolean);
+    if (!projectIds.length) {
+      return json(200, {
+        ok: true,
+        role,
+        role_code: roleCode,
+        org_id: orgId,
+        page_size: pageSize,
+        has_more: false,
+        next_cursor: null,
+        data: [],
+      }, getCacheHeaders(role));
+    }
+    query = query.in("project_id", projectIds);
+  }
 
   const filtered = applySafeFilters(query, qs);
   query = filtered.query;
@@ -190,6 +224,8 @@ exports.handler = async (event) => {
   return json(200, {
     ok: true,
     role,
+    role_code: roleCode,
+    org_id: orgId,
     page_size: pageSize,
     has_more: hasMore,
     next_cursor: hasMore ? encodeCursor(rows[rows.length - 1]) : null,
