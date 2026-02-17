@@ -373,6 +373,11 @@
                 <div class="muted small" data-i18n="mapSubtitle">Drop a pin to create a site and add documentation.</div>
               </div>
               <div class="row map-controls">
+                <label class="muted small" for="mapBasemapSelect">Basemap</label>
+                <select id="mapBasemapSelect" class="input compact" style="max-width:170px;">
+                  <option value="street">Street</option>
+                  <option value="satellite">Satellite</option>
+                </select>
                 <input id="dropPinName" class="input compact" placeholder="Site name" data-i18n-placeholder="dropPinNamePlaceholder" />
                 <button id="btnDropPin" class="btn" data-action="dropPin" data-i18n="dropPin">Drop Pin</button>
                 <button id="btnImportLocations" class="btn secondary" type="button" data-i18n="importLocations">Import Locations (KMZ)</button>
@@ -381,6 +386,20 @@
               </div>
             </div>
             <div id="mapLayout" class="map-layout">
+              <aside class="map-layer-shell">
+                <div class="map-layer-card">
+                  <div class="site-panel-title">Layers</div>
+                  <div class="muted small">Toggle map layers</div>
+                  <div id="mapLayerPanelBody" class="map-layer-list" style="margin-top:10px;">
+                    <label class="layer-toggle-row"><input id="mapLayerBoundary" type="checkbox" checked /> Project Boundary</label>
+                    <label class="layer-toggle-row"><input id="mapLayerPins" type="checkbox" checked /> Pins / Locations</label>
+                    <label class="layer-toggle-row"><input id="mapLayerSpans" type="checkbox" checked /> Spans / Paths</label>
+                    <label class="layer-toggle-row"><input id="mapLayerKmz" type="checkbox" checked /> KMZ Imports</label>
+                    <label class="layer-toggle-row"><input id="mapLayerPhotos" type="checkbox" /> Photos</label>
+                  </div>
+                  <div id="mapKmzGroupList" class="muted small" style="margin-top:10px;"></div>
+                </div>
+              </aside>
               <div id="mapShell" class="map-shell">
                 <div class="map-sheet-bar">
                   <button id="mapSheetHandle" class="map-sheet-handle" type="button" aria-label="Resize map"></button>
@@ -394,6 +413,27 @@
                 <div id="mapStatus" class="muted small" style="margin-top:10px;"></div>
               </div>
               <div class="site-panel-shell">
+                <div id="featureDrawerCard" class="feature-drawer-card">
+                  <div class="row" style="justify-content:space-between; align-items:flex-start;">
+                    <div>
+                      <div id="featureDrawerTitle" class="site-panel-title">Feature details</div>
+                      <div id="featureDrawerSubTitle" class="muted small">Select a map feature.</div>
+                    </div>
+                    <button id="btnFeatureDrawerClose" class="btn ghost small" type="button">Close</button>
+                  </div>
+                  <div id="featureDrawerPager" class="row" style="margin-top:8px; display:none; gap:8px;">
+                    <button id="btnFeaturePrev" class="btn ghost small" type="button">Prev</button>
+                    <div id="featureDrawerPagerText" class="muted small" style="align-self:center;">1/1</div>
+                    <button id="btnFeatureNext" class="btn ghost small" type="button">Next</button>
+                  </div>
+                  <div class="row feature-tabs" style="margin-top:10px;">
+                    <button class="btn ghost small is-active" type="button" data-feature-tab="summary">Summary</button>
+                    <button class="btn ghost small" type="button" data-feature-tab="photos">Photos</button>
+                    <button class="btn ghost small" type="button" data-feature-tab="billing">Billing</button>
+                    <button class="btn ghost small" type="button" data-feature-tab="notes">Notes</button>
+                  </div>
+                  <div id="featureDrawerBody" class="feature-drawer-body" style="margin-top:10px;"></div>
+                </div>
                 <div class="site-panel-card">
                   <div class="row" style="justify-content:space-between; align-items:center;">
                     <div>

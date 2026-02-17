@@ -148,7 +148,34 @@ const state = {
   locationPollId: null,
   map: {
     instance: null,
+    basemap: "street",
+    basemapLayer: null,
+    basemapLayers: {
+      street: null,
+      satellite: null,
+    },
+    layerVisibility: {
+      boundary: true,
+      pins: true,
+      spans: true,
+      kmz: true,
+      photos: false,
+    },
+    layers: {
+      boundary: null,
+      pins: null,
+      spans: null,
+      kmz: null,
+      photos: null,
+    },
+    kmzImportGroups: new Map(),
     markers: new Map(),
+    featureMarkerMeta: new Map(),
+    selectedFeature: null,
+    selectedSet: [],
+    selectedIndex: 0,
+    selectedTab: "summary",
+    highlightLayer: null,
     userNames: new Map(),
     siteSearchIndex: new Map(),
     searchDebounceId: null,
@@ -1950,13 +1977,26 @@ function clearPendingPinMarker(){
 }
 
 function clearImportPreviewMarkers(){
-  if (!state.map.instance || !state.map.importPreviewMarkers?.length) return;
-  state.map.importPreviewMarkers.forEach((marker) => {
-    try{
-      state.map.instance.removeLayer(marker);
-    } catch {}
-  });
-  state.map.importPreviewMarkers = [];
+  if (!state.map.instance) return;
+  const kmzLayer = state.map.layers?.kmz;
+  if (state.map.importPreviewMarkers?.length){
+    state.map.importPreviewMarkers.forEach((marker) => {
+      try{
+        if (kmzLayer?.removeLayer) kmzLayer.removeLayer(marker);
+        else state.map.instance.removeLayer(marker);
+      } catch {}
+    });
+    state.map.importPreviewMarkers = [];
+  }
+  if (state.map.kmzImportGroups?.size){
+    state.map.kmzImportGroups.forEach((group) => {
+      try{
+        if (kmzLayer?.removeLayer) kmzLayer.removeLayer(group);
+      } catch {}
+    });
+    state.map.kmzImportGroups.clear();
+    renderMapLayerPanel();
+  }
 }
 
 const IMPORT_PREVIEW_MAX_MARKERS = 600;
@@ -2048,6 +2088,8 @@ function renderImportPreviewMarkers(rows){
   if (!state.map.instance || !window.L){
     return { totalRows: rows?.length || 0, shownMarkers: 0, clustered: false, precision: null };
   }
+  ensureMapLayerRegistry();
+  const kmzLayer = state.map.layers?.kmz;
   const { points, clustered, precision } = aggregateImportPreviewRows(rows);
   state.map.importPreviewMarkers = points.map((point) => {
     const count = point.count || 1;
@@ -2061,8 +2103,20 @@ function renderImportPreviewMarkers(rows){
       bubblingMouseEvents: false,
     });
     marker.bindPopup(buildImportPreviewPopup(point));
-    marker.on("click", () => marker.openPopup());
-    marker.addTo(state.map.instance);
+    const feature = buildKmzFeatureFromRow(point.row || {
+      location_name: point.sampleNames?.[0] || "KMZ Point",
+      latitude: point.lat,
+      longitude: point.lng,
+      notes: point.count > 1 ? `${point.count} locations clustered` : "",
+      __kml_layer: "KMZ Preview",
+      __rowNumber: point.row?.__rowNumber || "",
+    }, "KMZ Preview");
+    marker.on("click", () => {
+      marker.openPopup();
+      if (feature) handleMapFeatureSelection(feature);
+    });
+    if (kmzLayer?.addLayer) kmzLayer.addLayer(marker);
+    else marker.addTo(state.map.instance);
     return marker;
   });
   return {
@@ -3246,12 +3300,17 @@ function focusSiteOnMap(siteId){
       fillOpacity: 0.9,
       weight: 2,
     });
-    targetMarker.addTo(state.map.instance);
-    targetMarker.on("click", () => setActiveSite(site.id, { openOverview: true }));
+    const pinsLayer = state.map.layers?.pins;
+    if (pinsLayer?.addLayer) pinsLayer.addLayer(targetMarker);
+    else targetMarker.addTo(state.map.instance);
+    targetMarker.on("click", () => {
+      handleMapFeatureSelection(buildSiteFeature(site), { siteId: site.id, openOverview: true });
+    });
     const time = site.created_at ? new Date(site.created_at).toLocaleTimeString() : "-";
     const pendingLabel = site.is_pending ? ` • ${t("siteStatusPending")}` : "";
     targetMarker.bindPopup(`<b>${escapeHtml(getSiteDisplayName(site))}</b>${pendingLabel}<br>${escapeHtml(time)}`);
     state.map.markers.set(siteId, targetMarker);
+    state.map.featureMarkerMeta.set(siteId, { kind: "site", siteId: site.id });
   }
   if (targetMarker?.getLatLng){
     const latLng = targetMarker.getLatLng();
@@ -3261,15 +3320,477 @@ function focusSiteOnMap(siteId){
   }
 }
 
+const MAP_BASEMAP_STORAGE_KEY = "speccom.map.basemap";
+const MAP_LAYER_VISIBILITY_KEY = "speccom.map.layerVisibility";
+const MAP_BASEMAPS = {
+  street: {
+    label: "Street",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: "&copy; OpenStreetMap contributors",
+    maxZoom: 19,
+  },
+  satellite: {
+    label: "Satellite",
+    url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Tiles &copy; Esri",
+    maxZoom: 19,
+  },
+};
+const FEATURE_FIELD_LABELS = {
+  id: "ID",
+  type: "Type",
+  name: "Name",
+  location_name: "Location Name",
+  project_id: "Project ID",
+  created_at: "Created",
+  updated_at: "Updated",
+  gps_lat: "Latitude",
+  gps_lng: "Longitude",
+  notes: "Notes",
+  status: "Status",
+  labor_material_unit: "Labor/Material Unit",
+  __kml_layer: "KMZ Layer",
+  __import_group: "Import Group",
+};
+function getDefaultMapLayerVisibility(){
+  return {
+    boundary: true,
+    pins: true,
+    spans: true,
+    kmz: true,
+    photos: false,
+  };
+}
+function normalizeBasemap(value){
+  const key = String(value || "").toLowerCase().trim();
+  return Object.prototype.hasOwnProperty.call(MAP_BASEMAPS, key) ? key : "street";
+}
+function getSavedBasemap(){
+  const raw = safeLocalStorageGet(MAP_BASEMAP_STORAGE_KEY);
+  return normalizeBasemap(raw || state.map.basemap || "street");
+}
+function saveBasemap(value){
+  safeLocalStorageSet(MAP_BASEMAP_STORAGE_KEY, normalizeBasemap(value));
+}
+function getSavedLayerVisibility(){
+  const defaults = getDefaultMapLayerVisibility();
+  const raw = safeLocalStorageGet(MAP_LAYER_VISIBILITY_KEY);
+  if (!raw) return defaults;
+  try{
+    const parsed = JSON.parse(raw);
+    return {
+      boundary: parsed?.boundary !== false,
+      pins: parsed?.pins !== false,
+      spans: parsed?.spans !== false,
+      kmz: parsed?.kmz !== false,
+      photos: parsed?.photos === true,
+    };
+  } catch {
+    return defaults;
+  }
+}
+function saveLayerVisibility(next){
+  safeLocalStorageSet(MAP_LAYER_VISIBILITY_KEY, JSON.stringify(next || getDefaultMapLayerVisibility()));
+}
+function titleCaseKey(raw){
+  return String(raw || "")
+    .replace(/^_+/, "")
+    .replace(/[_\s]+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+}
+function getFeatureFieldLabel(key){
+  const normalized = String(key || "").trim();
+  if (!normalized) return "";
+  return FEATURE_FIELD_LABELS[normalized] || titleCaseKey(normalized);
+}
+function formatFeatureFieldValue(value){
+  if (value == null || value === "") return "-";
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  const text = String(value);
+  const time = Date.parse(text);
+  if (Number.isFinite(time) && /T/.test(text)){
+    return new Date(time).toLocaleString();
+  }
+  return text;
+}
+function buildSiteFeature(site){
+  const coords = getSiteCoords(site);
+  return {
+    type: "Feature",
+    geometry: coords ? { type: "Point", coordinates: [coords.lng, coords.lat] } : null,
+    properties: {
+      id: site?.id || "",
+      type: "PIN",
+      name: getSiteDisplayName(site),
+      project_id: site?.project_id || "",
+      notes: site?.notes || "",
+      created_at: site?.created_at || "",
+      updated_at: site?.updated_at || "",
+      status: site?.is_pending ? "Pending sync" : "Active",
+      gps_lat: coords?.lat ?? "",
+      gps_lng: coords?.lng ?? "",
+    },
+  };
+}
+function buildKmzFeatureFromRow(row, groupName = "KMZ Import"){
+  const lat = Number(row?.latitude);
+  const lng = Number(row?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return {
+    type: "Feature",
+    geometry: { type: "Point", coordinates: [lng, lat] },
+    properties: {
+      id: row?.id || row?.__rowNumber || "",
+      type: "KMZ",
+      name: row?.location_name || "KMZ Point",
+      location_name: row?.location_name || "",
+      notes: row?.notes || "",
+      gps_lat: lat,
+      gps_lng: lng,
+      __kml_layer: row?.__kml_layer || "",
+      __import_group: groupName,
+    },
+  };
+}
+function clearFeatureHighlight(){
+  const layer = state.map.highlightLayer;
+  if (!layer || !state.map.instance) return;
+  try{
+    state.map.instance.removeLayer(layer);
+  } catch {}
+  state.map.highlightLayer = null;
+}
+function drawFeatureHighlight(feature){
+  clearFeatureHighlight();
+  if (!state.map.instance || !window.L || !feature?.geometry) return;
+  const geom = feature.geometry;
+  let layer = null;
+  if (geom.type === "Point"){
+    const c = geom.coordinates || [];
+    const lat = Number(c[1]);
+    const lng = Number(c[0]);
+    if (Number.isFinite(lat) && Number.isFinite(lng)){
+      layer = window.L.circleMarker([lat, lng], {
+        radius: 12,
+        color: "#f97316",
+        fillColor: "#f97316",
+        fillOpacity: 0.14,
+        weight: 3,
+        interactive: false,
+      }).addTo(state.map.instance);
+    }
+  } else if (geom.type === "LineString"){
+    const pts = (geom.coordinates || []).map((c) => [Number(c[1]), Number(c[0])]).filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+    if (pts.length){
+      layer = window.L.polyline(pts, {
+        color: "#f97316",
+        weight: 5,
+        opacity: 0.9,
+        interactive: false,
+      }).addTo(state.map.instance);
+    }
+  }
+  state.map.highlightLayer = layer || null;
+}
+function setFeatureTab(tab){
+  const nextTab = String(tab || "summary").toLowerCase();
+  state.map.selectedTab = ["summary", "photos", "billing", "notes"].includes(nextTab) ? nextTab : "summary";
+  const wrap = $("featureDrawerCard");
+  if (wrap){
+    wrap.querySelectorAll("[data-feature-tab]").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.featureTab === state.map.selectedTab);
+    });
+  }
+  renderFeatureDrawer();
+}
+function featurePagerDelta(delta){
+  const set = state.map.selectedSet || [];
+  if (!set.length) return;
+  const len = set.length;
+  const current = Number(state.map.selectedIndex) || 0;
+  const next = (current + delta + len) % len;
+  setSelectedFeatureByIndex(next);
+}
+function setSelectedFeatureByIndex(index){
+  const set = state.map.selectedSet || [];
+  if (!set.length) return;
+  let next = Number(index);
+  if (!Number.isFinite(next)) next = 0;
+  next = Math.max(0, Math.min(set.length - 1, next));
+  state.map.selectedIndex = next;
+  state.map.selectedFeature = set[next] || null;
+  drawFeatureHighlight(state.map.selectedFeature);
+  renderFeatureDrawer();
+}
+function getFeatureSetByPoint(lat, lng){
+  const rows = getSiteSearchResultSet().rows || [];
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return [];
+  const key = `${lat.toFixed(5)}|${lng.toFixed(5)}`;
+  const points = rows
+    .map((site) => ({ site, coords: getSiteCoords(site) }))
+    .filter((entry) => entry.coords)
+    .filter((entry) => `${entry.coords.lat.toFixed(5)}|${entry.coords.lng.toFixed(5)}` === key)
+    .map((entry) => buildSiteFeature(entry.site));
+  return points;
+}
+function handleMapFeatureSelection(feature, options = {}){
+  if (!feature) return;
+  const geom = feature.geometry || null;
+  if (geom?.type === "Point"){
+    const lat = Number(geom.coordinates?.[1]);
+    const lng = Number(geom.coordinates?.[0]);
+    const selectedSet = getFeatureSetByPoint(lat, lng);
+    state.map.selectedSet = selectedSet.length ? selectedSet : [feature];
+    state.map.selectedIndex = Math.max(0, state.map.selectedSet.findIndex((f) => String(f?.properties?.id || "") === String(feature?.properties?.id || "")));
+  } else {
+    state.map.selectedSet = [feature];
+    state.map.selectedIndex = 0;
+  }
+  if (state.map.selectedIndex < 0) state.map.selectedIndex = 0;
+  state.map.selectedFeature = state.map.selectedSet[state.map.selectedIndex] || feature;
+  drawFeatureHighlight(state.map.selectedFeature);
+  if (options?.siteId){
+    setActiveSite(options.siteId, { openOverview: options.openOverview === true });
+  }
+  setFeatureTab(state.map.selectedTab || "summary");
+}
+function closeFeatureDrawer(){
+  state.map.selectedFeature = null;
+  state.map.selectedSet = [];
+  state.map.selectedIndex = 0;
+  clearFeatureHighlight();
+  renderFeatureDrawer();
+}
+function renderFeatureDrawer(){
+  const titleEl = $("featureDrawerTitle");
+  const subEl = $("featureDrawerSubTitle");
+  const bodyEl = $("featureDrawerBody");
+  const pagerEl = $("featureDrawerPager");
+  const pagerTextEl = $("featureDrawerPagerText");
+  if (!titleEl || !subEl || !bodyEl) return;
+  const feature = state.map.selectedFeature || null;
+  if (!feature){
+    titleEl.textContent = "Feature details";
+    subEl.textContent = "Select a map feature.";
+    bodyEl.innerHTML = `<div class="muted small">No feature selected.</div>`;
+    if (pagerEl) pagerEl.style.display = "none";
+    return;
+  }
+  const props = feature.properties || {};
+  const label = String(props.name || props.location_name || props.id || "Feature").trim();
+  titleEl.textContent = label || "Feature";
+  subEl.textContent = `${props.type || "Feature"} ${props.id ? `#${props.id}` : ""}`.trim();
+  const selectedSet = state.map.selectedSet || [];
+  if (pagerEl){
+    pagerEl.style.display = selectedSet.length > 1 ? "" : "none";
+  }
+  if (pagerTextEl){
+    pagerTextEl.textContent = `${Math.min((state.map.selectedIndex || 0) + 1, Math.max(1, selectedSet.length))}/${Math.max(1, selectedSet.length)}`;
+  }
+  const tab = state.map.selectedTab || "summary";
+  if (tab === "summary"){
+    const entries = Object.entries(props).filter(([key]) => !String(key).startsWith("__"));
+    bodyEl.innerHTML = `
+      <div class="feature-kv">
+        ${entries.map(([key, value]) => `
+          <div class="feature-kv-row">
+            <div class="feature-kv-key">${escapeHtml(getFeatureFieldLabel(key))}</div>
+            <div class="feature-kv-val">${escapeHtml(formatFeatureFieldValue(value))}</div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+    return;
+  }
+  if (tab === "photos"){
+    bodyEl.innerHTML = `<div class="muted small">Photo records will appear here when available for this feature.</div>`;
+    return;
+  }
+  if (tab === "billing"){
+    bodyEl.innerHTML = `<div class="muted small">Billing details scaffold is ready for this feature.</div>`;
+    return;
+  }
+  bodyEl.innerHTML = `<div class="muted small">${escapeHtml(String(props.notes || "No notes available."))}</div>`;
+}
+function ensureMapLayerRegistry(){
+  if (!state.map.instance || !window.L) return;
+  if (state.map.layers?.pins) return;
+  state.map.layers = {
+    boundary: window.L.layerGroup(),
+    pins: window.L.layerGroup(),
+    spans: window.L.layerGroup(),
+    kmz: window.L.layerGroup(),
+    photos: window.L.layerGroup(),
+  };
+  applyMapLayerVisibility();
+}
+function applyMapLayerVisibility(){
+  if (!state.map.instance) return;
+  const map = state.map.instance;
+  const vis = state.map.layerVisibility || getDefaultMapLayerVisibility();
+  const layers = state.map.layers || {};
+  const apply = (name) => {
+    const layer = layers[name];
+    if (!layer) return;
+    if (vis[name]){
+      if (!map.hasLayer(layer)) map.addLayer(layer);
+    } else if (map.hasLayer(layer)){
+      map.removeLayer(layer);
+    }
+  };
+  ["boundary", "pins", "spans", "kmz", "photos"].forEach(apply);
+}
+function syncMapLayerToggles(){
+  const vis = state.map.layerVisibility || getDefaultMapLayerVisibility();
+  const map = {
+    boundary: $("mapLayerBoundary"),
+    pins: $("mapLayerPins"),
+    spans: $("mapLayerSpans"),
+    kmz: $("mapLayerKmz"),
+    photos: $("mapLayerPhotos"),
+  };
+  Object.entries(map).forEach(([key, el]) => {
+    if (el) el.checked = Boolean(vis[key]);
+  });
+}
+function renderMapLayerPanel(){
+  syncMapLayerToggles();
+  const kmzList = $("mapKmzGroupList");
+  if (!kmzList) return;
+  const groups = Array.from(state.map.kmzImportGroups?.keys() || []);
+  if (!groups.length){
+    kmzList.textContent = "KMZ groups: none loaded.";
+    return;
+  }
+  kmzList.textContent = `KMZ groups: ${groups.join(", ")}`;
+}
+function setMapLayerVisibility(name, visible){
+  const next = {
+    ...(state.map.layerVisibility || getDefaultMapLayerVisibility()),
+    [name]: Boolean(visible),
+  };
+  state.map.layerVisibility = next;
+  saveLayerVisibility(next);
+  applyMapLayerVisibility();
+  renderMapLayerPanel();
+}
+function setMapBasemap(nextBasemap){
+  const basemap = normalizeBasemap(nextBasemap);
+  state.map.basemap = basemap;
+  saveBasemap(basemap);
+  const map = state.map.instance;
+  if (!map) return;
+  const layers = state.map.basemapLayers || {};
+  if (!layers.street || !layers.satellite) return;
+  Object.values(layers).forEach((layer) => {
+    if (layer && map.hasLayer(layer)) map.removeLayer(layer);
+  });
+  state.map.basemapLayer = layers[basemap];
+  if (state.map.basemapLayer) state.map.basemapLayer.addTo(map);
+  const select = $("mapBasemapSelect");
+  if (select) select.value = basemap;
+}
+function registerMapUiBindings(){
+  if (state.map.uiBound) return;
+  state.map.uiBound = true;
+  const basemapSelect = $("mapBasemapSelect");
+  if (basemapSelect){
+    basemapSelect.addEventListener("change", (e) => setMapBasemap(e.target.value));
+  }
+  const layerMap = [
+    ["mapLayerBoundary", "boundary"],
+    ["mapLayerPins", "pins"],
+    ["mapLayerSpans", "spans"],
+    ["mapLayerKmz", "kmz"],
+    ["mapLayerPhotos", "photos"],
+  ];
+  layerMap.forEach(([id, name]) => {
+    const input = $(id);
+    if (!input) return;
+    input.addEventListener("change", (e) => setMapLayerVisibility(name, Boolean(e.target.checked)));
+  });
+  const closeBtn = $("btnFeatureDrawerClose");
+  if (closeBtn){
+    closeBtn.addEventListener("click", () => closeFeatureDrawer());
+  }
+  const prevBtn = $("btnFeaturePrev");
+  if (prevBtn){
+    prevBtn.addEventListener("click", () => featurePagerDelta(-1));
+  }
+  const nextBtn = $("btnFeatureNext");
+  if (nextBtn){
+    nextBtn.addEventListener("click", () => featurePagerDelta(1));
+  }
+  const drawer = $("featureDrawerCard");
+  if (drawer){
+    drawer.addEventListener("click", (e) => {
+      const tabBtn = e.target.closest("[data-feature-tab]");
+      if (!tabBtn) return;
+      setFeatureTab(tabBtn.dataset.featureTab || "summary");
+    });
+  }
+}
+function renderKmzPreviewFeatures(rows, sourceName = "KMZ Import"){
+  ensureMap();
+  if (!state.map.instance || !window.L) return;
+  const kmzLayer = state.map.layers?.kmz;
+  if (!kmzLayer) return;
+  if (!state.map.kmzImportGroups) state.map.kmzImportGroups = new Map();
+  const key = String(sourceName || "KMZ Import");
+  const existing = state.map.kmzImportGroups.get(key);
+  if (existing){
+    try{ kmzLayer.removeLayer(existing); } catch {}
+  }
+  const group = window.L.layerGroup();
+  (rows || []).forEach((row) => {
+    const feature = buildKmzFeatureFromRow(row, key);
+    if (!feature) return;
+    const lat = feature.geometry.coordinates[1];
+    const lng = feature.geometry.coordinates[0];
+    const marker = window.L.circleMarker([lat, lng], {
+      radius: 6,
+      color: "#7c3aed",
+      fillColor: "#7c3aed",
+      fillOpacity: 0.8,
+      weight: 2,
+    });
+    marker.on("click", () => handleMapFeatureSelection(feature));
+    marker.bindPopup(`<b>${escapeHtml(feature.properties.name || "KMZ Point")}</b><br>${escapeHtml(feature.properties.__kml_layer || key)}`);
+    group.addLayer(marker);
+  });
+  kmzLayer.addLayer(group);
+  state.map.kmzImportGroups.set(key, group);
+  renderMapLayerPanel();
+}
+
 function ensureMap(){
   if (state.map.instance || !window.L) return;
   const mapEl = $("liveMap");
   if (!mapEl) return;
   const map = window.L.map(mapEl).setView([39.5, -98.35], 4);
-  window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "&copy; OpenStreetMap contributors",
-  }).addTo(map);
+  const street = window.L.tileLayer(MAP_BASEMAPS.street.url, {
+    attribution: MAP_BASEMAPS.street.attribution,
+    maxZoom: MAP_BASEMAPS.street.maxZoom,
+  });
+  const satellite = window.L.tileLayer(MAP_BASEMAPS.satellite.url, {
+    attribution: MAP_BASEMAPS.satellite.attribution,
+    maxZoom: MAP_BASEMAPS.satellite.maxZoom,
+  });
+  state.map.basemapLayers = { street, satellite };
+  state.map.basemap = getSavedBasemap();
+  state.map.basemapLayer = state.map.basemap === "satellite" ? satellite : street;
+  state.map.basemapLayer.addTo(map);
+  state.map.layerVisibility = getSavedLayerVisibility();
   window.__speccomMap = map;
+  state.map.instance = map;
+  ensureMapLayerRegistry();
+  applyMapLayerVisibility();
+  registerMapUiBindings();
+  renderMapLayerPanel();
+  setMapBasemap(state.map.basemap);
+  renderFeatureDrawer();
   map.on("click", async (event) => {
     const latlng = event?.latlng;
     if (!latlng){
@@ -3287,7 +3808,6 @@ function ensureMap(){
       await updateSiteLocationFromMapClick(targetSiteId, { lat: latlng.lat, lng: latlng.lng });
     }
   });
-  state.map.instance = map;
 }
 
 async function loadLocationNames(userIds){
@@ -3303,6 +3823,8 @@ async function loadLocationNames(userIds){
 
 function updateMapMarkers(rows){
   if (!state.map.instance) return;
+  ensureMapLayerRegistry();
+  const pinsLayer = state.map.layers?.pins;
   const activeSearch = String(state.mapFilters.search || "").trim();
   const renderRows = activeSearch ? getSiteSearchResultSet().rows : (rows || []);
   const markers = state.map.markers;
@@ -3326,9 +3848,13 @@ function updateMapMarkers(rows){
         fillOpacity: 0.9,
         weight: 2,
       });
-      marker.addTo(state.map.instance);
-      marker.on("click", () => setActiveSite(id, { openOverview: true }));
+      if (pinsLayer?.addLayer) pinsLayer.addLayer(marker);
+      else marker.addTo(state.map.instance);
+      marker.on("click", () => {
+        handleMapFeatureSelection(buildSiteFeature(row), { siteId: id, openOverview: true });
+      });
       markers.set(id, marker);
+      state.map.featureMarkerMeta.set(id, { kind: "site", siteId: id });
     } else {
       marker.setLatLng(markerCoords);
       if (marker.setStyle){
@@ -3342,10 +3868,114 @@ function updateMapMarkers(rows){
   });
   markers.forEach((marker, id) => {
     if (!seen.has(id)){
-      state.map.instance.removeLayer(marker);
+      if (pinsLayer?.removeLayer) pinsLayer.removeLayer(marker);
+      else state.map.instance.removeLayer(marker);
       markers.delete(id);
+      state.map.featureMarkerMeta.delete(id);
     }
   });
+}
+
+function renderDerivedMapLayers(rows){
+  if (!state.map.instance || !window.L) return;
+  ensureMapLayerRegistry();
+  const boundaryLayer = state.map.layers?.boundary;
+  const spansLayer = state.map.layers?.spans;
+  const photosLayer = state.map.layers?.photos;
+  if (boundaryLayer?.clearLayers) boundaryLayer.clearLayers();
+  if (spansLayer?.clearLayers) spansLayer.clearLayers();
+  if (photosLayer?.clearLayers) photosLayer.clearLayers();
+
+  const sites = (rows || []).map((site) => ({ site, coords: getSiteCoords(site) })).filter((x) => x.coords);
+  if (sites.length >= 2 && boundaryLayer){
+    const points = sites.map((x) => [x.coords.lat, x.coords.lng]);
+    const bounds = window.L.latLngBounds(points);
+    const rectangle = window.L.rectangle(bounds, {
+      color: "#0ea5e9",
+      weight: 2,
+      fillOpacity: 0.05,
+      dashArray: "6 4",
+    });
+    rectangle.on("click", () => {
+      const feature = {
+        type: "Feature",
+        geometry: {
+          type: "Polygon",
+          coordinates: [[
+            [bounds.getWest(), bounds.getSouth()],
+            [bounds.getEast(), bounds.getSouth()],
+            [bounds.getEast(), bounds.getNorth()],
+            [bounds.getWest(), bounds.getNorth()],
+            [bounds.getWest(), bounds.getSouth()],
+          ]],
+        },
+        properties: {
+          id: state.activeProject?.id || "",
+          type: "BOUNDARY",
+          name: `${state.activeProject?.name || "Project"} Boundary`,
+          project_id: state.activeProject?.id || "",
+          points: sites.length,
+        },
+      };
+      handleMapFeatureSelection(feature);
+    });
+    boundaryLayer.addLayer(rectangle);
+  }
+  if (sites.length >= 2 && spansLayer){
+    const ordered = sites.slice().sort((a, b) => String(a.site?.name || "").localeCompare(String(b.site?.name || "")));
+    const linePoints = ordered.map((x) => [x.coords.lat, x.coords.lng]);
+    const span = window.L.polyline(linePoints, {
+      color: "#14b8a6",
+      weight: 3,
+      opacity: 0.85,
+    });
+    span.on("click", () => {
+      const feature = {
+        type: "Feature",
+        geometry: {
+          type: "LineString",
+          coordinates: ordered.map((x) => [x.coords.lng, x.coords.lat]),
+        },
+        properties: {
+          id: `${state.activeProject?.id || "project"}-span`,
+          type: "SPAN",
+          name: `${state.activeProject?.name || "Project"} Path`,
+          project_id: state.activeProject?.id || "",
+          segment_count: Math.max(0, ordered.length - 1),
+        },
+      };
+      handleMapFeatureSelection(feature);
+    });
+    spansLayer.addLayer(span);
+  }
+  if (photosLayer){
+    (state.siteMedia || []).forEach((row, idx) => {
+      const lat = Number(row?.gps_lat);
+      const lng = Number(row?.gps_lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      const marker = window.L.circleMarker([lat, lng], {
+        radius: 5,
+        color: "#ef4444",
+        fillColor: "#ef4444",
+        fillOpacity: 0.85,
+        weight: 2,
+      });
+      const feature = {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [lng, lat] },
+        properties: {
+          id: row?.id || idx + 1,
+          type: "PHOTO",
+          name: state.activeSite ? `${getSiteDisplayName(state.activeSite)} Photo` : "Photo Marker",
+          created_at: row?.created_at || "",
+          gps_lat: lat,
+          gps_lng: lng,
+        },
+      };
+      marker.on("click", () => handleMapFeatureSelection(feature));
+      photosLayer.addLayer(marker);
+    });
+  }
 }
 
 async function refreshLocations(){
@@ -3360,6 +3990,9 @@ async function refreshLocations(){
   const searchResult = getSiteSearchResultSet();
   const rows = searchResult.rows;
   updateMapMarkers(rows);
+  renderDerivedMapLayers(rows);
+  renderMapLayerPanel();
+  renderFeatureDrawer();
   updateSiteSearchUiSummary(searchResult);
   if (status){
     if (!state.activeProject){
@@ -3763,14 +4396,21 @@ SpecCom.helpers.deleteSiteFromPanel = async function(){
     if (state.map?.instance && state.map?.markers?.has(site.id)){
       const marker = state.map.markers.get(site.id);
       if (marker){
-        try{ state.map.instance.removeLayer(marker); } catch {}
+        try{
+          const pinsLayer = state.map.layers?.pins;
+          if (pinsLayer?.removeLayer) pinsLayer.removeLayer(marker);
+          else state.map.instance.removeLayer(marker);
+        } catch {}
       }
       state.map.markers.delete(site.id);
+      state.map.featureMarkerMeta.delete(site.id);
     }
     closeSitePanel();
     renderSiteList();
     if (state.map?.instance){
-      updateMapMarkers(getVisibleSites());
+      const rows = getVisibleSites();
+      updateMapMarkers(rows);
+      renderDerivedMapLayers(rows);
     }
     toast("Deleted", "Site deleted.");
   } catch (err){
@@ -5533,6 +6173,7 @@ async function handleLocationImport(file){
   state.importPreview.rows = validation.validRows;
   state.importPreview.validation = validation;
   state.importPreview.preview = renderImportPreviewMarkers(validation.validRows);
+  renderKmzPreviewFeatures(validation.validRows, file.name || "KMZ Import");
 
   openImportLocationsModal(validation.validRows, state.activeProject);
 }
@@ -8647,7 +9288,9 @@ async function loadProjectSites(projectId){
   }
   renderSiteList();
   if (state.map.instance){
-    updateMapMarkers(getSiteSearchResultSet().rows);
+    const rows = getSiteSearchResultSet().rows;
+    updateMapMarkers(rows);
+    renderDerivedMapLayers(rows);
   }
 }
 
@@ -8701,6 +9344,7 @@ function scheduleLocationSearchRefresh({ syncMap = true } = {}){
     const resultSet = getSiteSearchResultSet();
     if (state.map.instance){
       updateMapMarkers(resultSet.rows);
+      renderDerivedMapLayers(resultSet.rows);
       if (syncMap){
         syncMapToSearchResults(resultSet);
       }
@@ -8717,6 +9361,7 @@ function clearLocationSearch(){
   renderSiteList();
   if (state.map.instance){
     updateMapMarkers(getVisibleSites());
+    renderDerivedMapLayers(getVisibleSites());
   }
 }
 
@@ -8732,11 +9377,31 @@ function focusFirstSearchResult(){
 async function setActiveSite(siteId, { openOverview = false } = {}){
   const site = getVisibleSites().find((row) => row.id === siteId) || null;
   state.activeSite = site;
+  if (site){
+    const feature = buildSiteFeature(site);
+    const coords = getSiteCoords(site);
+    if (coords){
+      const set = getFeatureSetByPoint(coords.lat, coords.lng);
+      state.map.selectedSet = set.length ? set : [feature];
+      state.map.selectedIndex = Math.max(0, state.map.selectedSet.findIndex((f) => String(f?.properties?.id || "") === String(site.id)));
+      if (state.map.selectedIndex < 0) state.map.selectedIndex = 0;
+      state.map.selectedFeature = state.map.selectedSet[state.map.selectedIndex] || feature;
+      drawFeatureHighlight(state.map.selectedFeature);
+    } else {
+      state.map.selectedSet = [feature];
+      state.map.selectedIndex = 0;
+      state.map.selectedFeature = feature;
+      drawFeatureHighlight(feature);
+    }
+  } else {
+    closeFeatureDrawer();
+  }
   state.siteMedia = [];
   state.siteCodes = [];
   state.siteEntries = [];
   renderSiteList();
   renderSitePanel();
+  renderFeatureDrawer();
   if (openOverview){
     SpecCom.helpers.openPinOverview();
     SpecCom.helpers.renderPinOverview();
@@ -8748,6 +9413,7 @@ async function setActiveSite(siteId, { openOverview = false } = {}){
     loadSiteEntries(site.id),
   ]);
   renderSitePanel();
+  renderFeatureDrawer();
   if (openOverview){
     SpecCom.helpers.renderPinOverview();
   }
@@ -8761,6 +9427,7 @@ function closeSitePanel(){
   SpecCom.helpers.closePinOverview();
   renderSiteList();
   renderSitePanel();
+  closeFeatureDrawer();
 }
 
 SpecCom.helpers.ensurePinOverviewModal = function(){
@@ -9231,6 +9898,9 @@ function renderSitePanel(){
         `;
       }).join("");
     }
+  }
+  if (state.map.instance){
+    renderDerivedMapLayers(getSiteSearchResultSet().rows);
   }
   if (state.pinOverview.open){
     SpecCom.helpers.renderPinOverview();
@@ -14271,6 +14941,7 @@ function wireUI(){
   if (clearMapSearchBtn){
     clearMapSearchBtn.addEventListener("click", () => clearLocationSearch());
   }
+  registerMapUiBindings();
   const dropPinBtn = $("btnDropPin");
   if (dropPinBtn){
     dropPinBtn.addEventListener("click", () => dropPin());
