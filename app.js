@@ -1048,9 +1048,6 @@ const LEGACY_DRAWER_TAB_KEY = "speccom.ui.drawerTab";
 const LEGACY_DRAWER_WIDTH_KEY = "speccom.ui.drawerWidth";
 const SIDEBAR_MIN_WIDTH = 320;
 const SIDEBAR_MAX_WIDTH = 520;
-let hoverPanelPinned = false;
-let hoverPanelHideTimer = null;
-let hoverPanelUiBound = false;
 
 function storageOk(){
   try{
@@ -1220,22 +1217,6 @@ function setDrawerWidth(width, { persist = true } = {}){
   }
 }
 
-function getMapHoverPanelEls(){
-  return {
-    panel: $("mapHoverPanel"),
-    title: $("mapHoverTitle"),
-    body: $("mapHoverBody"),
-    close: $("btnHoverPanelClose"),
-  };
-}
-
-function clearHoverPanelHideTimer(){
-  if (hoverPanelHideTimer){
-    clearTimeout(hoverPanelHideTimer);
-    hoverPanelHideTimer = null;
-  }
-}
-
 function getCodesRequiredForActiveProject(){
   const project = state?.activeProject || null;
   let raw = project
@@ -1275,89 +1256,6 @@ function getCodesRequiredForActiveProject(){
     return Object.keys(raw).filter((k) => raw[k]).map((k) => String(k).trim()).filter(Boolean);
   }
   return [];
-}
-
-function buildFieldsForSite(site){
-  if (!site || typeof site !== "object") return [];
-  const allowedCodes = getCodesRequiredForActiveProject();
-  const codeText = allowedCodes.length ? allowedCodes.join(" | ") : "(none listed)";
-  const fields = [
-    { k: "Site", v: getSiteDisplayName(site) || site.name || site.label || site.location_label || "-" },
-    { k: "Site ID", v: site.id || "-" },
-    { k: "Allowed Codes", v: codeText },
-  ];
-  if (site.status != null) fields.push({ k: "Status", v: site.status });
-  if (site.billing_status != null) fields.push({ k: "Billing Status", v: site.billing_status });
-  if (site.photos_count != null) fields.push({ k: "Photos", v: site.photos_count });
-  if (site.is_pending != null) fields.push({ k: "Pending", v: site.is_pending ? "Yes" : "No" });
-  if (site.completed != null) fields.push({ k: "Completed", v: site.completed ? "Yes" : "No" });
-  if (site.work_codes != null){
-    const workCodes = Array.isArray(site.work_codes) ? site.work_codes.join(", ") : String(site.work_codes || "");
-    if (workCodes) fields.push({ k: "Work Codes", v: workCodes });
-  }
-  const lat = Number(site.gps_lat);
-  const lng = Number(site.gps_lng);
-  if (Number.isFinite(lat) && Number.isFinite(lng)){
-    fields.push({ k: "Coordinates", v: `${lat.toFixed(6)}, ${lng.toFixed(6)}` });
-  }
-  if (site.gps_accuracy_m != null) fields.push({ k: "GPS Accuracy (m)", v: site.gps_accuracy_m });
-  if (site.created_at) fields.push({ k: "Created", v: new Date(site.created_at).toLocaleString() });
-  return fields;
-}
-
-function showHoverPanel(site, { pinned = false } = {}){
-  if (!site) return;
-  const { panel, title, body } = getMapHoverPanelEls();
-  if (!panel || !title || !body) return;
-  if (hoverPanelPinned && !pinned) return;
-  clearHoverPanelHideTimer();
-  if (pinned){
-    hoverPanelPinned = true;
-  }
-  const siteLabel = getSiteDisplayName(site) || site.name || site.label || site.location_label || "Site";
-  title.textContent = siteLabel;
-  const rows = buildFieldsForSite(site);
-  body.innerHTML = rows.map((row) => `
-    <div class="kv">
-      <div class="k">${escapeHtml(String(row.k || ""))}</div>
-      <div class="v">${escapeHtml(String(row.v == null ? "" : row.v))}</div>
-    </div>
-  `).join("");
-  panel.classList.remove("hidden");
-  panel.setAttribute("aria-hidden", "false");
-}
-
-function hideHoverPanel(force = false){
-  const { panel } = getMapHoverPanelEls();
-  if (!panel) return;
-  clearHoverPanelHideTimer();
-  if (hoverPanelPinned && !force) return;
-  panel.classList.add("hidden");
-  panel.setAttribute("aria-hidden", "true");
-}
-
-function scheduleHoverPanelHide(delay = 150){
-  clearHoverPanelHideTimer();
-  hoverPanelHideTimer = setTimeout(() => {
-    hideHoverPanel(false);
-  }, delay);
-}
-
-function initMapHoverPanelUi(){
-  if (hoverPanelUiBound) return;
-  const { panel, close } = getMapHoverPanelEls();
-  if (!panel || !close) return;
-  hoverPanelUiBound = true;
-  panel.addEventListener("mouseenter", () => clearHoverPanelHideTimer());
-  panel.addEventListener("mouseleave", () => {
-    if (!hoverPanelPinned){
-      scheduleHoverPanelHide(120);
-    }
-  });
-  close.addEventListener("click", () => {
-    hoverPanelPinned = false;
-    hideHoverPanel(true);
-  });
 }
 
 function queueMapInvalidate(delays = 120){
@@ -1509,7 +1407,6 @@ function initDrawerResizer(){
 function initMapWorkspaceUi(){
   if (state.map.workspaceUiBound) return;
   state.map.workspaceUiBound = true;
-  initMapHoverPanelUi();
   const sidebarClose = $("btnSidebarClose");
   if (sidebarClose){
     sidebarClose.addEventListener("click", () => setDrawerOpen(false));
@@ -1521,8 +1418,6 @@ function initMapWorkspaceUi(){
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape"){
-      hoverPanelPinned = false;
-      hideHoverPanel(true);
       if (isMobileViewport()){
         setDrawerOpen(false);
       }
@@ -4084,7 +3979,8 @@ function updateMapMarkers(rows){
   const pinsLayer = state.map.layers?.pins;
   const activeSearch = String(state.mapFilters.search || "").trim();
   const renderRows = activeSearch ? getSiteSearchResultSet().rows : (rows || []);
-  const requiredCodes = getCodesRequiredForActiveProject();
+  const requiredCodesRaw = getCodesRequiredForActiveProject();
+  const requiredCodes = Array.isArray(requiredCodesRaw) ? requiredCodesRaw : [];
   const markers = state.map.markers;
   const seen = new Set();
   renderRows.forEach((row) => {
@@ -4127,24 +4023,30 @@ function updateMapMarkers(rows){
     const time = row.created_at ? new Date(row.created_at).toLocaleTimeString() : "-";
     const pendingLabel = row.is_pending ? ` • ${t("siteStatusPending")}` : "";
     marker.bindPopup(`<b>${escapeHtml(getSiteDisplayName(row))}</b>${pendingLabel}<br>${escapeHtml(time)}`);
-    const loc = row.name || row.address || row.label || row.location_name || `Site ${row.id || ""}`.trim();
-    const codeText = requiredCodes.length ? requiredCodes.slice(0, 8).join(" • ") : "(none)";
-    const more = requiredCodes.length > 8 ? ` • +${requiredCodes.length - 8} more` : "";
-    const tooltipHtml = `
-      <div class="scHoverTip">
-        <div class="t1">${escapeHtml(loc)}</div>
-        <div class="t2">Codes: ${escapeHtml(codeText + more)}</div>
-      </div>
-    `;
-    if (marker.getTooltip && marker.getTooltip()){
-      marker.setTooltipContent(tooltipHtml);
-    } else if (marker.bindTooltip){
-      marker.bindTooltip(tooltipHtml, {
-        direction: "top",
-        sticky: true,
-        opacity: 0.97,
-        className: "sc-hover-tooltip",
-      });
+    try{
+      const loc = row.name || row.address || row.label || row.location_name || `Site ${row.id || ""}`.trim();
+      const codeText = requiredCodes.length ? requiredCodes.slice(0, 8).join(" | ") : "(none)";
+      const more = requiredCodes.length > 8 ? ` | +${requiredCodes.length - 8} more` : "";
+      const tooltipHtml = `
+        <div class="scHoverTip">
+          <div class="t1">${escapeHtml(loc)}</div>
+          <div class="t2">Codes: ${escapeHtml(codeText + more)}</div>
+        </div>
+      `;
+      const existingTooltip = typeof marker.getTooltip === "function" ? marker.getTooltip() : null;
+      if (existingTooltip && typeof marker.setTooltipContent === "function"){
+        marker.setTooltipContent(tooltipHtml);
+      } else if (typeof marker.bindTooltip === "function"){
+        marker.bindTooltip(tooltipHtml, {
+          direction: "top",
+          sticky: true,
+          opacity: 0.97,
+          className: "sc-hover-tooltip",
+          interactive: false,
+        });
+      }
+    } catch (error){
+      debugLog("[map] tooltip render failed", error);
     }
     seen.add(id);
   });

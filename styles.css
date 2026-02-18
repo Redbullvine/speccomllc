@@ -1055,6 +1055,9 @@ a{color:inherit; text-decoration:none;}
   border-color:#60a5fa;
   color:#0b3a75;
 }
+.hidden{
+  display:none !important;
+}
 .site-list::-webkit-scrollbar{
   width:8px;
 }
@@ -1151,68 +1154,6 @@ a{color:inherit; text-decoration:none;}
 }
 .map-canvas .leaflet-right{
   right:12px;
-}
-.hover-panel{
-  position:absolute;
-  top:12px;
-  right:12px;
-  z-index:38;
-  width:min(420px, 42vw);
-  min-width:360px;
-  max-height:60vh;
-  display:flex;
-  flex-direction:column;
-  background:#fff;
-  border:1px solid rgba(15,23,42,.1);
-  border-radius:12px;
-  box-shadow:0 10px 24px rgba(15,23,42,.18);
-  overflow:hidden;
-}
-.hover-panel-header{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  padding:10px 12px;
-  border-bottom:1px solid rgba(15,23,42,.08);
-}
-.hover-title{
-  font-weight:800;
-  color:#0f172a;
-}
-.hover-close{
-  width:28px;
-  height:28px;
-  min-width:28px;
-  border-radius:999px;
-  border:1px solid rgba(15,23,42,.2);
-  background:#fff;
-  color:#0f172a;
-  font-weight:700;
-  cursor:pointer;
-}
-.hover-panel-body{
-  overflow:auto;
-}
-.hover-panel .kv{
-  display:flex;
-  gap:10px;
-  padding:6px 10px;
-  border-top:1px solid rgba(0,0,0,.06);
-}
-.hover-panel .k{
-  width:45%;
-  font-weight:600;
-  color:var(--text-muted);
-}
-.hover-panel .v{
-  width:55%;
-  font-weight:600;
-  color:#111;
-  word-break:break-word;
-}
-.hidden{
-  display:none !important;
 }
 .sc-hover-tooltip{
   border:1px solid rgba(0,0,0,0.12);
@@ -1499,13 +1440,6 @@ a{color:inherit; text-decoration:none;}
   }
   .map-canvas{
     width:100%;
-  }
-  .hover-panel{
-    right:8px;
-    left:8px;
-    width:auto;
-    min-width:0;
-    max-height:52vh;
   }
   .feature-kv{
     grid-template-columns:1fr;
