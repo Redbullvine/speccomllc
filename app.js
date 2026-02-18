@@ -148,6 +148,10 @@ const state = {
   locationPollId: null,
   map: {
     instance: null,
+    drawerOpen: true,
+    drawerTab: "layers",
+    drawerDocked: false,
+    uiBound: false,
     basemap: "street",
     basemapLayer: null,
     basemapLayers: {
@@ -1034,8 +1038,9 @@ function safeLocalStorageRemove(key){
 
 const CURRENT_PROJECT_KEY = "current_project_id";
 const MAP_PANEL_VISIBLE_KEY = "map_panel_visible";
-const MAP_PANEL_MOBILE_SNAP_KEY = "map_panel_mobile_snap";
-const MAP_SHEET_SNAPS = [30, 60, 90];
+const DRAWER_OPEN_KEY = "speccom.ui.drawerOpen";
+const DRAWER_TAB_KEY = "speccom.ui.drawerTab";
+const DRAWER_DOCKED_KEY = "speccom.ui.drawerDocked";
 
 function storageOk(){
   try{
@@ -1158,21 +1163,13 @@ function setSavedProjectPreference(projectId){
 }
 
 function getSavedMapPanelVisible(){
-  const raw = safeLocalStorageGet(MAP_PANEL_VISIBLE_KEY);
-  if (raw == null) return true;
-  return raw !== "0";
-}
-
-function nearestMapSnap(value){
-  const num = Number(value);
-  if (!Number.isFinite(num)) return 60;
-  return MAP_SHEET_SNAPS.reduce((closest, snap) => (
-    Math.abs(snap - num) < Math.abs(closest - num) ? snap : closest
-  ), MAP_SHEET_SNAPS[0]);
-}
-
-function getSavedMapSheetSnap(){
-  return nearestMapSnap(safeLocalStorageGet(MAP_PANEL_MOBILE_SNAP_KEY));
+  const raw = safeLocalStorageGet(DRAWER_OPEN_KEY);
+  if (raw == null){
+    const legacy = safeLocalStorageGet(MAP_PANEL_VISIBLE_KEY);
+    if (legacy == null) return true;
+    return legacy !== "0";
+  }
+  return raw === "1";
 }
 
 function isMobileViewport(){
@@ -1183,107 +1180,142 @@ function isMapViewActive(){
   return Boolean($("viewMap")?.classList.contains("active"));
 }
 
-function applyMapSheetSnapUI(){
-  const snap = nearestMapSnap(state.map.mobileSnap);
-  const heightValue = `${snap}vh`;
-  const mapShell = $("mapShell");
-  if (mapShell){
-    mapShell.style.setProperty("--map-sheet-height", heightValue);
+function normalizeDrawerTab(tab){
+  const key = String(tab || "").toLowerCase().trim();
+  return ["layers", "feature", "site"].includes(key) ? key : "layers";
+}
+
+function queueMapInvalidate(delay = 100){
+  if (!isMapViewActive() || !state.map.instance) return;
+  setTimeout(() => {
+    try{
+      state.map.instance.invalidateSize(true);
+    } catch {}
+  }, delay);
+}
+
+function applyDrawerUiState(){
+  const workspace = $("mapWorkspace");
+  const drawer = $("rightDrawer");
+  const topToggle = $("btnMapToggle");
+  const drawerToggle = $("btnDrawerToggle");
+  const dockBtn = $("drawerDockBtn");
+  const open = state.map.drawerOpen !== false;
+  let docked = state.map.drawerDocked === true;
+  if (isMobileViewport()) docked = false;
+  state.map.drawerDocked = docked;
+  state.map.panelVisible = open;
+
+  if (workspace){
+    workspace.classList.toggle("drawer-open", open);
+    workspace.classList.toggle("drawer-docked", open && docked);
   }
-  document.documentElement.style.setProperty("--map-sheet-height", heightValue);
-  document.querySelectorAll(".map-snap-btn").forEach((btn) => {
-    btn.classList.toggle("active", Number(btn.dataset.mapSnap) === snap);
+  if (drawer){
+    drawer.classList.toggle("open", open);
+  }
+
+  if (topToggle){
+    topToggle.classList.toggle("is-active", open);
+    topToggle.setAttribute("aria-pressed", open ? "true" : "false");
+    topToggle.title = open ? t("mapHide") : t("mapShow");
+  }
+  if (drawerToggle){
+    drawerToggle.classList.toggle("is-active", open);
+  }
+  if (dockBtn){
+    dockBtn.style.display = isMobileViewport() ? "none" : "";
+    dockBtn.textContent = docked ? "Undock" : "Dock";
+  }
+
+  const tab = normalizeDrawerTab(state.map.drawerTab);
+  state.map.drawerTab = tab;
+  document.querySelectorAll("[data-drawer-tab]").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.drawerTab === tab);
+  });
+  document.querySelectorAll(".drawer-tab-pane").forEach((pane) => {
+    pane.classList.toggle("active", pane.id === `drawerTab${tab.charAt(0).toUpperCase()}${tab.slice(1)}`);
   });
 }
 
-function setMapSheetSnap(snap, { persist = true } = {}){
-  state.map.mobileSnap = nearestMapSnap(snap);
+function setDrawerOpen(openBool, { persist = true } = {}){
+  const open = Boolean(openBool);
+  state.map.drawerOpen = open;
+  state.map.panelVisible = open;
   if (persist){
-    safeLocalStorageSet(MAP_PANEL_MOBILE_SNAP_KEY, String(state.map.mobileSnap));
+    safeLocalStorageSet(DRAWER_OPEN_KEY, open ? "1" : "0");
+    safeLocalStorageSet(MAP_PANEL_VISIBLE_KEY, open ? "1" : "0");
   }
-  applyMapSheetSnapUI();
-  if (state.map.panelVisible !== false && isMapViewActive() && state.map.instance){
-    setTimeout(() => state.map.instance.invalidateSize(), 50);
-  }
+  applyDrawerUiState();
+  queueMapInvalidate();
 }
 
-function bindMapSheetDrag(){
-  const handle = $("mapSheetHandle");
-  if (!handle || handle.dataset.bound === "1") return;
-  handle.dataset.bound = "1";
-  let pointerId = null;
-  let previewSnap = state.map.mobileSnap || 60;
-
-  const finishDrag = () => {
-    pointerId = null;
-    setMapSheetSnap(previewSnap);
-    window.removeEventListener("pointermove", onMove);
-    window.removeEventListener("pointerup", onUp);
-    window.removeEventListener("pointercancel", onUp);
-  };
-
-  const onMove = (e) => {
-    if (e.pointerId !== pointerId) return;
-    const vh = ((window.innerHeight - e.clientY) / window.innerHeight) * 100;
-    const bounded = Math.max(24, Math.min(92, vh));
-    previewSnap = nearestMapSnap(bounded);
-    const mapShell = $("mapShell");
-    if (mapShell){
-      mapShell.style.setProperty("--map-sheet-height", `${bounded.toFixed(1)}vh`);
+function setDrawerTab(tabName, { persist = true, open = true } = {}){
+  state.map.drawerTab = normalizeDrawerTab(tabName);
+  if (persist){
+    safeLocalStorageSet(DRAWER_TAB_KEY, state.map.drawerTab);
+  }
+  if (open){
+    state.map.drawerOpen = true;
+    state.map.panelVisible = true;
+    if (persist){
+      safeLocalStorageSet(DRAWER_OPEN_KEY, "1");
     }
-    document.documentElement.style.setProperty("--map-sheet-height", `${bounded.toFixed(1)}vh`);
-  };
+  }
+  applyDrawerUiState();
+  queueMapInvalidate(80);
+}
 
-  const onUp = (e) => {
-    if (e.pointerId !== pointerId) return;
-    finishDrag();
-  };
+function setDrawerDocked(dockedBool, { persist = true } = {}){
+  const docked = Boolean(dockedBool) && !isMobileViewport();
+  state.map.drawerDocked = docked;
+  if (persist){
+    safeLocalStorageSet(DRAWER_DOCKED_KEY, docked ? "1" : "0");
+  }
+  applyDrawerUiState();
+  queueMapInvalidate();
+}
 
-  handle.addEventListener("pointerdown", (e) => {
-    if (!isMobileViewport() || state.map.panelVisible === false) return;
-    pointerId = e.pointerId;
-    previewSnap = state.map.mobileSnap || 60;
-    handle.setPointerCapture?.(pointerId);
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
+function applyDrawerStateFromStorage(){
+  state.map.drawerOpen = getSavedMapPanelVisible();
+  state.map.drawerTab = normalizeDrawerTab(safeLocalStorageGet(DRAWER_TAB_KEY) || state.map.drawerTab);
+  state.map.drawerDocked = safeLocalStorageGet(DRAWER_DOCKED_KEY) === "1";
+  state.map.panelVisible = state.map.drawerOpen;
+  applyDrawerUiState();
+}
+
+function initMapWorkspaceUi(){
+  if (state.map.workspaceUiBound) return;
+  state.map.workspaceUiBound = true;
+  const drawerToggle = $("btnDrawerToggle");
+  if (drawerToggle){
+    drawerToggle.addEventListener("click", () => setDrawerOpen(!state.map.drawerOpen));
+  }
+  const drawerClose = $("drawerCloseBtn");
+  if (drawerClose){
+    drawerClose.addEventListener("click", () => setDrawerOpen(false));
+  }
+  const drawerDock = $("drawerDockBtn");
+  if (drawerDock){
+    drawerDock.addEventListener("click", () => setDrawerDocked(!state.map.drawerDocked));
+  }
+  document.querySelectorAll("[data-drawer-tab]").forEach((btn) => {
+    if (btn.dataset.drawerBound === "1") return;
+    btn.dataset.drawerBound = "1";
+    btn.addEventListener("click", () => setDrawerTab(btn.dataset.drawerTab || "layers"));
   });
-}
-
-function applyMapPanelVisibility(){
-  const mapLayout = $("mapLayout");
-  const mapShell = $("mapShell");
-  const toggleBtn = $("btnMapToggle");
-  const isVisible = state.map.panelVisible !== false;
-
-  if (mapLayout) mapLayout.classList.toggle("map-collapsed", !isVisible);
-  if (mapShell) mapShell.hidden = !isVisible;
-  if (toggleBtn){
-    toggleBtn.classList.toggle("is-active", isVisible);
-    toggleBtn.setAttribute("aria-pressed", isVisible ? "true" : "false");
-    toggleBtn.title = isVisible ? t("mapHide") : t("mapShow");
-  }
-  applyMapSheetSnapUI();
-
-  if (isVisible && isMapViewActive()){
-    ensureMap();
-    if (state.map.instance){
-      setTimeout(() => state.map.instance.invalidateSize(), 50);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape"){
+      setDrawerOpen(false);
     }
-  }
+  });
 }
 
 function setMapPanelVisible(visible, { persist = true } = {}){
-  const next = Boolean(visible);
-  state.map.panelVisible = next;
-  if (persist){
-    safeLocalStorageSet(MAP_PANEL_VISIBLE_KEY, next ? "1" : "0");
-  }
-  applyMapPanelVisibility();
+  setDrawerOpen(Boolean(visible), { persist });
 }
 
 function toggleMapPanel(){
-  setMapPanelVisible(!state.map.panelVisible);
+  setDrawerOpen(!state.map.drawerOpen);
 }
 
 function t(key, vars = {}){
@@ -1755,13 +1787,10 @@ function setActiveView(viewId){
     if (state.features.labor) loadLaborRows();
   }
   if (viewId === "viewMap"){
-    if (state.map.panelVisible !== false){
-      ensureMap();
-      if (state.map.instance){
-        setTimeout(() => state.map.instance.invalidateSize(), 50);
-      }
-    }
-    applyMapPanelVisibility();
+    ensureMap();
+    initMapWorkspaceUi();
+    applyDrawerUiState();
+    queueMapInvalidate(90);
     refreshLocations();
   }
   if (viewId === "viewDailyReport"){
@@ -3304,7 +3333,7 @@ function focusSiteOnMap(siteId){
     if (pinsLayer?.addLayer) pinsLayer.addLayer(targetMarker);
     else targetMarker.addTo(state.map.instance);
     targetMarker.on("click", () => {
-      handleMapFeatureSelection(buildSiteFeature(site), { siteId: site.id, openOverview: true });
+      handleMapFeatureSelection(buildSiteFeature(site), { siteId: site.id, openOverview: true, tab: "feature" });
     });
     const time = site.created_at ? new Date(site.created_at).toLocaleTimeString() : "-";
     const pendingLabel = site.is_pending ? ` • ${t("siteStatusPending")}` : "";
@@ -3551,9 +3580,14 @@ function handleMapFeatureSelection(feature, options = {}){
   if (state.map.selectedIndex < 0) state.map.selectedIndex = 0;
   state.map.selectedFeature = state.map.selectedSet[state.map.selectedIndex] || feature;
   drawFeatureHighlight(state.map.selectedFeature);
+  const targetTab = normalizeDrawerTab(options?.tab || "feature");
   if (options?.siteId){
-    setActiveSite(options.siteId, { openOverview: options.openOverview === true });
+    setActiveSite(options.siteId, {
+      openOverview: options.openOverview === true,
+      autoDrawerTab: targetTab === "site",
+    });
   }
+  setDrawerTab(targetTab, { open: true });
   setFeatureTab(state.map.selectedTab || "summary");
 }
 function closeFeatureDrawer(){
@@ -3785,6 +3819,8 @@ function ensureMap(){
   state.map.layerVisibility = getSavedLayerVisibility();
   window.__speccomMap = map;
   state.map.instance = map;
+  initMapWorkspaceUi();
+  applyDrawerUiState();
   ensureMapLayerRegistry();
   applyMapLayerVisibility();
   registerMapUiBindings();
@@ -3851,7 +3887,7 @@ function updateMapMarkers(rows){
       if (pinsLayer?.addLayer) pinsLayer.addLayer(marker);
       else marker.addTo(state.map.instance);
       marker.on("click", () => {
-        handleMapFeatureSelection(buildSiteFeature(row), { siteId: id, openOverview: true });
+        handleMapFeatureSelection(buildSiteFeature(row), { siteId: id, openOverview: true, tab: "feature" });
       });
       markers.set(id, marker);
       state.map.featureMarkerMeta.set(id, { kind: "site", siteId: id });
@@ -4115,7 +4151,7 @@ function refreshLanguageSensitiveUI(){
   renderDprMetrics();
   renderDprProjectOptions();
   applyI18n();
-  applyMapPanelVisibility();
+  applyDrawerUiState();
   refreshLocations();
 }
 
@@ -7003,8 +7039,8 @@ function closeMessagesModal(){
 function openMenuModal(){
   const modal = $("menuModal");
   if (!modal) return;
-  if (isMapViewActive() && state.map.panelVisible !== false){
-    setMapPanelVisible(false);
+  if (isMapViewActive() && state.map.drawerOpen !== false){
+    setDrawerOpen(false);
   }
   syncMenuLanguageToggle();
   const grantBtn = $("btnGrantProjectAccess");
@@ -9374,10 +9410,13 @@ function focusFirstSearchResult(){
   });
 }
 
-async function setActiveSite(siteId, { openOverview = false } = {}){
+async function setActiveSite(siteId, { openOverview = false, autoDrawerTab = true } = {}){
   const site = getVisibleSites().find((row) => row.id === siteId) || null;
   state.activeSite = site;
   if (site){
+    if (autoDrawerTab){
+      setDrawerTab("site", { open: true });
+    }
     const feature = buildSiteFeature(site);
     const coords = getSiteCoords(site);
     if (coords){
@@ -9427,7 +9466,7 @@ function closeSitePanel(){
   SpecCom.helpers.closePinOverview();
   renderSiteList();
   renderSitePanel();
-  closeFeatureDrawer();
+  renderFeatureDrawer();
 }
 
 SpecCom.helpers.ensurePinOverviewModal = function(){
@@ -14376,15 +14415,11 @@ async function handleSignIn(e) {
 function wireUI(){
   if (uiWired) return;
   uiWired = true;
-  state.map.panelVisible = getSavedMapPanelVisible();
-  state.map.mobileSnap = getSavedMapSheetSnap();
-  applyMapPanelVisibility();
-  bindMapSheetDrag();
+  applyDrawerStateFromStorage();
+  initMapWorkspaceUi();
   window.addEventListener("resize", () => {
-    applyMapSheetSnapUI();
-    if (isMapViewActive() && state.map.panelVisible !== false && state.map.instance){
-      setTimeout(() => state.map.instance.invalidateSize(), 40);
-    }
+    applyDrawerUiState();
+    queueMapInvalidate(120);
   });
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.addEventListener("click", () => setActiveView(btn.dataset.view));
@@ -14754,11 +14789,6 @@ function wireUI(){
   if (mapToggleBtn){
     mapToggleBtn.addEventListener("click", () => toggleMapPanel());
   }
-  document.querySelectorAll(".map-snap-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      setMapSheetSnap(Number(btn.dataset.mapSnap));
-    });
-  });
   const projectsOpenBtn = $("btnOpenProjects");
   if (projectsOpenBtn){
     projectsOpenBtn.addEventListener("click", () => openProjectsModal());

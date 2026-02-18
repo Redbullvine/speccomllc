@@ -366,13 +366,14 @@
         </section>
 
         <section id="viewMap" class="view active">
-          <div class="card">
-            <div class="row" style="justify-content:space-between; align-items:center;">
-              <div>
-                <h1 data-i18n="mapTitle">Sites map</h1>
-                <div class="muted small" data-i18n="mapSubtitle">Drop a pin to create a site and add documentation.</div>
-              </div>
-              <div class="row map-controls">
+          <div id="mapWorkspace" class="map-workspace">
+            <div id="mapCanvas" class="map-canvas">
+              <div id="liveMap" class="map-leaflet map"></div>
+              <div class="map-floating-toolbar">
+                <button id="btnDrawerToggle" class="btn ghost small" type="button">Drawer</button>
+                <button class="btn ghost small" type="button" data-drawer-tab="layers">Layers</button>
+                <button class="btn ghost small" type="button" data-drawer-tab="feature">Feature</button>
+                <button class="btn ghost small" type="button" data-drawer-tab="site">Site</button>
                 <label class="muted small" for="mapBasemapSelect">Basemap</label>
                 <select id="mapBasemapSelect" class="input compact" style="max-width:170px;">
                   <option value="street">Street</option>
@@ -384,120 +385,128 @@
                 <button id="btnInvoiceAgent" class="btn secondary" type="button" data-i18n="invoiceAgentAction">Invoice Agent</button>
                 <input id="importLocationsInput" type="file" accept=".kmz,application/vnd.google-earth.kmz" style="display:none;" />
               </div>
+              <div id="mapStatus" class="muted small map-status-overlay"></div>
             </div>
-            <div id="mapLayout" class="map-layout">
-              <aside class="map-layer-shell">
-                <div class="map-layer-card">
-                  <div class="site-panel-title">Layers</div>
-                  <div class="muted small">Toggle map layers</div>
-                  <div id="mapLayerPanelBody" class="map-layer-list" style="margin-top:10px;">
-                    <label class="layer-toggle-row"><input id="mapLayerBoundary" type="checkbox" checked /> Project Boundary</label>
-                    <label class="layer-toggle-row"><input id="mapLayerPins" type="checkbox" checked /> Pins / Locations</label>
-                    <label class="layer-toggle-row"><input id="mapLayerSpans" type="checkbox" checked /> Spans / Paths</label>
-                    <label class="layer-toggle-row"><input id="mapLayerKmz" type="checkbox" checked /> KMZ Imports</label>
-                    <label class="layer-toggle-row"><input id="mapLayerPhotos" type="checkbox" /> Photos</label>
-                  </div>
-                  <div id="mapKmzGroupList" class="muted small" style="margin-top:10px;"></div>
+
+            <aside id="rightDrawer" class="right-drawer">
+              <div class="drawer-header">
+                <div class="drawer-tabs">
+                  <button class="btn ghost small" type="button" data-drawer-tab="layers">Layers</button>
+                  <button class="btn ghost small" type="button" data-drawer-tab="feature">Feature</button>
+                  <button class="btn ghost small" type="button" data-drawer-tab="site">Site</button>
                 </div>
-              </aside>
-              <div id="mapShell" class="map-shell">
-                <div class="map-sheet-bar">
-                  <button id="mapSheetHandle" class="map-sheet-handle" type="button" aria-label="Resize map"></button>
-                  <div class="map-sheet-snaps" role="group" aria-label="Map size">
-                    <button class="map-snap-btn" type="button" data-map-snap="30">30%</button>
-                    <button class="map-snap-btn" type="button" data-map-snap="60">60%</button>
-                    <button class="map-snap-btn" type="button" data-map-snap="90">90%</button>
-                  </div>
-                </div>
-                <div id="liveMap" class="map"></div>
-                <div id="mapStatus" class="muted small" style="margin-top:10px;"></div>
-              </div>
-              <div class="site-panel-shell">
-                <div id="featureDrawerCard" class="feature-drawer-card">
-                  <div class="row" style="justify-content:space-between; align-items:flex-start;">
-                    <div>
-                      <div id="featureDrawerTitle" class="site-panel-title">Feature details</div>
-                      <div id="featureDrawerSubTitle" class="muted small">Select a map feature.</div>
-                    </div>
-                    <button id="btnFeatureDrawerClose" class="btn ghost small" type="button">Close</button>
-                  </div>
-                  <div id="featureDrawerPager" class="row" style="margin-top:8px; display:none; gap:8px;">
-                    <button id="btnFeaturePrev" class="btn ghost small" type="button">Prev</button>
-                    <div id="featureDrawerPagerText" class="muted small" style="align-self:center;">1/1</div>
-                    <button id="btnFeatureNext" class="btn ghost small" type="button">Next</button>
-                  </div>
-                  <div class="row feature-tabs" style="margin-top:10px;">
-                    <button class="btn ghost small is-active" type="button" data-feature-tab="summary">Summary</button>
-                    <button class="btn ghost small" type="button" data-feature-tab="photos">Photos</button>
-                    <button class="btn ghost small" type="button" data-feature-tab="billing">Billing</button>
-                    <button class="btn ghost small" type="button" data-feature-tab="notes">Notes</button>
-                  </div>
-                  <div id="featureDrawerBody" class="feature-drawer-body" style="margin-top:10px;"></div>
-                </div>
-                <div class="site-panel-card">
-                  <div class="row" style="justify-content:space-between; align-items:center;">
-                    <div>
-                      <div class="site-panel-title" data-i18n="sitePanelTitle">Site panel</div>
-                      <div id="sitePanelSubtitle" class="muted small" data-i18n="noSiteSelected">No site selected.</div>
-                    </div>
-                    <button id="btnCloseSitePanel" class="btn ghost small" data-action="closeSitePanel" data-i18n="closeLabel">Close</button>
-                  </div>
-                  <div class="hr"></div>
-
-                  <div class="panel-section">
-                    <div class="section-title" data-i18n="siteNameTitle">Location name</div>
-                    <div class="muted small" data-i18n="siteNameSubtitle">Name this splice location so it is easy to find later.</div>
-                    <div class="row" style="margin-top:8px;">
-                      <input id="siteNameInput" class="input" placeholder="Location name" data-i18n-placeholder="siteNamePlaceholder" />
-                      <button id="btnSaveSiteName" class="btn secondary" data-action="saveSiteName" data-i18n="saveLabel">Save</button>
-                      <button id="btnEditSiteLocation" class="btn ghost" type="button">Edit location</button>
-                    </div>
-                  </div>
-
-                  <div class="panel-section">
-                    <div class="section-title" data-i18n="mediaTitle">Media</div>
-                    <div class="muted small" data-i18n="mediaSubtitle">Add images from camera or gallery.</div>
-                    <div class="row" style="margin-top:8px;">
-                      <label class="btn secondary file-btn">
-                        <span data-i18n="addMedia">Add media</span>
-                        <input id="siteMediaInput" type="file" accept="image/*" capture="environment" />
-                      </label>
-                    </div>
-                    <div id="siteMediaGallery" class="media-gallery" style="margin-top:10px;"></div>
-                  </div>
-
-                  <div class="panel-section">
-                    <div class="section-title" data-i18n="codesTitle">Codes</div>
-                    <div class="muted small" data-i18n="codesSubtitle">Add one or more codes for this site.</div>
-                    <div class="row" style="margin-top:8px;">
-                      <input id="siteCodesInput" class="input" placeholder="Add codes (comma separated)" data-i18n-placeholder="codesPlaceholder" />
-                      <button id="btnSaveCodes" class="btn secondary" data-action="saveCodes" data-i18n="saveLabel">Save</button>
-                    </div>
-                    <div id="siteCodesList" class="code-list" style="margin-top:8px;"></div>
-                  </div>
-
-                  <div class="panel-section">
-                    <div class="section-title" data-i18n="entriesTitle">Entries</div>
-                    <div class="muted small" data-i18n="entriesSubtitle">Add neutral line entries with optional quantity.</div>
-                    <div class="row" style="margin-top:8px;">
-                      <input id="siteEntryDescription" class="input" placeholder="Entry description" data-i18n-placeholder="entryDescriptionPlaceholder" />
-                      <input id="siteEntryQuantity" class="input" type="number" step="0.01" placeholder="Qty (optional)" data-i18n-placeholder="entryQuantityPlaceholder" />
-                      <button id="btnAddEntry" class="btn secondary" data-action="addEntry" data-i18n="addEntry">Add</button>
-                    </div>
-                    <div id="siteEntriesList" class="entry-list" style="margin-top:8px;"></div>
-                  </div>
-
-                  <div class="panel-section">
-                    <div class="section-title" data-i18n="notesTitle">Notes</div>
-                    <div class="muted small" data-i18n="notesSubtitle">Optional notes for this site.</div>
-                    <textarea id="siteNotesInput" class="input" rows="3" placeholder="Add notes" data-i18n-placeholder="notesPlaceholder"></textarea>
-                    <div class="row" style="margin-top:8px;">
-                      <button id="btnSaveNotes" class="btn secondary" data-action="saveNotes" data-i18n="saveLabel">Save</button>
-                    </div>
-                  </div>
+                <div class="drawer-actions">
+                  <button id="drawerDockBtn" class="btn ghost small" type="button">Dock</button>
+                  <button id="drawerCloseBtn" class="btn ghost small" type="button">Close</button>
                 </div>
               </div>
-            </div>
+
+              <div class="drawer-body">
+                <section id="drawerTabLayers" class="drawer-tab-pane">
+                  <div class="map-layer-card">
+                    <div class="site-panel-title">Layers</div>
+                    <div class="muted small">Toggle map layers</div>
+                    <div id="mapLayerPanelBody" class="map-layer-list" style="margin-top:10px;">
+                      <label class="layer-toggle-row"><input id="mapLayerBoundary" type="checkbox" checked /> Project Boundary</label>
+                      <label class="layer-toggle-row"><input id="mapLayerPins" type="checkbox" checked /> Pins / Locations</label>
+                      <label class="layer-toggle-row"><input id="mapLayerSpans" type="checkbox" checked /> Spans / Paths</label>
+                      <label class="layer-toggle-row"><input id="mapLayerKmz" type="checkbox" checked /> KMZ Imports</label>
+                      <label class="layer-toggle-row"><input id="mapLayerPhotos" type="checkbox" /> Photos</label>
+                    </div>
+                    <div id="mapKmzGroupList" class="muted small" style="margin-top:10px;"></div>
+                  </div>
+                </section>
+
+                <section id="drawerTabFeature" class="drawer-tab-pane">
+                  <div id="featureDrawerCard" class="feature-drawer-card">
+                    <div class="row" style="justify-content:space-between; align-items:flex-start;">
+                      <div>
+                        <div id="featureDrawerTitle" class="site-panel-title">Feature details</div>
+                        <div id="featureDrawerSubTitle" class="muted small">Select a map feature.</div>
+                      </div>
+                      <button id="btnFeatureDrawerClose" class="btn ghost small" type="button">Close</button>
+                    </div>
+                    <div id="featureDrawerPager" class="row" style="margin-top:8px; display:none; gap:8px;">
+                      <button id="btnFeaturePrev" class="btn ghost small" type="button">Prev</button>
+                      <div id="featureDrawerPagerText" class="muted small" style="align-self:center;">1/1</div>
+                      <button id="btnFeatureNext" class="btn ghost small" type="button">Next</button>
+                    </div>
+                    <div class="row feature-tabs" style="margin-top:10px;">
+                      <button class="btn ghost small is-active" type="button" data-feature-tab="summary">Summary</button>
+                      <button class="btn ghost small" type="button" data-feature-tab="photos">Photos</button>
+                      <button class="btn ghost small" type="button" data-feature-tab="billing">Billing</button>
+                      <button class="btn ghost small" type="button" data-feature-tab="notes">Notes</button>
+                    </div>
+                    <div id="featureDrawerBody" class="feature-drawer-body" style="margin-top:10px;"></div>
+                  </div>
+                </section>
+
+                <section id="drawerTabSite" class="drawer-tab-pane">
+                  <div class="site-panel-card">
+                    <div class="row" style="justify-content:space-between; align-items:center;">
+                      <div>
+                        <div class="site-panel-title" data-i18n="sitePanelTitle">Site panel</div>
+                        <div id="sitePanelSubtitle" class="muted small" data-i18n="noSiteSelected">No site selected.</div>
+                      </div>
+                      <button id="btnCloseSitePanel" class="btn ghost small" data-action="closeSitePanel" data-i18n="closeLabel">Close</button>
+                    </div>
+                    <div class="hr"></div>
+
+                    <div class="panel-section">
+                      <div class="section-title" data-i18n="siteNameTitle">Location name</div>
+                      <div class="muted small" data-i18n="siteNameSubtitle">Name this splice location so it is easy to find later.</div>
+                      <div class="row" style="margin-top:8px;">
+                        <input id="siteNameInput" class="input" placeholder="Location name" data-i18n-placeholder="siteNamePlaceholder" />
+                        <button id="btnSaveSiteName" class="btn secondary" data-action="saveSiteName" data-i18n="saveLabel">Save</button>
+                        <button id="btnEditSiteLocation" class="btn ghost" type="button">Edit location</button>
+                      </div>
+                    </div>
+
+                    <div class="panel-section">
+                      <div class="section-title" data-i18n="mediaTitle">Media</div>
+                      <div class="muted small" data-i18n="mediaSubtitle">Add images from camera or gallery.</div>
+                      <div class="row" style="margin-top:8px;">
+                        <label class="btn secondary file-btn">
+                          <span data-i18n="addMedia">Add media</span>
+                          <input id="siteMediaInput" type="file" accept="image/*" capture="environment" />
+                        </label>
+                      </div>
+                      <div id="siteMediaGallery" class="media-gallery" style="margin-top:10px;"></div>
+                    </div>
+
+                    <div class="panel-section">
+                      <div class="section-title" data-i18n="codesTitle">Codes</div>
+                      <div class="muted small" data-i18n="codesSubtitle">Add one or more codes for this site.</div>
+                      <div class="row" style="margin-top:8px;">
+                        <input id="siteCodesInput" class="input" placeholder="Add codes (comma separated)" data-i18n-placeholder="codesPlaceholder" />
+                        <button id="btnSaveCodes" class="btn secondary" data-action="saveCodes" data-i18n="saveLabel">Save</button>
+                      </div>
+                      <div id="siteCodesList" class="code-list" style="margin-top:8px;"></div>
+                    </div>
+
+                    <div class="panel-section">
+                      <div class="section-title" data-i18n="entriesTitle">Entries</div>
+                      <div class="muted small" data-i18n="entriesSubtitle">Add neutral line entries with optional quantity.</div>
+                      <div class="row" style="margin-top:8px;">
+                        <input id="siteEntryDescription" class="input" placeholder="Entry description" data-i18n-placeholder="entryDescriptionPlaceholder" />
+                        <input id="siteEntryQuantity" class="input" type="number" step="0.01" placeholder="Qty (optional)" data-i18n-placeholder="entryQuantityPlaceholder" />
+                        <button id="btnAddEntry" class="btn secondary" data-action="addEntry" data-i18n="addEntry">Add</button>
+                      </div>
+                      <div id="siteEntriesList" class="entry-list" style="margin-top:8px;"></div>
+                    </div>
+
+                    <div class="panel-section">
+                      <div class="section-title" data-i18n="notesTitle">Notes</div>
+                      <div class="muted small" data-i18n="notesSubtitle">Optional notes for this site.</div>
+                      <textarea id="siteNotesInput" class="input" rows="3" placeholder="Add notes" data-i18n-placeholder="notesPlaceholder"></textarea>
+                      <div class="row" style="margin-top:8px;">
+                        <button id="btnSaveNotes" class="btn secondary" data-action="saveNotes" data-i18n="saveLabel">Save</button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </aside>
           </div>
         </section>
 
