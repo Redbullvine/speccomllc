@@ -367,11 +367,10 @@
 
         <section id="viewMap" class="view active">
           <div id="mapWorkspace" class="map-workspace">
-            <aside id="leftSidebar" class="left-sidebar">
-              <div id="sidebarResizer" class="sidebar-resizer" aria-hidden="true"></div>
+            <aside id="rightDrawer" class="right-drawer">
               <div class="sidebar-header">
-                <div class="sidebar-title">Map Controls</div>
-                <button id="btnSidebarClose" class="btn ghost small" type="button">Close</button>
+                <div class="sidebar-title">Map Drawer</div>
+                <button id="btnSidebarClose" class="btn ghost small drawer-close-btn" type="button" aria-label="Close drawer">✕</button>
               </div>
               <div class="sidebar-tabs">
                 <button class="btn ghost small" type="button" data-sidebar-tab="layers">Layers</button>
@@ -403,7 +402,6 @@
                         <div id="featureDrawerTitle" class="site-panel-title">Feature details</div>
                         <div id="featureDrawerSubTitle" class="muted small">Select a map feature.</div>
                       </div>
-                      <button id="btnFeatureDrawerClose" class="btn ghost small" type="button">Close</button>
                     </div>
                     <div id="featureDrawerPager" class="row" style="margin-top:8px; display:none; gap:8px;">
                       <button id="btnFeaturePrev" class="btn ghost small" type="button">Prev</button>
@@ -421,14 +419,13 @@
                 </section>
 
                 <section id="sidebarTabSite" class="sidebar-tab">
-                  <div class="site-panel-card">
-                    <div class="row" style="justify-content:space-between; align-items:center;">
-                      <div>
-                        <div class="site-panel-title" data-i18n="sitePanelTitle">Site panel</div>
-                        <div id="sitePanelSubtitle" class="muted small" data-i18n="noSiteSelected">No site selected.</div>
+                    <div class="site-panel-card">
+                      <div class="row" style="justify-content:space-between; align-items:center;">
+                        <div>
+                          <div class="site-panel-title" data-i18n="sitePanelTitle">Site panel</div>
+                          <div id="sitePanelSubtitle" class="muted small" data-i18n="noSiteSelected">No site selected.</div>
+                        </div>
                       </div>
-                      <button id="btnCloseSitePanel" class="btn ghost small" data-action="closeSitePanel" data-i18n="closeLabel">Close</button>
-                    </div>
                     <div class="hr"></div>
 
                     <div class="panel-section">

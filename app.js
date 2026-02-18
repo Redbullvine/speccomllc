@@ -9438,7 +9438,7 @@ function renderSiteList(){
     const status = site.is_pending ? ` <span class="muted small">(${t("siteStatusPending")})</span>` : "";
     const label = getSiteDisplayName(site);
     return `
-      <button class="btn ${isActive ? "" : "secondary"} small" data-site-id="${site.id}">
+      <button class="site-row${isActive ? " is-selected" : ""}" data-site-id="${site.id}">
         <span>${highlightLocationMatch(label, rawSearch)}${status}</span>
       </button>
     `;
