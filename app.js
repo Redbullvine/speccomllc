@@ -1649,6 +1649,11 @@ function getSiteDisplayName(site){
   return raw || "Pinned site";
 }
 
+function toSiteIdKey(id){
+  if (id == null) return "";
+  return String(id);
+}
+
 function getSiteCoords(site){
   const lat = site?.gps_lat ?? site?.lat ?? site?.latitude ?? null;
   const lng = site?.gps_lng ?? site?.lng ?? site?.longitude ?? null;
@@ -2246,6 +2251,7 @@ function renderImportPreviewMarkers(rows){
       weight: count > 1 ? 2.5 : 2,
       interactive: true,
       bubblingMouseEvents: false,
+      pane: MAP_PANES.kmz,
     });
     marker.bindPopup(buildImportPreviewPopup(point));
     const feature = buildKmzFeatureFromRow(point.row || {
@@ -3408,14 +3414,17 @@ function showPendingPinMarker(latlng){
     fillColor: "#ef4444",
     fillOpacity: 0.9,
     weight: 2,
+    pane: MAP_PANES.pending,
+    bubblingMouseEvents: false,
   });
   marker.addTo(state.map.instance);
   state.map.pendingMarker = marker;
 }
 
 function focusSiteOnMap(siteId){
-  if (!siteId) return;
-  const site = getVisibleSites().find((row) => row.id === siteId) || null;
+  const siteKey = toSiteIdKey(siteId);
+  if (!siteKey) return;
+  const site = getVisibleSites().find((row) => toSiteIdKey(row?.id) === siteKey) || null;
   if (!site){
     toast("Site not found", "Site data unavailable.");
     return;
@@ -3427,9 +3436,9 @@ function focusSiteOnMap(siteId){
     toast("Site has no coordinates", "Add coordinates to place this site on the map.");
     return;
   }
-  const marker = state.map.markers.get(siteId);
+  const marker = state.map.markers.get(siteKey);
   dlog("focusSiteOnMap", {
-    siteId,
+    siteId: siteKey,
     resolvedSiteId: site?.id,
     coords: [coords.lat, coords.lng],
     hasMarker: Boolean(marker),
@@ -3444,18 +3453,20 @@ function focusSiteOnMap(siteId){
       fillColor: color,
       fillOpacity: 0.9,
       weight: 2,
+      pane: MAP_PANES.pins,
+      bubblingMouseEvents: false,
     });
     const pinsLayer = state.map.layers?.pins;
     if (pinsLayer?.addLayer) pinsLayer.addLayer(targetMarker);
     else targetMarker.addTo(state.map.instance);
     targetMarker.on("click", () => {
-      handleMapFeatureSelection(buildSiteFeature(site), { siteId: site.id, openOverview: true, tab: "feature" });
+      handleMapFeatureSelection(buildSiteFeature(site), { siteId: siteKey, openOverview: true, tab: "feature" });
     });
     const time = site.created_at ? new Date(site.created_at).toLocaleTimeString() : "-";
     const pendingLabel = site.is_pending ? ` • ${t("siteStatusPending")}` : "";
     targetMarker.bindPopup(`<b>${escapeHtml(getSiteDisplayName(site))}</b>${pendingLabel}<br>${escapeHtml(time)}`);
-    state.map.markers.set(siteId, targetMarker);
-    state.map.featureMarkerMeta.set(siteId, { kind: "site", siteId: site.id });
+    state.map.markers.set(siteKey, targetMarker);
+    state.map.featureMarkerMeta.set(siteKey, { kind: "site", siteId: siteKey });
   }
   if (targetMarker?.getLatLng){
     const latLng = targetMarker.getLatLng();
@@ -3480,6 +3491,15 @@ const MAP_BASEMAPS = {
     attribution: "Tiles &copy; Esri",
     maxZoom: 19,
   },
+};
+const MAP_PANES = {
+  boundary: "speccom-boundary-pane",
+  spans: "speccom-spans-pane",
+  kmz: "speccom-kmz-pane",
+  pins: "speccom-pins-pane",
+  photos: "speccom-photos-pane",
+  highlight: "speccom-highlight-pane",
+  pending: "speccom-pending-pane",
 };
 const FEATURE_FIELD_LABELS = {
   id: "ID",
@@ -3624,6 +3644,7 @@ function drawFeatureHighlight(feature){
         fillOpacity: 0.14,
         weight: 3,
         interactive: false,
+        pane: MAP_PANES.highlight,
       }).addTo(state.map.instance);
     }
   } else if (geom.type === "LineString"){
@@ -3634,6 +3655,7 @@ function drawFeatureHighlight(feature){
         weight: 5,
         opacity: 0.9,
         interactive: false,
+        pane: MAP_PANES.highlight,
       }).addTo(state.map.instance);
     }
   }
@@ -3905,6 +3927,8 @@ function renderKmzPreviewFeatures(rows, sourceName = "KMZ Import"){
       fillColor: "#7c3aed",
       fillOpacity: 0.8,
       weight: 2,
+      pane: MAP_PANES.kmz,
+      bubblingMouseEvents: false,
     });
     marker.on("click", () => handleMapFeatureSelection(feature));
     marker.bindPopup(`<b>${escapeHtml(feature.properties.name || "KMZ Point")}</b><br>${escapeHtml(feature.properties.__kml_layer || key)}`);
@@ -3913,6 +3937,24 @@ function renderKmzPreviewFeatures(rows, sourceName = "KMZ Import"){
   kmzLayer.addLayer(group);
   state.map.kmzImportGroups.set(key, group);
   renderMapLayerPanel();
+}
+
+function ensureMapPanes(){
+  const map = state.map.instance;
+  if (!map || !window.L) return;
+  const panes = [
+    [MAP_PANES.boundary, 410],
+    [MAP_PANES.spans, 420],
+    [MAP_PANES.kmz, 430],
+    [MAP_PANES.pins, 440],
+    [MAP_PANES.photos, 450],
+    [MAP_PANES.highlight, 460],
+    [MAP_PANES.pending, 470],
+  ];
+  panes.forEach(([name, zIndex]) => {
+    const pane = map.getPane(name) || map.createPane(name);
+    pane.style.zIndex = String(zIndex);
+  });
 }
 
 function ensureMap(){
@@ -3935,6 +3977,7 @@ function ensureMap(){
   state.map.layerVisibility = getSavedLayerVisibility();
   window.__speccomMap = map;
   state.map.instance = map;
+  ensureMapPanes();
   initMapWorkspaceUi();
   applyDrawerUiState();
   ensureMapLayerRegistry();
@@ -3989,7 +4032,7 @@ function updateMapMarkers(rows){
       debugLog("[map] missing coordinates", row);
       return;
     }
-    const id = row.id;
+    const id = toSiteIdKey(row?.id);
     if (!id) return;
     const markerCoords = [coords.lat, coords.lng];
     let marker = markers.get(id);
@@ -4001,9 +4044,11 @@ function updateMapMarkers(rows){
         fillColor: color,
         fillOpacity: 0.9,
         weight: 2,
+        pane: MAP_PANES.pins,
+        bubblingMouseEvents: false,
       });
       const resolveSite = () => {
-        return getVisibleSites().find((item) => item.id === id) || row;
+        return getVisibleSites().find((item) => toSiteIdKey(item?.id) === id) || row;
       };
       if (pinsLayer?.addLayer) pinsLayer.addLayer(marker);
       else marker.addTo(state.map.instance);
@@ -4079,6 +4124,7 @@ function renderDerivedMapLayers(rows){
       weight: 2,
       fillOpacity: 0.05,
       dashArray: "6 4",
+      pane: MAP_PANES.boundary,
     });
     rectangle.on("click", () => {
       const feature = {
@@ -4112,6 +4158,7 @@ function renderDerivedMapLayers(rows){
       color: "#14b8a6",
       weight: 3,
       opacity: 0.85,
+      pane: MAP_PANES.spans,
     });
     span.on("click", () => {
       const feature = {
@@ -4143,6 +4190,8 @@ function renderDerivedMapLayers(rows){
         fillColor: "#ef4444",
         fillOpacity: 0.85,
         weight: 2,
+        pane: MAP_PANES.photos,
+        bubblingMouseEvents: false,
       });
       const feature = {
         type: "Feature",
@@ -4577,8 +4626,9 @@ SpecCom.helpers.deleteSiteFromPanel = async function(){
     }
     state.projectSites = (state.projectSites || []).filter(s => s.id !== site.id);
     state.pendingSites = (state.pendingSites || []).filter(s => s.id !== site.id);
-    if (state.map?.instance && state.map?.markers?.has(site.id)){
-      const marker = state.map.markers.get(site.id);
+    const siteKey = toSiteIdKey(site.id);
+    if (state.map?.instance && state.map?.markers?.has(siteKey)){
+      const marker = state.map.markers.get(siteKey);
       if (marker){
         try{
           const pinsLayer = state.map.layers?.pins;
@@ -4586,8 +4636,8 @@ SpecCom.helpers.deleteSiteFromPanel = async function(){
           else state.map.instance.removeLayer(marker);
         } catch {}
       }
-      state.map.markers.delete(site.id);
-      state.map.featureMarkerMeta.delete(site.id);
+      state.map.markers.delete(siteKey);
+      state.map.featureMarkerMeta.delete(siteKey);
     }
     closeSitePanel();
     renderSiteList();
@@ -9466,8 +9516,8 @@ async function loadProjectSites(projectId){
   state.projectSites = data || [];
   state.pendingSites = loadPendingSitesFromStorage();
   state.map.siteSearchIndex.clear();
-  const visibleIds = new Set(getVisibleSites().map((site) => site.id));
-  if (state.activeSite && !visibleIds.has(state.activeSite.id)){
+  const visibleIds = new Set(getVisibleSites().map((site) => toSiteIdKey(site?.id)));
+  if (state.activeSite && !visibleIds.has(toSiteIdKey(state.activeSite.id))){
     closeSitePanel();
   }
   renderSiteList();
@@ -9507,7 +9557,7 @@ function renderSiteList(){
   }
   const rawSearch = String(state.mapFilters.search || "").trim();
   wrap.innerHTML = rows.map((site) => {
-    const isActive = state.activeSite?.id === site.id;
+    const isActive = toSiteIdKey(state.activeSite?.id) === toSiteIdKey(site?.id);
     const status = site.is_pending ? ` <span class="muted small">(${t("siteStatusPending")})</span>` : "";
     const label = getSiteDisplayName(site);
     return `
@@ -9559,7 +9609,8 @@ function focusFirstSearchResult(){
 }
 
 async function setActiveSite(siteId, { openOverview = false, autoDrawerTab = true } = {}){
-  const site = getVisibleSites().find((row) => row.id === siteId) || null;
+  const siteKey = toSiteIdKey(siteId);
+  const site = getVisibleSites().find((row) => toSiteIdKey(row?.id) === siteKey) || null;
   state.activeSite = site;
   if (site){
     if (autoDrawerTab){
@@ -9570,7 +9621,7 @@ async function setActiveSite(siteId, { openOverview = false, autoDrawerTab = tru
     if (coords){
       const set = getFeatureSetByPoint(coords.lat, coords.lng);
       state.map.selectedSet = set.length ? set : [feature];
-      state.map.selectedIndex = Math.max(0, state.map.selectedSet.findIndex((f) => String(f?.properties?.id || "") === String(site.id)));
+      state.map.selectedIndex = Math.max(0, state.map.selectedSet.findIndex((f) => toSiteIdKey(f?.properties?.id) === siteKey));
       if (state.map.selectedIndex < 0) state.map.selectedIndex = 0;
       state.map.selectedFeature = state.map.selectedSet[state.map.selectedIndex] || feature;
       drawFeatureHighlight(state.map.selectedFeature);
