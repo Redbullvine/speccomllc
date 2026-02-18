@@ -1040,12 +1040,14 @@ function safeLocalStorageRemove(key){
 
 const CURRENT_PROJECT_KEY = "current_project_id";
 const MAP_PANEL_VISIBLE_KEY = "map_panel_visible";
-const DRAWER_OPEN_KEY = "speccom.ui.drawerOpen";
-const DRAWER_TAB_KEY = "speccom.ui.drawerTab";
-const DRAWER_DOCKED_KEY = "speccom.ui.drawerDocked";
-const DRAWER_WIDTH_KEY = "speccom.ui.drawerWidth";
-const DRAWER_MIN_WIDTH = 320;
-const DRAWER_MAX_WIDTH = 520;
+const SIDEBAR_OPEN_KEY = "speccom.ui.sidebarOpen";
+const SIDEBAR_TAB_KEY = "speccom.ui.sidebarTab";
+const SIDEBAR_WIDTH_KEY = "speccom.ui.sidebarWidth";
+const LEGACY_DRAWER_OPEN_KEY = "speccom.ui.drawerOpen";
+const LEGACY_DRAWER_TAB_KEY = "speccom.ui.drawerTab";
+const LEGACY_DRAWER_WIDTH_KEY = "speccom.ui.drawerWidth";
+const SIDEBAR_MIN_WIDTH = 320;
+const SIDEBAR_MAX_WIDTH = 520;
 
 function storageOk(){
   try{
@@ -1168,7 +1170,7 @@ function setSavedProjectPreference(projectId){
 }
 
 function getSavedMapPanelVisible(){
-  const raw = safeLocalStorageGet(DRAWER_OPEN_KEY);
+  const raw = safeLocalStorageGet(SIDEBAR_OPEN_KEY) ?? safeLocalStorageGet(LEGACY_DRAWER_OPEN_KEY);
   if (raw == null){
     const legacy = safeLocalStorageGet(MAP_PANEL_VISIBLE_KEY);
     if (legacy == null) return true;
@@ -1178,7 +1180,7 @@ function getSavedMapPanelVisible(){
 }
 
 function isMobileViewport(){
-  return window.matchMedia("(max-width: 980px)").matches;
+  return window.matchMedia("(max-width: 900px)").matches;
 }
 
 function isMapViewActive(){
@@ -1187,22 +1189,22 @@ function isMapViewActive(){
 
 function normalizeDrawerTab(tab){
   const key = String(tab || "").toLowerCase().trim();
-  return ["layers", "feature", "site"].includes(key) ? key : "layers";
+  return ["layers", "feature", "site", "basemap"].includes(key) ? key : "layers";
 }
 
 function normalizeDrawerWidth(raw){
   const value = Number(raw);
   if (!Number.isFinite(value)) return null;
-  return Math.max(DRAWER_MIN_WIDTH, Math.min(DRAWER_MAX_WIDTH, Math.round(value)));
+  return Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, Math.round(value)));
 }
 
 function applyDrawerWidthCss(width){
   const next = normalizeDrawerWidth(width);
   if (!next){
-    document.documentElement.style.removeProperty("--drawer-w-current");
+    document.documentElement.style.removeProperty("--sidebar-w");
     return;
   }
-  document.documentElement.style.setProperty("--drawer-w-current", `${next}px`);
+  document.documentElement.style.setProperty("--sidebar-w", `${next}px`);
 }
 
 function setDrawerWidth(width, { persist = true } = {}){
@@ -1211,7 +1213,7 @@ function setDrawerWidth(width, { persist = true } = {}){
   state.map.drawerWidth = next;
   applyDrawerWidthCss(next);
   if (persist){
-    safeLocalStorageSet(DRAWER_WIDTH_KEY, String(next));
+    safeLocalStorageSet(SIDEBAR_WIDTH_KEY, String(next));
   }
 }
 
@@ -1231,49 +1233,29 @@ function queueMapInvalidate(delays = 120){
 }
 
 function applyDrawerUiState(){
-  const workspace = $("mapWorkspace");
-  const drawer = $("rightDrawer");
+  const body = document.body;
   const topToggle = $("btnMapToggle");
-  const drawerToggle = $("btnDrawerToggle");
-  const drawerMenu = $("btnDrawerMenu");
-  const dockBtn = $("drawerDockBtn");
   const open = state.map.drawerOpen !== false;
-  let docked = state.map.drawerDocked === true;
-  if (isMobileViewport()) docked = false;
-  state.map.drawerDocked = docked;
+  const mobile = isMobileViewport();
+  state.map.drawerDocked = !mobile;
   state.map.panelVisible = open;
 
-  if (workspace){
-    workspace.classList.toggle("drawer-open", open);
-    workspace.classList.toggle("drawer-docked", open && docked);
-  }
-  if (drawer){
-    drawer.classList.toggle("open", open);
-  }
+  body.classList.toggle("sidebar-open", open && mobile);
+  body.classList.toggle("sidebar-collapsed", !open && !mobile);
 
   if (topToggle){
     topToggle.classList.toggle("is-active", open);
     topToggle.setAttribute("aria-pressed", open ? "true" : "false");
     topToggle.title = open ? t("mapHide") : t("mapShow");
   }
-  if (drawerToggle){
-    drawerToggle.classList.toggle("is-active", open);
-  }
-  if (drawerMenu){
-    drawerMenu.classList.toggle("is-active", open);
-  }
-  if (dockBtn){
-    dockBtn.style.display = isMobileViewport() ? "none" : "";
-    dockBtn.textContent = docked ? "Undock" : "Dock";
-  }
 
   const tab = normalizeDrawerTab(state.map.drawerTab);
   state.map.drawerTab = tab;
-  document.querySelectorAll("[data-drawer-tab]").forEach((btn) => {
-    btn.classList.toggle("is-active", btn.dataset.drawerTab === tab);
+  document.querySelectorAll("[data-sidebar-tab]").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.sidebarTab === tab);
   });
-  document.querySelectorAll(".drawer-tab-pane").forEach((pane) => {
-    pane.classList.toggle("active", pane.id === `drawerTab${tab.charAt(0).toUpperCase()}${tab.slice(1)}`);
+  document.querySelectorAll(".sidebar-tab").forEach((pane) => {
+    pane.classList.toggle("active", pane.id === `sidebarTab${tab.charAt(0).toUpperCase()}${tab.slice(1)}`);
   });
 }
 
@@ -1282,44 +1264,54 @@ function setDrawerOpen(openBool, { persist = true } = {}){
   state.map.drawerOpen = open;
   state.map.panelVisible = open;
   if (persist){
-    safeLocalStorageSet(DRAWER_OPEN_KEY, open ? "1" : "0");
+    safeLocalStorageSet(SIDEBAR_OPEN_KEY, open ? "1" : "0");
     safeLocalStorageSet(MAP_PANEL_VISIBLE_KEY, open ? "1" : "0");
   }
   applyDrawerUiState();
   queueMapInvalidate([120, 220]);
 }
 
+function toggleSidebarOpen(){
+  setDrawerOpen(!state.map.drawerOpen);
+}
+
 function setDrawerTab(tabName, { persist = true, open = true } = {}){
   state.map.drawerTab = normalizeDrawerTab(tabName);
   if (persist){
-    safeLocalStorageSet(DRAWER_TAB_KEY, state.map.drawerTab);
+    safeLocalStorageSet(SIDEBAR_TAB_KEY, state.map.drawerTab);
   }
   if (open){
     state.map.drawerOpen = true;
     state.map.panelVisible = true;
     if (persist){
-      safeLocalStorageSet(DRAWER_OPEN_KEY, "1");
+      safeLocalStorageSet(SIDEBAR_OPEN_KEY, "1");
     }
   }
   applyDrawerUiState();
   queueMapInvalidate([120, 220]);
 }
 
+function switchSidebarTab(tabId){
+  setDrawerTab(tabId, { open: true });
+}
+
 function setDrawerDocked(dockedBool, { persist = true } = {}){
-  const docked = Boolean(dockedBool) && !isMobileViewport();
-  state.map.drawerDocked = docked;
-  if (persist){
-    safeLocalStorageSet(DRAWER_DOCKED_KEY, docked ? "1" : "0");
-  }
-  applyDrawerUiState();
-  queueMapInvalidate([120, 220]);
+  state.map.drawerDocked = Boolean(dockedBool) && !isMobileViewport();
+  if (persist) safeLocalStorageSet("speccom.ui.sidebarDocked", state.map.drawerDocked ? "1" : "0");
 }
 
 function applyDrawerStateFromStorage(){
   state.map.drawerOpen = getSavedMapPanelVisible();
-  state.map.drawerTab = normalizeDrawerTab(safeLocalStorageGet(DRAWER_TAB_KEY) || state.map.drawerTab);
-  state.map.drawerDocked = safeLocalStorageGet(DRAWER_DOCKED_KEY) === "1";
-  state.map.drawerWidth = normalizeDrawerWidth(safeLocalStorageGet(DRAWER_WIDTH_KEY));
+  state.map.drawerTab = normalizeDrawerTab(
+    safeLocalStorageGet(SIDEBAR_TAB_KEY)
+    || safeLocalStorageGet(LEGACY_DRAWER_TAB_KEY)
+    || state.map.drawerTab
+  );
+  state.map.drawerDocked = !isMobileViewport();
+  state.map.drawerWidth = normalizeDrawerWidth(
+    safeLocalStorageGet(SIDEBAR_WIDTH_KEY)
+    || safeLocalStorageGet(LEGACY_DRAWER_WIDTH_KEY)
+  );
   applyDrawerWidthCss(state.map.drawerWidth);
   state.map.panelVisible = state.map.drawerOpen;
   applyDrawerUiState();
@@ -1327,9 +1319,9 @@ function applyDrawerStateFromStorage(){
 
 function initDrawerResizer(){
   if (state.map.drawerResizeBound) return;
-  const handle = $("drawerResizer");
-  const drawer = $("rightDrawer");
-  if (!handle || !drawer) return;
+  const handle = $("sidebarResizer");
+  const sidebar = $("leftSidebar");
+  if (!handle || !sidebar) return;
   state.map.drawerResizeBound = true;
 
   let dragWidth = null;
@@ -1340,7 +1332,7 @@ function initDrawerResizer(){
   const onPointerMove = (e) => {
     if (!dragging) return;
     const delta = e.clientX - startX;
-    dragWidth = normalizeDrawerWidth(startWidth - delta);
+    dragWidth = normalizeDrawerWidth(startWidth + delta);
     if (!dragWidth) return;
     applyDrawerWidthCss(dragWidth);
     queueMapInvalidate(50);
@@ -1359,12 +1351,12 @@ function initDrawerResizer(){
   };
 
   handle.addEventListener("pointerdown", (e) => {
-    if (!state.map.drawerDocked || isMobileViewport()) return;
+    if (isMobileViewport()) return;
     if (state.map.drawerOpen === false) return;
     e.preventDefault();
     dragging = true;
     startX = e.clientX;
-    startWidth = drawer.getBoundingClientRect().width;
+    startWidth = sidebar.getBoundingClientRect().width;
     dragWidth = startWidth;
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
@@ -1374,30 +1366,20 @@ function initDrawerResizer(){
 function initMapWorkspaceUi(){
   if (state.map.workspaceUiBound) return;
   state.map.workspaceUiBound = true;
-  const drawerToggle = $("btnDrawerToggle");
-  if (drawerToggle){
-    drawerToggle.addEventListener("click", () => setDrawerOpen(!state.map.drawerOpen));
+  const sidebarClose = $("btnSidebarClose");
+  if (sidebarClose){
+    sidebarClose.addEventListener("click", () => setDrawerOpen(false));
   }
-  const drawerMenu = $("btnDrawerMenu");
-  if (drawerMenu){
-    drawerMenu.addEventListener("click", () => setDrawerTab("layers", { open: true }));
-  }
-  const drawerClose = $("drawerCloseBtn");
-  if (drawerClose){
-    drawerClose.addEventListener("click", () => setDrawerOpen(false));
-  }
-  const drawerDock = $("drawerDockBtn");
-  if (drawerDock){
-    drawerDock.addEventListener("click", () => setDrawerDocked(!state.map.drawerDocked));
-  }
-  document.querySelectorAll("[data-drawer-tab]").forEach((btn) => {
+  document.querySelectorAll("[data-sidebar-tab]").forEach((btn) => {
     if (btn.dataset.drawerBound === "1") return;
     btn.dataset.drawerBound = "1";
-    btn.addEventListener("click", () => setDrawerTab(btn.dataset.drawerTab || "layers"));
+    btn.addEventListener("click", () => setDrawerTab(btn.dataset.sidebarTab || "layers"));
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape"){
-      setDrawerOpen(false);
+      if (isMobileViewport()){
+        setDrawerOpen(false);
+      }
     }
   });
   initDrawerResizer();
@@ -1408,7 +1390,7 @@ function setMapPanelVisible(visible, { persist = true } = {}){
 }
 
 function toggleMapPanel(){
-  setDrawerOpen(!state.map.drawerOpen);
+  toggleSidebarOpen();
 }
 
 function t(key, vars = {}){
@@ -3680,7 +3662,7 @@ function handleMapFeatureSelection(feature, options = {}){
       autoDrawerTab: targetTab === "site",
     });
   }
-  setDrawerTab(targetTab, { open: true });
+  switchSidebarTab(targetTab);
   setFeatureTab(state.map.selectedTab || "summary");
 }
 function closeFeatureDrawer(){
@@ -7132,7 +7114,7 @@ function closeMessagesModal(){
 function openMenuModal(){
   const modal = $("menuModal");
   if (!modal) return;
-  if (isMapViewActive() && state.map.drawerOpen !== false){
+  if (isMapViewActive() && isMobileViewport() && state.map.drawerOpen !== false){
     setDrawerOpen(false);
   }
   syncMenuLanguageToggle();
@@ -9508,7 +9490,7 @@ async function setActiveSite(siteId, { openOverview = false, autoDrawerTab = tru
   state.activeSite = site;
   if (site){
     if (autoDrawerTab){
-      setDrawerTab("site", { open: true });
+      switchSidebarTab("site");
     }
     const feature = buildSiteFeature(site);
     const coords = getSiteCoords(site);

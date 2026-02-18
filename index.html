@@ -367,68 +367,21 @@
 
         <section id="viewMap" class="view active">
           <div id="mapWorkspace" class="map-workspace">
-            <div id="mapCanvas" class="map-canvas">
-              <div id="liveMap" class="map-leaflet map"></div>
-              <div class="map-floating-toolbar">
-                <button id="btnDrawerToggle" class="btn ghost small toolbar-btn" type="button">
-                  <span class="toolbar-icon" aria-hidden="true">D</span>
-                  <span class="toolbar-label">Drawer</span>
-                </button>
-                <button id="btnDrawerMenu" class="btn ghost small toolbar-btn toolbar-menu-btn" type="button">
-                  <span class="toolbar-icon" aria-hidden="true">M</span>
-                  <span class="toolbar-label">Menu</span>
-                </button>
-                <button class="btn ghost small toolbar-btn toolbar-tab-btn" type="button" data-drawer-tab="layers">
-                  <span class="toolbar-icon" aria-hidden="true">L</span>
-                  <span class="toolbar-label">Layers</span>
-                </button>
-                <button class="btn ghost small toolbar-btn toolbar-tab-btn" type="button" data-drawer-tab="feature">
-                  <span class="toolbar-icon" aria-hidden="true">F</span>
-                  <span class="toolbar-label">Feature</span>
-                </button>
-                <button class="btn ghost small toolbar-btn toolbar-tab-btn" type="button" data-drawer-tab="site">
-                  <span class="toolbar-icon" aria-hidden="true">S</span>
-                  <span class="toolbar-label">Site</span>
-                </button>
-                <label class="muted small" for="mapBasemapSelect">Basemap</label>
-                <select id="mapBasemapSelect" class="input compact" style="max-width:170px;">
-                  <option value="street">Street</option>
-                  <option value="satellite">Satellite</option>
-                </select>
-                <input id="dropPinName" class="input compact" placeholder="Site name" data-i18n-placeholder="dropPinNamePlaceholder" />
-                <button id="btnDropPin" class="btn toolbar-btn" data-action="dropPin">
-                  <span class="toolbar-icon" aria-hidden="true">P</span>
-                  <span class="toolbar-label">Pin</span>
-                </button>
-                <button id="btnImportLocations" class="btn secondary toolbar-btn" type="button">
-                  <span class="toolbar-icon" aria-hidden="true">I</span>
-                  <span class="toolbar-label">Import</span>
-                </button>
-                <button id="btnInvoiceAgent" class="btn secondary toolbar-btn" type="button">
-                  <span class="toolbar-icon" aria-hidden="true">V</span>
-                  <span class="toolbar-label">Invoice</span>
-                </button>
-                <input id="importLocationsInput" type="file" accept=".kmz,application/vnd.google-earth.kmz" style="display:none;" />
+            <aside id="leftSidebar" class="left-sidebar">
+              <div id="sidebarResizer" class="sidebar-resizer" aria-hidden="true"></div>
+              <div class="sidebar-header">
+                <div class="sidebar-title">Map Controls</div>
+                <button id="btnSidebarClose" class="btn ghost small" type="button">Close</button>
               </div>
-              <div id="mapStatus" class="muted small map-status-overlay"></div>
-            </div>
-
-            <aside id="rightDrawer" class="right-drawer">
-              <div id="drawerResizer" class="drawer-resizer" aria-hidden="true"></div>
-              <div class="drawer-header">
-                <div class="drawer-tabs">
-                  <button class="btn ghost small" type="button" data-drawer-tab="layers">Layers</button>
-                  <button class="btn ghost small" type="button" data-drawer-tab="feature">Feature</button>
-                  <button class="btn ghost small" type="button" data-drawer-tab="site">Site</button>
-                </div>
-                <div class="drawer-actions">
-                  <button id="drawerDockBtn" class="btn ghost small" type="button">Dock</button>
-                  <button id="drawerCloseBtn" class="btn ghost small" type="button">Close</button>
-                </div>
+              <div class="sidebar-tabs">
+                <button class="btn ghost small" type="button" data-sidebar-tab="layers">Layers</button>
+                <button class="btn ghost small" type="button" data-sidebar-tab="feature">Feature</button>
+                <button class="btn ghost small" type="button" data-sidebar-tab="site">Site</button>
+                <button class="btn ghost small" type="button" data-sidebar-tab="basemap">Basemap</button>
               </div>
 
-              <div class="drawer-body">
-                <section id="drawerTabLayers" class="drawer-tab-pane">
+              <div class="sidebar-body">
+                <section id="sidebarTabLayers" class="sidebar-tab">
                   <div class="map-layer-card">
                     <div class="site-panel-title">Layers</div>
                     <div class="muted small">Toggle map layers</div>
@@ -443,7 +396,7 @@
                   </div>
                 </section>
 
-                <section id="drawerTabFeature" class="drawer-tab-pane">
+                <section id="sidebarTabFeature" class="sidebar-tab">
                   <div id="featureDrawerCard" class="feature-drawer-card">
                     <div class="row" style="justify-content:space-between; align-items:flex-start;">
                       <div>
@@ -467,7 +420,7 @@
                   </div>
                 </section>
 
-                <section id="drawerTabSite" class="drawer-tab-pane">
+                <section id="sidebarTabSite" class="sidebar-tab">
                   <div class="site-panel-card">
                     <div class="row" style="justify-content:space-between; align-items:center;">
                       <div>
@@ -531,8 +484,34 @@
                     </div>
                   </div>
                 </section>
+
+                <section id="sidebarTabBasemap" class="sidebar-tab">
+                  <div class="map-layer-card">
+                    <div class="site-panel-title">Basemap & Actions</div>
+                    <div class="muted small">Map rendering and quick actions.</div>
+                    <div class="field-stack" style="margin-top:10px;">
+                      <label class="muted small" for="mapBasemapSelect">Basemap</label>
+                      <select id="mapBasemapSelect" class="input">
+                        <option value="street">Street</option>
+                        <option value="satellite">Satellite</option>
+                      </select>
+                      <input id="dropPinName" class="input" placeholder="Site name" data-i18n-placeholder="dropPinNamePlaceholder" />
+                      <div class="row">
+                        <button id="btnDropPin" class="btn" data-action="dropPin">Drop Pin</button>
+                        <button id="btnImportLocations" class="btn secondary" type="button">Import Locations (KMZ)</button>
+                        <button id="btnInvoiceAgent" class="btn secondary" type="button">Invoice Agent</button>
+                        <input id="importLocationsInput" type="file" accept=".kmz,application/vnd.google-earth.kmz" style="display:none;" />
+                      </div>
+                      <div id="mapStatus" class="muted small"></div>
+                    </div>
+                  </div>
+                </section>
               </div>
             </aside>
+
+            <main id="mapCanvas" class="map-canvas">
+              <div id="liveMap" class="map-leaflet map"></div>
+            </main>
           </div>
         </section>
 
