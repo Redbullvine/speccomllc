@@ -1236,24 +1236,50 @@ function clearHoverPanelHideTimer(){
   }
 }
 
-function getAllowedCodesForActiveProject(){
-  const set = new Set();
-  (state.workCodes || []).forEach((row) => {
-    const code = String(row?.code || "").trim();
-    if (code) set.add(code);
-  });
-  if (!set.size){
-    (state.allowedQuantities || []).forEach((row) => {
-      const code = String(row?.unit_code || "").trim();
-      if (code) set.add(code);
-    });
+function getCodesRequiredForActiveProject(){
+  const project = state?.activeProject || null;
+  let raw = project
+    ? (
+        project.codes_required
+        ?? project.required_codes
+        ?? project.requiredCodes
+        ?? project.allowed_codes
+        ?? project.allowedCodes
+        ?? project.billing_codes
+        ?? project.codes
+        ?? null
+      )
+    : null;
+
+  if (!raw){
+    const byWorkCodes = (state.workCodes || []).map((row) => String(row?.code || "").trim()).filter(Boolean);
+    if (byWorkCodes.length) return Array.from(new Set(byWorkCodes));
+    const byUnits = (state.allowedQuantities || []).map((row) => String(row?.unit_code || "").trim()).filter(Boolean);
+    return Array.from(new Set(byUnits));
   }
-  return Array.from(set);
+
+  if (Array.isArray(raw)){
+    return raw.map((item) => {
+      if (item == null) return "";
+      if (typeof item === "string") return item.trim();
+      if (typeof item === "object"){
+        return String(item.code || item.name || item.id || "").trim();
+      }
+      return String(item).trim();
+    }).filter(Boolean);
+  }
+  if (typeof raw === "string"){
+    return raw.split(/[,|]/).map((s) => s.trim()).filter(Boolean);
+  }
+  if (typeof raw === "object"){
+    return Object.keys(raw).filter((k) => raw[k]).map((k) => String(k).trim()).filter(Boolean);
+  }
+  return [];
 }
 
 function buildFieldsForSite(site){
   if (!site || typeof site !== "object") return [];
-  const allowedCodes = getAllowedCodesForActiveProject();
+  const allowedCodes = getCodesRequiredForActiveProject();
   const codeText = allowedCodes.length ? allowedCodes.join(" | ") : "(none listed)";
   const fields = [
     { k: "Site", v: getSiteDisplayName(site) || site.name || site.label || site.location_label || "-" },
@@ -4058,6 +4084,7 @@ function updateMapMarkers(rows){
   const pinsLayer = state.map.layers?.pins;
   const activeSearch = String(state.mapFilters.search || "").trim();
   const renderRows = activeSearch ? getSiteSearchResultSet().rows : (rows || []);
+  const requiredCodes = getCodesRequiredForActiveProject();
   const markers = state.map.markers;
   const seen = new Set();
   renderRows.forEach((row) => {
@@ -4084,22 +4111,9 @@ function updateMapMarkers(rows){
       };
       if (pinsLayer?.addLayer) pinsLayer.addLayer(marker);
       else marker.addTo(state.map.instance);
-      marker.on("mouseover", () => {
+      marker.on("click", () => {
         const site = resolveSite();
         if (!site) return;
-        showHoverPanel(site, { pinned: false });
-      });
-      marker.on("mouseout", () => {
-        scheduleHoverPanelHide(150);
-      });
-      marker.on("click", (e) => {
-        const site = resolveSite();
-        if (!site) return;
-        if (e?.originalEvent?.shiftKey){
-          showHoverPanel(site, { pinned: true });
-        } else if (!hoverPanelPinned){
-          showHoverPanel(site, { pinned: false });
-        }
         handleMapFeatureSelection(buildSiteFeature(site), { siteId: id, openOverview: true, tab: "feature" });
       });
       markers.set(id, marker);
@@ -4113,6 +4127,25 @@ function updateMapMarkers(rows){
     const time = row.created_at ? new Date(row.created_at).toLocaleTimeString() : "-";
     const pendingLabel = row.is_pending ? ` • ${t("siteStatusPending")}` : "";
     marker.bindPopup(`<b>${escapeHtml(getSiteDisplayName(row))}</b>${pendingLabel}<br>${escapeHtml(time)}`);
+    const loc = row.name || row.address || row.label || row.location_name || `Site ${row.id || ""}`.trim();
+    const codeText = requiredCodes.length ? requiredCodes.slice(0, 8).join(" • ") : "(none)";
+    const more = requiredCodes.length > 8 ? ` • +${requiredCodes.length - 8} more` : "";
+    const tooltipHtml = `
+      <div class="scHoverTip">
+        <div class="t1">${escapeHtml(loc)}</div>
+        <div class="t2">Codes: ${escapeHtml(codeText + more)}</div>
+      </div>
+    `;
+    if (marker.getTooltip && marker.getTooltip()){
+      marker.setTooltipContent(tooltipHtml);
+    } else if (marker.bindTooltip){
+      marker.bindTooltip(tooltipHtml, {
+        direction: "top",
+        sticky: true,
+        opacity: 0.97,
+        className: "sc-hover-tooltip",
+      });
+    }
     seen.add(id);
   });
   markers.forEach((marker, id) => {
