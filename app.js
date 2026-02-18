@@ -1048,6 +1048,9 @@ const LEGACY_DRAWER_TAB_KEY = "speccom.ui.drawerTab";
 const LEGACY_DRAWER_WIDTH_KEY = "speccom.ui.drawerWidth";
 const SIDEBAR_MIN_WIDTH = 320;
 const SIDEBAR_MAX_WIDTH = 520;
+let hoverPanelPinned = false;
+let hoverPanelHideTimer = null;
+let hoverPanelUiBound = false;
 
 function storageOk(){
   try{
@@ -1217,6 +1220,120 @@ function setDrawerWidth(width, { persist = true } = {}){
   }
 }
 
+function getMapHoverPanelEls(){
+  return {
+    panel: $("mapHoverPanel"),
+    title: $("mapHoverTitle"),
+    body: $("mapHoverBody"),
+    close: $("btnHoverPanelClose"),
+  };
+}
+
+function clearHoverPanelHideTimer(){
+  if (hoverPanelHideTimer){
+    clearTimeout(hoverPanelHideTimer);
+    hoverPanelHideTimer = null;
+  }
+}
+
+function getAllowedCodesForActiveProject(){
+  const set = new Set();
+  (state.workCodes || []).forEach((row) => {
+    const code = String(row?.code || "").trim();
+    if (code) set.add(code);
+  });
+  if (!set.size){
+    (state.allowedQuantities || []).forEach((row) => {
+      const code = String(row?.unit_code || "").trim();
+      if (code) set.add(code);
+    });
+  }
+  return Array.from(set);
+}
+
+function buildFieldsForSite(site){
+  if (!site || typeof site !== "object") return [];
+  const allowedCodes = getAllowedCodesForActiveProject();
+  const codeText = allowedCodes.length ? allowedCodes.join(" | ") : "(none listed)";
+  const fields = [
+    { k: "Site", v: getSiteDisplayName(site) || site.name || site.label || site.location_label || "-" },
+    { k: "Site ID", v: site.id || "-" },
+    { k: "Allowed Codes", v: codeText },
+  ];
+  if (site.status != null) fields.push({ k: "Status", v: site.status });
+  if (site.billing_status != null) fields.push({ k: "Billing Status", v: site.billing_status });
+  if (site.photos_count != null) fields.push({ k: "Photos", v: site.photos_count });
+  if (site.is_pending != null) fields.push({ k: "Pending", v: site.is_pending ? "Yes" : "No" });
+  if (site.completed != null) fields.push({ k: "Completed", v: site.completed ? "Yes" : "No" });
+  if (site.work_codes != null){
+    const workCodes = Array.isArray(site.work_codes) ? site.work_codes.join(", ") : String(site.work_codes || "");
+    if (workCodes) fields.push({ k: "Work Codes", v: workCodes });
+  }
+  const lat = Number(site.gps_lat);
+  const lng = Number(site.gps_lng);
+  if (Number.isFinite(lat) && Number.isFinite(lng)){
+    fields.push({ k: "Coordinates", v: `${lat.toFixed(6)}, ${lng.toFixed(6)}` });
+  }
+  if (site.gps_accuracy_m != null) fields.push({ k: "GPS Accuracy (m)", v: site.gps_accuracy_m });
+  if (site.created_at) fields.push({ k: "Created", v: new Date(site.created_at).toLocaleString() });
+  return fields;
+}
+
+function showHoverPanel(site, { pinned = false } = {}){
+  if (!site) return;
+  const { panel, title, body } = getMapHoverPanelEls();
+  if (!panel || !title || !body) return;
+  if (hoverPanelPinned && !pinned) return;
+  clearHoverPanelHideTimer();
+  if (pinned){
+    hoverPanelPinned = true;
+  }
+  const siteLabel = getSiteDisplayName(site) || site.name || site.label || site.location_label || "Site";
+  title.textContent = siteLabel;
+  const rows = buildFieldsForSite(site);
+  body.innerHTML = rows.map((row) => `
+    <div class="kv">
+      <div class="k">${escapeHtml(String(row.k || ""))}</div>
+      <div class="v">${escapeHtml(String(row.v == null ? "" : row.v))}</div>
+    </div>
+  `).join("");
+  panel.classList.remove("hidden");
+  panel.setAttribute("aria-hidden", "false");
+}
+
+function hideHoverPanel(force = false){
+  const { panel } = getMapHoverPanelEls();
+  if (!panel) return;
+  clearHoverPanelHideTimer();
+  if (hoverPanelPinned && !force) return;
+  panel.classList.add("hidden");
+  panel.setAttribute("aria-hidden", "true");
+}
+
+function scheduleHoverPanelHide(delay = 150){
+  clearHoverPanelHideTimer();
+  hoverPanelHideTimer = setTimeout(() => {
+    hideHoverPanel(false);
+  }, delay);
+}
+
+function initMapHoverPanelUi(){
+  if (hoverPanelUiBound) return;
+  const { panel, close } = getMapHoverPanelEls();
+  if (!panel || !close) return;
+  hoverPanelUiBound = true;
+  panel.addEventListener("mouseenter", () => clearHoverPanelHideTimer());
+  panel.addEventListener("mouseleave", () => {
+    if (!hoverPanelPinned){
+      scheduleHoverPanelHide(120);
+    }
+  });
+  close.addEventListener("click", () => {
+    hoverPanelPinned = false;
+    hideHoverPanel(true);
+  });
+}
+
 function queueMapInvalidate(delays = 120){
   if (!isMapViewActive() || !state.map.instance) return;
   const delayList = Array.isArray(delays) ? delays : [delays];
@@ -1366,6 +1483,7 @@ function initDrawerResizer(){
 function initMapWorkspaceUi(){
   if (state.map.workspaceUiBound) return;
   state.map.workspaceUiBound = true;
+  initMapHoverPanelUi();
   const sidebarClose = $("btnSidebarClose");
   if (sidebarClose){
     sidebarClose.addEventListener("click", () => setDrawerOpen(false));
@@ -1377,6 +1495,8 @@ function initMapWorkspaceUi(){
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape"){
+      hoverPanelPinned = false;
+      hideHoverPanel(true);
       if (isMobileViewport()){
         setDrawerOpen(false);
       }
@@ -3959,10 +4079,28 @@ function updateMapMarkers(rows){
         fillOpacity: 0.9,
         weight: 2,
       });
+      const resolveSite = () => {
+        return getVisibleSites().find((item) => item.id === id) || row;
+      };
       if (pinsLayer?.addLayer) pinsLayer.addLayer(marker);
       else marker.addTo(state.map.instance);
-      marker.on("click", () => {
-        handleMapFeatureSelection(buildSiteFeature(row), { siteId: id, openOverview: true, tab: "feature" });
+      marker.on("mouseover", () => {
+        const site = resolveSite();
+        if (!site) return;
+        showHoverPanel(site, { pinned: false });
+      });
+      marker.on("mouseout", () => {
+        scheduleHoverPanelHide(150);
+      });
+      marker.on("click", (e) => {
+        const site = resolveSite();
+        if (!site) return;
+        if (e?.originalEvent?.shiftKey){
+          showHoverPanel(site, { pinned: true });
+        } else if (!hoverPanelPinned){
+          showHoverPanel(site, { pinned: false });
+        }
+        handleMapFeatureSelection(buildSiteFeature(site), { siteId: id, openOverview: true, tab: "feature" });
       });
       markers.set(id, marker);
       state.map.featureMarkerMeta.set(id, { kind: "site", siteId: id });

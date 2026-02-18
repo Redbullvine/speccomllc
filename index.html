@@ -496,6 +496,13 @@
             <main id="mapCanvas" class="map-canvas">
               <div id="liveMap" class="map-leaflet map"></div>
             </main>
+            <div id="mapHoverPanel" class="hover-panel hidden" aria-hidden="true">
+              <div class="hover-panel-header">
+                <div id="mapHoverTitle" class="hover-title">-</div>
+                <button id="btnHoverPanelClose" class="hover-close" type="button" title="Close">&times;</button>
+              </div>
+              <div id="mapHoverBody" class="hover-panel-body"></div>
+            </div>
           </div>
         </section>
 
