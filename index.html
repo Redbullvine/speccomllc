@@ -370,25 +370,51 @@
             <div id="mapCanvas" class="map-canvas">
               <div id="liveMap" class="map-leaflet map"></div>
               <div class="map-floating-toolbar">
-                <button id="btnDrawerToggle" class="btn ghost small" type="button">Drawer</button>
-                <button class="btn ghost small" type="button" data-drawer-tab="layers">Layers</button>
-                <button class="btn ghost small" type="button" data-drawer-tab="feature">Feature</button>
-                <button class="btn ghost small" type="button" data-drawer-tab="site">Site</button>
+                <button id="btnDrawerToggle" class="btn ghost small toolbar-btn" type="button">
+                  <span class="toolbar-icon" aria-hidden="true">D</span>
+                  <span class="toolbar-label">Drawer</span>
+                </button>
+                <button id="btnDrawerMenu" class="btn ghost small toolbar-btn toolbar-menu-btn" type="button">
+                  <span class="toolbar-icon" aria-hidden="true">M</span>
+                  <span class="toolbar-label">Menu</span>
+                </button>
+                <button class="btn ghost small toolbar-btn toolbar-tab-btn" type="button" data-drawer-tab="layers">
+                  <span class="toolbar-icon" aria-hidden="true">L</span>
+                  <span class="toolbar-label">Layers</span>
+                </button>
+                <button class="btn ghost small toolbar-btn toolbar-tab-btn" type="button" data-drawer-tab="feature">
+                  <span class="toolbar-icon" aria-hidden="true">F</span>
+                  <span class="toolbar-label">Feature</span>
+                </button>
+                <button class="btn ghost small toolbar-btn toolbar-tab-btn" type="button" data-drawer-tab="site">
+                  <span class="toolbar-icon" aria-hidden="true">S</span>
+                  <span class="toolbar-label">Site</span>
+                </button>
                 <label class="muted small" for="mapBasemapSelect">Basemap</label>
                 <select id="mapBasemapSelect" class="input compact" style="max-width:170px;">
                   <option value="street">Street</option>
                   <option value="satellite">Satellite</option>
                 </select>
                 <input id="dropPinName" class="input compact" placeholder="Site name" data-i18n-placeholder="dropPinNamePlaceholder" />
-                <button id="btnDropPin" class="btn" data-action="dropPin" data-i18n="dropPin">Drop Pin</button>
-                <button id="btnImportLocations" class="btn secondary" type="button" data-i18n="importLocations">Import Locations (KMZ)</button>
-                <button id="btnInvoiceAgent" class="btn secondary" type="button" data-i18n="invoiceAgentAction">Invoice Agent</button>
+                <button id="btnDropPin" class="btn toolbar-btn" data-action="dropPin">
+                  <span class="toolbar-icon" aria-hidden="true">P</span>
+                  <span class="toolbar-label">Pin</span>
+                </button>
+                <button id="btnImportLocations" class="btn secondary toolbar-btn" type="button">
+                  <span class="toolbar-icon" aria-hidden="true">I</span>
+                  <span class="toolbar-label">Import</span>
+                </button>
+                <button id="btnInvoiceAgent" class="btn secondary toolbar-btn" type="button">
+                  <span class="toolbar-icon" aria-hidden="true">V</span>
+                  <span class="toolbar-label">Invoice</span>
+                </button>
                 <input id="importLocationsInput" type="file" accept=".kmz,application/vnd.google-earth.kmz" style="display:none;" />
               </div>
               <div id="mapStatus" class="muted small map-status-overlay"></div>
             </div>
 
             <aside id="rightDrawer" class="right-drawer">
+              <div id="drawerResizer" class="drawer-resizer" aria-hidden="true"></div>
               <div class="drawer-header">
                 <div class="drawer-tabs">
                   <button class="btn ghost small" type="button" data-drawer-tab="layers">Layers</button>

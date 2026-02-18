@@ -151,6 +151,8 @@ const state = {
     drawerOpen: true,
     drawerTab: "layers",
     drawerDocked: false,
+    drawerWidth: null,
+    drawerResizeBound: false,
     uiBound: false,
     basemap: "street",
     basemapLayer: null,
@@ -1041,6 +1043,9 @@ const MAP_PANEL_VISIBLE_KEY = "map_panel_visible";
 const DRAWER_OPEN_KEY = "speccom.ui.drawerOpen";
 const DRAWER_TAB_KEY = "speccom.ui.drawerTab";
 const DRAWER_DOCKED_KEY = "speccom.ui.drawerDocked";
+const DRAWER_WIDTH_KEY = "speccom.ui.drawerWidth";
+const DRAWER_MIN_WIDTH = 320;
+const DRAWER_MAX_WIDTH = 520;
 
 function storageOk(){
   try{
@@ -1185,13 +1190,44 @@ function normalizeDrawerTab(tab){
   return ["layers", "feature", "site"].includes(key) ? key : "layers";
 }
 
-function queueMapInvalidate(delay = 100){
+function normalizeDrawerWidth(raw){
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return null;
+  return Math.max(DRAWER_MIN_WIDTH, Math.min(DRAWER_MAX_WIDTH, Math.round(value)));
+}
+
+function applyDrawerWidthCss(width){
+  const next = normalizeDrawerWidth(width);
+  if (!next){
+    document.documentElement.style.removeProperty("--drawer-w-current");
+    return;
+  }
+  document.documentElement.style.setProperty("--drawer-w-current", `${next}px`);
+}
+
+function setDrawerWidth(width, { persist = true } = {}){
+  const next = normalizeDrawerWidth(width);
+  if (!next) return;
+  state.map.drawerWidth = next;
+  applyDrawerWidthCss(next);
+  if (persist){
+    safeLocalStorageSet(DRAWER_WIDTH_KEY, String(next));
+  }
+}
+
+function queueMapInvalidate(delays = 120){
   if (!isMapViewActive() || !state.map.instance) return;
-  setTimeout(() => {
+  const delayList = Array.isArray(delays) ? delays : [delays];
+  const runInvalidate = () => {
     try{
       state.map.instance.invalidateSize(true);
     } catch {}
-  }, delay);
+  };
+  window.requestAnimationFrame(runInvalidate);
+  delayList
+    .map((delay) => Number(delay))
+    .filter((delay) => Number.isFinite(delay) && delay >= 0)
+    .forEach((delay) => setTimeout(runInvalidate, delay));
 }
 
 function applyDrawerUiState(){
@@ -1199,6 +1235,7 @@ function applyDrawerUiState(){
   const drawer = $("rightDrawer");
   const topToggle = $("btnMapToggle");
   const drawerToggle = $("btnDrawerToggle");
+  const drawerMenu = $("btnDrawerMenu");
   const dockBtn = $("drawerDockBtn");
   const open = state.map.drawerOpen !== false;
   let docked = state.map.drawerDocked === true;
@@ -1221,6 +1258,9 @@ function applyDrawerUiState(){
   }
   if (drawerToggle){
     drawerToggle.classList.toggle("is-active", open);
+  }
+  if (drawerMenu){
+    drawerMenu.classList.toggle("is-active", open);
   }
   if (dockBtn){
     dockBtn.style.display = isMobileViewport() ? "none" : "";
@@ -1246,7 +1286,7 @@ function setDrawerOpen(openBool, { persist = true } = {}){
     safeLocalStorageSet(MAP_PANEL_VISIBLE_KEY, open ? "1" : "0");
   }
   applyDrawerUiState();
-  queueMapInvalidate();
+  queueMapInvalidate([120, 220]);
 }
 
 function setDrawerTab(tabName, { persist = true, open = true } = {}){
@@ -1262,7 +1302,7 @@ function setDrawerTab(tabName, { persist = true, open = true } = {}){
     }
   }
   applyDrawerUiState();
-  queueMapInvalidate(80);
+  queueMapInvalidate([120, 220]);
 }
 
 function setDrawerDocked(dockedBool, { persist = true } = {}){
@@ -1272,15 +1312,63 @@ function setDrawerDocked(dockedBool, { persist = true } = {}){
     safeLocalStorageSet(DRAWER_DOCKED_KEY, docked ? "1" : "0");
   }
   applyDrawerUiState();
-  queueMapInvalidate();
+  queueMapInvalidate([120, 220]);
 }
 
 function applyDrawerStateFromStorage(){
   state.map.drawerOpen = getSavedMapPanelVisible();
   state.map.drawerTab = normalizeDrawerTab(safeLocalStorageGet(DRAWER_TAB_KEY) || state.map.drawerTab);
   state.map.drawerDocked = safeLocalStorageGet(DRAWER_DOCKED_KEY) === "1";
+  state.map.drawerWidth = normalizeDrawerWidth(safeLocalStorageGet(DRAWER_WIDTH_KEY));
+  applyDrawerWidthCss(state.map.drawerWidth);
   state.map.panelVisible = state.map.drawerOpen;
   applyDrawerUiState();
+}
+
+function initDrawerResizer(){
+  if (state.map.drawerResizeBound) return;
+  const handle = $("drawerResizer");
+  const drawer = $("rightDrawer");
+  if (!handle || !drawer) return;
+  state.map.drawerResizeBound = true;
+
+  let dragWidth = null;
+  let startX = 0;
+  let startWidth = 0;
+  let dragging = false;
+
+  const onPointerMove = (e) => {
+    if (!dragging) return;
+    const delta = e.clientX - startX;
+    dragWidth = normalizeDrawerWidth(startWidth - delta);
+    if (!dragWidth) return;
+    applyDrawerWidthCss(dragWidth);
+    queueMapInvalidate(50);
+  };
+
+  const onPointerUp = () => {
+    if (!dragging) return;
+    dragging = false;
+    if (dragWidth){
+      setDrawerWidth(dragWidth, { persist: true });
+    }
+    dragWidth = null;
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+    queueMapInvalidate([120, 220]);
+  };
+
+  handle.addEventListener("pointerdown", (e) => {
+    if (!state.map.drawerDocked || isMobileViewport()) return;
+    if (state.map.drawerOpen === false) return;
+    e.preventDefault();
+    dragging = true;
+    startX = e.clientX;
+    startWidth = drawer.getBoundingClientRect().width;
+    dragWidth = startWidth;
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+  });
 }
 
 function initMapWorkspaceUi(){
@@ -1289,6 +1377,10 @@ function initMapWorkspaceUi(){
   const drawerToggle = $("btnDrawerToggle");
   if (drawerToggle){
     drawerToggle.addEventListener("click", () => setDrawerOpen(!state.map.drawerOpen));
+  }
+  const drawerMenu = $("btnDrawerMenu");
+  if (drawerMenu){
+    drawerMenu.addEventListener("click", () => setDrawerTab("layers", { open: true }));
   }
   const drawerClose = $("drawerCloseBtn");
   if (drawerClose){
@@ -1308,6 +1400,7 @@ function initMapWorkspaceUi(){
       setDrawerOpen(false);
     }
   });
+  initDrawerResizer();
 }
 
 function setMapPanelVisible(visible, { persist = true } = {}){
