@@ -1951,6 +1951,9 @@ a{color:inherit; text-decoration:none;}
 .places-node:hover{
   background:rgba(148,163,184,.18);
 }
+.places-node.is-muted{
+  opacity:.62;
+}
 .places-parent{
   cursor:pointer;
 }
@@ -1982,6 +1985,9 @@ a{color:inherit; text-decoration:none;}
   accent-color:#1d4ed8;
   margin:0;
   flex:0 0 auto;
+}
+.places-node input[type="checkbox"]:disabled{
+  opacity:.45;
 }
 .places-node .glyph{
   width:14px;

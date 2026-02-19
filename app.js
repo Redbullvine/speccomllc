@@ -176,6 +176,7 @@ const state = {
     },
     kmzImportGroups: new Map(),
     kmzGroupVisibility: new Map(),
+    kmzLayerCatalog: [],
     markers: new Map(),
     featureMarkerMeta: new Map(),
     selectedFeature: null,
@@ -2272,6 +2273,7 @@ function clearImportPreviewMarkers(){
   if (state.map.kmzGroupVisibility?.size){
     state.map.kmzGroupVisibility.clear();
   }
+  state.map.kmzLayerCatalog = [];
   if (state.map.kmzImportGroups?.size){
     state.map.kmzImportGroups.forEach((group) => {
       try{
@@ -3075,6 +3077,52 @@ function parseKmlCoordinateText(coordText){
   return null;
 }
 
+const KMZ_CRITICAL_LAYERS = ["Project", "Drop", "Network Point", "Cable", "Connectivity Point"];
+
+function canonicalKmzLayerName(value){
+  const raw = String(value || "").replace(/\s+/g, " ").trim();
+  if (!raw) return "";
+  const normalized = raw.toLowerCase().replace(/[_-]+/g, " ");
+  if (normalized === "project") return "Project";
+  if (normalized === "drop") return "Drop";
+  if (normalized === "cable") return "Cable";
+  if (normalized === "connectivity point") return "Connectivity Point";
+  if (normalized === "network point") return "Network Point";
+  if (normalized === "servicelocation" || normalized === "service location") return "Network Point";
+  if (normalized === "path") return "Path";
+  if (normalized === "network devices") return "Network Devices";
+  return raw
+    .split(" ")
+    .map((part) => (part ? (part[0].toUpperCase() + part.slice(1).toLowerCase()) : ""))
+    .join(" ")
+    .trim();
+}
+
+function normalizeKmzLayerList(values){
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(values) ? values : []).forEach((value) => {
+    const name = canonicalKmzLayerName(value);
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    out.push(name);
+  });
+  return out;
+}
+
+function getOrderedKmzLayerList(values, { includeCritical = false } = {}){
+  const normalized = normalizeKmzLayerList(values);
+  const critical = normalized
+    .filter((name) => KMZ_CRITICAL_LAYERS.includes(name))
+    .sort((a, b) => KMZ_CRITICAL_LAYERS.indexOf(a) - KMZ_CRITICAL_LAYERS.indexOf(b));
+  const extras = normalized.filter((name) => !KMZ_CRITICAL_LAYERS.includes(name));
+  extras.sort((a, b) => a.localeCompare(b));
+  if (includeCritical){
+    return [...KMZ_CRITICAL_LAYERS, ...extras];
+  }
+  return [...critical, ...extras];
+}
+
 function parseKmlText(kmlText){
   const parser = new DOMParser();
   const raw = String(kmlText || "");
@@ -3123,6 +3171,20 @@ function parseKmlText(kmlText){
     return "";
   };
 
+  const allLayerNames = [];
+  const layerSeen = new Set();
+  Array.from(xml.getElementsByTagName("*")).forEach((node) => {
+    const local = String(node?.localName || node?.nodeName || "").toLowerCase();
+    if (local !== "folder" && local !== "document") return;
+    const name = canonicalKmzLayerName(getDirectName(node));
+    if (!name || layerSeen.has(name)) return;
+    layerSeen.add(name);
+    allLayerNames.push(name);
+  });
+  if (!allLayerNames.length){
+    allLayerNames.push(...KMZ_CRITICAL_LAYERS);
+  }
+
   placemarks.forEach((placemark, idx) => {
     const name = placemark.getElementsByTagName("name")[0]?.textContent?.trim() || `KMZ Point ${idx + 1}`;
     const descriptionRaw = placemark.getElementsByTagName("description")[0]?.textContent || "";
@@ -3133,7 +3195,8 @@ function parseKmlText(kmlText){
     const coordText = pointNode.getElementsByTagName("coordinates")[0]?.textContent || "";
     const coords = parseKmlCoordinateText(coordText);
     if (!coords) return;
-    const layerName = getLayerName(placemark);
+    const layerNameRaw = getLayerName(placemark);
+    const layerName = canonicalKmzLayerName(layerNameRaw);
 
     const row = {
       location_name: name,
@@ -3141,6 +3204,7 @@ function parseKmlText(kmlText){
       longitude: coords.lng,
       notes: description || null,
       __kml_layer: layerName || null,
+      __kml_layer_raw: layerNameRaw || null,
       __rowNumber: rows.length + 2,
     };
 
@@ -3160,8 +3224,17 @@ function parseKmlText(kmlText){
     rows.push(row);
   });
 
-  const serviceLocationRows = rows.filter((row) => /service\s*location/i.test(String(row.__kml_layer || "")));
-  return serviceLocationRows.length ? serviceLocationRows : rows;
+  const attachLayerCatalog = (targetRows) => {
+    try{
+      Object.defineProperty(targetRows, "__kmlLayerNames", {
+        value: allLayerNames.slice(),
+        enumerable: false,
+        writable: true,
+      });
+    } catch {}
+    return targetRows;
+  };
+  return attachLayerCatalog(rows);
 }
 
 function decodeKmzTextBytes(bytes){
@@ -3204,7 +3277,22 @@ async function parseKmzFile(file){
       const kmlBytes = await entry.async("uint8array");
       const kmlText = decodeKmzTextBytes(kmlBytes);
       const rows = parseKmlText(kmlText);
-      if (rows.length) return rows;
+      if (!rows.length) continue;
+      const serviceRows = rows.filter((row) => /service\s*location/i.test(String(row?.__kml_layer_raw || "")));
+      const selectedRows = serviceRows.length ? serviceRows : rows;
+      try{
+        Object.defineProperty(selectedRows, "__allKmzRows", {
+          value: rows.slice(),
+          enumerable: false,
+          writable: true,
+        });
+        Object.defineProperty(selectedRows, "__kmlLayerNames", {
+          value: Array.isArray(rows.__kmlLayerNames) ? rows.__kmlLayerNames.slice() : [],
+          enumerable: false,
+          writable: true,
+        });
+      } catch {}
+      return selectedRows;
     } catch (err){
       lastError = err;
     }
@@ -4434,44 +4522,43 @@ function applyMapLayerVisibility(){
 function syncMapLayerToggles(){
   const vis = state.map.layerVisibility || getDefaultMapLayerVisibility();
   const lookup = {
-    boundary: [$("mapLayerBoundary"), $("menuLayerBoundary")],
-    pins: [$("mapLayerPins"), $("menuLayerPins")],
-    spans: [$("mapLayerSpans"), $("menuLayerSpans")],
-    kmz: [$("mapLayerKmz"), $("menuLayerKmz")],
-    photos: [$("mapLayerPhotos"), $("menuLayerPhotos")],
+    boundary: $("mapLayerBoundary"),
+    pins: $("mapLayerPins"),
+    spans: $("mapLayerSpans"),
+    kmz: $("mapLayerKmz"),
+    photos: $("mapLayerPhotos"),
   };
-  Object.entries(lookup).forEach(([key, els]) => {
-    els.forEach((el) => {
-      if (el) el.checked = Boolean(vis[key]);
-    });
+  Object.entries(lookup).forEach(([key, el]) => {
+    if (el) el.checked = Boolean(vis[key]);
   });
 }
 function renderMapLayerPanel(){
   syncMapLayerToggles();
   const groups = Array.from(state.map.kmzImportGroups?.keys() || []);
   const kmzEnabled = Boolean((state.map.layerVisibility || getDefaultMapLayerVisibility()).kmz);
+  const availableCatalog = getOrderedKmzLayerList(state.map.kmzLayerCatalog || groups);
+  const placesCatalog = getOrderedKmzLayerList(state.map.kmzLayerCatalog || groups, { includeCritical: true });
   const kmzList = $("mapKmzGroupList");
   if (kmzList){
-    if (!groups.length){
+    if (!availableCatalog.length){
       kmzList.textContent = "KMZ groups: none loaded.";
     } else {
-      kmzList.textContent = `KMZ groups: ${groups.join(", ")}`;
+      kmzList.textContent = `KMZ groups: ${availableCatalog.join(", ")}`;
     }
   }
-  const menuKmzList = $("menuKmzGroupList");
-  if (!menuKmzList) return;
-  if (!groups.length){
-    menuKmzList.innerHTML = `<div class="places-kmz-empty">No KMZ groups loaded.</div>`;
-    return;
-  }
-  menuKmzList.innerHTML = groups.map((groupName) => {
-    const checked = state.map.kmzGroupVisibility.get(groupName) !== false;
+  const placesTree = $("placesLayerTree");
+  if (!placesTree) return;
+  placesTree.innerHTML = placesCatalog.map((groupName) => {
+    const hasGroup = state.map.kmzImportGroups?.has(groupName);
+    const checked = hasGroup && state.map.kmzGroupVisibility.get(groupName) !== false;
     const checkedAttr = checked ? " checked" : "";
-    const disabledAttr = kmzEnabled ? "" : " disabled";
+    const disabledAttr = (kmzEnabled && hasGroup) ? "" : " disabled";
+    const nodeClass = hasGroup ? "places-node" : "places-node is-muted";
+    const glyphType = (groupName === "Project") ? "folder" : "cube";
     return `
-      <label class="places-kmz-item">
+      <label class="${nodeClass}">
         <input type="checkbox" data-kmz-group="${escapeHtml(groupName)}"${checkedAttr}${disabledAttr} />
-        <span class="glyph folder"></span>
+        <span class="glyph ${glyphType}"></span>
         <span class="label">${escapeHtml(groupName)}</span>
       </label>
     `;
@@ -4479,7 +4566,7 @@ function renderMapLayerPanel(){
 }
 
 function setKmzGroupVisibility(groupName, visible){
-  const key = String(groupName || "").trim();
+  const key = canonicalKmzLayerName(groupName);
   if (!key) return;
   if (!state.map.kmzGroupVisibility) state.map.kmzGroupVisibility = new Map();
   const isVisible = Boolean(visible);
@@ -4497,6 +4584,23 @@ function setKmzGroupVisibility(groupName, visible){
   }
   renderMapLayerPanel();
 }
+
+function syncKmzPreviewGroups(){
+  const kmzLayer = state.map.layers?.kmz;
+  if (!kmzLayer || !state.map.kmzImportGroups?.size) return;
+  const kmzVisible = state.map.layerVisibility?.kmz !== false;
+  state.map.kmzImportGroups.forEach((group, key) => {
+    const groupVisible = state.map.kmzGroupVisibility.get(key) !== false;
+    try{
+      if (kmzVisible && groupVisible){
+        if (kmzLayer.addLayer) kmzLayer.addLayer(group);
+      } else if (kmzLayer.removeLayer){
+        kmzLayer.removeLayer(group);
+      }
+    } catch {}
+  });
+}
+
 function setMapLayerVisibility(name, visible){
   const next = {
     ...(state.map.layerVisibility || getDefaultMapLayerVisibility()),
@@ -4505,6 +4609,9 @@ function setMapLayerVisibility(name, visible){
   state.map.layerVisibility = next;
   saveLayerVisibility(next);
   applyMapLayerVisibility();
+  if (name === "kmz"){
+    syncKmzPreviewGroups();
+  }
   renderMapLayerPanel();
 }
 function setMapBasemap(nextBasemap){
@@ -4536,11 +4643,6 @@ function registerMapUiBindings(){
     ["mapLayerSpans", "spans"],
     ["mapLayerKmz", "kmz"],
     ["mapLayerPhotos", "photos"],
-    ["menuLayerBoundary", "boundary"],
-    ["menuLayerPins", "pins"],
-    ["menuLayerSpans", "spans"],
-    ["menuLayerKmz", "kmz"],
-    ["menuLayerPhotos", "photos"],
   ];
   layerMap.forEach(([id, name]) => {
     const input = $(id);
@@ -4652,14 +4754,22 @@ function renderKmzPreviewFeatures(rows, sourceName = "KMZ Import"){
   if (!kmzLayer) return;
   if (!state.map.kmzImportGroups) state.map.kmzImportGroups = new Map();
   if (!state.map.kmzGroupVisibility) state.map.kmzGroupVisibility = new Map();
-  const key = String(sourceName || "KMZ Import");
-  const existing = state.map.kmzImportGroups.get(key);
-  if (existing){
-    try{ kmzLayer.removeLayer(existing); } catch {}
+  if (state.map.kmzImportGroups.size){
+    state.map.kmzImportGroups.forEach((group) => {
+      try{
+        if (kmzLayer?.removeLayer) kmzLayer.removeLayer(group);
+      } catch {}
+    });
+    state.map.kmzImportGroups.clear();
   }
-  const group = window.L.layerGroup();
+  const groupsByLayer = new Map();
   (rows || []).forEach((row) => {
-    const feature = buildKmzFeatureFromRow(row, key);
+    const layerName = canonicalKmzLayerName(row?.__kml_layer || row?.__kml_layer_raw || sourceName || "KMZ");
+    const key = layerName || "KMZ";
+    if (!groupsByLayer.has(key)){
+      groupsByLayer.set(key, window.L.layerGroup());
+    }
+    const feature = buildKmzFeatureFromRow({ ...row, __kml_layer: key }, key);
     if (!feature) return;
     const lat = feature.geometry.coordinates[1];
     const lng = feature.geometry.coordinates[0];
@@ -4674,14 +4784,22 @@ function renderKmzPreviewFeatures(rows, sourceName = "KMZ Import"){
     });
     marker.on("click", () => handleMapFeatureSelection(feature));
     marker.bindPopup(`<b>${escapeHtml(feature.properties.name || "KMZ Point")}</b><br>${escapeHtml(feature.properties.__kml_layer || key)}`);
-    group.addLayer(marker);
+    groupsByLayer.get(key).addLayer(marker);
   });
-  const groupVisible = state.map.kmzGroupVisibility.get(key) !== false;
-  if (groupVisible){
-    kmzLayer.addLayer(group);
-  }
-  state.map.kmzGroupVisibility.set(key, groupVisible);
-  state.map.kmzImportGroups.set(key, group);
+  groupsByLayer.forEach((group, key) => {
+    const groupVisible = state.map.kmzGroupVisibility.get(key) !== false;
+    if (groupVisible){
+      kmzLayer.addLayer(group);
+    }
+    state.map.kmzGroupVisibility.set(key, groupVisible);
+    state.map.kmzImportGroups.set(key, group);
+  });
+  const layerCatalog = getOrderedKmzLayerList([
+    ...(state.map.kmzLayerCatalog || []),
+    ...(rows?.__kmlLayerNames || []),
+    ...(rows || []).map((row) => row?.__kml_layer || row?.__kml_layer_raw),
+  ]);
+  state.map.kmzLayerCatalog = layerCatalog;
   renderMapLayerPanel();
 }
 
@@ -7135,6 +7253,9 @@ async function handleLocationImport(file){
     return;
   }
   dlog("Parsed rows:", rows);
+  const kmzAllRows = Array.isArray(rows.__allKmzRows) ? rows.__allKmzRows : rows;
+  const kmzLayerNames = getOrderedKmzLayerList(rows.__kmlLayerNames || kmzAllRows.map((row) => row?.__kml_layer || row?.__kml_layer_raw));
+  state.map.kmzLayerCatalog = kmzLayerNames;
 
   const normalized = rows.map((row) => ({
     location_name: String(row.location_name).trim(),
@@ -7149,6 +7270,8 @@ async function handleLocationImport(file){
     items: Array.isArray(row.items) ? row.items : buildItemsFromRow(row),
     billing_codes: buildBillingCodesFromRow(row),
     photo_urls: buildPhotoUrlsFromRow(row),
+    __kml_layer: canonicalKmzLayerName(row.__kml_layer || row.__kml_layer_raw || ""),
+    __kml_layer_raw: String(row.__kml_layer_raw || row.__kml_layer || "").trim() || null,
     __rowNumber: row.__rowNumber,
   }));
 
@@ -7159,7 +7282,7 @@ async function handleLocationImport(file){
   state.importPreview.rows = validation.validRows;
   state.importPreview.validation = validation;
   state.importPreview.preview = renderImportPreviewMarkers(validation.validRows);
-  renderKmzPreviewFeatures(validation.validRows, file.name || "KMZ Import");
+  renderKmzPreviewFeatures(kmzAllRows, file.name || "KMZ Import");
 
   openImportLocationsModal(validation.validRows, state.activeProject);
 }

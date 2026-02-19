@@ -713,33 +713,8 @@
             <span class="glyph cube"></span>
             <span class="label">Project</span>
           </button>
-          <div class="places-children" data-places-group="project">
-            <label class="places-node">
-              <input id="menuLayerPins" type="checkbox" />
-              <span class="glyph cube"></span>
-              <span class="label">ServiceLocation</span>
-            </label>
-            <label class="places-node">
-              <input id="menuLayerBoundary" type="checkbox" />
-              <span class="glyph folder"></span>
-              <span class="label">Project Boundary</span>
-            </label>
-            <label class="places-node">
-              <input id="menuLayerSpans" type="checkbox" />
-              <span class="glyph cube"></span>
-              <span class="label">Cable / Path</span>
-            </label>
-            <label class="places-node">
-              <input id="menuLayerKmz" type="checkbox" />
-              <span class="glyph cube"></span>
-              <span class="label">KMZ Imports</span>
-            </label>
-            <div id="menuKmzGroupList" class="places-kmz-list"></div>
-            <label class="places-node">
-              <input id="menuLayerPhotos" type="checkbox" />
-              <span class="glyph cube"></span>
-              <span class="label">Photos</span>
-            </label>
+          <div id="placesLayerTree" class="places-children is-open" data-places-group="project">
+            <div class="places-kmz-empty">No KMZ groups loaded.</div>
           </div>
         </div>
         <div class="places-footer">
