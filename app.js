@@ -4583,6 +4583,7 @@ function setKmzGroupVisibility(groupName, visible){
       }
     } catch {}
   }
+  syncPlacesLayerVisibilityFromGroups();
   renderMapLayerPanel();
 }
 
@@ -4600,6 +4601,48 @@ function syncKmzPreviewGroups(){
       }
     } catch {}
   });
+}
+
+function syncPlacesLayerVisibilityFromGroups(){
+  const available = new Set(getOrderedKmzLayerList(state.map.kmzLayerCatalog || []));
+  if (!available.size) return;
+  const next = {
+    ...(state.map.layerVisibility || getDefaultMapLayerVisibility()),
+  };
+  let changed = false;
+
+  if (available.has("Project")){
+    const visible = state.map.kmzGroupVisibility.get("Project") !== false;
+    if (next.boundary !== visible){
+      next.boundary = visible;
+      changed = true;
+    }
+  }
+
+  const pointKeys = ["Drop", "Network Point", "Connectivity Point", "ServiceLocation", "Network Devices"];
+  const pointAvailable = pointKeys.filter((key) => available.has(key));
+  if (pointAvailable.length){
+    const visible = pointAvailable.some((key) => state.map.kmzGroupVisibility.get(key) !== false);
+    if (next.pins !== visible){
+      next.pins = visible;
+      changed = true;
+    }
+  }
+
+  const spanKeys = ["Cable", "Path"];
+  const spanAvailable = spanKeys.filter((key) => available.has(key));
+  if (spanAvailable.length){
+    const visible = spanAvailable.some((key) => state.map.kmzGroupVisibility.get(key) !== false);
+    if (next.spans !== visible){
+      next.spans = visible;
+      changed = true;
+    }
+  }
+
+  if (!changed) return;
+  state.map.layerVisibility = next;
+  saveLayerVisibility(next);
+  applyMapLayerVisibility();
 }
 
 function setMapLayerVisibility(name, visible){
@@ -4801,6 +4844,8 @@ function renderKmzPreviewFeatures(rows, sourceName = "KMZ Import"){
     ...(rows || []).map((row) => row?.__kml_layer || row?.__kml_layer_raw),
   ]);
   state.map.kmzLayerCatalog = layerCatalog;
+  syncPlacesLayerVisibilityFromGroups();
+  syncMapLayerToggles();
   renderMapLayerPanel();
 }
 
@@ -9745,6 +9790,101 @@ async function loadMessages(){
   }
 }
 
+function canManageMessage(msg){
+  if (!msg) return false;
+  if (msg.sender_id === state.user?.id) return true;
+  return SpecCom.helpers.isRoot() || isOwnerOrAdmin();
+}
+
+async function editMessageById(messageId){
+  const id = String(messageId || "").trim();
+  if (!id) return;
+  const msg = (state.messages || []).find((row) => String(row?.id || "") === id) || null;
+  if (!msg){
+    toast("Message missing", "Message not found.", "error");
+    return;
+  }
+  if (!canManageMessage(msg)){
+    toast("Not allowed", "You can only edit your own messages.", "error");
+    return;
+  }
+  const current = String(msg.body || "");
+  const nextRaw = prompt("Edit message", current);
+  if (nextRaw == null) return;
+  const next = String(nextRaw || "").trim();
+  if (!next){
+    toast("Message required", "Message cannot be empty.", "error");
+    return;
+  }
+  if (next === current.trim()) return;
+  if (isDemo){
+    state.demo.messages = (state.demo.messages || []).map((row) => (
+      String(row?.id || "") === id ? { ...row, body: next } : row
+    ));
+    await loadMessages();
+    renderMessages();
+    return;
+  }
+  if (!state.client){
+    toast("Update failed", "Client not ready.", "error");
+    return;
+  }
+  let query = state.client
+    .from("messages")
+    .update({ body: next })
+    .eq("id", id);
+  if (!SpecCom.helpers.isRoot() && !isOwnerOrAdmin()){
+    query = query.eq("sender_id", state.user?.id || "");
+  }
+  const { error } = await query;
+  if (error){
+    toast("Update failed", error.message || "Could not edit message.", "error");
+    return;
+  }
+  await loadMessages();
+  renderMessages();
+}
+
+async function deleteMessageById(messageId){
+  const id = String(messageId || "").trim();
+  if (!id) return;
+  const msg = (state.messages || []).find((row) => String(row?.id || "") === id) || null;
+  if (!msg){
+    toast("Message missing", "Message not found.", "error");
+    return;
+  }
+  if (!canManageMessage(msg)){
+    toast("Not allowed", "You can only delete your own messages.", "error");
+    return;
+  }
+  const ok = confirm("Delete this message?");
+  if (!ok) return;
+  if (isDemo){
+    state.demo.messages = (state.demo.messages || []).filter((row) => String(row?.id || "") !== id);
+    await loadMessages();
+    renderMessages();
+    return;
+  }
+  if (!state.client){
+    toast("Delete failed", "Client not ready.", "error");
+    return;
+  }
+  let query = state.client
+    .from("messages")
+    .delete()
+    .eq("id", id);
+  if (!SpecCom.helpers.isRoot() && !isOwnerOrAdmin()){
+    query = query.eq("sender_id", state.user?.id || "");
+  }
+  const { error } = await query;
+  if (error){
+    toast("Delete failed", error.message || "Could not delete message.", "error");
+    return;
+  }
+  await loadMessages();
+  renderMessages();
+}
+
 function renderMessages(){
   const list = $("messagesList");
   const empty = $("messagesEmpty");
@@ -9778,6 +9918,7 @@ function renderMessages(){
       : "";
     const body = escapeHtml(msg.body || "").replace(/\n/g, "<br>");
     const metaParts = [sender, recipientLabel, time].filter(Boolean);
+    const canManage = canManageMessage(msg);
     return `
       <div class="message-card ${outgoing ? "outgoing" : "incoming"}">
         <div class="message-meta">
@@ -9785,6 +9926,12 @@ function renderMessages(){
           <span>${escapeHtml(metaParts.join(" | "))}</span>
         </div>
         <div>${body}</div>
+        ${canManage ? `
+          <div class="message-actions">
+            <button type="button" class="btn ghost small" data-action="editMessage" data-message-id="${escapeHtml(String(msg.id || ""))}">Edit</button>
+            <button type="button" class="btn ghost small" data-action="deleteMessage" data-message-id="${escapeHtml(String(msg.id || ""))}">Delete</button>
+          </div>
+        ` : ""}
       </div>
     `;
   }).join("");
@@ -15881,7 +16028,13 @@ function wireUI(){
   }
   const mapToggleBtn = $("btnMapToggle");
   if (mapToggleBtn){
-    mapToggleBtn.addEventListener("click", () => toggleMapPanel());
+    mapToggleBtn.addEventListener("click", () => {
+      if (!isMapViewActive()){
+        setActiveView("viewMap");
+        return;
+      }
+      toggleMapPanel();
+    });
   }
   const projectsOpenBtn = $("btnOpenProjects");
   if (projectsOpenBtn){
@@ -15929,6 +16082,21 @@ function wireUI(){
   const messageMode = $("messageMode");
   if (messageMode){
     messageMode.addEventListener("change", () => syncMessageComposerMode());
+  }
+  const messagesList = $("messagesList");
+  if (messagesList){
+    messagesList.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-action]");
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const messageId = btn.dataset.messageId;
+      if (!messageId) return;
+      if (action === "editMessage"){
+        void editMessageById(messageId);
+      } else if (action === "deleteMessage"){
+        void deleteMessageById(messageId);
+      }
+    });
   }
   const messageFilters = document.querySelectorAll("#messagesModal [data-filter]");
   messageFilters.forEach((btn) => {
