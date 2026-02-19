@@ -184,6 +184,7 @@ const state = {
     highlightLayer: null,
     userNames: new Map(),
     siteCodesBySiteId: new Map(),
+    sitePhotosBySiteId: new Map(),
     siteSearchIndex: new Map(),
     searchDebounceId: null,
     searchJumpKey: "",
@@ -1713,6 +1714,79 @@ async function fetchSiteCodesForMapPopup(siteId){
     return [];
   }
   return setCachedSiteCodes(key, (data || []).map((row) => row.code));
+}
+
+function normalizePopupPhotos(items){
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item) => {
+      const url = String(item?.url || "").trim();
+      if (!url) return null;
+      return {
+        url,
+        createdAt: item?.createdAt || "",
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
+function getCachedSitePhotos(siteId){
+  const key = toSiteIdKey(siteId);
+  if (!key) return [];
+  const cached = state.map.sitePhotosBySiteId.get(key);
+  return Array.isArray(cached) ? cached : [];
+}
+
+function setCachedSitePhotos(siteId, photos){
+  const key = toSiteIdKey(siteId);
+  if (!key) return [];
+  const normalized = normalizePopupPhotos(photos);
+  state.map.sitePhotosBySiteId.set(key, normalized);
+  return normalized;
+}
+
+async function fetchSitePhotosForMapPopup(siteId){
+  const key = toSiteIdKey(siteId);
+  if (!key) return [];
+  const cached = state.map.sitePhotosBySiteId.get(key);
+  if (Array.isArray(cached)) return cached;
+  if (isDemo){
+    const rows = (state.demo.siteMedia || [])
+      .filter((row) => toSiteIdKey(row?.site_id) === key)
+      .slice(0, 6)
+      .map((row) => ({
+        url: String(row?.previewUrl || row?.media_path || "").trim(),
+        createdAt: row?.created_at || "",
+      }))
+      .filter((row) => row.url);
+    return setCachedSitePhotos(key, rows);
+  }
+  if (!state.client) return [];
+  const { data, error } = await state.client
+    .from("site_media")
+    .select("media_path, created_at")
+    .eq("site_id", siteId)
+    .order("created_at", { ascending: false })
+    .limit(6);
+  if (error){
+    debugLog("[map] popup photo fetch failed", error);
+    return [];
+  }
+  const rows = [];
+  for (const row of data || []){
+    const url = row?.media_path
+      ? (/^https?:\/\//i.test(String(row.media_path))
+          ? String(row.media_path)
+          : await getPublicOrSignedUrl("proof-photos", row.media_path))
+      : "";
+    if (!url) continue;
+    rows.push({
+      url,
+      createdAt: row?.created_at || "",
+    });
+  }
+  return setCachedSitePhotos(key, rows);
 }
 
 function getDemoCredentials(){
@@ -3519,6 +3593,8 @@ function focusSiteOnMap(siteId){
       requiredCodes: normalizeCodeList(getCodesRequiredForActiveProject()),
       siteCodes: getCachedSiteCodes(site.id),
       loadingCodes: false,
+      sitePhotos: getCachedSitePhotos(site.id),
+      loadingPhotos: false,
     });
     state.map.markers.set(siteKey, targetMarker);
     state.map.featureMarkerMeta.set(siteKey, { kind: "site", siteId: siteKey });
@@ -3557,7 +3633,13 @@ const MAP_PANES = {
   pending: "speccom-pending-pane",
 };
 
-function buildSiteMarkerPopupHtml(site, { requiredCodes = [], siteCodes = null, loadingCodes = false } = {}){
+function buildSiteMarkerPopupHtml(site, {
+  requiredCodes = [],
+  siteCodes = null,
+  loadingCodes = false,
+  sitePhotos = [],
+  loadingPhotos = false,
+} = {}){
   const locationName = getSiteDisplayName(site);
   const siteId = toSiteIdKey(site?.id) || "-";
   const coords = getSiteCoords(site);
@@ -3571,7 +3653,18 @@ function buildSiteMarkerPopupHtml(site, { requiredCodes = [], siteCodes = null, 
   const codesValue = loadingCodes
     ? "Loading..."
     : summarizeCodesForPopup(showBillingCodes ? effectiveSiteCodes : effectiveRequiredCodes);
-  const notesText = String(site?.notes || "").trim();
+  const notesRaw = String(site?.notes || "").trim();
+  const notesText = notesRaw.length > 240 ? `${notesRaw.slice(0, 237)}...` : notesRaw;
+  const photos = normalizePopupPhotos(sitePhotos);
+  const photosHtml = loadingPhotos
+    ? `<div class="scSitePopup-photo-empty">Loading photos...</div>`
+    : photos.length
+      ? `<div class="scSitePopup-photos">${photos.map((item) => `
+          <a class="photo" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">
+            <img src="${escapeHtml(item.url)}" alt="Site photo" loading="lazy" />
+          </a>
+        `).join("")}</div>`
+      : `<div class="scSitePopup-photo-empty">No photos yet.</div>`;
   return `
     <div class="scSitePopup">
       <div class="scSitePopup-title">${escapeHtml(locationName)}</div>
@@ -3584,6 +3677,8 @@ function buildSiteMarkerPopupHtml(site, { requiredCodes = [], siteCodes = null, 
         <div class="k">Created</div><div class="v">${escapeHtml(createdText)}</div>
         ${notesText ? `<div class="k">Notes</div><div class="v">${escapeHtml(notesText)}</div>` : ""}
       </div>
+      <div class="scSitePopup-photo-head">Photos</div>
+      ${photosHtml}
     </div>
   `;
 }
@@ -3603,18 +3698,33 @@ async function handleSiteMarkerClick(marker, siteIdKey, resolveSite){
   if (!site) return;
   const requiredCodes = normalizeCodeList(getCodesRequiredForActiveProject());
   const cachedCodes = getCachedSiteCodes(site.id);
+  const cachedPhotos = getCachedSitePhotos(site.id);
   bindSiteMarkerPopup(marker, site, {
     requiredCodes,
     siteCodes: cachedCodes.length ? cachedCodes : null,
     loadingCodes: !cachedCodes.length,
+    sitePhotos: cachedPhotos,
+    loadingPhotos: !cachedPhotos.length,
   });
   if (marker.openPopup) marker.openPopup();
-  handleMapFeatureSelection(buildSiteFeature(site), { siteId: siteIdKey, openOverview: true, tab: "feature" });
-  if (cachedCodes.length) return;
+  handleMapFeatureSelection(buildSiteFeature(site), { siteId: siteIdKey, openOverview: false, tab: "feature" });
+  if (typeof SpecCom.helpers.closePinOverview === "function"){
+    SpecCom.helpers.closePinOverview();
+  }
+  if (cachedCodes.length && cachedPhotos.length) return;
   try{
-    const siteCodes = await fetchSiteCodesForMapPopup(site.id);
+    const [siteCodes, sitePhotos] = await Promise.all([
+      cachedCodes.length ? Promise.resolve(cachedCodes) : fetchSiteCodesForMapPopup(site.id),
+      cachedPhotos.length ? Promise.resolve(cachedPhotos) : fetchSitePhotosForMapPopup(site.id),
+    ]);
     const latestSite = typeof resolveSite === "function" ? (resolveSite() || site) : site;
-    bindSiteMarkerPopup(marker, latestSite, { requiredCodes, siteCodes, loadingCodes: false });
+    bindSiteMarkerPopup(marker, latestSite, {
+      requiredCodes,
+      siteCodes,
+      loadingCodes: false,
+      sitePhotos,
+      loadingPhotos: false,
+    });
     if (!marker.isPopupOpen || marker.isPopupOpen()){
       if (marker.openPopup) marker.openPopup();
     }
@@ -4189,6 +4299,8 @@ function updateMapMarkers(rows){
       requiredCodes,
       siteCodes: getCachedSiteCodes(row.id),
       loadingCodes: false,
+      sitePhotos: getCachedSitePhotos(row.id),
+      loadingPhotos: false,
     });
     try{
       const loc = row.name || row.address || row.label || row.location_name || `Site ${row.id || ""}`.trim();
@@ -4764,6 +4876,7 @@ SpecCom.helpers.deleteSiteFromPanel = async function(){
       state.map.featureMarkerMeta.delete(siteKey);
     }
     state.map.siteCodesBySiteId.delete(siteKey);
+    state.map.sitePhotosBySiteId.delete(siteKey);
     closeSitePanel();
     renderSiteList();
     if (state.map?.instance){
@@ -9595,7 +9708,7 @@ function syncMapToSearchResults(resultSet){
       const siteName = getSiteDisplayName(nearest.site);
       const meters = Math.round(nearest.distanceM);
       setSiteSearchBanner(`Jumped to coordinate - nearest site: ${siteName} (${meters}m)`);
-      setActiveSite(nearest.site.id, { openOverview: true }).then(() => focusSiteOnMap(nearest.site.id));
+      setActiveSite(nearest.site.id, { openOverview: false }).then(() => focusSiteOnMap(nearest.site.id));
     } else {
       setSiteSearchBanner("Jumped to coordinate - no nearby site found.");
     }
@@ -9612,7 +9725,7 @@ function syncMapToSearchResults(resultSet){
   if (!bounds.length) return;
   if (bounds.length === 1){
     state.map.instance.setView(bounds[0], Math.max(state.map.instance.getZoom() || 0, 17));
-    setActiveSite(rows[0].id, { openOverview: true }).then(() => focusSiteOnMap(rows[0].id));
+    setActiveSite(rows[0].id, { openOverview: false }).then(() => focusSiteOnMap(rows[0].id));
     return;
   }
   state.map.instance.fitBounds(window.L.latLngBounds(bounds), { padding: [24, 24], maxZoom: 16 });
@@ -9624,6 +9737,7 @@ async function loadProjectSites(projectId){
     state.pendingSites = loadPendingSitesFromStorage();
     state.map.siteSearchIndex.clear();
     state.map.siteCodesBySiteId.clear();
+    state.map.sitePhotosBySiteId.clear();
     renderSiteList();
     return;
   }
@@ -9632,6 +9746,7 @@ async function loadProjectSites(projectId){
     state.pendingSites = loadPendingSitesFromStorage();
     state.map.siteSearchIndex.clear();
     state.map.siteCodesBySiteId.clear();
+    state.map.sitePhotosBySiteId.clear();
     renderSiteList();
     return;
   }
@@ -9644,6 +9759,7 @@ async function loadProjectSites(projectId){
   state.pendingSites = loadPendingSitesFromStorage();
   state.map.siteSearchIndex.clear();
   state.map.siteCodesBySiteId.clear();
+  state.map.sitePhotosBySiteId.clear();
   const visibleIds = new Set(getVisibleSites().map((site) => toSiteIdKey(site?.id)));
   if (state.activeSite && !visibleIds.has(toSiteIdKey(state.activeSite.id))){
     closeSitePanel();
@@ -9731,7 +9847,7 @@ function focusFirstSearchResult(){
   const resultSet = getSiteSearchResultSet();
   if (!resultSet.rows.length) return;
   const first = resultSet.rows[0];
-  setActiveSite(first.id, { openOverview: true }).then(() => {
+  setActiveSite(first.id, { openOverview: false }).then(() => {
     focusSiteOnMap(first.id);
   });
 }
@@ -9771,6 +9887,8 @@ async function setActiveSite(siteId, { openOverview = false, autoDrawerTab = tru
   if (openOverview){
     SpecCom.helpers.openPinOverview();
     SpecCom.helpers.renderPinOverview();
+  } else if (typeof SpecCom.helpers.closePinOverview === "function"){
+    SpecCom.helpers.closePinOverview();
   }
   if (!site || site.is_pending) return;
   await Promise.all([
@@ -9782,6 +9900,8 @@ async function setActiveSite(siteId, { openOverview = false, autoDrawerTab = tru
   renderFeatureDrawer();
   if (openOverview){
     SpecCom.helpers.renderPinOverview();
+  } else if (typeof SpecCom.helpers.closePinOverview === "function"){
+    SpecCom.helpers.closePinOverview();
   }
 }
 
@@ -10318,6 +10438,10 @@ async function saveSiteName(){
 async function loadSiteMedia(siteId){
   if (isDemo){
     state.siteMedia = (state.demo.siteMedia || []).filter((row) => row.site_id === siteId);
+    setCachedSitePhotos(siteId, state.siteMedia.map((row) => ({
+      url: String(row?.previewUrl || row?.media_path || "").trim(),
+      createdAt: row?.created_at || "",
+    })).filter((row) => row.url));
     return;
   }
   const { data, error } = await state.client
@@ -10328,6 +10452,7 @@ async function loadSiteMedia(siteId){
   if (error){
     toast("Media load error", error.message);
     state.siteMedia = [];
+    setCachedSitePhotos(siteId, []);
     return;
   }
   const rows = data || [];
@@ -10339,6 +10464,10 @@ async function loadSiteMedia(siteId){
     withUrls.push({ ...row, previewUrl });
   }
   state.siteMedia = withUrls;
+  setCachedSitePhotos(siteId, withUrls.map((row) => ({
+    url: String(row?.previewUrl || "").trim(),
+    createdAt: row?.created_at || "",
+  })).filter((row) => row.url));
 }
 
 async function loadSiteCodes(siteId){
