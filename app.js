@@ -5493,11 +5493,25 @@ function createKmzLeafletLayer(feature, row){
 }
 
 function parseKmzDescriptionRows(rawHtml){
+  const parseRowsFromHtml = (htmlValue) => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<body>${htmlValue}</body>`, "text/html");
+    return Array.from(doc.querySelectorAll("tr"));
+  };
+  const decodeHtmlEntities = (value) => {
+    const text = String(value || "");
+    if (!text) return "";
+    const el = document.createElement("textarea");
+    el.innerHTML = text;
+    return String(el.value || "");
+  };
   const html = String(rawHtml || "").trim();
   if (!html) return [];
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(`<body>${html}</body>`, "text/html");
-  const tableRows = Array.from(doc.querySelectorAll("tr"));
+  let tableRows = parseRowsFromHtml(html);
+  if (!tableRows.length && /&lt;\/?(table|tr|td|th)\b/i.test(html)){
+    const decoded = decodeHtmlEntities(html);
+    tableRows = parseRowsFromHtml(decoded);
+  }
   const rows = [];
   tableRows.forEach((tr) => {
     const cells = Array.from(tr.querySelectorAll("th,td"))
@@ -5510,6 +5524,52 @@ function parseKmzDescriptionRows(rawHtml){
     });
   });
   return rows;
+}
+
+function sanitizeKmzDescriptionText(rawHtml){
+  const raw = String(rawHtml || "").trim();
+  if (!raw) return "";
+  const decodeHtmlEntities = (value) => {
+    const el = document.createElement("textarea");
+    el.innerHTML = String(value || "");
+    return String(el.value || "");
+  };
+  const extractText = (htmlValue) => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<body>${htmlValue}</body>`, "text/html");
+    return String(doc.body?.textContent || "").replace(/\s+\n/g, "\n").replace(/\n\s+/g, "\n").replace(/[ \t]+/g, " ").trim();
+  };
+  let text = extractText(raw);
+  if (!text && /&lt;\/?(table|tr|td|th|div|span|p)\b/i.test(raw)){
+    text = extractText(decodeHtmlEntities(raw));
+  }
+  return text;
+}
+
+function normalizePopupRowKey(value){
+  return String(value || "").trim().toLowerCase();
+}
+
+function isKmzPathFeatureRow(row){
+  const name = String(row?.placemark_name || row?.location_name || "").trim();
+  if (/^ruidosopath/i.test(name)) return true;
+  const folderPath = String(
+    row?.folder_path
+    || row?.folder_name
+    || row?.__kml_layer_raw
+    || row?.__kml_layer
+    || ""
+  );
+  return /\bpaths?\b/i.test(folderPath);
+}
+
+function trimRowsUntilKey(rows, keyName){
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return [];
+  const target = normalizePopupRowKey(keyName);
+  const idx = list.findIndex((entry) => normalizePopupRowKey(entry?.key) === target);
+  if (idx <= 0) return list;
+  return list.slice(idx);
 }
 
 function buildKmzFallbackAttributeRows(row){
@@ -5550,10 +5610,19 @@ function buildKmzFallbackAttributeRows(row){
     .map(([key, value]) => ({ key, value: String(value) }));
 }
 
-function getKmzPopupAttributeRows(row){
+function getKmzPopupContentModel(row){
   const descRows = parseKmzDescriptionRows(row?.raw_description_html || "");
-  if (descRows.length) return descRows;
-  return buildKmzFallbackAttributeRows(row);
+  if (descRows.length){
+    const trimmedRows = isKmzPathFeatureRow(row) ? trimRowsUntilKey(descRows, "Path Name") : descRows;
+    if (trimmedRows.length){
+      return { kind: "table", rows: trimmedRows };
+    }
+  }
+  const plainText = sanitizeKmzDescriptionText(row?.raw_description_html || "");
+  if (plainText){
+    return { kind: "text", text: plainText };
+  }
+  return { kind: "table", rows: buildKmzFallbackAttributeRows(row) };
 }
 
 function buildKmzFeaturePopupHtml(featureId){
@@ -5562,13 +5631,12 @@ function buildKmzFeaturePopupHtml(featureId){
     return `<div class="kmz-popup"><div class="muted small">Feature unavailable.</div></div>`;
   }
   const title = String(row.placemark_name || row.location_name || "Placemark").trim() || "Placemark";
-  const attributes = getKmzPopupAttributeRows(row);
-  return `
-    <div class="kmz-popup" data-kmz-feature-id="${escapeHtml(row.__feature_id || featureId)}">
-      <h3 class="kmz-popup-title">${escapeHtml(title)}</h3>
+  const model = getKmzPopupContentModel(row);
+  const tableHtml = model.kind === "table"
+    ? `
       <table class="kmz-popup-table">
         <tbody>
-          ${attributes.map((entry) => `
+          ${(model.rows || []).map((entry) => `
             <tr>
               <th>${escapeHtml(entry.key || "Field")}</th>
               <td>${escapeHtml(entry.value || "-")}</td>
@@ -5576,6 +5644,12 @@ function buildKmzFeaturePopupHtml(featureId){
           `).join("")}
         </tbody>
       </table>
+    `
+    : `<div class="kmz-popup-text">${escapeHtml(model.text || "No description available.")}</div>`;
+  return `
+    <div class="kmz-popup" data-kmz-feature-id="${escapeHtml(row.__feature_id || featureId)}">
+      <h3 class="kmz-popup-title">${escapeHtml(title)}</h3>
+      ${tableHtml}
       <div class="kmz-popup-actions">
         <button type="button" class="btn secondary small" data-kmz-action="view-details" data-kmz-feature-id="${escapeHtml(row.__feature_id || featureId)}">View Details</button>
       </div>
@@ -5593,19 +5667,23 @@ function openMapDetailsDrawerForKmzFeature(featureId){
   const bodyEl = $("mapDetailsBody");
   if (!drawer || !titleEl || !bodyEl) return;
   titleEl.textContent = row.placemark_name || row.location_name || "Feature details";
-  const rows = getKmzPopupAttributeRows(row);
-  bodyEl.innerHTML = `
-    <table class="kmz-popup-table">
-      <tbody>
-        ${rows.map((entry) => `
-          <tr>
-            <th>${escapeHtml(entry.key || "Field")}</th>
-            <td>${escapeHtml(entry.value || "-")}</td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-  `;
+  const model = getKmzPopupContentModel(row);
+  if (model.kind === "table"){
+    bodyEl.innerHTML = `
+      <table class="kmz-popup-table">
+        <tbody>
+          ${(model.rows || []).map((entry) => `
+            <tr>
+              <th>${escapeHtml(entry.key || "Field")}</th>
+              <td>${escapeHtml(entry.value || "-")}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  } else {
+    bodyEl.innerHTML = `<div class="kmz-popup-text">${escapeHtml(model.text || "No description available.")}</div>`;
+  }
   drawer.classList.add("is-open");
 }
 
