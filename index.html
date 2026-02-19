@@ -103,13 +103,36 @@
             <div class="gis-actions">
               <div class="site-panel-title">Map View</div>
               <div class="map-view-block">
-                <label class="muted small" for="mapBasemapSelect">Basemap</label>
-                <select id="mapBasemapSelect" class="input">
-                  <option value="street">Street</option>
-                  <option value="satellite">Satellite</option>
-                </select>
-                <div class="muted small map-view-overlays-title">Overlays</div>
-                <div id="mapViewOverlayList" class="map-view-overlay-list"></div>
+                <div id="mapViewDropdown" class="map-view-dropdown">
+                  <button
+                    id="mapViewDropdownButton"
+                    type="button"
+                    class="map-view-trigger input"
+                    aria-expanded="false"
+                    aria-controls="mapViewDropdownMenu"
+                  >
+                    <span id="mapViewDropdownLabel">Street</span>
+                    <span class="map-view-trigger-caret" aria-hidden="true"></span>
+                  </button>
+                  <div id="mapViewDropdownMenu" class="map-view-menu" hidden>
+                    <div class="map-view-menu-section">
+                      <div class="muted small map-view-menu-title">Basemap</div>
+                      <label class="map-view-option-row">
+                        <input type="radio" name="mapViewBasemap" value="street" data-map-basemap />
+                        <span>Street</span>
+                      </label>
+                      <label class="map-view-option-row">
+                        <input type="radio" name="mapViewBasemap" value="satellite" data-map-basemap />
+                        <span>Satellite</span>
+                      </label>
+                    </div>
+                    <div class="map-view-menu-divider" role="separator"></div>
+                    <div class="map-view-menu-section">
+                      <div class="muted small map-view-menu-title">Overlays</div>
+                      <div id="mapViewOverlayList" class="map-view-overlay-list"></div>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div class="map-material-block">
                 <div class="site-panel-title">Materials Totals</div>

@@ -2116,22 +2116,86 @@ a{color:inherit; text-decoration:none;}
   gap:8px;
 }
 .map-view-block{
-  display:grid;
-  gap:8px;
+  display:block;
   border:1px solid var(--border);
   border-radius:12px;
   padding:10px;
   background:#f8fafc;
 }
-.map-view-block .input{
-  min-width:0;
+.map-view-dropdown{
+  position:relative;
 }
-.map-view-overlays-title{
-  margin-top:2px;
+.map-view-trigger{
+  min-width:0;
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  text-align:left;
+  font-weight:700;
+  color:#0f172a;
+  cursor:pointer;
+}
+.map-view-trigger-caret{
+  width:8px;
+  height:8px;
+  border-right:2px solid #64748b;
+  border-bottom:2px solid #64748b;
+  transform: rotate(45deg) translateY(-1px);
+  transition:transform .14s ease;
+  flex:0 0 auto;
+}
+.map-view-dropdown.is-open .map-view-trigger-caret{
+  transform: rotate(-135deg) translateY(-1px);
+}
+.map-view-menu{
+  position:absolute;
+  top:calc(100% + 6px);
+  left:0;
+  right:0;
+  z-index:1200;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:#fff;
+  box-shadow:0 12px 28px rgba(15, 23, 42, 0.18);
+  padding:8px;
+  display:grid;
+  gap:8px;
+}
+.map-view-menu-section{
+  display:grid;
+  gap:6px;
+}
+.map-view-menu-title{
+  letter-spacing:.02em;
+  text-transform:uppercase;
+}
+.map-view-menu-divider{
+  height:1px;
+  background:#e2e8f0;
+}
+.map-view-option-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-weight:700;
+  color:#1e293b;
+  border-radius:8px;
+  padding:4px 6px;
+}
+.map-view-option-row:hover{
+  background:#eff6ff;
+}
+.map-view-option-row input[type="radio"]{
+  width:16px;
+  height:16px;
+  margin:0;
+  accent-color:#2563eb;
 }
 .map-view-overlay-list{
   display:grid;
-  gap:6px;
+  gap:4px;
 }
 .map-view-overlay-row{
   display:flex;
@@ -2139,6 +2203,11 @@ a{color:inherit; text-decoration:none;}
   gap:8px;
   font-weight:700;
   color:#1e293b;
+  border-radius:8px;
+  padding:4px 6px;
+}
+.map-view-overlay-row:hover{
+  background:#eff6ff;
 }
 .map-view-overlay-row input[type="checkbox"]{
   width:16px;
@@ -2148,6 +2217,9 @@ a{color:inherit; text-decoration:none;}
 }
 .map-view-overlay-row.is-disabled{
   color:#64748b;
+}
+.map-view-overlay-row.is-disabled:hover{
+  background:transparent;
 }
 .map-material-block{
   display:grid;
