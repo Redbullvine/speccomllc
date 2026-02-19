@@ -101,11 +101,16 @@
               <div id="kmzLegendBody" class="map-layer-card gis-panel"></div>
             </section>
             <div class="gis-actions">
-              <label class="muted small" for="mapBasemapSelect">Basemap</label>
-              <select id="mapBasemapSelect" class="input">
-                <option value="street">Street</option>
-                <option value="satellite">Satellite</option>
-              </select>
+              <div class="site-panel-title">Map View</div>
+              <div class="map-view-block">
+                <label class="muted small" for="mapBasemapSelect">Basemap</label>
+                <select id="mapBasemapSelect" class="input">
+                  <option value="street">Street</option>
+                  <option value="satellite">Satellite</option>
+                </select>
+                <div class="muted small map-view-overlays-title">Overlays</div>
+                <div id="mapViewOverlayList" class="map-view-overlay-list"></div>
+              </div>
               <div class="row">
                 <button id="btnImportLocations" class="btn secondary" type="button">Import Locations (KMZ)</button>
                 <button id="btnInvoiceAgent" class="btn secondary" type="button">Invoice Agent</button>
