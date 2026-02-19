@@ -73,161 +73,48 @@
     </div>
 
     <div id="viewApp" class="app-shell" style="display:none;">
-      <aside id="leftControlRail" class="sidebar">
-        <aside id="rightDrawer" class="right-drawer">
-          <div class="sidebar-header">
-            <div class="sidebar-title">Controls</div>
+      <aside id="leftControlRail" class="sidebar gis-sidebar">
+        <aside id="rightDrawer" class="right-drawer gis-drawer">
+          <div class="sidebar-header gis-header">
+            <div class="sidebar-title">Places</div>
             <button id="btnOpenProjects" class="btn ghost small" type="button" data-i18n="projectsNav">Projects</button>
           </div>
-          <div class="sidebar-tabs">
-            <button class="btn ghost small" type="button" data-sidebar-tab="layers">Layers</button>
-            <button class="btn ghost small" type="button" data-sidebar-tab="feature">Feature</button>
-            <button class="btn ghost small" type="button" data-sidebar-tab="site">Site</button>
-            <button class="btn ghost small" type="button" data-sidebar-tab="basemap">Basemap</button>
+          <div class="sidebar-tabs gis-tabs">
+            <button class="btn ghost small is-active" type="button" data-sidebar-tab="data">Data</button>
+            <button class="btn ghost small" type="button" data-sidebar-tab="legend">Legend</button>
           </div>
-
-          <div class="sidebar-body">
-            <section id="sidebarTabLayers" class="sidebar-tab">
-              <div class="map-layer-card">
-                <div class="site-panel-title">Layers</div>
-                <div class="muted small">Toggle map layers</div>
-                <div id="mapLayerPanelBody" class="map-layer-list" style="margin-top:10px;">
-                  <label class="layer-toggle-row"><input id="mapLayerBoundary" type="checkbox" checked /> Project Boundary</label>
-                  <label class="layer-toggle-row"><input id="mapLayerPins" type="checkbox" checked /> Pins / Locations</label>
-                  <label class="layer-toggle-row"><input id="mapLayerSpans" type="checkbox" checked /> Spans / Paths</label>
-                  <label class="layer-toggle-row"><input id="mapLayerKmz" type="checkbox" checked /> KMZ Imports</label>
-                  <label class="layer-toggle-row"><input id="mapLayerPhotos" type="checkbox" /> Photos</label>
-                </div>
-                <div id="mapKmzGroupList" class="muted small" style="margin-top:10px;"></div>
+          <div class="sidebar-body gis-body">
+            <section id="sidebarTabData" class="sidebar-tab active">
+              <div class="map-layer-card gis-panel">
+                <label class="muted small" for="kmzTreeSearch">Search network points</label>
+                <input
+                  id="kmzTreeSearch"
+                  class="input compact"
+                  type="text"
+                  placeholder="Search network points..."
+                  aria-label="Search network points"
+                />
+                <div id="kmzFolderTree" class="kmz-tree" style="margin-top:10px;"></div>
               </div>
             </section>
-
-            <section id="sidebarTabFeature" class="sidebar-tab">
-              <div id="featureDrawerCard" class="feature-drawer-card">
-                <div class="row" style="justify-content:space-between; align-items:flex-start;">
-                  <div>
-                    <div id="featureDrawerTitle" class="site-panel-title">Feature details</div>
-                    <div id="featureDrawerSubTitle" class="muted small">Select a map feature.</div>
-                  </div>
-                </div>
-                <div id="featureDrawerPager" class="row" style="margin-top:8px; display:none; gap:8px;">
-                  <button id="btnFeaturePrev" class="btn ghost small" type="button">Prev</button>
-                  <div id="featureDrawerPagerText" class="muted small" style="align-self:center;">1/1</div>
-                  <button id="btnFeatureNext" class="btn ghost small" type="button">Next</button>
-                </div>
-                <div class="row feature-tabs" style="margin-top:10px;">
-                  <button class="btn ghost small is-active" type="button" data-feature-tab="summary">Summary</button>
-                  <button class="btn ghost small" type="button" data-feature-tab="photos">Photos</button>
-                  <button class="btn ghost small" type="button" data-feature-tab="billing">Billing</button>
-                  <button class="btn ghost small" type="button" data-feature-tab="notes">Notes</button>
-                </div>
-                <div id="featureDrawerBody" class="feature-drawer-body" style="margin-top:10px;"></div>
-              </div>
+            <section id="sidebarTabLegend" class="sidebar-tab">
+              <div id="kmzLegendBody" class="map-layer-card gis-panel"></div>
             </section>
-
-            <section id="sidebarTabSite" class="sidebar-tab">
-              <div class="site-panel-card">
-                <div class="row" style="justify-content:space-between; align-items:center;">
-                  <div>
-                    <div class="site-panel-title" data-i18n="sitePanelTitle">Site panel</div>
-                    <div id="sitePanelSubtitle" class="muted small" data-i18n="noSiteSelected">No site selected.</div>
-                  </div>
-                </div>
-                <div class="hr"></div>
-
-                <div class="panel-section">
-                  <div class="section-title" data-i18n="siteNameTitle">Location name</div>
-                  <div class="muted small" data-i18n="siteNameSubtitle">Name this splice location so it is easy to find later.</div>
-                  <div class="row" style="margin-top:8px;">
-                    <input id="siteNameInput" class="input" placeholder="Location name" data-i18n-placeholder="siteNamePlaceholder" />
-                    <button id="btnSaveSiteName" class="btn secondary" data-action="saveSiteName" data-i18n="saveLabel">Save</button>
-                    <button id="btnEditSiteLocation" class="btn ghost" type="button">Edit location</button>
-                  </div>
-                </div>
-
-                <div class="panel-section">
-                  <div class="section-title" data-i18n="mediaTitle">Media</div>
-                  <div class="muted small" data-i18n="mediaSubtitle">Add images from camera or gallery.</div>
-                  <div class="row" style="margin-top:8px;">
-                    <label class="btn secondary file-btn">
-                      <span data-i18n="addMedia">Add media</span>
-                      <input id="siteMediaInput" type="file" accept="image/*" capture="environment" />
-                    </label>
-                  </div>
-                  <div id="siteMediaGallery" class="media-gallery" style="margin-top:10px;"></div>
-                </div>
-
-                <div class="panel-section">
-                  <div class="section-title" data-i18n="codesTitle">Codes</div>
-                  <div class="muted small" data-i18n="codesSubtitle">Add one or more codes for this site.</div>
-                  <div class="row" style="margin-top:8px;">
-                    <input id="siteCodesInput" class="input" placeholder="Add codes (comma separated)" data-i18n-placeholder="codesPlaceholder" />
-                    <button id="btnSaveCodes" class="btn secondary" data-action="saveCodes" data-i18n="saveLabel">Save</button>
-                  </div>
-                  <div id="siteCodesList" class="code-list" style="margin-top:8px;"></div>
-                </div>
-
-                <div class="panel-section">
-                  <div class="section-title" data-i18n="entriesTitle">Entries</div>
-                  <div class="muted small" data-i18n="entriesSubtitle">Add neutral line entries with optional quantity.</div>
-                  <div class="row" style="margin-top:8px;">
-                    <input id="siteEntryDescription" class="input" placeholder="Entry description" data-i18n-placeholder="entryDescriptionPlaceholder" />
-                    <input id="siteEntryQuantity" class="input" type="number" step="0.01" placeholder="Qty (optional)" data-i18n-placeholder="entryQuantityPlaceholder" />
-                    <button id="btnAddEntry" class="btn secondary" data-action="addEntry" data-i18n="addEntry">Add</button>
-                  </div>
-                  <div id="siteEntriesList" class="entry-list" style="margin-top:8px;"></div>
-                </div>
-
-                <div class="panel-section">
-                  <div class="section-title" data-i18n="notesTitle">Notes</div>
-                  <div class="muted small" data-i18n="notesSubtitle">Optional notes for this site.</div>
-                  <textarea id="siteNotesInput" class="input" rows="3" placeholder="Add notes" data-i18n-placeholder="notesPlaceholder"></textarea>
-                  <div class="row" style="margin-top:8px;">
-                    <button id="btnSaveNotes" class="btn secondary" data-action="saveNotes" data-i18n="saveLabel">Save</button>
-                  </div>
-                </div>
+            <div class="gis-actions">
+              <label class="muted small" for="mapBasemapSelect">Basemap</label>
+              <select id="mapBasemapSelect" class="input">
+                <option value="street">Street</option>
+                <option value="satellite">Satellite</option>
+              </select>
+              <div class="row">
+                <button id="btnImportLocations" class="btn secondary" type="button">Import Locations (KMZ)</button>
+                <button id="btnInvoiceAgent" class="btn secondary" type="button">Invoice Agent</button>
+                <input id="importLocationsInput" type="file" accept=".kmz,application/vnd.google-earth.kmz" style="display:none;" />
               </div>
-            </section>
-
-            <section id="sidebarTabBasemap" class="sidebar-tab">
-              <div class="map-layer-card">
-                <div class="site-panel-title">Basemap & Actions</div>
-                <div class="muted small">Map rendering and quick actions.</div>
-                <div class="field-stack" style="margin-top:10px;">
-                  <label class="muted small" for="mapBasemapSelect">Basemap</label>
-                  <select id="mapBasemapSelect" class="input">
-                    <option value="street">Street</option>
-                    <option value="satellite">Satellite</option>
-                  </select>
-                  <input id="dropPinName" class="input" placeholder="Site name" data-i18n-placeholder="dropPinNamePlaceholder" />
-                  <div class="row">
-                    <button id="btnDropPin" class="btn" data-action="dropPin">Drop Pin</button>
-                    <button id="btnImportLocations" class="btn secondary" type="button">Import Locations (KMZ)</button>
-                    <button id="btnInvoiceAgent" class="btn secondary" type="button">Invoice Agent</button>
-                    <input id="importLocationsInput" type="file" accept=".kmz,application/vnd.google-earth.kmz" style="display:none;" />
-                  </div>
-                  <div id="mapStatus" class="muted small"></div>
-                </div>
-              </div>
-            </section>
+              <div id="mapStatus" class="muted small"></div>
+            </div>
           </div>
         </aside>
-        <div class="muted small" data-i18n="siteListTitle" style="margin-top:12px;">Sites</div>
-        <div class="row" style="margin-top:8px; gap:6px;">
-          <input
-            id="mapSearch"
-            class="input compact"
-            type="text"
-            placeholder="Search locations (name, address, ID, or lat,lng)"
-            data-i18n-placeholder="mapSearchPlaceholder"
-            aria-label="Search locations"
-            style="flex:1 1 auto;"
-          />
-          <button id="btnClearMapSearch" class="btn ghost small" type="button" style="display:none;">Clear</button>
-        </div>
-        <div id="siteSearchMeta" class="muted small" style="margin-top:6px;"></div>
-        <div id="siteSearchBanner" class="muted small" style="margin-top:6px; display:none;"></div>
-        <div id="siteList" class="site-list" style="margin-top:8px;"></div>
       </aside>
 
       <main class="content">
@@ -496,6 +383,15 @@
             <main id="mapCanvas" class="map-canvas">
               <div id="liveMap" class="map-leaflet map"></div>
             </main>
+            <aside id="mapDetailsDrawer" class="map-details-drawer">
+              <div class="map-details-header">
+                <div id="mapDetailsTitle" class="site-panel-title">Feature details</div>
+                <button id="btnMapDetailsClose" class="btn ghost small" type="button">Close</button>
+              </div>
+              <div id="mapDetailsBody" class="map-details-body">
+                <div class="muted small">Select a feature and click View Details.</div>
+              </div>
+            </aside>
           </div>
         </section>
 
@@ -697,28 +593,6 @@
           <div class="row" style="justify-content:flex-end;">
             <button id="btnSendMessage" class="btn" type="button" data-i18n="sendMessage">Send</button>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <div id="menuModal" class="modal places-modal" style="display:none;">
-      <div class="card modal-card places-card">
-        <div class="places-header">
-          <h2>Places</h2>
-          <button id="btnMenuClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
-        </div>
-        <div class="places-tree">
-          <button class="places-node places-parent is-open" type="button" data-places-expand="project">
-            <span class="caret"></span>
-            <span class="glyph cube"></span>
-            <span class="label">Project</span>
-          </button>
-          <div id="placesLayerTree" class="places-children is-open" data-places-group="project">
-            <div class="places-kmz-empty">No KMZ groups loaded.</div>
-          </div>
-        </div>
-        <div class="places-footer">
-          <button id="btnSignOut" class="btn secondary small" type="button" style="display:none;" data-action="signOut" data-i18n="signOut">Sign out</button>
         </div>
       </div>
     </div>
