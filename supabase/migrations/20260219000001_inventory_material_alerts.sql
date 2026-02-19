@@ -130,7 +130,9 @@ where true;
 update public.inventory_items i
 set company_id = src.org_id
 from (
-  select ni.item_id, max(pr.org_id) as org_id
+  select
+    ni.item_id,
+    (array_agg(pr.org_id order by pr.org_id))[1] as org_id
   from public.node_inventory ni
   join public.nodes n on n.id = ni.node_id
   join public.projects pr on pr.id = n.project_id
@@ -141,7 +143,12 @@ where i.id = src.item_id
 
 update public.inventory_items i
 set company_id = src.org_id
-from (select min(id) as org_id from public.orgs) src
+from (
+  select o.id as org_id
+  from public.orgs o
+  order by o.id
+  limit 1
+) src
 where i.company_id is null
   and src.org_id is not null;
 
