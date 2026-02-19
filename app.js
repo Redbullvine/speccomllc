@@ -183,6 +183,7 @@ const state = {
     selectedTab: "summary",
     highlightLayer: null,
     userNames: new Map(),
+    siteCodesBySiteId: new Map(),
     siteSearchIndex: new Map(),
     searchDebounceId: null,
     searchJumpKey: "",
@@ -1661,6 +1662,57 @@ function getSiteCoords(site){
   const lngNum = Number(lng);
   if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return null;
   return { lat: latNum, lng: lngNum };
+}
+
+function normalizeCodeList(list){
+  if (!Array.isArray(list)) return [];
+  return Array.from(new Set(list.map((code) => String(code || "").trim()).filter(Boolean)));
+}
+
+function summarizeCodesForPopup(list, maxItems = 10){
+  const cleaned = normalizeCodeList(list);
+  if (!cleaned.length) return "(none)";
+  if (cleaned.length <= maxItems) return cleaned.join(", ");
+  return `${cleaned.slice(0, maxItems).join(", ")} (+${cleaned.length - maxItems} more)`;
+}
+
+function getCachedSiteCodes(siteId){
+  const key = toSiteIdKey(siteId);
+  if (!key) return [];
+  const cached = state.map.siteCodesBySiteId.get(key);
+  return Array.isArray(cached) ? cached : [];
+}
+
+function setCachedSiteCodes(siteId, codes){
+  const key = toSiteIdKey(siteId);
+  if (!key) return [];
+  const normalized = normalizeCodeList(codes);
+  state.map.siteCodesBySiteId.set(key, normalized);
+  return normalized;
+}
+
+async function fetchSiteCodesForMapPopup(siteId){
+  const key = toSiteIdKey(siteId);
+  if (!key) return [];
+  const cached = state.map.siteCodesBySiteId.get(key);
+  if (Array.isArray(cached)) return cached;
+  if (isDemo){
+    const demoCodes = (state.demo.siteCodes || [])
+      .filter((row) => toSiteIdKey(row?.site_id) === key)
+      .map((row) => row.code);
+    return setCachedSiteCodes(key, demoCodes);
+  }
+  if (!state.client) return [];
+  const { data, error } = await state.client
+    .from("site_codes")
+    .select("code")
+    .eq("site_id", siteId)
+    .order("created_at", { ascending: true });
+  if (error){
+    debugLog("[map] popup code fetch failed", error);
+    return [];
+  }
+  return setCachedSiteCodes(key, (data || []).map((row) => row.code));
 }
 
 function getDemoCredentials(){
@@ -3460,11 +3512,14 @@ function focusSiteOnMap(siteId){
     if (pinsLayer?.addLayer) pinsLayer.addLayer(targetMarker);
     else targetMarker.addTo(state.map.instance);
     targetMarker.on("click", () => {
-      handleMapFeatureSelection(buildSiteFeature(site), { siteId: siteKey, openOverview: true, tab: "feature" });
+      const resolveSite = () => getVisibleSites().find((row) => toSiteIdKey(row?.id) === siteKey) || site;
+      void handleSiteMarkerClick(targetMarker, siteKey, resolveSite);
     });
-    const time = site.created_at ? new Date(site.created_at).toLocaleTimeString() : "-";
-    const pendingLabel = site.is_pending ? ` • ${t("siteStatusPending")}` : "";
-    targetMarker.bindPopup(`<b>${escapeHtml(getSiteDisplayName(site))}</b>${pendingLabel}<br>${escapeHtml(time)}`);
+    bindSiteMarkerPopup(targetMarker, site, {
+      requiredCodes: normalizeCodeList(getCodesRequiredForActiveProject()),
+      siteCodes: getCachedSiteCodes(site.id),
+      loadingCodes: false,
+    });
     state.map.markers.set(siteKey, targetMarker);
     state.map.featureMarkerMeta.set(siteKey, { kind: "site", siteId: siteKey });
   }
@@ -3501,6 +3556,73 @@ const MAP_PANES = {
   highlight: "speccom-highlight-pane",
   pending: "speccom-pending-pane",
 };
+
+function buildSiteMarkerPopupHtml(site, { requiredCodes = [], siteCodes = null, loadingCodes = false } = {}){
+  const locationName = getSiteDisplayName(site);
+  const siteId = toSiteIdKey(site?.id) || "-";
+  const coords = getSiteCoords(site);
+  const coordText = coords ? `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : "-";
+  const createdText = site?.created_at ? new Date(site.created_at).toLocaleString() : "-";
+  const statusText = site?.is_pending ? t("siteStatusPending") : "Active";
+  const effectiveSiteCodes = normalizeCodeList(siteCodes);
+  const effectiveRequiredCodes = normalizeCodeList(requiredCodes);
+  const showBillingCodes = effectiveSiteCodes.length > 0;
+  const codesLabel = showBillingCodes ? "Billing Codes" : "Required Codes";
+  const codesValue = loadingCodes
+    ? "Loading..."
+    : summarizeCodesForPopup(showBillingCodes ? effectiveSiteCodes : effectiveRequiredCodes);
+  const notesText = String(site?.notes || "").trim();
+  return `
+    <div class="scSitePopup">
+      <div class="scSitePopup-title">${escapeHtml(locationName)}</div>
+      <div class="scSitePopup-sub">${escapeHtml(statusText)}</div>
+      <div class="scSitePopup-grid">
+        <div class="k">Location</div><div class="v">${escapeHtml(locationName)}</div>
+        <div class="k">Site ID</div><div class="v">${escapeHtml(siteId)}</div>
+        <div class="k">Coordinates</div><div class="v mono">${escapeHtml(coordText)}</div>
+        <div class="k">${escapeHtml(codesLabel)}</div><div class="v">${escapeHtml(codesValue)}</div>
+        <div class="k">Created</div><div class="v">${escapeHtml(createdText)}</div>
+        ${notesText ? `<div class="k">Notes</div><div class="v">${escapeHtml(notesText)}</div>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function bindSiteMarkerPopup(marker, site, options = {}){
+  if (!marker || !site || typeof marker.bindPopup !== "function") return;
+  marker.bindPopup(buildSiteMarkerPopupHtml(site, options), {
+    className: "sc-site-popup",
+    maxWidth: 440,
+    minWidth: 280,
+    autoPanPadding: [20, 20],
+  });
+}
+
+async function handleSiteMarkerClick(marker, siteIdKey, resolveSite){
+  const site = typeof resolveSite === "function" ? resolveSite() : null;
+  if (!site) return;
+  const requiredCodes = normalizeCodeList(getCodesRequiredForActiveProject());
+  const cachedCodes = getCachedSiteCodes(site.id);
+  bindSiteMarkerPopup(marker, site, {
+    requiredCodes,
+    siteCodes: cachedCodes.length ? cachedCodes : null,
+    loadingCodes: !cachedCodes.length,
+  });
+  if (marker.openPopup) marker.openPopup();
+  handleMapFeatureSelection(buildSiteFeature(site), { siteId: siteIdKey, openOverview: true, tab: "feature" });
+  if (cachedCodes.length) return;
+  try{
+    const siteCodes = await fetchSiteCodesForMapPopup(site.id);
+    const latestSite = typeof resolveSite === "function" ? (resolveSite() || site) : site;
+    bindSiteMarkerPopup(marker, latestSite, { requiredCodes, siteCodes, loadingCodes: false });
+    if (!marker.isPopupOpen || marker.isPopupOpen()){
+      if (marker.openPopup) marker.openPopup();
+    }
+  } catch (error){
+    debugLog("[map] marker popup update failed", error);
+  }
+}
+
 const FEATURE_FIELD_LABELS = {
   id: "ID",
   type: "Type",
@@ -4053,9 +4175,7 @@ function updateMapMarkers(rows){
       if (pinsLayer?.addLayer) pinsLayer.addLayer(marker);
       else marker.addTo(state.map.instance);
       marker.on("click", () => {
-        const site = resolveSite();
-        if (!site) return;
-        handleMapFeatureSelection(buildSiteFeature(site), { siteId: id, openOverview: true, tab: "feature" });
+        void handleSiteMarkerClick(marker, id, resolveSite);
       });
       markers.set(id, marker);
       state.map.featureMarkerMeta.set(id, { kind: "site", siteId: id });
@@ -4065,13 +4185,17 @@ function updateMapMarkers(rows){
         marker.setStyle({ color, fillColor: color });
       }
     }
-    const time = row.created_at ? new Date(row.created_at).toLocaleTimeString() : "-";
-    const pendingLabel = row.is_pending ? ` • ${t("siteStatusPending")}` : "";
-    marker.bindPopup(`<b>${escapeHtml(getSiteDisplayName(row))}</b>${pendingLabel}<br>${escapeHtml(time)}`);
+    bindSiteMarkerPopup(marker, row, {
+      requiredCodes,
+      siteCodes: getCachedSiteCodes(row.id),
+      loadingCodes: false,
+    });
     try{
       const loc = row.name || row.address || row.label || row.location_name || `Site ${row.id || ""}`.trim();
-      const codeText = requiredCodes.length ? requiredCodes.slice(0, 8).join(" | ") : "(none)";
-      const more = requiredCodes.length > 8 ? ` | +${requiredCodes.length - 8} more` : "";
+      const hoverCodes = normalizeCodeList(getCachedSiteCodes(row.id));
+      const fallbackCodes = hoverCodes.length ? hoverCodes : requiredCodes;
+      const codeText = fallbackCodes.length ? fallbackCodes.slice(0, 8).join(" | ") : "(none)";
+      const more = fallbackCodes.length > 8 ? ` | +${fallbackCodes.length - 8} more` : "";
       const tooltipHtml = `
         <div class="scHoverTip">
           <div class="t1">${escapeHtml(loc)}</div>
@@ -4639,6 +4763,7 @@ SpecCom.helpers.deleteSiteFromPanel = async function(){
       state.map.markers.delete(siteKey);
       state.map.featureMarkerMeta.delete(siteKey);
     }
+    state.map.siteCodesBySiteId.delete(siteKey);
     closeSitePanel();
     renderSiteList();
     if (state.map?.instance){
@@ -9498,6 +9623,7 @@ async function loadProjectSites(projectId){
     state.projectSites = (state.demo.sites || []).filter(s => !projectId || s.project_id === projectId);
     state.pendingSites = loadPendingSitesFromStorage();
     state.map.siteSearchIndex.clear();
+    state.map.siteCodesBySiteId.clear();
     renderSiteList();
     return;
   }
@@ -9505,6 +9631,7 @@ async function loadProjectSites(projectId){
     state.projectSites = [];
     state.pendingSites = loadPendingSitesFromStorage();
     state.map.siteSearchIndex.clear();
+    state.map.siteCodesBySiteId.clear();
     renderSiteList();
     return;
   }
@@ -9516,6 +9643,7 @@ async function loadProjectSites(projectId){
   state.projectSites = data || [];
   state.pendingSites = loadPendingSitesFromStorage();
   state.map.siteSearchIndex.clear();
+  state.map.siteCodesBySiteId.clear();
   const visibleIds = new Set(getVisibleSites().map((site) => toSiteIdKey(site?.id)));
   if (state.activeSite && !visibleIds.has(toSiteIdKey(state.activeSite.id))){
     closeSitePanel();
@@ -10216,6 +10344,7 @@ async function loadSiteMedia(siteId){
 async function loadSiteCodes(siteId){
   if (isDemo){
     state.siteCodes = (state.demo.siteCodes || []).filter((row) => row.site_id === siteId);
+    setCachedSiteCodes(siteId, state.siteCodes.map((row) => row.code));
     return;
   }
   const { data, error } = await state.client
@@ -10226,9 +10355,11 @@ async function loadSiteCodes(siteId){
   if (error){
     toast("Codes load error", error.message);
     state.siteCodes = [];
+    setCachedSiteCodes(siteId, []);
     return;
   }
   state.siteCodes = data || [];
+  setCachedSiteCodes(siteId, state.siteCodes.map((row) => row.code));
 }
 
 async function loadSiteEntries(siteId){
@@ -10300,6 +10431,7 @@ async function saveSiteCodes(){
       created_at: new Date().toISOString(),
     })));
     state.siteCodes = state.demo.siteCodes.filter((row) => row.site_id === site.id);
+    setCachedSiteCodes(site.id, state.siteCodes.map((row) => row.code));
     renderSitePanel();
     return;
   }
