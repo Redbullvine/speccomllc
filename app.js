@@ -4550,15 +4550,13 @@ function renderMapLayerPanel(){
   if (!placesTree) return;
   placesTree.innerHTML = placesCatalog.map((groupName) => {
     const hasGroup = state.map.kmzImportGroups?.has(groupName);
-    const checked = hasGroup && state.map.kmzGroupVisibility.get(groupName) !== false;
+    const checked = state.map.kmzGroupVisibility.get(groupName) !== false;
     const checkedAttr = checked ? " checked" : "";
-    const disabledAttr = (kmzEnabled && hasGroup) ? "" : " disabled";
     const nodeClass = hasGroup ? "places-node" : "places-node is-muted";
-    const glyphType = (groupName === "Project") ? "folder" : "cube";
+    const titleAttr = hasGroup ? "" : ` title="No features loaded for ${escapeHtml(groupName)} yet."`;
     return `
-      <label class="${nodeClass}">
-        <input type="checkbox" data-kmz-group="${escapeHtml(groupName)}"${checkedAttr}${disabledAttr} />
-        <span class="glyph ${glyphType}"></span>
+      <label class="${nodeClass}"${titleAttr}>
+        <input type="checkbox" data-kmz-group="${escapeHtml(groupName)}"${checkedAttr} />
         <span class="label">${escapeHtml(groupName)}</span>
       </label>
     `;
@@ -4571,6 +4569,9 @@ function setKmzGroupVisibility(groupName, visible){
   if (!state.map.kmzGroupVisibility) state.map.kmzGroupVisibility = new Map();
   const isVisible = Boolean(visible);
   state.map.kmzGroupVisibility.set(key, isVisible);
+  if (isVisible && state.map.layerVisibility?.kmz === false){
+    setMapLayerVisibility("kmz", true);
+  }
   const group = state.map.kmzImportGroups?.get(key);
   const kmzLayer = state.map.layers?.kmz;
   if (group && kmzLayer){
