@@ -111,6 +111,14 @@
                 <div class="muted small map-view-overlays-title">Overlays</div>
                 <div id="mapViewOverlayList" class="map-view-overlay-list"></div>
               </div>
+              <div class="map-material-block">
+                <div class="site-panel-title">Materials Totals</div>
+                <div id="mapMaterialTotals" class="map-material-totals muted small">Import a KMZ and select a project to load totals.</div>
+              </div>
+              <div class="map-material-block">
+                <div class="site-panel-title">Material Alerts</div>
+                <div id="mapMaterialAlerts" class="map-material-alerts muted small">No open alerts.</div>
+              </div>
               <div class="row">
                 <button id="btnImportLocations" class="btn secondary" type="button">Import Locations (KMZ)</button>
                 <button id="btnInvoiceAgent" class="btn secondary" type="button">Invoice Agent</button>
@@ -459,6 +467,37 @@
               </div>
               <div class="hr"></div>
               <div id="adminUsersList"></div>
+            </div>
+          </div>
+          <div class="card" style="margin-top:12px;">
+            <h2>Inventory + SMS Alerts</h2>
+            <div class="muted small">ADMIN/ROOT only. Keep on-hand and reorder points current, and configure SMS alert delivery.</div>
+            <div id="adminMaterialGate" class="note warning" style="display:none; margin-top:10px;">
+              <div style="font-weight:900;">Admin access required</div>
+              <div class="muted small">Only ADMIN/ROOT can edit inventory stock and SMS subscriptions.</div>
+            </div>
+            <div id="adminMaterialPanel" style="margin-top:12px;">
+              <div class="row" style="flex-wrap:wrap; align-items:flex-end;">
+                <div class="field-stack" style="min-width:220px; flex:1 1 220px;">
+                  <label class="muted small" for="adminSmsPhone">Patrick SMS (E.164)</label>
+                  <input id="adminSmsPhone" class="input" placeholder="+1575xxxxxxx" />
+                </div>
+                <div class="field-stack" style="min-width:140px;">
+                  <label class="muted small" for="adminSmsCooldown">Cooldown (minutes)</label>
+                  <input id="adminSmsCooldown" class="input" type="number" min="1" step="1" value="30" />
+                </div>
+                <label class="row" style="gap:8px; min-width:120px; align-items:center; margin-bottom:8px;">
+                  <input id="adminSmsEnabled" type="checkbox" />
+                  <span>SMS enabled</span>
+                </label>
+                <button id="btnAdminSmsSave" class="btn secondary" type="button">Save SMS</button>
+              </div>
+              <div id="adminInventoryStatus" class="muted small" style="margin-top:10px;"></div>
+              <div id="adminInventoryTable" style="margin-top:10px;"></div>
+              <div class="row" style="margin-top:10px;">
+                <button id="btnAdminInventoryRefresh" class="btn ghost" type="button">Refresh</button>
+                <button id="btnAdminInventorySave" class="btn secondary" type="button">Save Inventory</button>
+              </div>
             </div>
           </div>
         </section>

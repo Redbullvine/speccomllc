@@ -144,6 +144,8 @@ const state = {
     metrics: null,
   },
   adminProfiles: [],
+  materialAdminRows: [],
+  materialSmsSubscription: null,
   locationWatchId: null,
   locationPollId: null,
   map: {
@@ -192,6 +194,10 @@ const state = {
       paths: true,
       boundaries: true,
     },
+    materialTotals: [],
+    materialAlerts: [],
+    materialFeatureTotals: new Map(),
+    materialFeatureId: "",
     kmzSelectedFeatureId: "",
     kmzTreeSearch: "",
     markers: new Map(),
@@ -2045,6 +2051,7 @@ function setActiveView(viewId){
   });
   if (viewId === "viewAdmin"){
     loadAdminProfiles();
+    loadAdminMaterialSettings();
   }
   if (viewId === "viewTechnician"){
     if (state.features.labor) loadTechnicianTimesheet();
@@ -2063,6 +2070,7 @@ function setActiveView(viewId){
     initMapWorkspaceUi();
     applyDrawerUiState();
     queueMapInvalidate(90);
+    refreshMaterialProjectData({ silent: true });
     refreshLocations();
   }
   if (viewId === "viewDailyReport"){
@@ -2563,6 +2571,7 @@ async function confirmImportLocations(){
     closeImportLocationsModal();
   }
   await loadProjectSites(projectId);
+  await refreshMaterialProjectData({ projectId, silent: true });
 }
 
 SpecCom.helpers.resetInvoiceAgentState = function(){
@@ -3115,6 +3124,43 @@ function parseKmlCoordinateList(coordText){
   return points;
 }
 
+function fnv1aHash(input){
+  const text = String(input || "");
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1){
+    hash ^= text.charCodeAt(i);
+    hash = (hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+function buildStableFeatureId({
+  placemarkId = "",
+  placemarkName = "",
+  folderPath = "",
+  geometry = null,
+} = {}){
+  const explicitId = String(placemarkId || "").trim();
+  if (explicitId){
+    return `kmz-feature-${fnv1aHash(`id:${explicitId}`)}`;
+  }
+  const geomType = String(geometry?.type || "").trim();
+  const geomCoords = (() => {
+    try {
+      return JSON.stringify(geometry?.coordinates || null);
+    } catch {
+      return "";
+    }
+  })();
+  const seed = [
+    String(placemarkName || "").trim(),
+    String(folderPath || "").trim(),
+    geomType,
+    geomCoords,
+  ].join("|");
+  return `kmz-feature-${fnv1aHash(seed)}`;
+}
+
 function getDirectKmlChild(node, childName){
   if (!node) return null;
   const target = String(childName || "").toLowerCase();
@@ -3322,6 +3368,7 @@ function parseKmlText(kmlText){
   const rows = [];
   let rowNumber = 2;
   let featureSeq = 1;
+  const featureIdCounts = new Map();
   const allLayerNames = [];
   const layerSeen = new Set();
   const treeRoot = {
@@ -3364,6 +3411,23 @@ function parseKmlText(kmlText){
       const placemarkName = getDirectKmlName(child) || `Placemark ${featureSeq}`;
       const geometry = parsePlacemarkGeometry(child);
       if (!geometry) return;
+      const placemarkId = String(
+        child.getAttribute("id")
+        || child.getAttribute("targetId")
+        || child.getAttributeNS?.("http://www.opengis.net/kml/2.2", "id")
+        || ""
+      ).trim();
+      const stableBaseFeatureId = buildStableFeatureId({
+        placemarkId,
+        placemarkName,
+        folderPath: parentPath.join(" / "),
+        geometry,
+      });
+      const featureCount = (featureIdCounts.get(stableBaseFeatureId) || 0) + 1;
+      featureIdCounts.set(stableBaseFeatureId, featureCount);
+      const stableFeatureId = featureCount > 1
+        ? `${stableBaseFeatureId}-${featureCount}`
+        : stableBaseFeatureId;
       const center = getGeometryCenter(geometry);
       const folderName = parentPath[parentPath.length - 1] || "Project";
       const layerName = canonicalKmzLayerName(folderName);
@@ -3390,7 +3454,7 @@ function parseKmlText(kmlText){
         __layer_type: inferKmzLayerType(parentPath),
         __has_line_geometry: hasLineGeometry,
         __has_polygon_geometry: hasPolygonGeometry,
-        __feature_id: `kmz-feature-${featureSeq}`,
+        __feature_id: stableFeatureId,
         __rowNumber: rowNumber,
       };
       const dataNodes = Array.from(child.getElementsByTagName("Data"));
@@ -3954,6 +4018,418 @@ const MAP_PANES = {
   highlight: "speccom-highlight-pane",
   pending: "speccom-pending-pane",
 };
+const MATERIAL_ITEM_DEFS = {
+  splice_closure: {
+    label: "Splice Closure",
+    addLabel: "+ Closure",
+  },
+  splitter_1x4: {
+    label: "1x4 Splitter",
+    addLabel: "+ 1x4 Splitter",
+  },
+  splitter_1x8: {
+    label: "1x8 Splitter",
+    addLabel: "+ 1x8 Splitter",
+  },
+};
+const MATERIAL_ITEM_KEYS = Object.keys(MATERIAL_ITEM_DEFS);
+const MATERIAL_SMS_FUNCTION_NAME = "notify_alerts";
+const MATERIAL_SMS_PHONE_RE = /^\+[1-9]\d{7,14}$/;
+
+function isMaterialAdminRole(){
+  return SpecCom.helpers.isRoot() || getRoleCode() === ROLES.ADMIN;
+}
+
+function coerceMaterialInt(value, fallback = 0){
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.round(parsed);
+}
+
+function normalizeMaterialItemKey(value){
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function getMaterialItemLabel(itemKey, fallbackName = ""){
+  const key = normalizeMaterialItemKey(itemKey);
+  if (!key) return String(fallbackName || "Material").trim() || "Material";
+  return MATERIAL_ITEM_DEFS[key]?.label
+    || String(fallbackName || "").trim()
+    || titleCaseKey(key);
+}
+
+function getActiveCompanyId(){
+  return state.activeProject?.org_id || state.profile?.org_id || null;
+}
+
+function isMissingRpcFunctionError(error, functionName){
+  const message = String(error?.message || "").toLowerCase();
+  const fnName = String(functionName || "").toLowerCase();
+  if (!message) return false;
+  return (
+    (message.includes(fnName) && message.includes("does not exist"))
+    || (message.includes("could not find the function") && (!fnName || message.includes(fnName)))
+  );
+}
+
+function normalizeMaterialTotalsRows(rows){
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      const itemKey = normalizeMaterialItemKey(row?.item_key || "");
+      if (!itemKey) return null;
+      return {
+        item_key: itemKey,
+        item_name: String(row?.item_name || "").trim() || getMaterialItemLabel(itemKey),
+        unit: String(row?.unit || "ea").trim() || "ea",
+        expected_total: coerceMaterialInt(row?.expected_total, 0),
+        used_total: coerceMaterialInt(row?.used_total, 0),
+        remaining: coerceMaterialInt(row?.remaining, 0),
+        on_hand: coerceMaterialInt(row?.on_hand, 0),
+        reorder_point: coerceMaterialInt(row?.reorder_point, 0),
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeMaterialAlertRows(rows){
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      const itemKey = normalizeMaterialItemKey(row?.item_key || "");
+      if (!itemKey) return null;
+      return {
+        id: String(row?.id || "").trim() || null,
+        item_key: itemKey,
+        alert_type: String(row?.alert_type || "").trim().toUpperCase(),
+        expected_qty: row?.expected_qty == null ? null : coerceMaterialInt(row.expected_qty, null),
+        actual_qty: row?.actual_qty == null ? null : coerceMaterialInt(row.actual_qty, null),
+        on_hand: row?.on_hand == null ? null : coerceMaterialInt(row.on_hand, null),
+        message: String(row?.message || "").trim(),
+        created_at: String(row?.created_at || "").trim() || "",
+        last_sent_at: String(row?.last_sent_at || "").trim() || "",
+        is_open: row?.is_open !== false,
+      };
+    })
+    .filter(Boolean);
+}
+
+function setMapMaterialStateFromPayload(payload){
+  if (!payload || typeof payload !== "object") return;
+  const totals = normalizeMaterialTotalsRows(payload.totals || []);
+  const alerts = normalizeMaterialAlertRows(payload.alerts || []);
+  if (totals.length || Array.isArray(payload.totals)){
+    state.map.materialTotals = totals;
+  }
+  if (alerts.length || Array.isArray(payload.alerts)){
+    state.map.materialAlerts = alerts;
+  }
+}
+
+function renderMapMaterialTotals(){
+  const wrap = $("mapMaterialTotals");
+  if (!wrap) return;
+  if (!state.activeProject){
+    wrap.textContent = "Select a project to load planned vs used totals.";
+    return;
+  }
+  const rows = normalizeMaterialTotalsRows(state.map.materialTotals || []);
+  if (!rows.length){
+    wrap.textContent = "No KMZ material totals yet. Import a KMZ to populate planned totals.";
+    return;
+  }
+  const preferredOrder = new Map(MATERIAL_ITEM_KEYS.map((itemKey, index) => [itemKey, index]));
+  const ordered = rows.slice().sort((a, b) => {
+    const rankA = preferredOrder.has(a.item_key) ? preferredOrder.get(a.item_key) : 999;
+    const rankB = preferredOrder.has(b.item_key) ? preferredOrder.get(b.item_key) : 999;
+    if (rankA !== rankB) return rankA - rankB;
+    return getMaterialItemLabel(a.item_key, a.item_name).localeCompare(getMaterialItemLabel(b.item_key, b.item_name));
+  });
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Planned</th>
+          <th>Used</th>
+          <th>Remaining</th>
+          <th>On-hand</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${ordered.map((row) => {
+          const remainingClass = row.remaining < 0 ? ' style="color:#991b1b;font-weight:800;"' : "";
+          const lowStock = row.on_hand <= row.reorder_point;
+          const stockClass = lowStock ? ' style="color:#b45309;font-weight:800;"' : "";
+          return `
+            <tr>
+              <td>${escapeHtml(getMaterialItemLabel(row.item_key, row.item_name))}</td>
+              <td>${row.expected_total}</td>
+              <td>${row.used_total}</td>
+              <td${remainingClass}>${row.remaining}</td>
+              <td${stockClass}>${row.on_hand}</td>
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderMapMaterialAlerts(){
+  const wrap = $("mapMaterialAlerts");
+  if (!wrap) return;
+  if (!state.activeProject){
+    wrap.textContent = "Select a project to view open material alerts.";
+    return;
+  }
+  const alerts = normalizeMaterialAlertRows(state.map.materialAlerts || []);
+  if (!alerts.length){
+    wrap.textContent = "No open alerts.";
+    return;
+  }
+  wrap.innerHTML = alerts.slice(0, 8).map((alert) => {
+    const itemLabel = getMaterialItemLabel(alert.item_key);
+    const typeLabel = alert.alert_type === "LOW_STOCK" ? "Low stock" : "Exceeded plan";
+    return `
+      <div class="map-material-alert">
+        <strong>${escapeHtml(typeLabel)}</strong> - ${escapeHtml(itemLabel)}
+        <div>${escapeHtml(alert.message || "")}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function refreshMaterialProjectData({ projectId = state.activeProject?.id || null, silent = false } = {}){
+  if (!projectId || !state.client || isDemo || isDemoUser()){
+    state.map.materialTotals = [];
+    state.map.materialAlerts = [];
+    renderMapMaterialTotals();
+    renderMapMaterialAlerts();
+    return { totals: [], alerts: [] };
+  }
+  const [totalsRes, alertsRes] = await Promise.all([
+    state.client.rpc("fn_get_material_project_totals", { p_project_id: projectId }),
+    state.client.rpc("fn_get_material_open_alerts", { p_project_id: projectId }),
+  ]);
+  if (totalsRes.error){
+    if (!isMissingRpcFunctionError(totalsRes.error, "fn_get_material_project_totals") && !silent){
+      toast("Materials unavailable", getDetailedErrorMessage(totalsRes.error), "error");
+    }
+    state.map.materialTotals = [];
+  } else {
+    state.map.materialTotals = normalizeMaterialTotalsRows(totalsRes.data || []);
+  }
+  if (alertsRes.error){
+    if (!isMissingRpcFunctionError(alertsRes.error, "fn_get_material_open_alerts") && !silent){
+      toast("Alerts unavailable", getDetailedErrorMessage(alertsRes.error), "error");
+    }
+    state.map.materialAlerts = [];
+  } else {
+    state.map.materialAlerts = normalizeMaterialAlertRows(alertsRes.data || []);
+  }
+  renderMapMaterialTotals();
+  renderMapMaterialAlerts();
+  return {
+    totals: state.map.materialTotals.slice(),
+    alerts: state.map.materialAlerts.slice(),
+  };
+}
+
+async function triggerMaterialAlertNotifications(alerts, {
+  projectId = state.activeProject?.id || null,
+  companyId = getActiveCompanyId(),
+} = {}){
+  if (!state.client || !state.client.functions?.invoke || !projectId || !companyId || isDemo || isDemoUser()) return;
+  const alertRows = normalizeMaterialAlertRows(alerts || []).filter((row) => row.id);
+  if (!alertRows.length) return;
+  try{
+    const { error } = await state.client.functions.invoke(MATERIAL_SMS_FUNCTION_NAME, {
+      body: {
+        company_id: companyId,
+        project_id: projectId,
+        alerts: alertRows.map((row) => ({ id: row.id })),
+      },
+    });
+    if (error){
+      const message = String(error.message || "").toLowerCase();
+      if (!message.includes("twilio")){
+        console.warn("notify_alerts failed:", error.message || error);
+      }
+    }
+  } catch (error){
+    console.warn("notify_alerts invoke error:", error);
+  }
+}
+
+function parseMaterialSignalsFromKmzRow(row){
+  const pairs = [];
+  const seen = new Set();
+  const pushPair = (key, value) => {
+    const keyText = String(key || "").trim();
+    const valueText = String(value || "").trim();
+    if (!keyText && !valueText) return;
+    const dedupeKey = `${keyText}::${valueText}`.toLowerCase();
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+    pairs.push({ key: keyText, value: valueText });
+  };
+
+  parseKmzDescriptionRows(row?.raw_description_html || "").forEach((entry) => {
+    pushPair(entry?.key || "", entry?.value || "");
+  });
+
+  const skip = new Set([
+    "id",
+    "location_name",
+    "placemark_name",
+    "folder_name",
+    "folder_path",
+    "latitude",
+    "longitude",
+    "geometry",
+    "raw_description_html",
+    "notes",
+    "__kml_layer",
+    "__kml_layer_raw",
+    "__layer_type",
+    "__feature_id",
+    "__rowNumber",
+    "__has_line_geometry",
+    "__has_polygon_geometry",
+  ]);
+  Object.entries(row || {}).forEach(([key, value]) => {
+    if (skip.has(key) || key.startsWith("__")) return;
+    if (value == null) return;
+    if (Array.isArray(value)){
+      pushPair(key, value.join(", "));
+      return;
+    }
+    if (typeof value === "object") return;
+    pushPair(key, String(value));
+  });
+
+  return pairs;
+}
+
+function extractMaterialRequirementsFromKmzRows(rows){
+  const requirements = [];
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  sourceRows.forEach((row) => {
+    const featureId = String(row?.__feature_id || "").trim();
+    if (!featureId) return;
+    const signals = parseMaterialSignalsFromKmzRow(row);
+    if (!signals.length) return;
+    const byItem = new Map();
+    const bump = (itemKey, rawLabel) => {
+      const key = normalizeMaterialItemKey(itemKey);
+      if (!key) return;
+      const entry = byItem.get(key) || { item_key: key, qty_required: 0, raw_label: "" };
+      entry.qty_required = Math.max(1, entry.qty_required);
+      if (!entry.raw_label && rawLabel){
+        entry.raw_label = String(rawLabel).trim().slice(0, 220);
+      }
+      byItem.set(key, entry);
+    };
+
+    signals.forEach((signal) => {
+      const signalKey = String(signal?.key || "").trim();
+      const signalValue = String(signal?.value || "").trim();
+      const keyLower = signalKey.toLowerCase();
+      const valueLower = signalValue.toLowerCase();
+      const combined = `${keyLower} ${valueLower}`;
+      const rawLabel = signalKey && signalValue ? `${signalKey}: ${signalValue}` : (signalKey || signalValue);
+
+      const has1x4 = /(^|[^a-z0-9])1\s*x\s*4([^a-z0-9]|$)/i.test(combined);
+      const has1x8 = /(^|[^a-z0-9])1\s*x\s*8([^a-z0-9]|$)/i.test(combined);
+      const ratioIsFour = keyLower.includes("splitter ratio") && /(^|[^0-9])4([^0-9]|$)/.test(valueLower);
+      const closureMatch = /spliceenclosure|enclosure|closure/i.test(combined);
+
+      if (ratioIsFour || has1x4){
+        bump("splitter_1x4", rawLabel);
+      }
+      if (has1x8){
+        bump("splitter_1x8", rawLabel);
+      }
+      if (closureMatch){
+        bump("splice_closure", rawLabel);
+      }
+    });
+
+    byItem.forEach((entry) => {
+      if (entry.qty_required <= 0) return;
+      requirements.push({
+        feature_id: featureId,
+        item_key: entry.item_key,
+        qty_required: entry.qty_required,
+        raw_label: entry.raw_label || null,
+      });
+    });
+  });
+  return requirements;
+}
+
+async function syncMaterialRequirementsFromKmzRows(rows, {
+  projectId = state.activeProject?.id || null,
+  replaceExisting = true,
+  silent = false,
+} = {}){
+  if (!projectId || !state.client || isDemo || isDemoUser()) return null;
+  const requirements = extractMaterialRequirementsFromKmzRows(rows);
+  const { data, error } = await state.client.rpc("fn_sync_material_requirements", {
+    p_project_id: projectId,
+    p_requirements: requirements,
+    p_replace_existing: replaceExisting,
+  });
+  if (error){
+    if (!isMissingRpcFunctionError(error, "fn_sync_material_requirements") && !silent){
+      toast("KMZ materials sync failed", getDetailedErrorMessage(error), "error");
+    }
+    return null;
+  }
+  if (data && typeof data === "object"){
+    setMapMaterialStateFromPayload(data);
+    renderMapMaterialTotals();
+    renderMapMaterialAlerts();
+    await triggerMaterialAlertNotifications(data.alerts || [], { projectId, companyId: getActiveCompanyId() });
+  }
+  return data;
+}
+
+async function refreshMaterialFeatureTotals(featureId, { projectId = state.activeProject?.id || null, silent = true } = {}){
+  const featureKey = String(featureId || "").trim();
+  if (!featureKey || !projectId || !state.client || isDemo || isDemoUser()){
+    state.map.materialFeatureTotals.delete(featureKey);
+    return [];
+  }
+  const { data, error } = await state.client.rpc("fn_get_material_feature_totals", {
+    p_project_id: projectId,
+    p_feature_id: featureKey,
+  });
+  if (error){
+    if (!isMissingRpcFunctionError(error, "fn_get_material_feature_totals") && !silent){
+      toast("Feature materials unavailable", getDetailedErrorMessage(error), "error");
+    }
+    state.map.materialFeatureTotals.delete(featureKey);
+    return [];
+  }
+  const rows = (Array.isArray(data) ? data : []).map((row) => ({
+    item_key: normalizeMaterialItemKey(row?.item_key || ""),
+    item_name: String(row?.item_name || "").trim(),
+    unit: String(row?.unit || "ea").trim() || "ea",
+    expected_qty: coerceMaterialInt(row?.expected_qty, 0),
+    used_qty: coerceMaterialInt(row?.used_qty, 0),
+  })).filter((row) => row.item_key);
+  state.map.materialFeatureTotals.set(featureKey, rows);
+  return rows;
+}
+
+function sanitizeE164Phone(value){
+  const phone = String(value || "").replace(/[^\d+]/g, "").trim();
+  return phone;
+}
 
 function buildSiteMarkerPopupHtml(site, {
   requiredCodes = [],
@@ -5182,6 +5658,8 @@ function renderMapLayerPanel(){
   syncMapLayerToggles();
   renderKmzLegend();
   renderMapViewOverlayControls();
+  renderMapMaterialTotals();
+  renderMapMaterialAlerts();
   const searchInput = $("kmzTreeSearch");
   if (searchInput && searchInput.value !== (state.map.kmzTreeSearch || "")){
     searchInput.value = state.map.kmzTreeSearch || "";
@@ -5313,7 +5791,7 @@ function registerMapUiBindings(){
       if (kmzViewDetailsBtn){
         e.preventDefault();
         e.stopPropagation();
-        openMapDetailsDrawerForKmzFeature(kmzViewDetailsBtn.dataset.kmzFeatureId);
+        void openMapDetailsDrawerForKmzFeature(kmzViewDetailsBtn.dataset.kmzFeatureId);
         return;
       }
       const popupRoot = e.target.closest(".scSitePopup");
@@ -5424,6 +5902,23 @@ function registerMapUiBindings(){
   const detailsCloseBtn = $("btnMapDetailsClose");
   if (detailsCloseBtn){
     detailsCloseBtn.addEventListener("click", () => closeMapDetailsDrawer());
+  }
+  const detailsBody = $("mapDetailsBody");
+  if (detailsBody){
+    detailsBody.addEventListener("click", (e) => {
+      const addBtn = e.target.closest("[data-material-add]");
+      if (!addBtn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (addBtn.disabled) return;
+      const featureId = addBtn.dataset.materialFeatureId || state.map.materialFeatureId || "";
+      const itemKey = addBtn.dataset.materialAdd || "";
+      addBtn.disabled = true;
+      void handleMapDetailsMaterialAdd(featureId, itemKey)
+        .finally(() => {
+          addBtn.disabled = false;
+        });
+    });
   }
 }
 function getKmzLeafletStyle(row, geometryType){
@@ -5625,6 +6120,108 @@ function getKmzPopupContentModel(row){
   return { kind: "table", rows: buildKmzFallbackAttributeRows(row) };
 }
 
+function buildKmzMaterialSectionHtml(featureId, {
+  featureTotals = [],
+  loading = false,
+  errorText = "",
+} = {}){
+  const featureKey = String(featureId || "").trim();
+  const byKey = new Map();
+  (Array.isArray(featureTotals) ? featureTotals : []).forEach((row) => {
+    const itemKey = normalizeMaterialItemKey(row?.item_key || "");
+    if (!itemKey) return;
+    byKey.set(itemKey, {
+      item_key: itemKey,
+      item_name: getMaterialItemLabel(itemKey, row?.item_name || ""),
+      expected_qty: coerceMaterialInt(row?.expected_qty, 0),
+      used_qty: coerceMaterialInt(row?.used_qty, 0),
+    });
+  });
+  const keys = [
+    ...MATERIAL_ITEM_KEYS,
+    ...Array.from(byKey.keys()).filter((itemKey) => !MATERIAL_ITEM_KEYS.includes(itemKey)),
+  ];
+  const rows = keys.map((itemKey) => {
+    const match = byKey.get(itemKey);
+    return {
+      item_key: itemKey,
+      item_name: getMaterialItemLabel(itemKey, match?.item_name || ""),
+      expected_qty: match?.expected_qty || 0,
+      used_qty: match?.used_qty || 0,
+    };
+  });
+  const canWrite = Boolean(
+    state.activeProject?.id
+    && state.client
+    && state.user
+    && !isDemo
+    && !isDemoUser()
+  );
+  const disabledAttr = canWrite && !loading ? "" : " disabled";
+  const statusHtml = errorText
+    ? `<div class="muted small" style="color:#b91c1c;">${escapeHtml(errorText)}</div>`
+    : (loading
+      ? `<div class="muted small">Loading materials...</div>`
+      : "");
+  return `
+    <section class="kmz-material-section" data-kmz-material-feature="${escapeHtml(featureKey)}">
+      <div class="kmz-material-heading">Materials</div>
+      ${statusHtml}
+      <table class="kmz-popup-table">
+        <tbody>
+          ${rows.map((row) => `
+            <tr>
+              <th>${escapeHtml(row.item_name)}</th>
+              <td>Expected ${row.expected_qty} | Used ${row.used_qty}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+      <div class="kmz-material-actions">
+        ${MATERIAL_ITEM_KEYS.map((itemKey) => `
+          <button
+            type="button"
+            class="btn secondary small"
+            data-material-add="${escapeHtml(itemKey)}"
+            data-material-feature-id="${escapeHtml(featureKey)}"${disabledAttr}
+          >${escapeHtml(MATERIAL_ITEM_DEFS[itemKey]?.addLabel || `+ ${getMaterialItemLabel(itemKey)}`)}</button>
+        `).join("")}
+      </div>
+      <div class="muted small">Planned vs used is company-scoped and updates alerts automatically.</div>
+    </section>
+  `;
+}
+
+function buildMapDetailsDrawerBodyHtml(row, {
+  featureTotals = [],
+  loadingMaterials = false,
+  materialError = "",
+} = {}){
+  const model = getKmzPopupContentModel(row);
+  const detailsHtml = model.kind === "table"
+    ? `
+      <table class="kmz-popup-table">
+        <tbody>
+          ${(model.rows || []).map((entry) => `
+            <tr>
+              <th>${escapeHtml(entry.key || "Field")}</th>
+              <td>${escapeHtml(entry.value || "-")}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `
+    : `<div class="kmz-popup-text">${escapeHtml(model.text || "No description available.")}</div>`;
+  return `
+    ${detailsHtml}
+    ${buildKmzMaterialSectionHtml(row?.__feature_id || "", {
+      featureTotals,
+      loading: loadingMaterials,
+      errorText: materialError,
+    })}
+  `;
+}
+
 function buildKmzFeaturePopupHtml(featureId){
   const row = state.map.kmzFeatureRows.get(String(featureId || "").trim()) || null;
   if (!row){
@@ -5657,7 +6254,7 @@ function buildKmzFeaturePopupHtml(featureId){
   `;
 }
 
-function openMapDetailsDrawerForKmzFeature(featureId){
+async function openMapDetailsDrawerForKmzFeature(featureId){
   const key = String(featureId || "").trim();
   if (!key) return;
   const row = state.map.kmzFeatureRows.get(key) || null;
@@ -5666,31 +6263,79 @@ function openMapDetailsDrawerForKmzFeature(featureId){
   const titleEl = $("mapDetailsTitle");
   const bodyEl = $("mapDetailsBody");
   if (!drawer || !titleEl || !bodyEl) return;
+  state.map.materialFeatureId = key;
   titleEl.textContent = row.placemark_name || row.location_name || "Feature details";
-  const model = getKmzPopupContentModel(row);
-  if (model.kind === "table"){
-    bodyEl.innerHTML = `
-      <table class="kmz-popup-table">
-        <tbody>
-          ${(model.rows || []).map((entry) => `
-            <tr>
-              <th>${escapeHtml(entry.key || "Field")}</th>
-              <td>${escapeHtml(entry.value || "-")}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    `;
-  } else {
-    bodyEl.innerHTML = `<div class="kmz-popup-text">${escapeHtml(model.text || "No description available.")}</div>`;
-  }
+  bodyEl.innerHTML = buildMapDetailsDrawerBodyHtml(row, {
+    featureTotals: [],
+    loadingMaterials: true,
+  });
   drawer.classList.add("is-open");
+  let featureTotals = [];
+  let materialError = "";
+  try{
+    featureTotals = await refreshMaterialFeatureTotals(key, { silent: true });
+  } catch (error){
+    materialError = getDetailedErrorMessage(error);
+  }
+  if (state.map.materialFeatureId !== key) return;
+  bodyEl.innerHTML = buildMapDetailsDrawerBodyHtml(row, {
+    featureTotals,
+    loadingMaterials: false,
+    materialError,
+  });
 }
 
 function closeMapDetailsDrawer(){
   const drawer = $("mapDetailsDrawer");
   if (!drawer) return;
   drawer.classList.remove("is-open");
+  state.map.materialFeatureId = "";
+}
+
+async function handleMapDetailsMaterialAdd(featureId, itemKey){
+  const featureKey = String(featureId || "").trim();
+  const normalizedItemKey = normalizeMaterialItemKey(itemKey);
+  const projectId = state.activeProject?.id || null;
+  if (!featureKey || !normalizedItemKey || !projectId){
+    toast("Materials unavailable", "Select a project and feature before logging usage.", "error");
+    return;
+  }
+  if (!state.client || !state.user || isDemo || isDemoUser()){
+    toast("Materials unavailable", "Sign in with a live account to log material usage.", "error");
+    return;
+  }
+  const { data, error } = await state.client.rpc("fn_record_material_usage", {
+    p_project_id: projectId,
+    p_feature_id: featureKey,
+    p_item_key: normalizedItemKey,
+    p_qty_used: 1,
+  });
+  if (error){
+    const message = getDetailedErrorMessage(error);
+    toast("Material update failed", message, "error");
+    return;
+  }
+  if (data && typeof data === "object"){
+    setMapMaterialStateFromPayload(data);
+  }
+  const latestFeatureTotals = await refreshMaterialFeatureTotals(featureKey, { projectId, silent: true });
+  if (state.map.materialFeatureId === featureKey){
+    const row = state.map.kmzFeatureRows.get(featureKey) || null;
+    const bodyEl = $("mapDetailsBody");
+    if (row && bodyEl){
+      bodyEl.innerHTML = buildMapDetailsDrawerBodyHtml(row, {
+        featureTotals: latestFeatureTotals,
+        loadingMaterials: false,
+      });
+    }
+  }
+  await refreshMaterialProjectData({ projectId, silent: true });
+  if (data?.alerts){
+    await triggerMaterialAlertNotifications(data.alerts, {
+      projectId,
+      companyId: getActiveCompanyId(),
+    });
+  }
 }
 
 async function openKmzFeaturePopup(featureId, { focusMap = true } = {}){
@@ -8362,6 +9007,12 @@ async function handleLocationImport(file){
   state.importPreview.validation = validation;
   state.importPreview.preview = renderImportPreviewMarkers(validation.validRows);
   renderKmzPreviewFeatures(kmzAllRows, file.name || "KMZ Import");
+  await syncMaterialRequirementsFromKmzRows(kmzAllRows, {
+    projectId: activeProjectId,
+    replaceExisting: true,
+    silent: true,
+  });
+  await refreshMaterialProjectData({ projectId: activeProjectId, silent: true });
 
   openImportLocationsModal(validation.validRows, state.activeProject);
 }
@@ -8948,6 +9599,9 @@ function applyDemoRestrictions(root = document){
     "#btnDispatchCreate",
     "#btnDispatchImportCsv",
     "#btnDispatchSave",
+    "#btnAdminSmsSave",
+    "#btnAdminInventoryRefresh",
+    "#btnAdminInventorySave",
   ].forEach((selector) => applyDemoLock(root.querySelector(selector)));
 }
 
@@ -11053,7 +11707,7 @@ async function loadProjects(){
     renderProjects();
     return;
   }
-  const baseSelect = "id, name, description, created_at, location, job_number, is_demo, created_by";
+  const baseSelect = "id, org_id, name, description, created_at, location, job_number, is_demo, created_by";
   let projects = [];
 
   if (SpecCom.helpers.isRoot()){
@@ -11143,6 +11797,271 @@ async function loadProjects(){
   debugLog("Loaded projects", state.projects);
   debugLog("Current project id", state.activeProject?.id || null);
   renderProjects();
+}
+
+function setAdminInventoryStatus(message = "", { isError = false } = {}){
+  const status = $("adminInventoryStatus");
+  if (!status) return;
+  status.textContent = message || "";
+  status.style.color = isError ? "#b91c1c" : "";
+}
+
+function selectSmsSubscriptionForAdmin(rows){
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return null;
+  const mine = list.find((row) => String(row?.user_id || "") === String(state.user?.id || ""));
+  if (mine) return mine;
+  const enabled = list.find((row) => row?.sms_enabled);
+  return enabled || list[0];
+}
+
+function syncAdminSmsInputs(){
+  const phoneInput = $("adminSmsPhone");
+  const cooldownInput = $("adminSmsCooldown");
+  const enabledInput = $("adminSmsEnabled");
+  const sub = state.materialSmsSubscription || null;
+  if (phoneInput) phoneInput.value = String(sub?.phone_e164 || "").trim();
+  if (cooldownInput){
+    const cooldown = Math.max(1, coerceMaterialInt(sub?.cooldown_minutes, 30));
+    cooldownInput.value = String(cooldown);
+  }
+  if (enabledInput){
+    enabledInput.checked = Boolean(sub?.sms_enabled);
+  }
+}
+
+function renderAdminInventoryTable(){
+  const wrap = $("adminInventoryTable");
+  if (!wrap) return;
+  const rows = Array.isArray(state.materialAdminRows) ? state.materialAdminRows : [];
+  if (!isMaterialAdminRole()){
+    wrap.innerHTML = "";
+    return;
+  }
+  if (!state.activeProject){
+    wrap.innerHTML = `<div class="muted small">Select a project to manage inventory stock.</div>`;
+    return;
+  }
+  if (!rows.length){
+    wrap.innerHTML = `<div class="muted small">No material totals loaded yet. Import a KMZ first.</div>`;
+    return;
+  }
+  wrap.innerHTML = `
+    <table class="admin-inventory-table">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Planned</th>
+          <th>Used</th>
+          <th>Remaining</th>
+          <th>On-hand</th>
+          <th>Reorder</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => `
+          <tr data-admin-item-row="${escapeHtml(row.item_key)}">
+            <td>${escapeHtml(getMaterialItemLabel(row.item_key, row.item_name))}</td>
+            <td>${coerceMaterialInt(row.expected_total, 0)}</td>
+            <td>${coerceMaterialInt(row.used_total, 0)}</td>
+            <td>${coerceMaterialInt(row.remaining, 0)}</td>
+            <td>
+              <input
+                class="input compact"
+                type="number"
+                min="0"
+                step="1"
+                data-admin-item-key="${escapeHtml(row.item_key)}"
+                data-admin-item-field="on_hand"
+                value="${coerceMaterialInt(row.on_hand, 0)}"
+              />
+            </td>
+            <td>
+              <input
+                class="input compact"
+                type="number"
+                min="0"
+                step="1"
+                data-admin-item-key="${escapeHtml(row.item_key)}"
+                data-admin-item-field="reorder_point"
+                value="${coerceMaterialInt(row.reorder_point, 0)}"
+              />
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+async function loadAdminMaterialSettings({ silent = true } = {}){
+  const gate = $("adminMaterialGate");
+  const panel = $("adminMaterialPanel");
+  const allowed = isMaterialAdminRole();
+  if (gate) gate.style.display = allowed ? "none" : "";
+  if (panel) panel.style.display = allowed ? "" : "none";
+  if (!allowed){
+    state.materialAdminRows = [];
+    state.materialSmsSubscription = null;
+    setAdminInventoryStatus("");
+    renderAdminInventoryTable();
+    return;
+  }
+  if (!state.client || !state.user){
+    setAdminInventoryStatus("Sign in to manage inventory and SMS settings.");
+    return;
+  }
+  if (!state.activeProject){
+    state.materialAdminRows = [];
+    renderAdminInventoryTable();
+    setAdminInventoryStatus("Select a project to load inventory controls.");
+    syncAdminSmsInputs();
+    return;
+  }
+  const projectId = state.activeProject.id;
+  await refreshMaterialProjectData({ projectId, silent: true });
+  const totals = normalizeMaterialTotalsRows(state.map.materialTotals || []);
+  state.materialAdminRows = totals.map((row) => ({
+    ...row,
+    _dirty: false,
+  }));
+
+  const companyId = getActiveCompanyId();
+  if (!companyId){
+    state.materialSmsSubscription = null;
+    syncAdminSmsInputs();
+    renderAdminInventoryTable();
+    setAdminInventoryStatus("Project is missing company scope.", { isError: true });
+    return;
+  }
+  const { data: subs, error: subError } = await state.client
+    .from("alert_subscriptions")
+    .select("company_id, user_id, phone_e164, sms_enabled, cooldown_minutes")
+    .eq("company_id", companyId);
+  if (subError && !silent){
+    toast("SMS settings load failed", getDetailedErrorMessage(subError), "error");
+  }
+  state.materialSmsSubscription = subError ? null : (selectSmsSubscriptionForAdmin(subs || []) || null);
+  syncAdminSmsInputs();
+  renderAdminInventoryTable();
+  setAdminInventoryStatus(`Loaded ${totals.length} inventory item${totals.length === 1 ? "" : "s"} for ${state.activeProject.name || "project"}.`);
+}
+
+function updateAdminInventoryDraft(itemKey, field, rawValue){
+  const key = normalizeMaterialItemKey(itemKey);
+  if (!key) return;
+  const allowedField = field === "on_hand" || field === "reorder_point";
+  if (!allowedField) return;
+  const nextValue = Math.max(0, coerceMaterialInt(rawValue, 0));
+  state.materialAdminRows = (state.materialAdminRows || []).map((row) => {
+    if (normalizeMaterialItemKey(row.item_key) !== key) return row;
+    const current = coerceMaterialInt(row[field], 0);
+    if (current === nextValue) return row;
+    return {
+      ...row,
+      [field]: nextValue,
+      _dirty: true,
+    };
+  });
+}
+
+async function saveAdminInventorySettings(){
+  if (!isMaterialAdminRole()){
+    toast("Not allowed", "Only ADMIN/ROOT can edit inventory.", "error");
+    return;
+  }
+  const projectId = state.activeProject?.id || null;
+  if (!projectId || !state.client){
+    toast("Inventory unavailable", "Select a project before saving inventory.", "error");
+    return;
+  }
+  const dirtyRows = (state.materialAdminRows || []).filter((row) => row?._dirty);
+  if (!dirtyRows.length){
+    setAdminInventoryStatus("No inventory changes to save.");
+    return;
+  }
+  setAdminInventoryStatus("Saving inventory updates...");
+  let latestPayload = null;
+  const mergedAlerts = [];
+  for (const row of dirtyRows){
+    const { data, error } = await state.client.rpc("fn_set_inventory_stock", {
+      p_project_id: projectId,
+      p_item_key: row.item_key,
+      p_on_hand: Math.max(0, coerceMaterialInt(row.on_hand, 0)),
+      p_reorder_point: Math.max(0, coerceMaterialInt(row.reorder_point, 0)),
+    });
+    if (error){
+      const message = getDetailedErrorMessage(error);
+      setAdminInventoryStatus(message, { isError: true });
+      toast("Inventory save failed", message, "error");
+      return;
+    }
+    latestPayload = data || latestPayload;
+    if (Array.isArray(data?.alerts)){
+      mergedAlerts.push(...data.alerts);
+    }
+  }
+  if (latestPayload && typeof latestPayload === "object"){
+    setMapMaterialStateFromPayload(latestPayload);
+  }
+  await refreshMaterialProjectData({ projectId, silent: true });
+  await triggerMaterialAlertNotifications(mergedAlerts, {
+    projectId,
+    companyId: getActiveCompanyId(),
+  });
+  await loadAdminMaterialSettings({ silent: true });
+  setAdminInventoryStatus(`Saved ${dirtyRows.length} inventory update${dirtyRows.length === 1 ? "" : "s"}.`);
+  toast("Inventory updated", "On-hand and reorder settings saved.");
+}
+
+async function saveAdminSmsSettings(){
+  if (!isMaterialAdminRole()){
+    toast("Not allowed", "Only ADMIN/ROOT can edit SMS settings.", "error");
+    return;
+  }
+  const companyId = getActiveCompanyId();
+  if (!companyId || !state.client){
+    toast("SMS unavailable", "Select a project before saving SMS settings.", "error");
+    return;
+  }
+  const phoneInput = $("adminSmsPhone");
+  const cooldownInput = $("adminSmsCooldown");
+  const enabledInput = $("adminSmsEnabled");
+  const phone = sanitizeE164Phone(phoneInput?.value || "");
+  const smsEnabled = Boolean(enabledInput?.checked);
+  const cooldownMinutes = Math.max(1, coerceMaterialInt(cooldownInput?.value, 30));
+  if (smsEnabled && !MATERIAL_SMS_PHONE_RE.test(phone)){
+    toast("Invalid phone", "Use E.164 format, example +15751234567.", "error");
+    return;
+  }
+  const targetUserId = state.materialSmsSubscription?.user_id || state.user?.id || null;
+  if (!targetUserId){
+    toast("SMS unavailable", "No target user found for SMS subscription.", "error");
+    return;
+  }
+  const { data, error } = await state.client.rpc("fn_save_alert_subscription", {
+    p_company_id: companyId,
+    p_user_id: targetUserId,
+    p_phone_e164: phone,
+    p_sms_enabled: smsEnabled,
+    p_cooldown_minutes: cooldownMinutes,
+  });
+  if (error){
+    const message = getDetailedErrorMessage(error);
+    setAdminInventoryStatus(message, { isError: true });
+    toast("SMS save failed", message, "error");
+    return;
+  }
+  state.materialSmsSubscription = data || {
+    company_id: companyId,
+    user_id: targetUserId,
+    phone_e164: phone,
+    sms_enabled: smsEnabled,
+    cooldown_minutes: cooldownMinutes,
+  };
+  syncAdminSmsInputs();
+  setAdminInventoryStatus("SMS settings saved.");
+  toast("SMS settings updated", smsEnabled ? "Patrick notifications are enabled." : "SMS notifications are disabled.");
 }
 
 async function loadAdminProfiles(){
@@ -13358,6 +14277,8 @@ async function loadBillingLocations(projectId){
 function setActiveProjectById(id){
   const next = state.projects.find(p => p.id === id) || null;
   state.activeProject = next;
+  state.map.materialFeatureId = "";
+  state.map.materialFeatureTotals.clear();
   state.mapFilters.search = "";
   const mapSearch = $("mapSearch");
   if (mapSearch) mapSearch.value = "";
@@ -13387,6 +14308,10 @@ function setActiveProjectById(id){
   if (activeViewId === "viewDispatch" && state.features.dispatch){
     loadDispatchTechnicians();
     loadDispatchWorkOrders();
+  }
+  refreshMaterialProjectData({ silent: true });
+  if (activeViewId === "viewAdmin"){
+    loadAdminMaterialSettings();
   }
 }
 
@@ -16545,7 +17470,7 @@ async function loadProfile(client, userId){
   // Expect a public.profiles row keyed by auth.uid()
   let { data, error } = await client
     .from("profiles")
-    .select("role, role_code, display_name, preferred_language, is_demo, current_project_id")
+    .select("role, role_code, display_name, preferred_language, is_demo, current_project_id, org_id")
     .eq("id", userId)
     .maybeSingle();
 
@@ -16554,7 +17479,7 @@ async function loadProfile(client, userId){
     if (message.includes("does not exist")){
       ({ data, error } = await client
         .from("profiles")
-        .select("role, role_code, display_name")
+        .select("role, role_code, display_name, org_id")
         .eq("id", userId)
         .maybeSingle());
     }
@@ -17048,6 +17973,36 @@ function wireUI(){
   const btnAdminCreate = $("btnAdminCreateUser");
   if (btnAdminCreate){
     btnAdminCreate.addEventListener("click", () => createAdminProfile());
+  }
+  const adminInventoryTable = $("adminInventoryTable");
+  if (adminInventoryTable){
+    adminInventoryTable.addEventListener("input", (e) => {
+      const input = e.target instanceof HTMLInputElement ? e.target : null;
+      if (!input) return;
+      const itemKey = input.dataset.adminItemKey || "";
+      const field = input.dataset.adminItemField || "";
+      if (!itemKey || !field) return;
+      updateAdminInventoryDraft(itemKey, field, input.value);
+      setAdminInventoryStatus("Inventory changes pending. Click Save Inventory.");
+    });
+  }
+  const adminInventoryRefreshBtn = $("btnAdminInventoryRefresh");
+  if (adminInventoryRefreshBtn){
+    adminInventoryRefreshBtn.addEventListener("click", () => {
+      loadAdminMaterialSettings({ silent: false });
+    });
+  }
+  const adminInventorySaveBtn = $("btnAdminInventorySave");
+  if (adminInventorySaveBtn){
+    adminInventorySaveBtn.addEventListener("click", () => {
+      saveAdminInventorySettings();
+    });
+  }
+  const adminSmsSaveBtn = $("btnAdminSmsSave");
+  if (adminSmsSaveBtn){
+    adminSmsSaveBtn.addEventListener("click", () => {
+      saveAdminSmsSettings();
+    });
   }
 
   const projectsBtn = $("btnProjects");

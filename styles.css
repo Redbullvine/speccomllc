@@ -2149,6 +2149,45 @@ a{color:inherit; text-decoration:none;}
 .map-view-overlay-row.is-disabled{
   color:#64748b;
 }
+.map-material-block{
+  display:grid;
+  gap:8px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:10px;
+  background:#f8fafc;
+}
+.map-material-totals table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:12px;
+}
+.map-material-totals th,
+.map-material-totals td{
+  border:1px solid #cbd5e1;
+  padding:4px 6px;
+  text-align:left;
+  vertical-align:top;
+}
+.map-material-totals th{
+  background:#e2e8f0;
+  color:#334155;
+}
+.map-material-alerts{
+  display:grid;
+  gap:6px;
+}
+.map-material-alert{
+  border:1px solid #cbd5e1;
+  border-radius:8px;
+  padding:6px 8px;
+  background:#fff;
+  font-size:12px;
+  line-height:1.35;
+}
+.map-material-alert strong{
+  color:#991b1b;
+}
 .kmz-tree{
   display:grid;
   gap:2px;
@@ -2323,6 +2362,45 @@ a{color:inherit; text-decoration:none;}
 }
 .map-details-body .kmz-popup-table td{
   word-break:break-word;
+}
+.kmz-material-section{
+  margin-top:12px;
+  border-top:1px solid #cbd5e1;
+  padding-top:10px;
+  display:grid;
+  gap:8px;
+}
+.kmz-material-heading{
+  font-size:13px;
+  font-weight:800;
+  color:#0f172a;
+}
+.kmz-material-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+.kmz-material-actions .btn{
+  padding:6px 10px;
+}
+.admin-inventory-table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:12px;
+}
+.admin-inventory-table th,
+.admin-inventory-table td{
+  border:1px solid #cbd5e1;
+  padding:6px;
+  text-align:left;
+}
+.admin-inventory-table th{
+  background:#e2e8f0;
+  color:#334155;
+}
+.admin-inventory-table input{
+  width:100%;
+  min-width:90px;
 }
 body.sidebar-collapsed .app-shell{
   grid-template-columns: 0 1fr;
