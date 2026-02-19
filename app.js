@@ -4528,6 +4528,14 @@ function buildKmzFeatureFromRow(row, groupName = "KMZ Import"){
     geometry = { type: "Point", coordinates: [lng, lat] };
   }
   const center = getGeometryCenter(geometry);
+  const fallbackLat = Number(row?.latitude);
+  const fallbackLng = Number(row?.longitude);
+  const resolvedLat = Number.isFinite(center?.lat)
+    ? Number(center.lat)
+    : (Number.isFinite(fallbackLat) ? fallbackLat : "");
+  const resolvedLng = Number.isFinite(center?.lng)
+    ? Number(center.lng)
+    : (Number.isFinite(fallbackLng) ? fallbackLng : "");
   return {
     type: "Feature",
     geometry,
@@ -4537,8 +4545,8 @@ function buildKmzFeatureFromRow(row, groupName = "KMZ Import"){
       name: row?.placemark_name || row?.location_name || "KMZ Point",
       location_name: row?.placemark_name || row?.location_name || "",
       notes: row?.notes || "",
-      gps_lat: center?.lat ?? Number(row?.latitude) || "",
-      gps_lng: center?.lng ?? Number(row?.longitude) || "",
+      gps_lat: resolvedLat,
+      gps_lng: resolvedLng,
       __kml_layer: row?.__kml_layer || "",
       __import_group: groupName,
       folder_name: row?.folder_name || "",
