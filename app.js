@@ -185,6 +185,10 @@ const state = {
     userNames: new Map(),
     siteCodesBySiteId: new Map(),
     sitePhotosBySiteId: new Map(),
+    popupSiteKeys: [],
+    popupSiteIndex: 0,
+    popupMarker: null,
+    popupRequiredCodes: [],
     siteSearchIndex: new Map(),
     searchDebounceId: null,
     searchJumpKey: "",
@@ -3639,6 +3643,9 @@ function buildSiteMarkerPopupHtml(site, {
   loadingCodes = false,
   sitePhotos = [],
   loadingPhotos = false,
+  pageIndex = 0,
+  pageTotal = 1,
+  nearbySites = [],
 } = {}){
   const locationName = getSiteDisplayName(site);
   const siteId = toSiteIdKey(site?.id) || "-";
@@ -3653,7 +3660,11 @@ function buildSiteMarkerPopupHtml(site, {
   const codesValue = loadingCodes
     ? "Loading..."
     : summarizeCodesForPopup(showBillingCodes ? effectiveSiteCodes : effectiveRequiredCodes);
-  const notesRaw = String(site?.notes || "").trim();
+  const notesRaw = String(site?.notes || "");
+  const trimmedNotes = notesRaw.trim();
+  const canManualProofEdit = !site?.is_pending && (SpecCom.helpers.isRoot() || isOwner());
+  const canDeleteSite = !site?.is_pending && SpecCom.helpers.isRoot();
+  const canEditSite = !site?.is_pending;
   const notesText = notesRaw.length > 240 ? `${notesRaw.slice(0, 237)}...` : notesRaw;
   const photos = normalizePopupPhotos(sitePhotos);
   const photosHtml = loadingPhotos
@@ -3665,18 +3676,85 @@ function buildSiteMarkerPopupHtml(site, {
           </a>
         `).join("")}</div>`
       : `<div class="scSitePopup-photo-empty">No photos yet.</div>`;
+  const total = Math.max(1, Number(pageTotal) || 1);
+  const current = Math.max(0, Math.min(total - 1, Number(pageIndex) || 0));
+  const pagerHtml = total > 1
+    ? `
+      <div class="scSitePopup-pager">
+        <button type="button" class="nav" data-popup-nav="prev" aria-label="Previous location">&lt;</button>
+        <span>${current + 1}/${total}</span>
+        <button type="button" class="nav" data-popup-nav="next" aria-label="Next location">&gt;</button>
+      </div>
+    `
+    : "";
+  const listRows = Array.isArray(nearbySites) ? nearbySites : [];
+  const locationsHtml = listRows.length > 1
+    ? `
+      <div class="scSitePopup-location-head">Locations (${listRows.length})</div>
+      <div class="scSitePopup-location-list">
+        ${listRows.map((row) => `
+          <button type="button" class="item${row.active ? " is-active" : ""}" data-popup-index="${Number(row.index) || 0}">
+            ${escapeHtml(row.label || "Site")}
+          </button>
+        `).join("")}
+      </div>
+    `
+    : "";
+  const editorDisabledAttr = canEditSite ? "" : " disabled";
+  const manualDisabledAttr = canManualProofEdit ? "" : " disabled";
+  const codesInputValue = effectiveSiteCodes.join(", ");
+  const saveHint = canEditSite
+    ? (canManualProofEdit ? "Edit fields and save." : "Name and billing codes can be edited here.")
+    : "Pending locations are read-only.";
+  const deleteButtonHtml = canDeleteSite
+    ? `<button type="button" class="scSitePopup-action is-danger" data-popup-action="delete" data-popup-site-id="${escapeHtml(siteId)}">Delete location</button>`
+    : "";
   return `
-    <div class="scSitePopup">
-      <div class="scSitePopup-title">${escapeHtml(locationName)}</div>
-      <div class="scSitePopup-sub">${escapeHtml(statusText)}</div>
+    <div class="scSitePopup" data-popup-site-id="${escapeHtml(siteId)}">
+      <div class="scSitePopup-top">
+        <div>
+          <div class="scSitePopup-title">${escapeHtml(locationName)}</div>
+          <div class="scSitePopup-sub">${escapeHtml(statusText)}</div>
+        </div>
+        ${pagerHtml}
+      </div>
+      ${locationsHtml}
       <div class="scSitePopup-grid">
         <div class="k">Location</div><div class="v">${escapeHtml(locationName)}</div>
         <div class="k">Site ID</div><div class="v">${escapeHtml(siteId)}</div>
         <div class="k">Coordinates</div><div class="v mono">${escapeHtml(coordText)}</div>
         <div class="k">${escapeHtml(codesLabel)}</div><div class="v">${escapeHtml(codesValue)}</div>
         <div class="k">Created</div><div class="v">${escapeHtml(createdText)}</div>
-        ${notesText ? `<div class="k">Notes</div><div class="v">${escapeHtml(notesText)}</div>` : ""}
+        ${trimmedNotes ? `<div class="k">Notes</div><div class="v">${escapeHtml(notesText)}</div>` : ""}
       </div>
+      <div class="scSitePopup-edit-head">Edit</div>
+      <div class="scSitePopup-edit-grid">
+        <label class="scSitePopup-field">
+          <span>Location</span>
+          <input type="text" value="${escapeHtml(locationName)}" data-popup-field="name"${editorDisabledAttr} />
+        </label>
+        <label class="scSitePopup-field">
+          <span>Billing Codes</span>
+          <input type="text" value="${escapeHtml(codesInputValue)}" placeholder="${loadingCodes ? "Loading..." : "CODE-A, CODE-B"}" data-popup-field="codes"${editorDisabledAttr} />
+        </label>
+        <label class="scSitePopup-field">
+          <span>Latitude</span>
+          <input type="number" step="any" value="${coords ? escapeHtml(String(coords.lat)) : ""}" data-popup-field="lat"${manualDisabledAttr} />
+        </label>
+        <label class="scSitePopup-field">
+          <span>Longitude</span>
+          <input type="number" step="any" value="${coords ? escapeHtml(String(coords.lng)) : ""}" data-popup-field="lng"${manualDisabledAttr} />
+        </label>
+        <label class="scSitePopup-field is-full">
+          <span>Notes</span>
+          <textarea rows="3" data-popup-field="notes"${manualDisabledAttr}>${escapeHtml(notesRaw)}</textarea>
+        </label>
+      </div>
+      <div class="scSitePopup-actions">
+        <button type="button" class="scSitePopup-action" data-popup-action="save" data-popup-site-id="${escapeHtml(siteId)}"${editorDisabledAttr}>Save changes</button>
+        ${deleteButtonHtml}
+      </div>
+      <div class="scSitePopup-edit-hint">${escapeHtml(saveHint)}</div>
       <div class="scSitePopup-photo-head">Photos</div>
       ${photosHtml}
     </div>
@@ -3687,16 +3765,74 @@ function bindSiteMarkerPopup(marker, site, options = {}){
   if (!marker || !site || typeof marker.bindPopup !== "function") return;
   marker.bindPopup(buildSiteMarkerPopupHtml(site, options), {
     className: "sc-site-popup",
-    maxWidth: 440,
+    maxWidth: 520,
     minWidth: 280,
     autoPanPadding: [20, 20],
   });
 }
 
-async function handleSiteMarkerClick(marker, siteIdKey, resolveSite){
-  const site = typeof resolveSite === "function" ? resolveSite() : null;
-  if (!site) return;
-  const requiredCodes = normalizeCodeList(getCodesRequiredForActiveProject());
+function getSitesAtCoordinate(coords){
+  if (!coords) return [];
+  const key = `${coords.lat.toFixed(5)}|${coords.lng.toFixed(5)}`;
+  return getVisibleSites()
+    .map((site) => ({ site, coords: getSiteCoords(site) }))
+    .filter((entry) => entry.coords && `${entry.coords.lat.toFixed(5)}|${entry.coords.lng.toFixed(5)}` === key)
+    .map((entry) => entry.site)
+    .sort((a, b) => String(getSiteDisplayName(a)).localeCompare(String(getSiteDisplayName(b))));
+}
+
+function setMapPopupSiteContext(marker, site){
+  const coords = getSiteCoords(site);
+  const currentSiteKey = toSiteIdKey(site?.id);
+  const groupedSites = coords ? getSitesAtCoordinate(coords) : [];
+  const siteKeys = (groupedSites.length ? groupedSites : [site])
+    .map((row) => toSiteIdKey(row?.id))
+    .filter(Boolean);
+  state.map.popupSiteKeys = siteKeys;
+  state.map.popupSiteIndex = Math.max(0, siteKeys.indexOf(currentSiteKey));
+  if (state.map.popupSiteIndex < 0) state.map.popupSiteIndex = 0;
+  state.map.popupMarker = marker || null;
+  state.map.popupRequiredCodes = normalizeCodeList(getCodesRequiredForActiveProject());
+}
+
+function getMapPopupSnapshot(){
+  const marker = state.map.popupMarker || null;
+  const keys = Array.isArray(state.map.popupSiteKeys) ? state.map.popupSiteKeys : [];
+  if (!marker || !keys.length) return null;
+  const visibleSites = getVisibleSites();
+  const byId = new Map(visibleSites.map((site) => [toSiteIdKey(site?.id), site]));
+  const total = keys.length;
+  let index = Number(state.map.popupSiteIndex);
+  if (!Number.isFinite(index)) index = 0;
+  index = ((index % total) + total) % total;
+  const activeKey = keys[index];
+  const site = byId.get(activeKey) || null;
+  if (!site) return null;
+  const nearby = keys
+    .map((key, idx) => {
+      const row = byId.get(key);
+      if (!row) return null;
+      return {
+        index: idx,
+        label: getSiteDisplayName(row),
+        active: idx === index,
+      };
+    })
+    .filter(Boolean);
+  return {
+    marker,
+    site,
+    index,
+    total,
+    nearby,
+    requiredCodes: normalizeCodeList(state.map.popupRequiredCodes),
+  };
+}
+
+async function renderMapPopupActiveSite({ syncSelection = true } = {}){
+  const snap = getMapPopupSnapshot();
+  if (!snap) return;
+  const { marker, site, index, total, nearby, requiredCodes } = snap;
   const cachedCodes = getCachedSiteCodes(site.id);
   const cachedPhotos = getCachedSitePhotos(site.id);
   bindSiteMarkerPopup(marker, site, {
@@ -3705,11 +3841,16 @@ async function handleSiteMarkerClick(marker, siteIdKey, resolveSite){
     loadingCodes: !cachedCodes.length,
     sitePhotos: cachedPhotos,
     loadingPhotos: !cachedPhotos.length,
+    pageIndex: index,
+    pageTotal: total,
+    nearbySites: nearby,
   });
   if (marker.openPopup) marker.openPopup();
-  handleMapFeatureSelection(buildSiteFeature(site), { siteId: siteIdKey, openOverview: false, tab: "feature" });
-  if (typeof SpecCom.helpers.closePinOverview === "function"){
-    SpecCom.helpers.closePinOverview();
+  if (syncSelection){
+    handleMapFeatureSelection(buildSiteFeature(site), { siteId: toSiteIdKey(site.id), openOverview: false, tab: "feature" });
+    if (typeof SpecCom.helpers.closePinOverview === "function"){
+      SpecCom.helpers.closePinOverview();
+    }
   }
   if (cachedCodes.length && cachedPhotos.length) return;
   try{
@@ -3717,20 +3858,260 @@ async function handleSiteMarkerClick(marker, siteIdKey, resolveSite){
       cachedCodes.length ? Promise.resolve(cachedCodes) : fetchSiteCodesForMapPopup(site.id),
       cachedPhotos.length ? Promise.resolve(cachedPhotos) : fetchSitePhotosForMapPopup(site.id),
     ]);
-    const latestSite = typeof resolveSite === "function" ? (resolveSite() || site) : site;
-    bindSiteMarkerPopup(marker, latestSite, {
-      requiredCodes,
+    const latest = getMapPopupSnapshot();
+    if (!latest) return;
+    if (toSiteIdKey(latest.site?.id) !== toSiteIdKey(site.id)) return;
+    bindSiteMarkerPopup(latest.marker, latest.site, {
+      requiredCodes: latest.requiredCodes,
       siteCodes,
       loadingCodes: false,
       sitePhotos,
       loadingPhotos: false,
+      pageIndex: latest.index,
+      pageTotal: latest.total,
+      nearbySites: latest.nearby,
     });
-    if (!marker.isPopupOpen || marker.isPopupOpen()){
-      if (marker.openPopup) marker.openPopup();
+    if (!latest.marker.isPopupOpen || latest.marker.isPopupOpen()){
+      if (latest.marker.openPopup) latest.marker.openPopup();
     }
   } catch (error){
     debugLog("[map] marker popup update failed", error);
   }
+}
+
+function stepMapPopupSite(delta){
+  const keys = Array.isArray(state.map.popupSiteKeys) ? state.map.popupSiteKeys : [];
+  if (keys.length <= 1) return;
+  const len = keys.length;
+  const current = Number(state.map.popupSiteIndex) || 0;
+  state.map.popupSiteIndex = ((current + delta) % len + len) % len;
+  void renderMapPopupActiveSite({ syncSelection: true });
+}
+
+function jumpMapPopupSite(index){
+  const keys = Array.isArray(state.map.popupSiteKeys) ? state.map.popupSiteKeys : [];
+  if (!keys.length) return;
+  const len = keys.length;
+  let next = Number(index);
+  if (!Number.isFinite(next)) return;
+  next = Math.max(0, Math.min(len - 1, Math.floor(next)));
+  if (next === state.map.popupSiteIndex) return;
+  state.map.popupSiteIndex = next;
+  void renderMapPopupActiveSite({ syncSelection: true });
+}
+
+function getVisibleSiteByIdKey(siteIdKey){
+  const key = toSiteIdKey(siteIdKey);
+  if (!key) return null;
+  return getVisibleSites().find((row) => toSiteIdKey(row?.id) === key) || null;
+}
+
+function patchSiteInCollections(siteIdKey, patch){
+  const key = toSiteIdKey(siteIdKey);
+  if (!key || !patch || typeof patch !== "object") return;
+  const applyPatch = (row) => (toSiteIdKey(row?.id) === key ? { ...row, ...patch } : row);
+  state.projectSites = (state.projectSites || []).map(applyPatch);
+  state.pendingSites = (state.pendingSites || []).map(applyPatch);
+  if (isDemo){
+    state.demo.sites = (state.demo.sites || []).map(applyPatch);
+  }
+  if (toSiteIdKey(state.activeSite?.id) === key){
+    state.activeSite = getVisibleSiteByIdKey(key) || { ...(state.activeSite || {}), ...patch };
+  }
+}
+
+async function saveMapPopupSiteEdits(siteIdKey, draft){
+  const key = toSiteIdKey(siteIdKey);
+  if (!key) return;
+  const site = getVisibleSiteByIdKey(key);
+  if (!site){
+    toast("Site missing", "This location is no longer available.", "error");
+    return;
+  }
+  if (site.is_pending){
+    toast("Read only", "Pending locations cannot be edited from this popup.", "error");
+    return;
+  }
+  const canManualProofEdit = SpecCom.helpers.isRoot() || isOwner();
+  const nextName = String(draft?.name || "").trim() || getSiteDisplayName(site);
+  const nextCodes = parseCodes(draft?.codes || "");
+  const nextNotes = String(draft?.notes || "").trim();
+  const latRaw = String(draft?.lat || "").trim();
+  const lngRaw = String(draft?.lng || "").trim();
+  const hasLat = latRaw !== "";
+  const hasLng = lngRaw !== "";
+  if (hasLat !== hasLng){
+    toast("GPS invalid", "Enter both latitude and longitude, or leave both empty.", "error");
+    return;
+  }
+  const hasGps = hasLat && hasLng;
+  let latNum = null;
+  let lngNum = null;
+  if (hasGps){
+    if (!canManualProofEdit){
+      toast("Permission denied", "Only ROOT or OWNER can manually edit GPS and notes.", "error");
+      return;
+    }
+    latNum = Number(latRaw);
+    lngNum = Number(lngRaw);
+    if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)){
+      toast("GPS invalid", "Enter valid numeric latitude/longitude.", "error");
+      return;
+    }
+  }
+
+  if (isDemo){
+    const patch = {
+      name: nextName,
+    };
+    if (canManualProofEdit){
+      patch.notes = nextNotes;
+    }
+    if (hasGps){
+      patch.gps_lat = latNum;
+      patch.gps_lng = lngNum;
+      patch.lat = latNum;
+      patch.lng = lngNum;
+    }
+    patchSiteInCollections(key, patch);
+    state.demo.siteCodes = (state.demo.siteCodes || []).filter((row) => toSiteIdKey(row?.site_id) !== key);
+    const stamp = Date.now();
+    state.demo.siteCodes.push(...nextCodes.map((code, idx) => ({
+      id: `demo-code-${stamp}-${idx}`,
+      site_id: site.id,
+      code,
+      created_at: nowISO(),
+    })));
+  } else {
+    if (!state.client){
+      toast("Update failed", "Client not ready.", "error");
+      return;
+    }
+    const sitePayload = {
+      name: nextName,
+    };
+    if (canManualProofEdit){
+      sitePayload.notes = nextNotes;
+    }
+    if (hasGps){
+      sitePayload.gps_lat = latNum;
+      sitePayload.gps_lng = lngNum;
+    }
+    let updateRes = await state.client
+      .from("sites")
+      .update(sitePayload)
+      .eq("id", site.id)
+      .select("id")
+      .single();
+    if (updateRes.error && hasGps && isMissingGpsColumnError(updateRes.error)){
+      const legacyPayload = {
+        ...sitePayload,
+        lat: latNum,
+        lng: lngNum,
+      };
+      delete legacyPayload.gps_lat;
+      delete legacyPayload.gps_lng;
+      updateRes = await state.client
+        .from("sites")
+        .update(legacyPayload)
+        .eq("id", site.id)
+        .select("id")
+        .single();
+    }
+    if (updateRes.error){
+      toast("Save failed", updateRes.error.message || "Could not save site changes.", "error");
+      return;
+    }
+
+    await state.client.from("site_codes").delete().eq("site_id", site.id);
+    if (nextCodes.length){
+      const { error: insertError } = await state.client
+        .from("site_codes")
+        .insert(nextCodes.map((code) => ({ site_id: site.id, code })));
+      if (insertError){
+        toast("Codes save error", insertError.message || "Could not update billing codes.", "error");
+        return;
+      }
+    }
+
+    const siteRes = await fetchSiteById(site.id);
+    if (siteRes.error){
+      toast("Refresh failed", siteRes.error.message || "Saved, but could not refresh location.", "error");
+    } else if (siteRes.data){
+      patchSiteInCollections(key, siteRes.data);
+    } else {
+      const fallbackPatch = { name: nextName };
+      if (canManualProofEdit){
+        fallbackPatch.notes = nextNotes;
+      }
+      if (hasGps){
+        fallbackPatch.gps_lat = latNum;
+        fallbackPatch.gps_lng = lngNum;
+        fallbackPatch.lat = latNum;
+        fallbackPatch.lng = lngNum;
+      }
+      patchSiteInCollections(key, fallbackPatch);
+    }
+  }
+
+  setCachedSiteCodes(site.id, nextCodes);
+  if (toSiteIdKey(state.activeSite?.id) === key){
+    await loadSiteCodes(site.id);
+  }
+  renderSiteList();
+  renderSitePanel();
+  if (state.map.instance){
+    const rows = getVisibleSites();
+    updateMapMarkers(rows);
+    renderDerivedMapLayers(rows);
+  }
+  const updatedSite = getVisibleSiteByIdKey(key);
+  const marker = state.map.markers.get(key) || state.map.popupMarker || null;
+  if (marker && updatedSite){
+    setMapPopupSiteContext(marker, updatedSite);
+    await renderMapPopupActiveSite({ syncSelection: true });
+  }
+  toast("Saved", "Popup details updated.");
+}
+
+async function deleteMapPopupSite(siteIdKey){
+  const key = toSiteIdKey(siteIdKey);
+  if (!key) return;
+  const site = getVisibleSiteByIdKey(key);
+  if (!site){
+    toast("Site missing", "This location is no longer available.", "error");
+    return;
+  }
+  if (!SpecCom.helpers.isRoot()){
+    toast("Not allowed", "Root role required.");
+    return;
+  }
+  state.activeSite = site;
+  await SpecCom.helpers.deleteSiteFromPanel();
+  if (getVisibleSiteByIdKey(key)){
+    return;
+  }
+  const remaining = (state.map.popupSiteKeys || []).filter((id) => id !== key);
+  state.map.popupSiteKeys = remaining;
+  if (!remaining.length){
+    if (state.map.popupMarker?.closePopup){
+      state.map.popupMarker.closePopup();
+    }
+    state.map.popupSiteIndex = 0;
+    state.map.popupMarker = null;
+    return;
+  }
+  state.map.popupSiteIndex = Math.max(0, Math.min(state.map.popupSiteIndex, remaining.length - 1));
+  const nextKey = remaining[state.map.popupSiteIndex];
+  state.map.popupMarker = state.map.markers.get(nextKey) || state.map.popupMarker;
+  await renderMapPopupActiveSite({ syncSelection: true });
+}
+
+async function handleSiteMarkerClick(marker, siteIdKey, resolveSite){
+  const site = typeof resolveSite === "function" ? resolveSite() : null;
+  if (!site) return;
+  setMapPopupSiteContext(marker, site);
+  await renderMapPopupActiveSite({ syncSelection: true });
 }
 
 const FEATURE_FIELD_LABELS = {
@@ -4133,6 +4514,62 @@ function registerMapUiBindings(){
       const tabBtn = e.target.closest("[data-feature-tab]");
       if (!tabBtn) return;
       setFeatureTab(tabBtn.dataset.featureTab || "summary");
+    });
+  }
+  const mapEl = $("liveMap");
+  if (mapEl){
+    mapEl.addEventListener("click", (e) => {
+      const popupRoot = e.target.closest(".scSitePopup");
+      if (!popupRoot) return;
+      const navBtn = e.target.closest("[data-popup-nav]");
+      if (navBtn){
+        e.preventDefault();
+        e.stopPropagation();
+        const dir = String(navBtn.dataset.popupNav || "").toLowerCase();
+        if (dir === "prev") stepMapPopupSite(-1);
+        else if (dir === "next") stepMapPopupSite(1);
+        return;
+      }
+      const siteBtn = e.target.closest("[data-popup-index]");
+      if (siteBtn){
+        e.preventDefault();
+        e.stopPropagation();
+        jumpMapPopupSite(siteBtn.dataset.popupIndex);
+        return;
+      }
+      const saveBtn = e.target.closest("[data-popup-action='save']");
+      if (saveBtn){
+        e.preventDefault();
+        e.stopPropagation();
+        if (saveBtn.disabled) return;
+        const siteKey = String(saveBtn.dataset.popupSiteId || popupRoot.dataset.popupSiteId || "").trim();
+        const getValue = (field) => String(popupRoot.querySelector(`[data-popup-field="${field}"]`)?.value || "");
+        const payload = {
+          name: getValue("name"),
+          codes: getValue("codes"),
+          lat: getValue("lat"),
+          lng: getValue("lng"),
+          notes: getValue("notes"),
+        };
+        saveBtn.disabled = true;
+        void saveMapPopupSiteEdits(siteKey, payload)
+          .finally(() => {
+            saveBtn.disabled = false;
+          });
+        return;
+      }
+      const deleteBtn = e.target.closest("[data-popup-action='delete']");
+      if (deleteBtn){
+        e.preventDefault();
+        e.stopPropagation();
+        if (deleteBtn.disabled) return;
+        const siteKey = String(deleteBtn.dataset.popupSiteId || popupRoot.dataset.popupSiteId || "").trim();
+        deleteBtn.disabled = true;
+        void deleteMapPopupSite(siteKey)
+          .finally(() => {
+            deleteBtn.disabled = false;
+          });
+      }
     });
   }
 }
