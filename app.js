@@ -175,6 +175,7 @@ const state = {
       photos: null,
     },
     kmzImportGroups: new Map(),
+    kmzGroupVisibility: new Map(),
     markers: new Map(),
     featureMarkerMeta: new Map(),
     selectedFeature: null,
@@ -2268,6 +2269,9 @@ function clearImportPreviewMarkers(){
     });
     state.map.importPreviewMarkers = [];
   }
+  if (state.map.kmzGroupVisibility?.size){
+    state.map.kmzGroupVisibility.clear();
+  }
   if (state.map.kmzImportGroups?.size){
     state.map.kmzImportGroups.forEach((group) => {
       try{
@@ -2275,8 +2279,8 @@ function clearImportPreviewMarkers(){
       } catch {}
     });
     state.map.kmzImportGroups.clear();
-    renderMapLayerPanel();
   }
+  renderMapLayerPanel();
 }
 
 const IMPORT_PREVIEW_MAX_MARKERS = 600;
@@ -4429,27 +4433,69 @@ function applyMapLayerVisibility(){
 }
 function syncMapLayerToggles(){
   const vis = state.map.layerVisibility || getDefaultMapLayerVisibility();
-  const map = {
-    boundary: $("mapLayerBoundary"),
-    pins: $("mapLayerPins"),
-    spans: $("mapLayerSpans"),
-    kmz: $("mapLayerKmz"),
-    photos: $("mapLayerPhotos"),
+  const lookup = {
+    boundary: [$("mapLayerBoundary"), $("menuLayerBoundary")],
+    pins: [$("mapLayerPins"), $("menuLayerPins")],
+    spans: [$("mapLayerSpans"), $("menuLayerSpans")],
+    kmz: [$("mapLayerKmz"), $("menuLayerKmz")],
+    photos: [$("mapLayerPhotos"), $("menuLayerPhotos")],
   };
-  Object.entries(map).forEach(([key, el]) => {
-    if (el) el.checked = Boolean(vis[key]);
+  Object.entries(lookup).forEach(([key, els]) => {
+    els.forEach((el) => {
+      if (el) el.checked = Boolean(vis[key]);
+    });
   });
 }
 function renderMapLayerPanel(){
   syncMapLayerToggles();
-  const kmzList = $("mapKmzGroupList");
-  if (!kmzList) return;
   const groups = Array.from(state.map.kmzImportGroups?.keys() || []);
+  const kmzEnabled = Boolean((state.map.layerVisibility || getDefaultMapLayerVisibility()).kmz);
+  const kmzList = $("mapKmzGroupList");
+  if (kmzList){
+    if (!groups.length){
+      kmzList.textContent = "KMZ groups: none loaded.";
+    } else {
+      kmzList.textContent = `KMZ groups: ${groups.join(", ")}`;
+    }
+  }
+  const menuKmzList = $("menuKmzGroupList");
+  if (!menuKmzList) return;
   if (!groups.length){
-    kmzList.textContent = "KMZ groups: none loaded.";
+    menuKmzList.innerHTML = `<div class="places-kmz-empty">No KMZ groups loaded.</div>`;
     return;
   }
-  kmzList.textContent = `KMZ groups: ${groups.join(", ")}`;
+  menuKmzList.innerHTML = groups.map((groupName) => {
+    const checked = state.map.kmzGroupVisibility.get(groupName) !== false;
+    const checkedAttr = checked ? " checked" : "";
+    const disabledAttr = kmzEnabled ? "" : " disabled";
+    return `
+      <label class="places-kmz-item">
+        <input type="checkbox" data-kmz-group="${escapeHtml(groupName)}"${checkedAttr}${disabledAttr} />
+        <span class="glyph folder"></span>
+        <span class="label">${escapeHtml(groupName)}</span>
+      </label>
+    `;
+  }).join("");
+}
+
+function setKmzGroupVisibility(groupName, visible){
+  const key = String(groupName || "").trim();
+  if (!key) return;
+  if (!state.map.kmzGroupVisibility) state.map.kmzGroupVisibility = new Map();
+  const isVisible = Boolean(visible);
+  state.map.kmzGroupVisibility.set(key, isVisible);
+  const group = state.map.kmzImportGroups?.get(key);
+  const kmzLayer = state.map.layers?.kmz;
+  if (group && kmzLayer){
+    try{
+      if (isVisible && (state.map.layerVisibility?.kmz !== false)){
+        if (kmzLayer.addLayer) kmzLayer.addLayer(group);
+      } else if (kmzLayer.removeLayer){
+        kmzLayer.removeLayer(group);
+      }
+    } catch {}
+  }
+  renderMapLayerPanel();
 }
 function setMapLayerVisibility(name, visible){
   const next = {
@@ -4490,6 +4536,11 @@ function registerMapUiBindings(){
     ["mapLayerSpans", "spans"],
     ["mapLayerKmz", "kmz"],
     ["mapLayerPhotos", "photos"],
+    ["menuLayerBoundary", "boundary"],
+    ["menuLayerPins", "pins"],
+    ["menuLayerSpans", "spans"],
+    ["menuLayerKmz", "kmz"],
+    ["menuLayerPhotos", "photos"],
   ];
   layerMap.forEach(([id, name]) => {
     const input = $(id);
@@ -4572,6 +4623,27 @@ function registerMapUiBindings(){
       }
     });
   }
+  const menuModal = $("menuModal");
+  if (menuModal){
+    menuModal.addEventListener("click", (e) => {
+      const parentBtn = e.target.closest("[data-places-expand]");
+      if (!parentBtn) return;
+      const groupKey = String(parentBtn.dataset.placesExpand || "").trim();
+      if (!groupKey) return;
+      const children = menuModal.querySelector(`[data-places-group="${groupKey}"]`);
+      parentBtn.classList.toggle("is-open");
+      if (children){
+        children.classList.toggle("is-open", parentBtn.classList.contains("is-open"));
+      }
+    });
+    menuModal.addEventListener("change", (e) => {
+      const input = e.target;
+      if (!(input instanceof HTMLInputElement)) return;
+      const groupName = String(input.dataset.kmzGroup || "").trim();
+      if (!groupName) return;
+      setKmzGroupVisibility(groupName, input.checked);
+    });
+  }
 }
 function renderKmzPreviewFeatures(rows, sourceName = "KMZ Import"){
   ensureMap();
@@ -4579,6 +4651,7 @@ function renderKmzPreviewFeatures(rows, sourceName = "KMZ Import"){
   const kmzLayer = state.map.layers?.kmz;
   if (!kmzLayer) return;
   if (!state.map.kmzImportGroups) state.map.kmzImportGroups = new Map();
+  if (!state.map.kmzGroupVisibility) state.map.kmzGroupVisibility = new Map();
   const key = String(sourceName || "KMZ Import");
   const existing = state.map.kmzImportGroups.get(key);
   if (existing){
@@ -4603,7 +4676,11 @@ function renderKmzPreviewFeatures(rows, sourceName = "KMZ Import"){
     marker.bindPopup(`<b>${escapeHtml(feature.properties.name || "KMZ Point")}</b><br>${escapeHtml(feature.properties.__kml_layer || key)}`);
     group.addLayer(marker);
   });
-  kmzLayer.addLayer(group);
+  const groupVisible = state.map.kmzGroupVisibility.get(key) !== false;
+  if (groupVisible){
+    kmzLayer.addLayer(group);
+  }
+  state.map.kmzGroupVisibility.set(key, groupVisible);
   state.map.kmzImportGroups.set(key, group);
   renderMapLayerPanel();
 }
@@ -7915,15 +7992,11 @@ function openMenuModal(){
   if (isMapViewActive() && isMobileViewport() && state.map.drawerOpen !== false){
     setDrawerOpen(false);
   }
-  syncMenuLanguageToggle();
-  const grantBtn = $("btnGrantProjectAccess");
-  if (grantBtn) grantBtn.style.display = SpecCom.helpers.isPlatformAdmin() ? "" : "none";
-  const priceBtn = $("btnImportPriceSheet");
-  if (priceBtn) priceBtn.style.display = SpecCom.helpers.isRoot() ? "" : "none";
-  const stakingBtn = $("btnCreateProjectFromStaking");
-  if (stakingBtn) stakingBtn.style.display = SpecCom.helpers.isRoot() ? "" : "none";
-  const testBtn = $("btnImportTestResults");
-  if (testBtn) testBtn.style.display = SpecCom.helpers.isRoot() ? "" : "none";
+  const parent = modal.querySelector("[data-places-expand='project']");
+  const children = modal.querySelector("[data-places-group='project']");
+  if (parent) parent.classList.add("is-open");
+  if (children) children.classList.add("is-open");
+  renderMapLayerPanel();
   modal.style.display = "";
 }
 
@@ -15740,7 +15813,12 @@ function wireUI(){
   setMessagesFilter(state.messageFilter);
   const menuBtn = $("btnMenu");
   if (menuBtn){
-    menuBtn.addEventListener("click", () => openMenuModal());
+    menuBtn.addEventListener("click", () => {
+      const modal = $("menuModal");
+      const isOpen = modal && modal.style.display !== "none";
+      if (isOpen) closeMenuModal();
+      else openMenuModal();
+    });
   }
   const menuCloseBtn = $("btnMenuClose");
   if (menuCloseBtn){
