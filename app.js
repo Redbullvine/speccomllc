@@ -174,6 +174,9 @@ const state = {
       pins: null,
       spans: null,
       kmz: null,
+      kmzPins: null,
+      kmzPaths: null,
+      kmzBounds: null,
       photos: null,
     },
     kmzImportGroups: new Map(),
@@ -2297,12 +2300,16 @@ function clearPendingPinMarker(){
 
 function clearImportPreviewMarkers(){
   if (!state.map.instance) return;
+  const map = state.map.instance;
   const kmzLayer = state.map.layers?.kmz;
+  const kmzPathsLayer = state.map.layers?.kmzPaths;
+  const kmzBoundsLayer = state.map.layers?.kmzBounds;
+  const kmzPinsLayer = state.map.layers?.kmzPins;
   if (state.map.importPreviewMarkers?.length){
     state.map.importPreviewMarkers.forEach((marker) => {
       try{
         if (kmzLayer?.removeLayer) kmzLayer.removeLayer(marker);
-        else state.map.instance.removeLayer(marker);
+        else map.removeLayer(marker);
       } catch {}
     });
     state.map.importPreviewMarkers = [];
@@ -2322,6 +2329,15 @@ function clearImportPreviewMarkers(){
   if (kmzLayer?.clearLayers){
     kmzLayer.clearLayers();
   }
+  [kmzPinsLayer, kmzPathsLayer, kmzBoundsLayer].forEach((layerGroup) => {
+    if (!layerGroup) return;
+    try{
+      if (map.hasLayer(layerGroup)) map.removeLayer(layerGroup);
+    } catch {}
+    try{
+      if (layerGroup.clearLayers) layerGroup.clearLayers();
+    } catch {}
+  });
   state.map.kmzFolderTree = [];
   state.map.kmzFeatureLayers = new Map();
   state.map.kmzFeatureRows = new Map();
@@ -3218,6 +3234,15 @@ function parsePlacemarkGeometry(placemark){
     if (!coords.length) return null;
     return { type: "LineString", coordinates: coords };
   };
+  const parseMultiLineString = (lineNodes) => {
+    const lines = Array.from(lineNodes || [])
+      .map((lineNode) => parseLineString(lineNode))
+      .filter((geom) => geom?.type === "LineString" && Array.isArray(geom.coordinates) && geom.coordinates.length)
+      .map((geom) => geom.coordinates);
+    if (!lines.length) return null;
+    if (lines.length === 1) return { type: "LineString", coordinates: lines[0] };
+    return { type: "MultiLineString", coordinates: lines };
+  };
   const parsePolygon = (polygonNode) => {
     const ringNode = polygonNode?.getElementsByTagName("outerBoundaryIs")[0]?.getElementsByTagName("LinearRing")[0]
       || polygonNode?.getElementsByTagName("LinearRing")[0]
@@ -3254,9 +3279,9 @@ function parsePlacemarkGeometry(placemark){
       const geom = parsePoint(multiPoint);
       if (geom) return geom;
     }
-    const multiLine = multiNode.getElementsByTagName("LineString")[0];
-    if (multiLine){
-      const geom = parseLineString(multiLine);
+    const multiLines = multiNode.getElementsByTagName("LineString");
+    if (multiLines?.length){
+      const geom = parseMultiLineString(multiLines);
       if (geom) return geom;
     }
     const multiPoly = multiNode.getElementsByTagName("Polygon")[0];
@@ -3282,6 +3307,20 @@ function getGeometryCenter(geometry){
     const lng = Number(mid?.[0]);
     const lat = Number(mid?.[1]);
     return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+  }
+  if (geometry.type === "MultiLineString"){
+    const lines = Array.isArray(geometry.coordinates) ? geometry.coordinates : [];
+    for (let i = 0; i < lines.length; i += 1){
+      const coords = Array.isArray(lines[i]) ? lines[i] : [];
+      if (!coords.length) continue;
+      const mid = coords[Math.floor(coords.length / 2)] || coords[0];
+      const lng = Number(mid?.[0]);
+      const lat = Number(mid?.[1]);
+      if (Number.isFinite(lat) && Number.isFinite(lng)){
+        return { lat, lng };
+      }
+    }
+    return null;
   }
   if (geometry.type === "Polygon"){
     const ring = Array.isArray(geometry.coordinates?.[0]) ? geometry.coordinates[0] : [];
@@ -5130,6 +5169,22 @@ function drawFeatureHighlight(feature){
         pane: MAP_PANES.highlight,
       }).addTo(state.map.instance);
     }
+  } else if (geom.type === "MultiLineString"){
+    const lineSets = (geom.coordinates || [])
+      .map((line) => (Array.isArray(line) ? line : []))
+      .map((line) => line
+        .map((coord) => [Number(coord?.[1]), Number(coord?.[0])])
+        .filter((coord) => Number.isFinite(coord[0]) && Number.isFinite(coord[1])))
+      .filter((line) => line.length);
+    if (lineSets.length){
+      layer = window.L.polyline(lineSets, {
+        color: "#f97316",
+        weight: 5,
+        opacity: 0.9,
+        interactive: false,
+        pane: MAP_PANES.highlight,
+      }).addTo(state.map.instance);
+    }
   }
   state.map.highlightLayer = layer || null;
 }
@@ -5260,14 +5315,21 @@ function renderFeatureDrawer(){
 }
 function ensureMapLayerRegistry(){
   if (!state.map.instance || !window.L) return;
-  if (state.map.layers?.pins) return;
-  state.map.layers = {
-    boundary: window.L.layerGroup(),
-    pins: window.L.layerGroup(),
-    spans: window.L.layerGroup(),
-    kmz: window.L.layerGroup(),
-    photos: window.L.layerGroup(),
-  };
+  const nextLayers = state.map.layers || {};
+  if (!nextLayers.boundary) nextLayers.boundary = window.L.layerGroup();
+  if (!nextLayers.pins) nextLayers.pins = window.L.layerGroup();
+  if (!nextLayers.spans) nextLayers.spans = window.L.layerGroup();
+  if (!nextLayers.kmz) nextLayers.kmz = window.L.layerGroup();
+  if (!nextLayers.kmzPins) nextLayers.kmzPins = window.L.layerGroup();
+  if (!nextLayers.kmzPaths) nextLayers.kmzPaths = window.L.layerGroup();
+  if (!nextLayers.kmzBounds) nextLayers.kmzBounds = window.L.layerGroup();
+  if (!nextLayers.photos) nextLayers.photos = window.L.layerGroup();
+  try{
+    if (nextLayers.kmz && nextLayers.kmzPins && !nextLayers.kmz.hasLayer(nextLayers.kmzPins)){
+      nextLayers.kmz.addLayer(nextLayers.kmzPins);
+    }
+  } catch {}
+  state.map.layers = nextLayers;
   applyMapLayerVisibility();
 }
 function applyMapLayerVisibility(){
@@ -5332,8 +5394,7 @@ function isKmzPolygonGeometry(feature, row){
 }
 
 function isKmzPathOverlayFeature(row, feature){
-  const ancestry = getKmzFolderAncestryText(row);
-  return /\bpaths?\b/i.test(ancestry) && isKmzLineGeometry(feature, row);
+  return isKmzLineGeometry(feature, row);
 }
 
 function isKmzBoundaryOverlayFeature(row, feature){
@@ -5342,19 +5403,50 @@ function isKmzBoundaryOverlayFeature(row, feature){
   return folderMatch && isKmzPolygonGeometry(feature, row);
 }
 
+function getKmzOverlayKeyForFeature(row, feature){
+  if (isKmzPathOverlayFeature(row, feature)) return "paths";
+  if (isKmzBoundaryOverlayFeature(row, feature)) return "boundaries";
+  return "";
+}
+
 function ensureKmzOverlayGroupRegistry(){
   if (!state.map.instance || !window.L) return;
-  if (!state.map.kmzOverlayGroups || typeof state.map.kmzOverlayGroups !== "object"){
-    state.map.kmzOverlayGroups = {};
+  ensureMapLayerRegistry();
+  const map = state.map.instance;
+  const prevGroups = state.map.kmzOverlayGroups || {};
+  const pathsLayer = state.map.layers?.kmzPaths || window.L.layerGroup();
+  const boundsLayer = state.map.layers?.kmzBounds || window.L.layerGroup();
+  if (prevGroups?.paths?.group && prevGroups.paths.group !== pathsLayer && map.hasLayer(prevGroups.paths.group)){
+    map.removeLayer(prevGroups.paths.group);
   }
-  MAP_VIEW_KMZ_OVERLAY_KEYS.forEach((key) => {
-    if (state.map.kmzOverlayGroups?.[key]?.group) return;
-    state.map.kmzOverlayGroups[key] = {
-      group: window.L.layerGroup(),
+  if (prevGroups?.boundaries?.group && prevGroups.boundaries.group !== boundsLayer && map.hasLayer(prevGroups.boundaries.group)){
+    map.removeLayer(prevGroups.boundaries.group);
+  }
+  state.map.kmzOverlayGroups = {
+    paths: {
+      group: pathsLayer,
       featureIds: new Set(),
       available: false,
-    };
-  });
+    },
+    boundaries: {
+      group: boundsLayer,
+      featureIds: new Set(),
+      available: false,
+    },
+  };
+}
+
+function setKmzOverlayLayerVisible(overlayKey, visible){
+  const map = state.map.instance;
+  const entry = state.map.kmzOverlayGroups?.[overlayKey];
+  if (!map || !entry?.group) return;
+  if (visible){
+    if (!map.hasLayer(entry.group)) map.addLayer(entry.group);
+    return;
+  }
+  if (map.hasLayer(entry.group)){
+    map.removeLayer(entry.group);
+  }
 }
 
 function isKmzFeatureVisibleByTree(featureId){
@@ -5389,13 +5481,8 @@ function applyKmzOverlayGroupVisibility(){
     if (!entry?.group) return;
     const enabled = overlays[key] !== false;
     const shouldShow = kmzBaseVisible && entry.available && enabled;
-    if (shouldShow){
-      if (!map.hasLayer(entry.group)) map.addLayer(entry.group);
-      return;
-    }
-    if (map.hasLayer(entry.group)){
-      map.removeLayer(entry.group);
-    }
+    setKmzOverlayLayerVisible(key, shouldShow);
+    if (shouldShow) return;
     if (!entry.available || !enabled){
       entry.group.eachLayer((layer) => {
         if (map.hasLayer(layer)) map.removeLayer(layer);
@@ -5423,28 +5510,34 @@ function syncKmzOverlayGroups(){
     if (!row || !feature || !layer) return;
     const treeVisible = isKmzFeatureVisibleByTree(featureId);
 
-    if (isKmzPathOverlayFeature(row, feature)){
-      const entry = groups.paths;
-      if (!entry) return;
-      entry.available = true;
-      entry.featureIds.add(featureId);
-      if (treeVisible){
-        entry.group.addLayer(layer);
-      }
+    const overlayKey = layerMeta?.overlayKey || getKmzOverlayKeyForFeature(row, feature);
+    if (!overlayKey) return;
+    const entry = groups[overlayKey];
+    if (!entry) return;
+    entry.available = true;
+    entry.featureIds.add(featureId);
+    const parentMeta = getKmzNodeMeta(layerMeta.parentNodeId);
+    if (parentMeta?.group?.removeLayer){
+      try{
+        parentMeta.group.removeLayer(layer);
+      } catch {}
     }
-
-    if (isKmzBoundaryOverlayFeature(row, feature)){
-      const entry = groups.boundaries;
-      if (!entry) return;
-      entry.available = true;
-      entry.featureIds.add(featureId);
-      if (treeVisible){
-        entry.group.addLayer(layer);
-      }
+    if (treeVisible){
+      entry.group.addLayer(layer);
+    } else if (entry.group.removeLayer){
+      try{
+        entry.group.removeLayer(layer);
+      } catch {}
     }
   });
 
   applyKmzOverlayGroupVisibility();
+}
+
+function logKmzOverlayLayerCounts(){
+  const pathsCount = state.map.kmzOverlayGroups?.paths?.group?.getLayers?.()?.length || 0;
+  const boundariesCount = state.map.kmzOverlayGroups?.boundaries?.group?.getLayers?.()?.length || 0;
+  console.log("[kmz overlay counts] paths:", pathsCount, "boundaries:", boundariesCount);
 }
 
 function getMapViewOverlayState(key){
@@ -5627,6 +5720,9 @@ function setKmzLeafVisibility(featureId, visible){
   if (!layerMeta) return;
   const isVisible = Boolean(visible);
   state.map.kmzFeatureVisibility.set(key, isVisible);
+  if (layerMeta.overlayKey === "paths" || layerMeta.overlayKey === "boundaries"){
+    return;
+  }
   const folderMeta = getKmzNodeMeta(layerMeta.parentNodeId);
   if (!folderMeta?.group) return;
   try{
@@ -6111,6 +6207,16 @@ function createKmzLeafletLayer(feature, row){
     if (!latLngs.length) return null;
     return window.L.polyline(latLngs, getKmzLeafletStyle(row, "LineString"));
   }
+  if (geom.type === "MultiLineString"){
+    const lineSets = (geom.coordinates || [])
+      .map((line) => (Array.isArray(line) ? line : []))
+      .map((line) => line
+        .map((coord) => [Number(coord?.[1]), Number(coord?.[0])])
+        .filter((coord) => Number.isFinite(coord[0]) && Number.isFinite(coord[1])))
+      .filter((line) => line.length);
+    if (!lineSets.length) return null;
+    return window.L.polyline(lineSets, getKmzLeafletStyle(row, "LineString"));
+  }
   if (geom.type === "Polygon"){
     const ring = Array.isArray(geom.coordinates?.[0]) ? geom.coordinates[0] : [];
     const latLngs = ring
@@ -6574,11 +6680,13 @@ function registerKmzTreeNode(node, parentNodeId, parentGroup){
     if (!feature) return;
     const layer = createKmzLeafletLayer(feature, row);
     if (!layer) return;
+    const overlayKey = getKmzOverlayKeyForFeature(row, feature);
     layer.on("click", () => {
       void openKmzFeaturePopup(node.featureId, { focusMap: false });
     });
     const visible = state.map.kmzFeatureVisibility.get(node.featureId) !== false;
-    if (visible){
+    const skipParentGroup = overlayKey === "paths" || overlayKey === "boundaries";
+    if (visible && !skipParentGroup){
       parentGroup.addLayer(layer);
     }
     state.map.kmzNodeIndex.set(node.id, {
@@ -6591,6 +6699,7 @@ function registerKmzTreeNode(node, parentNodeId, parentGroup){
       feature,
       nodeId: node.id,
       parentNodeId,
+      overlayKey,
     });
     return;
   }
@@ -6613,9 +6722,23 @@ function registerKmzTreeNode(node, parentNodeId, parentGroup){
 function renderKmzPreviewFeatures(rows, sourceName = "KMZ Import"){
   ensureMap();
   if (!state.map.instance || !window.L) return;
+  ensureMapLayerRegistry();
+  const map = state.map.instance;
   const kmzLayer = state.map.layers?.kmz;
+  const kmzPathsLayer = state.map.layers?.kmzPaths;
+  const kmzBoundsLayer = state.map.layers?.kmzBounds;
+  const kmzPinsLayer = state.map.layers?.kmzPins;
   if (!kmzLayer) return;
   if (kmzLayer?.clearLayers) kmzLayer.clearLayers();
+  [kmzPinsLayer, kmzPathsLayer, kmzBoundsLayer].forEach((layerGroup) => {
+    if (!layerGroup) return;
+    try{
+      if (map.hasLayer(layerGroup)) map.removeLayer(layerGroup);
+    } catch {}
+    try{
+      if (layerGroup.clearLayers) layerGroup.clearLayers();
+    } catch {}
+  });
   state.map.kmzImportGroups = new Map();
   state.map.kmzGroupVisibility = new Map();
   state.map.kmzFeatureLayers = new Map();
@@ -6650,6 +6773,7 @@ function renderKmzPreviewFeatures(rows, sourceName = "KMZ Import"){
   ], { includeCritical: true });
   setMapViewMenuDefaultsOnKmzImport();
   syncKmzOverlayGroups();
+  logKmzOverlayLayerCounts();
   renderMapLayerPanel();
 }
 
