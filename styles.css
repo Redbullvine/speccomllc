@@ -2521,3 +2521,321 @@ body.sidebar-collapsed .gis-sidebar{
     max-width:calc(100% - 64px);
   }
 }
+
+/* KMZ-style map workspace */
+.map-menu-btn{
+  display:none;
+}
+body.map-mode .page,
+body.map-mode .container{
+  max-width:none;
+  margin:0;
+  padding:0;
+}
+body.map-mode .spacer,
+body.map-mode #envWarning,
+body.map-mode #storageWarning{
+  display:none !important;
+}
+body.map-mode .topbar-inner{
+  max-width:none;
+  padding:7px 12px;
+}
+body.map-mode .topbar{
+  background:rgba(15,23,42,.86);
+  box-shadow:none;
+}
+body.map-mode .brand .muted.small{
+  display:none;
+}
+body.map-mode .brand-title{
+  font-size:14px;
+  letter-spacing:.03em;
+}
+body.map-mode .topbar-actions{
+  display:none;
+}
+body.map-mode .app-shell{
+  display:block;
+  position:relative;
+}
+body.map-mode .content{
+  gap:0;
+}
+body.map-mode .map-workspace{
+  width:100%;
+  height:calc(100vh - 47px);
+  min-height:calc(100vh - 47px);
+  border:none;
+  border-radius:0;
+  background:#d6dde7;
+}
+body.map-mode .map-menu-btn{
+  position:absolute;
+  top:20px;
+  left:20px;
+  z-index:780;
+  width:46px;
+  height:46px;
+  border:1px solid rgba(255,255,255,0.44);
+  background:rgba(17,24,39,0.56);
+  color:#fff;
+  border-radius:10px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  backdrop-filter: blur(3px);
+}
+body.map-mode .map-menu-btn .hamburger span{
+  width:20px;
+  height:2px;
+  background:#fff;
+}
+body.map-mode .map-menu-btn.is-active{
+  background:rgba(17,24,39,0.72);
+}
+body.map-mode .gis-sidebar{
+  position:absolute;
+  top:74px;
+  left:20px;
+  width:min(380px, calc(100vw - 40px));
+  max-width:380px;
+  min-width:280px;
+  z-index:760;
+  transform:translateX(0);
+  transition:transform .18s ease, opacity .18s ease;
+}
+body.map-mode .right-drawer,
+body.map-mode .gis-drawer{
+  max-height:calc(100vh - 88px);
+  border:1px solid rgba(15,23,42,.14);
+  border-radius:12px;
+  background:rgba(245,247,250,.98);
+  box-shadow:0 14px 30px rgba(15,23,42,.2);
+}
+body.map-mode .sidebar-header{
+  position:relative;
+  padding:12px 14px 6px;
+  border-bottom:none;
+  background:transparent;
+}
+body.map-mode .sidebar-title{
+  font-size:46px;
+  line-height:1;
+  letter-spacing:-.02em;
+}
+body.map-mode .sidebar-header-actions{
+  position:absolute;
+  top:12px;
+  right:12px;
+}
+body.map-mode .sidebar-header-actions .btn{
+  padding:5px 8px;
+  border-radius:8px;
+  border:1px solid #cbd5e1;
+  background:#fff;
+  color:#334155;
+}
+body.map-mode .sidebar-tabs{
+  display:none;
+}
+body.map-mode .sidebar-body{
+  padding:6px 12px 14px;
+}
+body.map-mode .map-layer-card{
+  border:none;
+  border-radius:0;
+  box-shadow:none;
+  background:transparent;
+  padding:0;
+}
+body.map-mode label[for="kmzTreeSearch"],
+body.map-mode #kmzTreeSearch{
+  display:none !important;
+}
+body.map-mode #kmzTreeSearch{
+  width:100%;
+  min-width:0;
+  max-width:none;
+  border:1px solid #d1d5db;
+  border-radius:11px;
+  background:#fff;
+}
+body.map-mode .kmz-tree{
+  max-height:calc(100vh - 196px);
+}
+body.map-mode .kmz-tree-row{
+  padding:6px 4px;
+  color:#111827;
+  font-size:17px;
+  font-weight:500;
+  line-height:1.25;
+}
+body.map-mode .kmz-tree-row.is-folder{
+  font-weight:600;
+}
+body.map-mode .kmz-tree-caret{
+  width:14px;
+  height:14px;
+  border-right:2px solid #111827;
+  border-bottom:2px solid #111827;
+}
+body.map-mode .kmz-tree-check{
+  appearance:none;
+  width:18px;
+  height:18px;
+  border:1px solid #374151;
+  border-radius:3px;
+  background:#fff;
+}
+body.map-mode .kmz-tree-check:checked{
+  background:#111827;
+}
+body.map-mode .kmz-tree-label{
+  white-space:nowrap;
+}
+body.map-mode .map-view-floating{
+  top:74px;
+  left:auto;
+  right:20px;
+  z-index:750;
+  min-width:194px;
+  max-width:194px;
+  border:1px solid rgba(15,23,42,.14);
+  border-radius:12px;
+  background:rgba(245,247,250,.98);
+  box-shadow:0 14px 30px rgba(15,23,42,.2);
+  padding:12px 11px 10px;
+  gap:6px;
+}
+body.map-mode .map-view-floating .site-panel-title{
+  font-size:32px;
+  font-weight:600;
+  line-height:1;
+}
+body.map-mode #mapViewDropdownButton{
+  display:none;
+}
+body.map-mode .map-view-menu{
+  position:static;
+  border:none;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  padding:0;
+  gap:4px;
+}
+body.map-mode #mapViewDropdownMenu[hidden]{
+  display:grid !important;
+}
+body.map-mode .map-view-menu-title,
+body.map-mode .map-view-menu-divider{
+  display:none;
+}
+body.map-mode .map-view-menu-divider{
+  background:#d1d5db;
+}
+body.map-mode .map-view-option-row,
+body.map-mode .map-view-overlay-row{
+  padding:4px 0;
+  border-radius:0;
+  font-size:16px;
+  font-weight:500;
+  color:#1f2937;
+  line-height:1.2;
+}
+body.map-mode .map-view-option-row:hover,
+body.map-mode .map-view-overlay-row:hover{
+  background:transparent;
+}
+body.map-mode .map-view-option-row input[type="radio"],
+body.map-mode .map-view-overlay-row input[type="checkbox"]{
+  appearance:none;
+  width:18px;
+  height:18px;
+  border:1px solid #374151;
+  border-radius:3px;
+  background:#fff;
+}
+body.map-mode .map-view-option-row input[type="radio"]:checked,
+body.map-mode .map-view-overlay-row input[type="checkbox"]:checked{
+  background:#111827;
+}
+body.map-mode .map-details-drawer{
+  top:74px;
+  right:260px;
+  bottom:20px;
+}
+body.map-mode.sidebar-collapsed .gis-sidebar{
+  transform:translateX(-120%);
+  opacity:0;
+  pointer-events:none;
+}
+body.map-mode .map-canvas .leaflet-top{
+  margin-top:0;
+}
+body.map-mode .map-canvas .leaflet-top.leaflet-left{
+  top:auto;
+  bottom:24px;
+  left:auto;
+  right:20px;
+}
+body.map-mode .map-canvas .leaflet-control-zoom{
+  border:none;
+  box-shadow:0 10px 20px rgba(15,23,42,.24);
+}
+body.map-mode .map-canvas .leaflet-control-zoom a{
+  width:40px;
+  height:40px;
+  line-height:38px;
+  font-size:26px;
+}
+@media (max-width: 1200px){
+  body.map-mode .map-details-drawer{
+    right:20px;
+    top:auto;
+    bottom:20px;
+    width:min(460px, calc(100vw - 40px));
+    max-height:42vh;
+  }
+}
+@media (max-width: 900px){
+  body.map-mode .topbar-inner{
+    padding:7px 10px;
+  }
+  body.map-mode .map-workspace{
+    height:calc(100vh - 45px);
+    min-height:calc(100vh - 45px);
+  }
+  body.map-mode .map-menu-btn{
+    top:10px;
+    left:10px;
+  }
+  body.map-mode .gis-sidebar{
+    left:10px;
+    top:54px;
+    width:min(340px, calc(100vw - 20px));
+    max-width:none;
+    transform:translateX(-120%);
+  }
+  body.map-mode.sidebar-open .gis-sidebar{
+    transform:translateX(0);
+    opacity:1;
+    pointer-events:auto;
+  }
+  body.map-mode .right-drawer,
+  body.map-mode .gis-drawer{
+    max-height:calc(100vh - 64px);
+  }
+  body.map-mode .map-view-floating{
+    right:10px;
+    top:54px;
+    min-width:182px;
+    max-width:min(194px, calc(100vw - 20px));
+  }
+  body.map-mode .map-canvas .leaflet-top.leaflet-left{
+    bottom:12px;
+    right:10px;
+  }
+}
