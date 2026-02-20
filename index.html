@@ -77,7 +77,10 @@
         <aside id="rightDrawer" class="right-drawer gis-drawer">
           <div class="sidebar-header gis-header">
             <div class="sidebar-title">Places</div>
-            <button id="btnOpenProjects" class="btn ghost small" type="button" data-i18n="projectsNav">Projects</button>
+            <div class="sidebar-header-actions">
+              <button id="btnImportLocations" class="btn ghost small" type="button">Import KMZ</button>
+              <input id="importLocationsInput" type="file" accept=".kmz,application/vnd.google-earth.kmz" style="display:none;" />
+            </div>
           </div>
           <div class="sidebar-tabs gis-tabs">
             <button class="btn ghost small is-active" type="button" data-sidebar-tab="data">Data</button>
@@ -100,55 +103,6 @@
             <section id="sidebarTabLegend" class="sidebar-tab">
               <div id="kmzLegendBody" class="map-layer-card gis-panel"></div>
             </section>
-            <div class="gis-actions">
-              <div class="site-panel-title">Map View</div>
-              <div class="map-view-block">
-                <div id="mapViewDropdown" class="map-view-dropdown">
-                  <button
-                    id="mapViewDropdownButton"
-                    type="button"
-                    class="map-view-trigger input"
-                    aria-expanded="false"
-                    aria-controls="mapViewDropdownMenu"
-                  >
-                    <span id="mapViewDropdownLabel">Street</span>
-                    <span class="map-view-trigger-caret" aria-hidden="true"></span>
-                  </button>
-                  <div id="mapViewDropdownMenu" class="map-view-menu" hidden>
-                    <div class="map-view-menu-section">
-                      <div class="muted small map-view-menu-title">Basemap</div>
-                      <label class="map-view-option-row">
-                        <input type="radio" name="mapViewBasemap" value="street" data-map-basemap />
-                        <span>Street</span>
-                      </label>
-                      <label class="map-view-option-row">
-                        <input type="radio" name="mapViewBasemap" value="satellite" data-map-basemap />
-                        <span>Satellite</span>
-                      </label>
-                    </div>
-                    <div class="map-view-menu-divider" role="separator"></div>
-                    <div class="map-view-menu-section">
-                      <div class="muted small map-view-menu-title">Overlays</div>
-                      <div id="mapViewOverlayList" class="map-view-overlay-list"></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div class="map-material-block">
-                <div class="site-panel-title">Materials Totals</div>
-                <div id="mapMaterialTotals" class="map-material-totals muted small">Import a KMZ and select a project to load totals.</div>
-              </div>
-              <div class="map-material-block">
-                <div class="site-panel-title">Material Alerts</div>
-                <div id="mapMaterialAlerts" class="map-material-alerts muted small">No open alerts.</div>
-              </div>
-              <div class="row">
-                <button id="btnImportLocations" class="btn secondary" type="button">Import Locations (KMZ)</button>
-                <button id="btnInvoiceAgent" class="btn secondary" type="button">Invoice Agent</button>
-                <input id="importLocationsInput" type="file" accept=".kmz,application/vnd.google-earth.kmz" style="display:none;" />
-              </div>
-              <div id="mapStatus" class="muted small"></div>
-            </div>
           </div>
         </aside>
       </aside>
@@ -417,6 +371,39 @@
         <section id="viewMap" class="view active">
           <div id="mapWorkspace" class="map-workspace">
             <main id="mapCanvas" class="map-canvas">
+              <div id="mapViewFloating" class="map-view-floating">
+                <div class="site-panel-title">Map View</div>
+                <div id="mapViewDropdown" class="map-view-dropdown">
+                  <button
+                    id="mapViewDropdownButton"
+                    type="button"
+                    class="map-view-trigger input"
+                    aria-expanded="false"
+                    aria-controls="mapViewDropdownMenu"
+                  >
+                    <span id="mapViewDropdownLabel">Street</span>
+                    <span class="map-view-trigger-caret" aria-hidden="true"></span>
+                  </button>
+                  <div id="mapViewDropdownMenu" class="map-view-menu" hidden>
+                    <div class="map-view-menu-section">
+                      <div class="muted small map-view-menu-title">Basemap</div>
+                      <label class="map-view-option-row">
+                        <input type="radio" name="mapViewBasemap" value="street" data-map-basemap />
+                        <span>Street</span>
+                      </label>
+                      <label class="map-view-option-row">
+                        <input type="radio" name="mapViewBasemap" value="satellite" data-map-basemap />
+                        <span>Satellite</span>
+                      </label>
+                    </div>
+                    <div class="map-view-menu-divider" role="separator"></div>
+                    <div class="map-view-menu-section">
+                      <div class="muted small map-view-menu-title">Overlays</div>
+                      <div id="mapViewOverlayList" class="map-view-overlay-list"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <div id="liveMap" class="map-leaflet map"></div>
             </main>
             <aside id="mapDetailsDrawer" class="map-details-drawer">
