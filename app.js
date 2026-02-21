@@ -9138,6 +9138,245 @@ function parseCsv(text){
   return rows;
 }
 
+function normalizeRuidosoToken(value){
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+function normalizeRuidosoEnclosure(value){
+  const clean = String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/-REENTRY$/i, "")
+    .replace(/\s+/g, "");
+  if (!clean) return "";
+  return clean.replace(/^0+(?=\d)/, "");
+}
+
+function parseRuidosoPhotoLoc(value){
+  const raw = String(value || "").trim();
+  if (!raw) return { jobMap: "", enclosure: "" };
+  const cleaned = raw.replace(/-REENTRY$/i, "");
+  const lastDash = cleaned.lastIndexOf("-");
+  if (lastDash > 0){
+    return {
+      jobMap: cleaned.slice(0, lastDash).trim(),
+      enclosure: cleaned.slice(lastDash + 1).trim(),
+    };
+  }
+  return { jobMap: "", enclosure: extractEnclosureToken(cleaned) };
+}
+
+function parseRuidosoCodesRaw(value){
+  const src = String(value || "").trim();
+  if (!src) return [];
+  const out = new Set();
+  const pattern = /([^,\n]+?)\s*\[(\d+(?:\.\d+)?)\]/g;
+  let match;
+  while ((match = pattern.exec(src))){
+    const code = String(match[1] || "").trim().replace(/\s+/g, " ");
+    if (code) out.add(code);
+  }
+  if (!out.size){
+    src.split(",").forEach((part) => {
+      const cleaned = String(part || "").replace(/\s*-\s*$/, "").trim();
+      if (cleaned) out.add(cleaned);
+    });
+  }
+  return Array.from(out);
+}
+
+function getRuidosoRowCandidateJobMaps(row){
+  const candidates = [
+    row?.job_map,
+    row?.node,
+    row?.node_id,
+    row?.node_name,
+    row?.ruidoso_network_name,
+    row?.ruidosonetworkname,
+    row?.ruidoso_network_point_name,
+    row?.ruidosonetworkpointname,
+    row?.placemark_name,
+    row?.location_name,
+    row?.name,
+  ];
+  const out = new Set();
+  candidates.forEach((raw) => {
+    const text = String(raw || "").trim();
+    if (!text) return;
+    const nodeMatch = text.match(/NODE\d+_[A-Z0-9]+(?:_[A-Z0-9]+)?/i);
+    if (nodeMatch?.[0]){
+      const normalizedNode = normalizeRuidosoToken(nodeMatch[0]);
+      if (normalizedNode) out.add(normalizedNode);
+    }
+    const normalized = normalizeRuidosoToken(text);
+    if (normalized) out.add(normalized);
+  });
+  return Array.from(out);
+}
+
+function getRuidosoRowCandidateEnclosures(row){
+  const candidates = [
+    row?.enclosure,
+    row?.drop_number,
+    row?.terminal_port,
+    row?.location_name,
+    row?.placemark_name,
+    row?.ruidoso_network_point_name,
+    row?.ruidosonetworkpointname,
+  ];
+  const out = new Set();
+  candidates.forEach((raw) => {
+    const normalized = normalizeRuidosoEnclosure(raw);
+    if (normalized) out.add(normalized);
+    const token = normalizeRuidosoEnclosure(extractEnclosureToken(raw));
+    if (token) out.add(token);
+  });
+  return Array.from(out);
+}
+
+function applyRuidosoPackageDataToRows(rows, { codeByKey, photosByKey, enclosureKeyCounts }){
+  const list = Array.isArray(rows) ? rows : [];
+  let matchedRows = 0;
+  let rowsWithCodes = 0;
+  let rowsWithPhotos = 0;
+  list.forEach((row) => {
+    const jobMaps = getRuidosoRowCandidateJobMaps(row);
+    const enclosures = getRuidosoRowCandidateEnclosures(row);
+    if (!enclosures.length) return;
+    let matchedKey = "";
+    for (const enclosure of enclosures){
+      for (const jobMap of jobMaps){
+        const key = `${jobMap}|${enclosure}`;
+        if (codeByKey.has(key) || photosByKey.has(key)){
+          matchedKey = key;
+          break;
+        }
+      }
+      if (matchedKey) break;
+      const fallbackKey = `*|${enclosure}`;
+      const count = enclosureKeyCounts.get(fallbackKey) || 0;
+      if (count === 1 && (codeByKey.has(fallbackKey) || photosByKey.has(fallbackKey))){
+        matchedKey = fallbackKey;
+        break;
+      }
+    }
+    if (!matchedKey) return;
+    matchedRows += 1;
+    const nextCodes = Array.from(new Set([
+      ...(Array.isArray(row.billing_codes) ? row.billing_codes : []),
+      ...(codeByKey.get(matchedKey) || []),
+    ].map((value) => String(value || "").trim()).filter(Boolean)));
+    const nextPhotos = Array.from(new Set([
+      ...(Array.isArray(row.photo_urls) ? row.photo_urls : []),
+      ...(photosByKey.get(matchedKey) || []),
+    ].map((value) => String(value || "").trim()).filter((url) => /^https?:\/\//i.test(url))));
+    if (nextCodes.length){
+      row.billing_codes = nextCodes;
+      rowsWithCodes += 1;
+    }
+    if (nextPhotos.length){
+      row.photo_urls = nextPhotos;
+      rowsWithPhotos += 1;
+    }
+  });
+  return { matchedRows, rowsWithCodes, rowsWithPhotos };
+}
+
+async function importRuidosoPackageZip(file){
+  const JSZip = await loadJsZip();
+  const zip = await JSZip.loadAsync(file);
+  const entries = Object.values(zip.files || {}).filter((entry) => !entry.dir);
+  const productionEntry = entries.find((entry) => /ruidoso_production_codes\.csv$/i.test(String(entry.name || "")));
+  const photoEntry = entries.find((entry) => /ruidoso_photo_links\.csv$/i.test(String(entry.name || "")));
+  if (!productionEntry && !photoEntry){
+    throw new Error("ZIP does not contain ruidoso_production_codes.csv or ruidoso_photo_links.csv.");
+  }
+
+  const codeByKey = new Map();
+  const photosByKey = new Map();
+  const enclosureKeyCounts = new Map();
+  const upsertMapSet = (map, key, values) => {
+    if (!key || !values?.length) return;
+    const next = new Set(map.get(key) || []);
+    values.forEach((value) => {
+      const cleaned = String(value || "").trim();
+      if (cleaned) next.add(cleaned);
+    });
+    if (next.size) map.set(key, Array.from(next));
+  };
+  const bumpEnclosureCount = (key) => {
+    if (!key) return;
+    enclosureKeyCounts.set(key, (enclosureKeyCounts.get(key) || 0) + 1);
+  };
+
+  if (productionEntry){
+    const text = await productionEntry.async("string");
+    const rows = parseCsv(text);
+    const headers = (rows[0] || []).map(SpecCom.helpers.normalizeImportHeader);
+    const jobIdx = findHeaderIndex(headers, ["job_map", "jobmap"]);
+    const enclosureIdx = findHeaderIndex(headers, ["enclosure"]);
+    const codesIdx = findHeaderIndex(headers, ["codes_raw", "codes"]);
+    rows.slice(1).forEach((row) => {
+      const jobMap = normalizeRuidosoToken(row[jobIdx] || "");
+      const enclosure = normalizeRuidosoEnclosure(row[enclosureIdx] || "");
+      const codes = parseRuidosoCodesRaw(row[codesIdx] || "");
+      if (!enclosure) return;
+      if (jobMap){
+        upsertMapSet(codeByKey, `${jobMap}|${enclosure}`, codes);
+        bumpEnclosureCount(`*|${enclosure}`);
+      }
+      upsertMapSet(codeByKey, `*|${enclosure}`, codes);
+    });
+  }
+
+  if (photoEntry){
+    const text = await photoEntry.async("string");
+    const rows = parseCsv(text);
+    const headers = (rows[0] || []).map(SpecCom.helpers.normalizeImportHeader);
+    const locIdx = findHeaderIndex(headers, ["loc", "location", "location_name"]);
+    const urlIdx = findHeaderIndex(headers, ["photo_url", "url"]);
+    rows.slice(1).forEach((row) => {
+      const parsed = parseRuidosoPhotoLoc(row[locIdx] || "");
+      const jobMap = normalizeRuidosoToken(parsed.jobMap);
+      const enclosure = normalizeRuidosoEnclosure(parsed.enclosure);
+      const url = String(row[urlIdx] || "").trim();
+      if (!enclosure || !/^https?:\/\//i.test(url)) return;
+      if (jobMap){
+        upsertMapSet(photosByKey, `${jobMap}|${enclosure}`, [url]);
+        bumpEnclosureCount(`*|${enclosure}`);
+      }
+      upsertMapSet(photosByKey, `*|${enclosure}`, [url]);
+    });
+  }
+
+  const kmzRows = Array.from(state.map.kmzFeatureRows?.values?.() || []);
+  if (!kmzRows.length){
+    throw new Error("Import a KMZ first, then apply this ZIP package.");
+  }
+  const result = applyRuidosoPackageDataToRows(kmzRows, { codeByKey, photosByKey, enclosureKeyCounts });
+
+  const previewRows = state.importPreview?.rawRows;
+  if (Array.isArray(previewRows) && previewRows.length){
+    const byFeatureId = new Map(kmzRows.map((row) => [String(row.__feature_id || ""), row]));
+    previewRows.forEach((row) => {
+      const key = String(row?.__feature_id || "");
+      const match = byFeatureId.get(key);
+      if (!match) return;
+      row.billing_codes = Array.isArray(match.billing_codes) ? match.billing_codes.slice() : [];
+      row.photo_urls = Array.isArray(match.photo_urls) ? match.photo_urls.slice() : [];
+    });
+  }
+  renderMapLayerPanel();
+  const selectedId = String(state.map.kmzSelectedFeatureId || "").trim();
+  if (selectedId && state.map.kmzFeatureRows.has(selectedId)){
+    void openKmzFeaturePopup(selectedId, { focusMap: false });
+  }
+  return result;
+}
+
 function findHeaderIndex(headers, names){
   for (const name of names){
     const idx = headers.indexOf(name);
@@ -9323,8 +9562,15 @@ async function handleLocationImport(file){
   try{
     if (name.endsWith(".kmz")){
       rows = await parseKmzFile(file);
+    } else if (name.endsWith(".zip")){
+      const result = await importRuidosoPackageZip(file);
+      toast(
+        "Package applied",
+        `Matched ${result.matchedRows} points. Added codes to ${result.rowsWithCodes} and photos to ${result.rowsWithPhotos}.`
+      );
+      return;
     } else {
-      toast("Import error", "Unsupported file type. Upload KMZ.");
+      toast("Import error", "Unsupported file type. Upload KMZ or RUIDOSO ZIP.");
       return;
     }
   } catch (error){
