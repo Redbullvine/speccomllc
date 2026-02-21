@@ -2609,35 +2609,12 @@ body.map-mode .gis-sidebar{
 body.map-mode .wired-sidebar-top{
   display:flex;
   align-items:center;
-  justify-content:space-between;
+  justify-content:flex-end;
   gap:8px;
   padding:8px 10px 4px;
 }
-body.map-mode .wired-logo-lockup{
-  display:flex;
-  align-items:center;
-  gap:8px;
-}
-body.map-mode .wired-logo-mark{
-  width:24px;
-  height:24px;
-  border:3px solid #22d3ee;
-  border-top-left-radius:16px;
-  border-top-right-radius:10px;
-  border-bottom-left-radius:10px;
-  border-bottom-right-radius:16px;
-  border-right-color:transparent;
-  transform:rotate(-26deg);
-}
-body.map-mode .wired-logo-text{
-  font-size:26px;
-  font-weight:700;
-  letter-spacing:0.03em;
-  color:#334155;
-  text-transform:uppercase;
-}
 body.map-mode .wired-project-pill{
-  max-width:54%;
+  max-width:100%;
   border:none;
   background:transparent;
   color:#475569;
