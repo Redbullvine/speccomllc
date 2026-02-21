@@ -7724,6 +7724,10 @@ function canViewDispatch(){
   return isPrivilegedRole();
 }
 
+function canCreateProjects(){
+  return isPrivilegedRole();
+}
+
 function parseViewFromHash(hashValue = window.location.hash){
   const raw = String(hashValue || "").trim();
   if (!raw || raw === "#") return null;
@@ -11111,7 +11115,7 @@ function updateProjectScopedControls(){
     }
   }
 
-  const canManageProjects = isOwnerOrAdmin();
+  const canManageProjects = canCreateProjects();
   const createBtn = $("btnProjectsCreate");
   const emptyCreateBtn = $("btnProjectsEmptyCreate");
   if (createBtn) createBtn.style.display = canManageProjects ? "" : "none";
@@ -12271,8 +12275,8 @@ async function createProject(){
     toast("Project name required", "Enter a project name.");
     return;
   }
-  if (!isOwnerOrAdmin()){
-    toast("Not allowed", "Only Owner or Admin can create projects.");
+  if (!canCreateProjects()){
+    toast("Not allowed", "Admin, Project Manager, Owner, or Support role required.");
     return;
   }
   if (isDemo){
