@@ -190,6 +190,7 @@ const state = {
     kmzFolderVisibility: new Map(),
     kmzFeatureLayers: new Map(),
     kmzFeatureRows: new Map(),
+    kmzPhotoOverrides: new Map(),
     kmzNodeIndex: new Map(),
     kmzRootNodeId: "",
     kmzOverlayGroups: null,
@@ -1082,6 +1083,7 @@ const SIDEBAR_WIDTH_KEY = "speccom.ui.sidebarWidth";
 const LEGACY_DRAWER_OPEN_KEY = "speccom.ui.drawerOpen";
 const LEGACY_DRAWER_TAB_KEY = "speccom.ui.drawerTab";
 const LEGACY_DRAWER_WIDTH_KEY = "speccom.ui.drawerWidth";
+const KMZ_PHOTO_OVERRIDES_KEY_PREFIX = "speccom.kmzPhotoOverrides.";
 const SIDEBAR_MIN_WIDTH = 320;
 const SIDEBAR_MAX_WIDTH = 520;
 
@@ -1099,6 +1101,42 @@ function ensureStorageAvailable(){
   if (state.storageAvailable) return true;
   showStorageBlockedWarning();
   return false;
+}
+
+function getKmzPhotoOverridesStorageKey(projectId = state.activeProject?.id || ""){
+  return `${KMZ_PHOTO_OVERRIDES_KEY_PREFIX}${String(projectId || "none")}`;
+}
+
+function loadKmzPhotoOverridesForActiveProject(){
+  state.map.kmzPhotoOverrides = new Map();
+  const raw = safeLocalStorageGet(getKmzPhotoOverridesStorageKey());
+  if (!raw) return;
+  try{
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return;
+    Object.entries(parsed).forEach(([featureId, urls]) => {
+      const key = String(featureId || "").trim();
+      if (!key || !Array.isArray(urls)) return;
+      const cleanUrls = Array.from(new Set(
+        urls
+          .map((url) => String(url || "").trim())
+          .filter((url) => /^https?:\/\//i.test(url))
+      ));
+      if (cleanUrls.length){
+        state.map.kmzPhotoOverrides.set(key, cleanUrls);
+      }
+    });
+  } catch {}
+}
+
+function saveKmzPhotoOverridesForActiveProject(){
+  const payload = {};
+  state.map.kmzPhotoOverrides.forEach((urls, featureId) => {
+    const key = String(featureId || "").trim();
+    if (!key || !Array.isArray(urls) || !urls.length) return;
+    payload[key] = urls;
+  });
+  safeLocalStorageSet(getKmzPhotoOverridesStorageKey(), JSON.stringify(payload));
 }
 
 function getRuntimeEnv(){
@@ -6184,6 +6222,65 @@ function registerMapUiBindings(){
         .finally(() => {
           addBtn.disabled = false;
         });
+      return;
+    });
+    detailsBody.addEventListener("click", (e) => {
+      const photoAddBtn = e.target.closest("[data-photo-add-url]");
+      if (photoAddBtn){
+        e.preventDefault();
+        e.stopPropagation();
+        const featureId = String(photoAddBtn.dataset.photoFeatureId || state.map.materialFeatureId || "").trim();
+        const input = detailsBody.querySelector(`[data-photo-url-input="${featureId}"]`);
+        const nextUrl = String(input?.value || "").trim();
+        if (!/^https?:\/\//i.test(nextUrl)){
+          toast("Invalid photo URL", "Paste a full http(s) photo URL.", "error");
+          return;
+        }
+        if (!addKmzFeaturePhotoUrl(featureId, nextUrl)){
+          toast("Photo add failed", "Unable to add photo URL.", "error");
+          return;
+        }
+        if (input) input.value = "";
+        const row = state.map.kmzFeatureRows.get(featureId) || null;
+        if (row){
+          const totals = state.map.materialFeatureTotals.get(featureId) || [];
+          detailsBody.innerHTML = buildMapDetailsDrawerBodyHtml(row, {
+            featureTotals: totals,
+            loadingMaterials: false,
+          });
+          toast("Photo added", "Photo URL added to this feature.");
+        }
+        return;
+      }
+      const removeBtn = e.target.closest("[data-photo-remove-url]");
+      if (removeBtn){
+        e.preventDefault();
+        e.stopPropagation();
+        const featureId = String(removeBtn.dataset.photoFeatureId || state.map.materialFeatureId || "").trim();
+        const photoUrl = String(removeBtn.dataset.photoRemoveUrl || "").trim();
+        if (!featureId || !photoUrl) return;
+        removeKmzFeaturePhotoUrl(featureId, photoUrl);
+        const row = state.map.kmzFeatureRows.get(featureId) || null;
+        if (row){
+          const totals = state.map.materialFeatureTotals.get(featureId) || [];
+          detailsBody.innerHTML = buildMapDetailsDrawerBodyHtml(row, {
+            featureTotals: totals,
+            loadingMaterials: false,
+          });
+        }
+        return;
+      }
+    });
+    detailsBody.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      const input = e.target.closest("[data-photo-url-input]");
+      if (!input) return;
+      e.preventDefault();
+      const featureId = String(input.dataset.photoUrlInput || state.map.materialFeatureId || "").trim();
+      const addButton = detailsBody.querySelector(`[data-photo-add-url][data-photo-feature-id="${featureId}"]`);
+      if (addButton instanceof HTMLButtonElement){
+        addButton.click();
+      }
     });
   }
 }
@@ -6349,14 +6446,82 @@ function getKmzBillingCodes(row){
 }
 
 function getKmzPhotoUrls(row){
-  if (Array.isArray(row?.photo_urls)){
-    return Array.from(new Set(
-      row.photo_urls
-        .map((url) => String(url || "").trim())
-        .filter((url) => /^https?:\/\//i.test(url))
-    ));
+  const featureId = String(row?.__feature_id || "").trim();
+  const base = Array.isArray(row?.photo_urls)
+    ? row.photo_urls
+    : buildPhotoUrlsFromRow(row || {});
+  const override = featureId ? (state.map.kmzPhotoOverrides.get(featureId) || []) : [];
+  return Array.from(new Set(
+    [...base, ...override]
+      .map((url) => String(url || "").trim())
+      .filter((url) => /^https?:\/\//i.test(url))
+  ));
+}
+
+function setKmzFeaturePhotoUrls(featureId, urls){
+  const key = String(featureId || "").trim();
+  if (!key) return;
+  const row = state.map.kmzFeatureRows.get(key) || null;
+  const cleanUrls = Array.from(new Set(
+    (Array.isArray(urls) ? urls : [])
+      .map((url) => String(url || "").trim())
+      .filter((url) => /^https?:\/\//i.test(url))
+  ));
+  if (row){
+    row.photo_urls = cleanUrls.slice();
   }
-  return buildPhotoUrlsFromRow(row || {});
+  if (cleanUrls.length){
+    state.map.kmzPhotoOverrides.set(key, cleanUrls.slice());
+  } else {
+    state.map.kmzPhotoOverrides.delete(key);
+  }
+  saveKmzPhotoOverridesForActiveProject();
+}
+
+function addKmzFeaturePhotoUrl(featureId, url){
+  const key = String(featureId || "").trim();
+  const clean = String(url || "").trim();
+  if (!key || !/^https?:\/\//i.test(clean)) return false;
+  const row = state.map.kmzFeatureRows.get(key) || null;
+  const next = getKmzPhotoUrls(row || { __feature_id: key, photo_urls: [] });
+  if (!next.includes(clean)) next.push(clean);
+  setKmzFeaturePhotoUrls(key, next);
+  return true;
+}
+
+function removeKmzFeaturePhotoUrl(featureId, url){
+  const key = String(featureId || "").trim();
+  if (!key) return;
+  const row = state.map.kmzFeatureRows.get(key) || null;
+  const next = getKmzPhotoUrls(row || { __feature_id: key, photo_urls: [] })
+    .filter((entry) => entry !== String(url || "").trim());
+  setKmzFeaturePhotoUrls(key, next);
+}
+
+function buildKmzPhotoSectionHtml(row){
+  const featureId = String(row?.__feature_id || "").trim();
+  const urls = getKmzPhotoUrls(row);
+  return `
+    <section class="kmz-photo-section" data-kmz-photo-feature="${escapeHtml(featureId)}">
+      <div class="kmz-material-heading">Photos</div>
+      ${urls.length ? `
+        <div class="kmz-photo-grid">
+          ${urls.map((url) => `
+            <div class="kmz-photo-card">
+              <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">
+                <img src="${escapeHtml(url)}" alt="Feature photo" loading="lazy" />
+              </a>
+              <button type="button" class="btn ghost small" data-photo-remove-url="${escapeHtml(url)}" data-photo-feature-id="${escapeHtml(featureId)}">Remove</button>
+            </div>
+          `).join("")}
+        </div>
+      ` : `<div class="muted small">No photos linked yet.</div>`}
+      <div class="kmz-photo-add-row">
+        <input class="input compact" type="url" placeholder="Paste photo URL" data-photo-url-input="${escapeHtml(featureId)}" />
+        <button type="button" class="btn secondary small" data-photo-add-url data-photo-feature-id="${escapeHtml(featureId)}">Add Photo URL</button>
+      </div>
+    </section>
+  `;
 }
 
 function appendKmzSupplementalRows(rows, row){
@@ -6571,6 +6736,7 @@ function buildMapDetailsDrawerBodyHtml(row, {
       loading: loadingMaterials,
       errorText: materialError,
     })}
+    ${buildKmzPhotoSectionHtml(row)}
   `;
 }
 
@@ -6663,7 +6829,10 @@ async function handleMapDetailsMaterialAdd(featureId, itemKey){
     p_qty_used: 1,
   });
   if (error){
-    const message = getDetailedErrorMessage(error);
+    let message = getDetailedErrorMessage(error);
+    if (String(error?.code || "") === "42702" && /item_key/i.test(message)){
+      message = "Database material functions need migration fix (item_key ambiguity). Apply latest Supabase migrations and retry.";
+    }
     toast("Material update failed", message, "error");
     return;
   }
@@ -14957,6 +15126,7 @@ async function loadBillingLocations(projectId){
 function setActiveProjectById(id){
   const next = state.projects.find(p => p.id === id) || null;
   state.activeProject = next;
+  loadKmzPhotoOverridesForActiveProject();
   state.map.materialFeatureId = "";
   state.map.materialFeatureTotals.clear();
   state.mapFilters.search = "";
