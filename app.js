@@ -191,6 +191,10 @@ const state = {
     kmzFeatureLayers: new Map(),
     kmzFeatureRows: new Map(),
     kmzPhotoOverrides: new Map(),
+    ruidosoEvidenceByName: new Map(),
+    ruidosoEvidenceByEnclosure: new Map(),
+    ruidosoEvidenceByCoord: new Map(),
+    ruidosoEvidenceEnclosureCounts: new Map(),
     kmzNodeIndex: new Map(),
     kmzRootNodeId: "",
     kmzOverlayGroups: null,
@@ -1764,6 +1768,11 @@ function getCachedSiteCodes(siteId){
   return Array.isArray(cached) ? cached : [];
 }
 
+function hasCachedSiteCodes(siteId){
+  const key = toSiteIdKey(siteId);
+  return Boolean(key) && state.map.siteCodesBySiteId.has(key);
+}
+
 function setCachedSiteCodes(siteId, codes){
   const key = toSiteIdKey(siteId);
   if (!key) return [];
@@ -1783,7 +1792,7 @@ async function fetchSiteCodesForMapPopup(siteId){
       .map((row) => row.code);
     return setCachedSiteCodes(key, demoCodes);
   }
-  if (!state.client) return [];
+  if (!state.client) return setCachedSiteCodes(key, []);
   const { data, error } = await state.client
     .from("site_codes")
     .select("code")
@@ -1791,7 +1800,7 @@ async function fetchSiteCodesForMapPopup(siteId){
     .order("created_at", { ascending: true });
   if (error){
     debugLog("[map] popup code fetch failed", error);
-    return [];
+    return setCachedSiteCodes(key, []);
   }
   return setCachedSiteCodes(key, (data || []).map((row) => row.code));
 }
@@ -1818,6 +1827,11 @@ function getCachedSitePhotos(siteId){
   return Array.isArray(cached) ? cached : [];
 }
 
+function hasCachedSitePhotos(siteId){
+  const key = toSiteIdKey(siteId);
+  return Boolean(key) && state.map.sitePhotosBySiteId.has(key);
+}
+
 function setCachedSitePhotos(siteId, photos){
   const key = toSiteIdKey(siteId);
   if (!key) return [];
@@ -1842,7 +1856,7 @@ async function fetchSitePhotosForMapPopup(siteId){
       .filter((row) => row.url);
     return setCachedSitePhotos(key, rows);
   }
-  if (!state.client) return [];
+  if (!state.client) return setCachedSitePhotos(key, []);
   const { data, error } = await state.client
     .from("site_media")
     .select("media_path, created_at")
@@ -1851,15 +1865,24 @@ async function fetchSitePhotosForMapPopup(siteId){
     .limit(6);
   if (error){
     debugLog("[map] popup photo fetch failed", error);
-    return [];
+    return setCachedSitePhotos(key, []);
   }
   const rows = [];
   for (const row of data || []){
-    const url = row?.media_path
-      ? (/^https?:\/\//i.test(String(row.media_path))
-          ? String(row.media_path)
-          : await getPublicOrSignedUrl("proof-photos", row.media_path))
-      : "";
+    let url = "";
+    if (row?.media_path){
+      const rawPath = String(row.media_path);
+      if (/^https?:\/\//i.test(rawPath)){
+        url = rawPath;
+      } else {
+        try{
+          url = await getPublicOrSignedUrl("proof-photos", rawPath);
+        } catch (error){
+          debugLog("[map] popup photo url resolve failed", error);
+          url = "";
+        }
+      }
+    }
     if (!url) continue;
     rows.push({
       url,
@@ -2382,6 +2405,10 @@ function clearImportPreviewMarkers(){
   state.map.kmzFolderTree = [];
   state.map.kmzFeatureLayers = new Map();
   state.map.kmzFeatureRows = new Map();
+  state.map.ruidosoEvidenceByName = new Map();
+  state.map.ruidosoEvidenceByEnclosure = new Map();
+  state.map.ruidosoEvidenceByCoord = new Map();
+  state.map.ruidosoEvidenceEnclosureCounts = new Map();
   state.map.kmzNodeIndex = new Map();
   state.map.kmzFeatureVisibility = new Map();
   state.map.kmzFolderVisibility = new Map();
@@ -4722,18 +4749,41 @@ function getMapPopupSnapshot(){
   };
 }
 
+function withPopupLoadTimeout(promise, timeoutMs = 5000, fallback = []){
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(fallback), Math.max(500, Number(timeoutMs) || 5000));
+    Promise.resolve(promise)
+      .then((value) => {
+        clearTimeout(timer);
+        finish(value);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        finish(fallback);
+      });
+  });
+}
+
 async function renderMapPopupActiveSite({ syncSelection = true } = {}){
   const snap = getMapPopupSnapshot();
   if (!snap) return;
   const { marker, site, index, total, nearby, requiredCodes } = snap;
+  const hasCodesCache = hasCachedSiteCodes(site.id);
+  const hasPhotosCache = hasCachedSitePhotos(site.id);
   const cachedCodes = getCachedSiteCodes(site.id);
   const cachedPhotos = getCachedSitePhotos(site.id);
   bindSiteMarkerPopup(marker, site, {
     requiredCodes,
     siteCodes: cachedCodes.length ? cachedCodes : null,
-    loadingCodes: !cachedCodes.length,
+    loadingCodes: !hasCodesCache,
     sitePhotos: cachedPhotos,
-    loadingPhotos: !cachedPhotos.length,
+    loadingPhotos: !hasPhotosCache,
     pageIndex: index,
     pageTotal: total,
     nearbySites: nearby,
@@ -4745,11 +4795,11 @@ async function renderMapPopupActiveSite({ syncSelection = true } = {}){
       SpecCom.helpers.closePinOverview();
     }
   }
-  if (cachedCodes.length && cachedPhotos.length) return;
+  if (hasCodesCache && hasPhotosCache) return;
   try{
     const [siteCodes, sitePhotos] = await Promise.all([
-      cachedCodes.length ? Promise.resolve(cachedCodes) : fetchSiteCodesForMapPopup(site.id),
-      cachedPhotos.length ? Promise.resolve(cachedPhotos) : fetchSitePhotosForMapPopup(site.id),
+      hasCodesCache ? Promise.resolve(cachedCodes) : withPopupLoadTimeout(fetchSiteCodesForMapPopup(site.id), 5000, []),
+      hasPhotosCache ? Promise.resolve(cachedPhotos) : withPopupLoadTimeout(fetchSitePhotosForMapPopup(site.id), 5000, []),
     ]);
     const latest = getMapPopupSnapshot();
     if (!latest) return;
@@ -7036,6 +7086,7 @@ function renderKmzPreviewFeatures(rows, sourceName = "KMZ Import"){
     state.map.kmzFeatureRows.set(featureId, row);
     state.map.kmzFeatureVisibility.set(featureId, true);
   });
+  rebuildRuidosoEvidenceIndex();
   let rootTree = rows?.__kmlFolderTree && rows.__kmlFolderTree.type === "folder"
     ? rows.__kmlFolderTree
     : buildFallbackKmzTree(rows || []);
@@ -9439,6 +9490,149 @@ function getRuidosoRowCandidateEnclosures(row){
   return Array.from(out);
 }
 
+function normalizeRuidosoNameKey(value){
+  return normalizeRuidosoToken(value);
+}
+
+function makeRuidosoCoordKey(lat, lng, precision = 5){
+  const latNum = Number(lat);
+  const lngNum = Number(lng);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return "";
+  return `${latNum.toFixed(precision)}|${lngNum.toFixed(precision)}`;
+}
+
+function getRuidosoRowCandidateNameKeys(row){
+  const fields = [
+    row?.ruidoso_network_point_name,
+    row?.ruidosonetworkpointname,
+    row?.ruidoso_network_name,
+    row?.ruidosonetworkname,
+    row?.placemark_name,
+    row?.location_name,
+    row?.name,
+    row?.drop_number,
+    row?.enclosure,
+  ];
+  const out = new Set();
+  fields.forEach((value) => {
+    const normalized = normalizeRuidosoNameKey(value);
+    if (normalized) out.add(normalized);
+  });
+  return Array.from(out);
+}
+
+function getRuidosoRowCoordinate(row){
+  const lat = Number(row?.latitude ?? row?.lat ?? row?.gps_lat);
+  const lng = Number(row?.longitude ?? row?.lng ?? row?.gps_lng);
+  if (Number.isFinite(lat) && Number.isFinite(lng)){
+    return { lat, lng };
+  }
+  return getGeometryCenter(row?.geometry || null);
+}
+
+function rebuildRuidosoEvidenceIndex(rows = null){
+  const byName = new Map();
+  const byEnclosure = new Map();
+  const byCoord = new Map();
+  const enclosureCounts = new Map();
+  const list = Array.isArray(rows)
+    ? rows
+    : Array.from(state.map.kmzFeatureRows?.values?.() || []);
+
+  const mergeEvidence = (target, row) => {
+    if (!target) return;
+    const codes = getKmzBillingCodes(row);
+    const photos = getKmzPhotoUrls(row);
+    if (codes.length){
+      const nextCodes = new Set(target.codes || []);
+      codes.forEach((code) => nextCodes.add(code));
+      target.codes = Array.from(nextCodes);
+    }
+    if (photos.length){
+      const nextPhotos = new Set(target.photos || []);
+      photos.forEach((url) => nextPhotos.add(url));
+      target.photos = Array.from(nextPhotos);
+    }
+  };
+
+  const attachEvidence = (map, key, row) => {
+    if (!key) return;
+    const current = map.get(key) || { codes: [], photos: [] };
+    mergeEvidence(current, row);
+    map.set(key, current);
+  };
+
+  list.forEach((row) => {
+    if (!row || typeof row !== "object") return;
+    const hasSignals = getKmzBillingCodes(row).length || getKmzPhotoUrls(row).length;
+    if (!hasSignals) return;
+    getRuidosoRowCandidateNameKeys(row).forEach((key) => attachEvidence(byName, key, row));
+    getRuidosoRowCandidateEnclosures(row).forEach((key) => {
+      if (!key) return;
+      enclosureCounts.set(key, (enclosureCounts.get(key) || 0) + 1);
+      attachEvidence(byEnclosure, key, row);
+    });
+    const coord = getRuidosoRowCoordinate(row);
+    const coordKey = makeRuidosoCoordKey(coord?.lat, coord?.lng);
+    attachEvidence(byCoord, coordKey, row);
+  });
+
+  state.map.ruidosoEvidenceByName = byName;
+  state.map.ruidosoEvidenceByEnclosure = byEnclosure;
+  state.map.ruidosoEvidenceByCoord = byCoord;
+  state.map.ruidosoEvidenceEnclosureCounts = enclosureCounts;
+}
+
+function getRuidosoSiteEvidence(site){
+  if (!site) return null;
+  const byName = state.map.ruidosoEvidenceByName || new Map();
+  const byEnclosure = state.map.ruidosoEvidenceByEnclosure || new Map();
+  const byCoord = state.map.ruidosoEvidenceByCoord || new Map();
+  const enclosureCounts = state.map.ruidosoEvidenceEnclosureCounts || new Map();
+
+  const nameKeys = [
+    site?.name,
+    getSiteDisplayName(site),
+    extractEnclosureToken(site?.name),
+  ].map(normalizeRuidosoNameKey).filter(Boolean);
+  for (const key of nameKeys){
+    if (byName.has(key)) return byName.get(key);
+  }
+
+  const enclosure = normalizeRuidosoEnclosure(extractEnclosureToken(site?.name));
+  if (enclosure && (enclosureCounts.get(enclosure) || 0) === 1 && byEnclosure.has(enclosure)){
+    return byEnclosure.get(enclosure);
+  }
+
+  const coords = getSiteCoords(site);
+  const coordKey = makeRuidosoCoordKey(coords?.lat, coords?.lng);
+  if (coordKey && byCoord.has(coordKey)) return byCoord.get(coordKey);
+  return null;
+}
+
+function primeSitePopupCachesFromRuidosoEvidence(rows = null){
+  const sites = Array.isArray(rows) ? rows : getVisibleSites();
+  let seededCodes = 0;
+  let seededPhotos = 0;
+  sites.forEach((site) => {
+    const siteId = toSiteIdKey(site?.id);
+    if (!siteId) return;
+    const evidence = getRuidosoSiteEvidence(site);
+    if (!evidence) return;
+    if (!hasCachedSiteCodes(siteId) && Array.isArray(evidence.codes) && evidence.codes.length){
+      setCachedSiteCodes(siteId, evidence.codes);
+      seededCodes += 1;
+    }
+    if (!hasCachedSitePhotos(siteId) && Array.isArray(evidence.photos) && evidence.photos.length){
+      setCachedSitePhotos(siteId, evidence.photos.map((url) => ({ url })));
+      seededPhotos += 1;
+    }
+  });
+  if (seededCodes || seededPhotos){
+    debugLog("[map] seeded popup cache from evidence", { seededCodes, seededPhotos });
+  }
+}
+
 function applyRuidosoPackageDataToRows(rows, { codeByKey, photosByKey, enclosureKeyCounts }){
   const list = Array.isArray(rows) ? rows : [];
   let matchedRows = 0;
@@ -9559,6 +9753,8 @@ async function importRuidosoPackageZip(file){
     throw new Error("Import a KMZ first, then apply this ZIP package.");
   }
   const result = applyRuidosoPackageDataToRows(kmzRows, { codeByKey, photosByKey, enclosureKeyCounts });
+  rebuildRuidosoEvidenceIndex(kmzRows);
+  primeSitePopupCachesFromRuidosoEvidence(state.projectSites || []);
 
   const previewRows = state.importPreview?.rawRows;
   if (Array.isArray(previewRows) && previewRows.length){
@@ -13337,6 +13533,7 @@ async function loadProjectSites(projectId){
   state.map.siteSearchIndex.clear();
   state.map.siteCodesBySiteId.clear();
   state.map.sitePhotosBySiteId.clear();
+  primeSitePopupCachesFromRuidosoEvidence(state.projectSites);
   const visibleIds = new Set(getVisibleSites().map((site) => toSiteIdKey(site?.id)));
   if (state.activeSite && !visibleIds.has(toSiteIdKey(state.activeSite.id))){
     closeSitePanel();
