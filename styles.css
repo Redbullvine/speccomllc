@@ -1798,6 +1798,25 @@ a{color:inherit; text-decoration:none;}
   text-align:left;
   width:100%;
 }
+.project-row-main{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+}
+.project-row-select{
+  border:none;
+  background:transparent;
+  color:inherit;
+  text-align:left;
+  width:100%;
+  padding:0;
+  cursor:pointer;
+}
+.project-row-delete{
+  flex:0 0 auto;
+  align-self:center;
+}
 .project-row:focus-visible{
   outline:3px solid rgba(212,175,55,.35);
   outline-offset:2px;

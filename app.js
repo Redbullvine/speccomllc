@@ -10402,14 +10402,14 @@ function renderProjectsList(){
   const list = $("projectsList");
   if (!list) return;
   list.innerHTML = "";
+  const canDeleteProjects = isOwnerOrAdmin();
   const empty = $("projectsEmpty");
   const footer = $("projectsFooter");
   if (empty) empty.style.display = state.projects.length ? "none" : "";
   list.style.display = state.projects.length ? "" : "none";
   if (footer) footer.style.display = state.projects.length ? "" : "none";
   state.projects.forEach((project) => {
-    const row = document.createElement("button");
-    row.type = "button";
+    const row = document.createElement("div");
     row.className = "project-row";
     row.dataset.projectId = project.id;
     if (state.activeProject?.id === project.id){
@@ -10418,10 +10418,29 @@ function renderProjectsList(){
     const title = project.job_number ? `${project.name} (Job ${project.job_number})` : (project.name || "Project");
     const meta = project.location ? project.location : (project.description || "");
     row.innerHTML = `
-      <div class="project-row-title">${escapeHtml(title)}</div>
-      ${meta ? `<div class="project-row-meta">${escapeHtml(meta)}</div>` : ""}
+      <div class="project-row-main">
+        <button type="button" class="project-row-select" data-project-open="${project.id}">
+          <div class="project-row-title">${escapeHtml(title)}</div>
+          ${meta ? `<div class="project-row-meta">${escapeHtml(meta)}</div>` : ""}
+        </button>
+        ${canDeleteProjects ? `<button type="button" class="btn danger small project-row-delete" data-project-delete="${project.id}">Delete</button>` : ""}
+      </div>
     `;
-    row.addEventListener("click", () => {
+    const selectBtn = row.querySelector("[data-project-open]");
+    if (selectBtn){
+      selectBtn.addEventListener("click", () => {
+        setActiveProjectById(project.id);
+        closeProjectsModal();
+      });
+    }
+    const deleteBtn = row.querySelector("[data-project-delete]");
+    if (deleteBtn){
+      deleteBtn.addEventListener("click", () => {
+        setActiveProjectById(project.id);
+        openDeleteProjectModal();
+      });
+    }
+    row.addEventListener("dblclick", () => {
       setActiveProjectById(project.id);
       closeProjectsModal();
     });
@@ -11576,9 +11595,13 @@ async function deleteProject(){
     await deleteProjectRpc(state.client, projectId);
     toast("Project deleted", "Project deleted.");
     state.projects = (state.projects || []).filter(p => p.id !== projectId);
-    state.activeProject = null;
+    state.activeProject = state.projects[0] || null;
     closeDeleteProjectModal();
-    closeProjectsModal();
+    renderProjects();
+    const projectsModal = $("projectsModal");
+    if (projectsModal && projectsModal.style.display !== "none"){
+      renderProjectsList();
+    }
   } catch (err) {
     console.error("Delete failed", err);
     toast("Delete failed", "Delete failed.");
