@@ -2553,7 +2553,16 @@ body.map-mode .brand-title{
   letter-spacing:.03em;
 }
 body.map-mode .topbar-actions{
-  display:none;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+body.map-mode .topbar-btn{
+  padding:6px 10px;
+  font-size:14px;
+}
+body.map-mode .icon-btn{
+  padding:7px 9px;
 }
 body.map-mode .app-shell{
   display:block;
