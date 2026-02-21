@@ -195,7 +195,7 @@ const state = {
     kmzOverlayGroups: null,
     mapViewOverlays: {
       pins: true,
-      paths: true,
+      paths: false,
       boundaries: true,
     },
     mapViewDropdownOpen: false,
@@ -4993,7 +4993,7 @@ function getDefaultMapLayerVisibility(){
 function getDefaultMapViewOverlays(){
   return {
     pins: true,
-    paths: true,
+    paths: false,
     boundaries: true,
   };
 }
@@ -5039,7 +5039,8 @@ function getSavedMapViewOverlays(){
     const parsed = JSON.parse(raw);
     return {
       pins: parsed?.pins !== false,
-      paths: parsed?.paths !== false,
+      // Always start clean on refresh; user can opt-in each session.
+      paths: false,
       boundaries: parsed?.boundaries !== false,
     };
   } catch {
@@ -5671,7 +5672,7 @@ function handleMapViewMenuEscape(event){
 function setMapViewMenuDefaultsOnKmzImport(){
   const next = {
     ...(state.map.mapViewOverlays || getDefaultMapViewOverlays()),
-    paths: true,
+    paths: false,
     boundaries: true,
   };
   state.map.mapViewOverlays = next;
@@ -6184,8 +6185,8 @@ function getKmzLeafletStyle(row, geometryType){
   }
   return {
     color,
-    weight: 3,
-    opacity: 0.92,
+    weight: 2,
+    opacity: 0.44,
     pane: MAP_PANES.kmz,
     bubblingMouseEvents: false,
   };
