@@ -2053,7 +2053,7 @@ function setAuthButtonsDisabled(disabled){
   if (note) note.style.display = disabled ? "" : "none";
 }
 
-function setActiveView(viewId){
+function setActiveView(viewId, { syncHash = true } = {}){
   document.body.classList.toggle("map-mode", viewId === "viewMap");
   document.querySelectorAll(".view").forEach((view) => {
     view.classList.toggle("active", view.id === viewId);
@@ -2090,6 +2090,9 @@ function setActiveView(viewId){
     syncDprProjectSelection();
     renderDprProjectOptions();
     loadDailyProgressReport();
+  }
+  if (syncHash){
+    syncHashForView(viewId);
   }
 }
 
@@ -7359,8 +7362,38 @@ function canViewDispatch(){
   return isPrivilegedRole();
 }
 
+function parseViewFromHash(hashValue = window.location.hash){
+  const raw = String(hashValue || "").trim();
+  if (!raw || raw === "#") return null;
+  const normalized = raw.startsWith("#") ? raw.slice(1) : raw;
+  const routeToken = normalized.split(/[?&]/)[0].trim().toLowerCase();
+  if (!routeToken) return null;
+  if (routeToken === "map" || routeToken === "viewmap") return "viewMap";
+  if (routeToken === "home" || routeToken === "dashboard" || routeToken === "viewdashboard") return "viewDashboard";
+  return null;
+}
+
+function syncHashForView(viewId){
+  if (!window.history?.replaceState) return;
+  let nextHash = "";
+  if (viewId === "viewMap"){
+    nextHash = "#map";
+  } else if (viewId === "viewDashboard"){
+    nextHash = "#home";
+  } else {
+    return;
+  }
+  if (window.location.hash === nextHash) return;
+  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${nextHash}`);
+}
+
 function getDefaultView(){
-  return "viewMap";
+  const hashView = parseViewFromHash();
+  if (hashView && isViewAllowed(hashView)) return hashView;
+  if (isFieldRole()){
+    return isViewAllowed("viewTechnician") ? "viewTechnician" : "viewMap";
+  }
+  return "viewDashboard";
 }
 
 function isViewAllowed(viewId){
@@ -17970,7 +18003,12 @@ async function initAuth(){
   setAuthButtonsDisabled(false);
   window.addEventListener("online", () => syncPendingSites());
   SpecCom.helpers.applyAuthModeFromHash();
-  window.addEventListener("hashchange", () => SpecCom.helpers.applyAuthModeFromHash());
+  window.addEventListener("hashchange", () => {
+    SpecCom.helpers.applyAuthModeFromHash();
+    const hashView = parseViewFromHash();
+    if (!hashView || !state.user || !isViewAllowed(hashView)) return;
+    setActiveView(hashView, { syncHash: false });
+  });
 
   if (window.location.pathname.endsWith("/demo-login")){
     await demoLogin();
@@ -18626,7 +18664,12 @@ function wireUI(){
 
   const projectsBtn = $("btnProjects");
   if (projectsBtn){
-    projectsBtn.addEventListener("click", () => openProjectsModal());
+    projectsBtn.addEventListener("click", () => {
+      if (isMapViewActive() && isViewAllowed("viewDashboard")){
+        setActiveView("viewDashboard");
+      }
+      openProjectsModal();
+    });
   }
   const mapProjectLabelBtn = $("mapProjectLabel");
   if (mapProjectLabelBtn){
@@ -18644,7 +18687,12 @@ function wireUI(){
   }
   const projectsOpenBtn = $("btnOpenProjects");
   if (projectsOpenBtn){
-    projectsOpenBtn.addEventListener("click", () => openProjectsModal());
+    projectsOpenBtn.addEventListener("click", () => {
+      if (isMapViewActive() && isViewAllowed("viewDashboard")){
+        setActiveView("viewDashboard");
+      }
+      openProjectsModal();
+    });
   }
   const projectsCloseBtn = $("btnProjectsClose");
   if (projectsCloseBtn){
@@ -18666,7 +18714,12 @@ function wireUI(){
   }
   const messagesBtn = $("btnMessages");
   if (messagesBtn){
-    messagesBtn.addEventListener("click", () => openMessagesModal());
+    messagesBtn.addEventListener("click", () => {
+      if (isMapViewActive() && isViewAllowed("viewDashboard")){
+        setActiveView("viewDashboard");
+      }
+      openMessagesModal();
+    });
   }
   const messagesCloseBtn = $("btnMessagesClose");
   if (messagesCloseBtn){

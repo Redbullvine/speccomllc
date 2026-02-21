@@ -22,7 +22,7 @@
           <span id="messagesBadge" class="alert-badge" style="display:none;">0</span>
         </button>
         <button id="btnProjects" class="topbar-btn" type="button" data-i18n="projectsNav">Projects</button>
-        <button id="btnMapToggle" class="topbar-btn" type="button" data-i18n="mapToggle" aria-pressed="true">Map</button>
+        <button id="btnMapToggle" class="topbar-btn" type="button" data-i18n="mapToggle" aria-pressed="false">Map</button>
         <button id="btnMenu" class="icon-btn" type="button" aria-label="Places">
           <span class="hamburger">
             <span></span>
@@ -111,7 +111,7 @@
       </aside>
 
       <main class="content">
-        <section id="viewDashboard" class="view">
+        <section id="viewDashboard" class="view active">
           <div class="card job-card">
             <div class="row" style="justify-content:space-between;">
               <div>
@@ -371,7 +371,7 @@
           </div>
         </section>
 
-        <section id="viewMap" class="view active">
+        <section id="viewMap" class="view">
           <div id="mapWorkspace" class="map-workspace">
             <button id="mapSidebarToggle" class="map-menu-btn" type="button" aria-label="Toggle Places" aria-expanded="true">
               <span class="hamburger">
