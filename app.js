@@ -315,6 +315,18 @@ function normalizeRole(role){
   return LEGACY_ROLE_MAP[key] || (ROLE_SET.has(key) ? key : DEFAULT_ROLE);
 }
 
+function isPatrickIdentity(value){
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) return false;
+  return /\bpatrick\b/.test(text);
+}
+
+function resolveProvisionedRoleCode(identity, requestedRole = DEFAULT_ROLE){
+  const normalized = normalizeRole(requestedRole || DEFAULT_ROLE);
+  if (isPatrickIdentity(identity)) return ROLES.SUPPORT;
+  return normalized || DEFAULT_ROLE;
+}
+
 function getRoleCode(member = state.profile){
   if (member?.role_code) return normalizeRole(member.role_code);
   if (member?.role) return normalizeRole(member.role);
@@ -569,9 +581,9 @@ const I18N = {
     alertsFeedTitle: "Alerts feed",
     adminNotesTitle: "Admin notes",
     userManagementTitle: "User management",
-    userManagementSubtitle: "Create/update profile rows for authenticated users. Auth users must already exist in Supabase.",
-    adminUserIdPlaceholder: "Auth user id (UUID)",
-    adminUserEmailPlaceholder: "Email or display name",
+    userManagementSubtitle: "Invite by email and manage profile rows. New users default to User Level 1 unless changed.",
+    adminUserIdPlaceholder: "Auth user id (optional)",
+    adminUserEmailPlaceholder: "Email (required for invites)",
     createProfile: "Create profile",
     settingsTitle: "Settings",
     languageLabel: "Language",
@@ -899,9 +911,9 @@ const I18N = {
     alertsFeedTitle: "Feed de alertas",
     adminNotesTitle: "Notas de admin",
     userManagementTitle: "Gestión de usuarios",
-    userManagementSubtitle: "Crea/actualiza perfiles. Los usuarios deben existir en Supabase.",
-    adminUserIdPlaceholder: "ID de usuario auth (UUID)",
-    adminUserEmailPlaceholder: "Correo o nombre",
+    userManagementSubtitle: "Invita por correo y gestiona perfiles. Los usuarios nuevos inician en User Level 1 salvo cambio.",
+    adminUserIdPlaceholder: "ID de usuario auth (opcional)",
+    adminUserEmailPlaceholder: "Correo (requerido para invitaciones)",
     createProfile: "Crear perfil",
     settingsTitle: "Configuración",
     languageLabel: "Idioma",
@@ -1812,6 +1824,8 @@ function normalizePopupPhotos(items){
       const url = String(item?.url || "").trim();
       if (!url) return null;
       return {
+        id: item?.id || "",
+        createdBy: item?.createdBy || item?.created_by || "",
         url,
         createdAt: item?.createdAt || "",
       };
@@ -1850,6 +1864,8 @@ async function fetchSitePhotosForMapPopup(siteId){
       .filter((row) => toSiteIdKey(row?.site_id) === key)
       .slice(0, 6)
       .map((row) => ({
+        id: row?.id || "",
+        createdBy: row?.created_by || "",
         url: String(row?.previewUrl || row?.media_path || "").trim(),
         createdAt: row?.created_at || "",
       }))
@@ -1857,12 +1873,20 @@ async function fetchSitePhotosForMapPopup(siteId){
     return setCachedSitePhotos(key, rows);
   }
   if (!state.client) return setCachedSitePhotos(key, []);
-  const { data, error } = await state.client
+  let { data, error } = await state.client
     .from("site_media")
-    .select("media_path, created_at")
+    .select("id, media_path, created_by, created_at")
     .eq("site_id", siteId)
     .order("created_at", { ascending: false })
     .limit(6);
+  if (error && isMissingColumnError(error, "created_by")){
+    ({ data, error } = await state.client
+      .from("site_media")
+      .select("id, media_path, created_at")
+      .eq("site_id", siteId)
+      .order("created_at", { ascending: false })
+      .limit(6));
+  }
   if (error){
     debugLog("[map] popup photo fetch failed", error);
     return setCachedSitePhotos(key, []);
@@ -1885,6 +1909,8 @@ async function fetchSitePhotosForMapPopup(siteId){
     }
     if (!url) continue;
     rows.push({
+      id: row?.id || "",
+      createdBy: row?.created_by || "",
       url,
       createdAt: row?.created_at || "",
     });
@@ -4587,15 +4613,24 @@ function buildSiteMarkerPopupHtml(site, {
   const canEditSite = !site?.is_pending;
   const notesText = notesRaw.length > 240 ? `${notesRaw.slice(0, 237)}...` : notesRaw;
   const photos = normalizePopupPhotos(sitePhotos);
+  const canManagePhotos = !site?.is_pending;
   const photosHtml = loadingPhotos
     ? `<div class="scSitePopup-photo-empty">Loading photos...</div>`
     : photos.length
       ? `<div class="scSitePopup-photos">${photos.map((item) => `
           <a class="photo" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">
             <img src="${escapeHtml(item.url)}" alt="Site photo" loading="lazy" />
-          </a>
+          </a>${canManagePhotos && item.id && canDeleteSiteMediaItem(item) ? `
+            <button type="button" class="btn ghost small" data-popup-action="remove-photo" data-popup-photo-id="${escapeHtml(String(item.id))}">Remove</button>
+          ` : ""}
         `).join("")}</div>`
       : `<div class="scSitePopup-photo-empty">No photos yet.</div>`;
+  const photoUploadRow = canManagePhotos ? `
+    <div class="scSitePopup-actions" style="margin-top:8px;">
+      <input type="file" accept="image/*" data-popup-field="photo-file" />
+      <button type="button" class="scSitePopup-action" data-popup-action="upload-photo" data-popup-site-id="${escapeHtml(siteId)}">Upload photo</button>
+    </div>
+  ` : "";
   const total = Math.max(1, Number(pageTotal) || 1);
   const current = Math.max(0, Math.min(total - 1, Number(pageIndex) || 0));
   const pagerHtml = total > 1
@@ -4677,6 +4712,7 @@ function buildSiteMarkerPopupHtml(site, {
       <div class="scSitePopup-edit-hint">${escapeHtml(saveHint)}</div>
       <div class="scSitePopup-photo-head">Photos</div>
       ${photosHtml}
+      ${photoUploadRow}
     </div>
   `;
 }
@@ -5048,6 +5084,78 @@ async function deleteMapPopupSite(siteIdKey){
   const nextKey = remaining[state.map.popupSiteIndex];
   state.map.popupMarker = state.map.markers.get(nextKey) || state.map.popupMarker;
   await renderMapPopupActiveSite({ syncSelection: true });
+}
+
+async function uploadMapPopupSitePhoto(siteIdKey, file){
+  const key = toSiteIdKey(siteIdKey);
+  if (!key || !file){
+    toast("Photo required", "Choose a photo before upload.", "error");
+    return;
+  }
+  const site = getVisibleSiteByIdKey(key);
+  if (!site){
+    toast("Site missing", "This location is no longer available.", "error");
+    return;
+  }
+  const gps = await getCurrentGps();
+  const uploadPath = await uploadSiteMediaForSite(file, site, gps, new Date().toISOString());
+  if (!uploadPath) return;
+  state.map.sitePhotosBySiteId.delete(key);
+  await fetchSitePhotosForMapPopup(site.id);
+  const marker = state.map.markers.get(key) || state.map.popupMarker || null;
+  if (marker){
+    setMapPopupSiteContext(marker, site);
+    await renderMapPopupActiveSite({ syncSelection: false });
+  }
+  if (toSiteIdKey(state.activeSite?.id) === key){
+    await loadSiteMedia(site.id);
+    renderSitePanel();
+  }
+  toast("Photo uploaded", "Photo attached to location.");
+}
+
+async function deleteMapPopupSitePhoto(siteIdKey, photoId){
+  const key = toSiteIdKey(siteIdKey);
+  const mediaId = String(photoId || "").trim();
+  if (!key || !mediaId){
+    toast("Photo missing", "Photo id was not found.", "error");
+    return;
+  }
+  const site = getVisibleSiteByIdKey(key);
+  if (!site){
+    toast("Site missing", "This location is no longer available.", "error");
+    return;
+  }
+  const photos = getCachedSitePhotos(site.id);
+  const photo = photos.find((row) => String(row?.id || "") === mediaId) || null;
+  const canDelete = canDeleteSiteMediaItem(photo || null);
+  if (!canDelete){
+    toast("Not allowed", "Only uploader, ADMIN, SUPPORT, OWNER, or ROOT can delete this photo.", "error");
+    return;
+  }
+  const ok = confirm("Delete this photo?");
+  if (!ok) return;
+  if (!state.client){
+    toast("Delete failed", "Client not ready.", "error");
+    return;
+  }
+  const { error } = await state.client.from("site_media").delete().eq("id", mediaId);
+  if (error){
+    toast("Delete failed", error.message || "Could not delete photo.", "error");
+    return;
+  }
+  state.map.sitePhotosBySiteId.delete(key);
+  await fetchSitePhotosForMapPopup(site.id);
+  const marker = state.map.markers.get(key) || state.map.popupMarker || null;
+  if (marker){
+    setMapPopupSiteContext(marker, site);
+    await renderMapPopupActiveSite({ syncSelection: false });
+  }
+  if (toSiteIdKey(state.activeSite?.id) === key){
+    await loadSiteMedia(site.id);
+    renderSitePanel();
+  }
+  toast("Photo deleted", "Photo removed.");
 }
 
 async function handleSiteMarkerClick(marker, siteIdKey, resolveSite){
@@ -6207,6 +6315,40 @@ function registerMapUiBindings(){
         void deleteMapPopupSite(siteKey)
           .finally(() => {
             deleteBtn.disabled = false;
+          });
+        return;
+      }
+      const uploadBtn = e.target.closest("[data-popup-action='upload-photo']");
+      if (uploadBtn){
+        e.preventDefault();
+        e.stopPropagation();
+        if (uploadBtn.disabled) return;
+        const siteKey = String(uploadBtn.dataset.popupSiteId || popupRoot.dataset.popupSiteId || "").trim();
+        const input = popupRoot.querySelector("[data-popup-field='photo-file']");
+        const file = input?.files?.[0] || null;
+        if (!file){
+          toast("Photo required", "Choose a photo before upload.", "error");
+          return;
+        }
+        uploadBtn.disabled = true;
+        void uploadMapPopupSitePhoto(siteKey, file)
+          .finally(() => {
+            uploadBtn.disabled = false;
+            if (input) input.value = "";
+          });
+        return;
+      }
+      const removePhotoBtn = e.target.closest("[data-popup-action='remove-photo']");
+      if (removePhotoBtn){
+        e.preventDefault();
+        e.stopPropagation();
+        if (removePhotoBtn.disabled) return;
+        const siteKey = String(popupRoot.dataset.popupSiteId || "").trim();
+        const photoId = String(removePhotoBtn.dataset.popupPhotoId || "").trim();
+        removePhotoBtn.disabled = true;
+        void deleteMapPopupSitePhoto(siteKey, photoId)
+          .finally(() => {
+            removePhotoBtn.disabled = false;
           });
       }
     });
@@ -7979,15 +8121,28 @@ SpecCom.helpers.renderMediaViewer = function(){
       : "GPS: unavailable";
   }
   if (actions){
-    actions.style.display = SpecCom.helpers.isRoot() ? "" : "none";
+    const canDelete = canDeleteSiteMediaItem(item);
+    actions.style.display = canDelete ? "" : "none";
   }
 };
 
+function canDeleteSiteMediaItem(item){
+  const roleCode = getRoleCode();
+  if (SpecCom.helpers.isRoot()) return true;
+  if (roleCode === ROLES.ADMIN || roleCode === ROLES.SUPPORT || isOwner()) return true;
+  const uploadedBy = toSiteIdKey(item?.created_by || item?.uploaded_by);
+  const userId = toSiteIdKey(state.user?.id);
+  return Boolean(uploadedBy && userId && uploadedBy === userId);
+}
+
 SpecCom.helpers.deleteActiveMedia = async function(){
-  if (!SpecCom.helpers.isRoot()) return;
   const items = state.siteMedia || [];
   const item = items[state.mediaViewer.index];
   if (!item) return;
+  if (!canDeleteSiteMediaItem(item)){
+    toast("Not allowed", "Only uploader, ADMIN, SUPPORT, OWNER, or ROOT can delete this photo.", "error");
+    return;
+  }
   const ok = confirm("Delete this photo? This cannot be undone.");
   if (!ok) return;
   if (!state.client){
@@ -11377,18 +11532,35 @@ async function extractExifGps(blob){
 
 async function uploadSiteMediaForSite(file, site, gps, capturedAt){
   if (!site || !file) return null;
-  const uploadPath = await uploadProofPhoto(file, site.id, "site-media");
+  const uploadPath = await uploadProofPhoto(file, site.id, "site-media", {
+    orgId: state.profile?.org_id || state.activeProject?.org_id || null,
+    projectId: site.project_id || state.activeProject?.id || null,
+    locationId: site.id,
+  });
   if (!uploadPath) return null;
-  const { error } = await state.client
+  let { error } = await state.client
     .from("site_media")
     .insert({
       site_id: site.id,
       media_path: uploadPath,
+      created_by: state.user?.id || null,
       gps_lat: gps?.lat ?? null,
       gps_lng: gps?.lng ?? null,
       gps_accuracy_m: gps?.accuracy ?? null,
       created_at: capturedAt || new Date().toISOString(),
     });
+  if (error && isMissingColumnError(error, "created_by")){
+    ({ error } = await state.client
+      .from("site_media")
+      .insert({
+        site_id: site.id,
+        media_path: uploadPath,
+        gps_lat: gps?.lat ?? null,
+        gps_lng: gps?.lng ?? null,
+        gps_accuracy_m: gps?.accuracy ?? null,
+        created_at: capturedAt || new Date().toISOString(),
+      }));
+  }
   if (error){
     toast("Media save error", error.message);
     return null;
@@ -12490,7 +12662,8 @@ async function loadMessageRecipients(){
     return;
   }
   state.messageIdentityMap.set(state.user.id, t("messageSenderYou"));
-  if (!state.profile?.org_id && !SpecCom.helpers.isRoot()){
+  const orgId = getMessageOrgId();
+  if (!SpecCom.helpers.isRoot() && !orgId){
     renderMessageRecipients();
     return;
   }
@@ -12500,7 +12673,7 @@ async function loadMessageRecipients(){
     .neq("id", state.user.id)
     .limit(500);
   if (!SpecCom.helpers.isRoot()){
-    query = query.eq("org_id", state.profile.org_id);
+    query = query.eq("org_id", orgId);
   }
   const { data, error } = await query;
   if (error){
@@ -12542,6 +12715,11 @@ function getLastMessageReadAt(filter){
 
 function setLastMessageReadAt(filter, iso){
   safeLocalStorageSet(getMessageReadKey(filter), iso);
+}
+
+function getMessageOrgId(){
+  if (state.profile?.org_id) return state.profile.org_id;
+  return null;
 }
 
 function countUnreadMessages(){
@@ -12596,7 +12774,8 @@ async function loadMessages(){
     updateMessagesBadge();
     return;
   }
-  if (!SpecCom.helpers.isRoot() && !state.profile?.org_id){
+  const orgId = getMessageOrgId();
+  if (!SpecCom.helpers.isRoot() && !orgId){
     state.messages = [];
     updateMessagesBadge();
     return;
@@ -12607,13 +12786,13 @@ async function loadMessages(){
     .order("created_at", { ascending: false })
     .limit(200);
   if (state.messageFilter === "board"){
-    if (state.profile?.org_id && !SpecCom.helpers.isRoot()){
-      query = query.eq("org_id", state.profile.org_id);
+    if (!SpecCom.helpers.isRoot()){
+      query = query.eq("org_id", orgId);
     }
     query = query.eq("channel", "BOARD");
   } else {
-    if (state.profile?.org_id && !SpecCom.helpers.isRoot()){
-      query = query.eq("org_id", state.profile.org_id);
+    if (!SpecCom.helpers.isRoot()){
+      query = query.eq("org_id", orgId);
     }
     query = query.eq("channel", "DM");
     query = query.or(`sender_id.eq.${state.user.id},recipient_id.eq.${state.user.id}`);
@@ -12802,16 +12981,6 @@ async function sendMessage(){
     toast("Recipient required", "Select a recipient for direct message.");
     return;
   }
-  const roleCode = getRoleCode();
-  const canPostBoard = SpecCom.helpers.isRoot()
-    || roleCode === ROLES.OWNER
-    || roleCode === ROLES.ADMIN
-    || roleCode === ROLES.PROJECT_MANAGER
-    || roleCode === ROLES.SUPPORT;
-  if (mode === "board" && !canPostBoard){
-    toast("Not allowed", "Only Owner/Admin/PM/Support can post to Main Board.");
-    return;
-  }
   if (isDemo){
     const row = {
       id: `demo-message-${Date.now()}`,
@@ -12834,12 +13003,13 @@ async function sendMessage(){
     toast("Messages unavailable", "Sign in to send messages.");
     return;
   }
-  if (!SpecCom.helpers.isRoot() && !state.profile?.org_id){
+  const orgId = getMessageOrgId();
+  if (!SpecCom.helpers.isRoot() && !orgId){
     toast("Messages unavailable", "Your profile is missing an organization.");
     return;
   }
   const payload = {
-    org_id: state.profile?.org_id || null,
+    org_id: orgId,
     channel: mode === "direct" ? "DM" : "BOARD",
     sender_id: state.user.id,
     recipient_id: mode === "direct" ? recipientId : null,
@@ -13315,10 +13485,23 @@ async function createAdminProfile(){
   }
   const userId = $("adminUserId")?.value.trim();
   const email = $("adminUserEmail")?.value.trim();
-  const nextRole = $("adminUserRole")?.value || DEFAULT_ROLE;
+  const roleInput = $("adminUserRole");
+  let nextRole = resolveProvisionedRoleCode(email, roleInput?.value || DEFAULT_ROLE);
+  if (isPatrickIdentity(email) && roleInput?.value !== ROLES.SUPPORT){
+    if (roleInput) roleInput.value = ROLES.SUPPORT;
+    toast("Role adjusted", "Patrick is mapped to SUPPORT by default.");
+  }
   const nextRoleCode = normalizeRole(nextRole);
-  if (!userId){
-    toast("User id required", "Enter the auth user id (UUID).");
+  let targetUserId = userId;
+  if (!targetUserId && email){
+    targetUserId = await resolveUserIdByIdentifier(email);
+  }
+  if (!targetUserId){
+    if (email && email.includes("@")){
+      await inviteAdminUserAccount();
+      return;
+    }
+    toast("User id required", "Enter the auth user id, or provide email to invite.");
     return;
   }
   if (isDemo){
@@ -13327,12 +13510,13 @@ async function createAdminProfile(){
   }
   const { error } = await state.client
     .from("profiles")
-    .insert({
-      id: userId,
+    .upsert({
+      id: targetUserId,
       display_name: email || null,
       role: nextRole,
       role_code: nextRoleCode,
-    });
+      org_id: state.profile?.org_id || null,
+    }, { onConflict: "id" });
   if (error){
     toast("Create failed", error.message);
     return;
@@ -13341,6 +13525,71 @@ async function createAdminProfile(){
   if ($("adminUserEmail")) $("adminUserEmail").value = "";
   await loadAdminProfiles();
   toast("Profile created", "User profile created.");
+}
+
+async function inviteAdminUserAccount(){
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
+  if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
+    toast("Not allowed", "Admin role required.");
+    return;
+  }
+  if (!state.client){
+    toast("Invite failed", "Client not ready.");
+    return;
+  }
+  const email = String($("adminUserEmail")?.value || "").trim().toLowerCase();
+  if (!email || !email.includes("@")){
+    toast("Email required", "Enter a valid email in Email or display name.");
+    return;
+  }
+  let roleCode = resolveProvisionedRoleCode(email, $("adminUserRole")?.value || DEFAULT_ROLE);
+  if (isPatrickIdentity(email) && $("adminUserRole")?.value !== ROLES.SUPPORT){
+    if ($("adminUserRole")) $("adminUserRole").value = ROLES.SUPPORT;
+    toast("Role adjusted", "Patrick is mapped to SUPPORT by default.");
+  }
+
+  const { error: inviteError } = await state.client.auth.signInWithOtp({
+    email,
+    options: { shouldCreateUser: true },
+  });
+  if (inviteError){
+    toast("Invite failed", inviteError.message || "Could not send invite.");
+    return;
+  }
+  const { error: inviteRecordError } = await state.client.rpc("fn_upsert_profile_invite", {
+    p_email: email,
+    p_role_code: roleCode,
+    p_display_name: email,
+    p_org_id: state.profile?.org_id || null,
+  });
+  if (inviteRecordError){
+    toast("Invite warning", `Invite sent, but profile invite record failed: ${inviteRecordError.message}`);
+  }
+
+  const resolvedUserId = await resolveUserIdByIdentifier(email);
+  if (!resolvedUserId){
+    toast("Invite sent", "Account invite sent. Profile/org will be applied on first sign-in.");
+    return;
+  }
+  const payload = {
+    id: resolvedUserId,
+    display_name: email,
+    role: roleCode,
+    role_code: roleCode,
+  };
+  const { error: upsertError } = await state.client
+    .from("profiles")
+    .upsert(payload, { onConflict: "id" });
+  if (upsertError){
+    toast("Invite sent", `Invite delivered. Profile upsert failed: ${upsertError.message}`);
+    return;
+  }
+  if ($("adminUserId")) $("adminUserId").value = resolvedUserId;
+  await loadAdminProfiles();
+  toast("Invite sent", `Account invite sent and profile set to ${formatRoleLabel(roleCode)}.`);
 }
 
 async function updateAdminProfile(userId){
@@ -14332,16 +14581,25 @@ async function loadSiteMedia(siteId){
   if (isDemo){
     state.siteMedia = (state.demo.siteMedia || []).filter((row) => row.site_id === siteId);
     setCachedSitePhotos(siteId, state.siteMedia.map((row) => ({
+      id: row?.id || "",
+      createdBy: row?.created_by || "",
       url: String(row?.previewUrl || row?.media_path || "").trim(),
       createdAt: row?.created_at || "",
     })).filter((row) => row.url));
     return;
   }
-  const { data, error } = await state.client
+  let { data, error } = await state.client
     .from("site_media")
-    .select("id, site_id, media_path, gps_lat, gps_lng, gps_accuracy_m, created_at")
+    .select("id, site_id, media_path, created_by, gps_lat, gps_lng, gps_accuracy_m, created_at")
     .eq("site_id", siteId)
     .order("created_at", { ascending: false });
+  if (error && isMissingColumnError(error, "created_by")){
+    ({ data, error } = await state.client
+      .from("site_media")
+      .select("id, site_id, media_path, gps_lat, gps_lng, gps_accuracy_m, created_at")
+      .eq("site_id", siteId)
+      .order("created_at", { ascending: false }));
+  }
   if (error){
     toast("Media load error", error.message);
     state.siteMedia = [];
@@ -14358,6 +14616,8 @@ async function loadSiteMedia(siteId){
   }
   state.siteMedia = withUrls;
   setCachedSitePhotos(siteId, withUrls.map((row) => ({
+    id: row?.id || "",
+    createdBy: row?.created_by || "",
     url: String(row?.previewUrl || "").trim(),
     createdAt: row?.created_at || "",
   })).filter((row) => row.url));
@@ -14549,6 +14809,7 @@ async function addSiteMedia(file){
       id: `demo-media-${Date.now()}`,
       site_id: site.id,
       media_path: "demo-only",
+      created_by: state.user?.id || null,
       created_at: capturedAt,
       gps_lat: finalGps?.lat ?? null,
       gps_lng: finalGps?.lng ?? null,
@@ -14559,18 +14820,35 @@ async function addSiteMedia(file){
     renderSitePanel();
     return;
   }
-  const uploadPath = await uploadProofPhoto(file, site.id, "site-media");
+  const uploadPath = await uploadProofPhoto(file, site.id, "site-media", {
+    orgId: state.profile?.org_id || state.activeProject?.org_id || null,
+    projectId: site.project_id || state.activeProject?.id || null,
+    locationId: site.id,
+  });
   if (!uploadPath) return;
-  const { error } = await state.client
+  let { error } = await state.client
     .from("site_media")
     .insert({
       site_id: site.id,
       media_path: uploadPath,
+      created_by: state.user?.id || null,
       gps_lat: finalGps?.lat ?? null,
       gps_lng: finalGps?.lng ?? null,
       gps_accuracy_m: finalGps?.accuracy ?? null,
       created_at: capturedAt,
     });
+  if (error && isMissingColumnError(error, "created_by")){
+    ({ error } = await state.client
+      .from("site_media")
+      .insert({
+        site_id: site.id,
+        media_path: uploadPath,
+        gps_lat: finalGps?.lat ?? null,
+        gps_lng: finalGps?.lng ?? null,
+        gps_accuracy_m: finalGps?.accuracy ?? null,
+        created_at: capturedAt,
+      }));
+  }
   if (error){
     toast("Media save error", error.message);
     return;
@@ -16589,11 +16867,17 @@ async function handleBackfillPhotoUpload(photoType, file){
   renderProofChecklist();
 }
 
-async function uploadProofPhoto(file, nodeId, prefix){
+async function uploadProofPhoto(file, nodeId, prefix, ctx = {}){
   if (!state.client) return null;
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const folder = `${prefix || "photos"}/node-${nodeId}`;
-  const path = `${folder}/${Date.now()}-${safeName}`;
+  const orgSegment = String(ctx?.orgId || state.profile?.org_id || "org-unknown");
+  const projectSegment = String(ctx?.projectId || state.activeProject?.id || "project-unknown");
+  const locationSegment = String(ctx?.locationId || nodeId || "location-unknown");
+  const fileId = (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function")
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+  const folder = `${orgSegment}/${projectSegment}/${locationSegment}/${prefix || "photos"}`;
+  const path = `${folder}/${fileId}-${safeName}`;
   const { data, error } = await state.client
     .storage
     .from("proof-photos")
@@ -18661,6 +18945,33 @@ async function loadProfile(client, userId){
     state.profile = null;
     return;
   }
+  if (!data){
+    const email = String(state.user?.email || "").trim().toLowerCase();
+    const fallbackName = email ? email.split("@")[0] : "";
+    await client
+      .from("profiles")
+      .upsert({
+        id: userId,
+        display_name: fallbackName || null,
+        role: DEFAULT_ROLE,
+        role_code: DEFAULT_ROLE,
+      }, { onConflict: "id" });
+    ({ data } = await client
+      .from("profiles")
+      .select("role, role_code, display_name, preferred_language, is_demo, current_project_id, org_id")
+      .eq("id", userId)
+      .maybeSingle());
+  }
+  if (!data?.org_id){
+    const { error: claimError } = await client.rpc("fn_claim_profile_invite");
+    if (!claimError){
+      ({ data } = await client
+        .from("profiles")
+        .select("role, role_code, display_name, preferred_language, is_demo, current_project_id, org_id")
+        .eq("id", userId)
+        .maybeSingle());
+    }
+  }
   state.profile = data || null;
   if (state.profile){
     state.profile.role = normalizeRole(state.profile.role);
@@ -19144,6 +19455,10 @@ function wireUI(){
   const btnAdminCreate = $("btnAdminCreateUser");
   if (btnAdminCreate){
     btnAdminCreate.addEventListener("click", () => createAdminProfile());
+  }
+  const btnAdminInvite = $("btnAdminInviteUser");
+  if (btnAdminInvite){
+    btnAdminInvite.addEventListener("click", () => inviteAdminUserAccount());
   }
   const adminInventoryTable = $("adminInventoryTable");
   if (adminInventoryTable){

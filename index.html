@@ -472,7 +472,7 @@
           </div>
           <div class="card" style="margin-top:12px;">
             <h2 data-i18n="userManagementTitle">User management</h2>
-            <div class="muted small" data-i18n="userManagementSubtitle">Create/update profile rows for authenticated users. Auth users must already exist in Supabase.</div>
+            <div class="muted small" data-i18n="userManagementSubtitle">Invite by email and manage profile rows. New users default to User Level 1 until explicitly changed.</div>
             <div id="adminBuildGate" class="note warning" style="display:none; margin-top:10px;">
               <div style="font-weight:900;">Build mode disabled</div>
               <div class="muted small">Enable BUILD_MODE to manage user profiles.</div>
@@ -482,13 +482,14 @@
                 <input id="adminUserId" class="input" placeholder="Auth user id (UUID)" data-i18n-placeholder="adminUserIdPlaceholder" />
                 <input id="adminUserEmail" class="input" placeholder="Email or display name" data-i18n-placeholder="adminUserEmailPlaceholder" />
                 <select id="adminUserRole" class="input" style="min-width:180px;">
-                  <option value="OWNER">Owner</option>
-                  <option value="ADMIN">Admin</option>
-                  <option value="PROJECT_MANAGER">Project Manager</option>
-                  <option value="USER_LEVEL_1">User Level 1</option>
+                  <option value="USER_LEVEL_1" selected>User Level 1</option>
                   <option value="USER_LEVEL_2">User Level 2</option>
+                  <option value="PROJECT_MANAGER">Project Manager</option>
+                  <option value="ADMIN">Admin</option>
+                  <option value="OWNER">Owner</option>
                   <option value="SUPPORT">Support</option>
                 </select>
+                <button id="btnAdminInviteUser" class="btn ghost" type="button">Invite account</button>
                 <button id="btnAdminCreateUser" class="btn secondary" data-action="adminCreateUser" data-i18n="createProfile">Create profile</button>
               </div>
               <div class="hr"></div>
