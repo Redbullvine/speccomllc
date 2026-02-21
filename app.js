@@ -9793,10 +9793,16 @@ async function importRuidosoPackageCsv(file){
   if (!hasCodesColumns && !hasPhotoColumns){
     throw new Error("CSV must include codes columns (job_map/enclosure/codes) or photo columns (loc/photo_url).");
   }
+  const detectedType = hasCodesColumns && hasPhotoColumns
+    ? "combined"
+    : (hasPhotoColumns ? "photos" : "codes");
 
   const codeByKey = new Map();
   const photosByKey = new Map();
   const enclosureKeyCounts = new Map();
+  let processedRows = 0;
+  let codeRows = 0;
+  let photoRows = 0;
   const upsertMapSet = (map, key, values) => {
     if (!key || !values?.length) return;
     const next = new Set(map.get(key) || []);
@@ -9812,6 +9818,7 @@ async function importRuidosoPackageCsv(file){
   };
 
   rows.slice(1).forEach((row) => {
+    processedRows += 1;
     const rawLoc = locIdx >= 0 ? row[locIdx] : "";
     const parsedLoc = parseRuidosoPhotoLoc(rawLoc || "");
     const jobMap = normalizeRuidosoToken(
@@ -9824,6 +9831,7 @@ async function importRuidosoPackageCsv(file){
 
     if (hasCodesColumns && codesIdx >= 0){
       const codes = parseRuidosoCodesRaw(row[codesIdx] || "");
+      if (codes.length) codeRows += 1;
       if (jobMap){
         upsertMapSet(codeByKey, `${jobMap}|${enclosure}`, codes);
         bumpEnclosureCount(`*|${enclosure}`);
@@ -9834,6 +9842,7 @@ async function importRuidosoPackageCsv(file){
     if (hasPhotoColumns && urlIdx >= 0){
       const url = String(row[urlIdx] || "").trim();
       if (!/^https?:\/\//i.test(url)) return;
+      photoRows += 1;
       if (jobMap){
         upsertMapSet(photosByKey, `${jobMap}|${enclosure}`, [url]);
         bumpEnclosureCount(`*|${enclosure}`);
@@ -9866,7 +9875,13 @@ async function importRuidosoPackageCsv(file){
   if (selectedId && state.map.kmzFeatureRows.has(selectedId)){
     void openKmzFeaturePopup(selectedId, { focusMap: false });
   }
-  return result;
+  return {
+    ...result,
+    detectedType,
+    processedRows,
+    codeRows,
+    photoRows,
+  };
 }
 
 function findHeaderIndex(headers, names){
@@ -10063,9 +10078,12 @@ async function handleLocationImport(file){
       return;
     } else if (name.endsWith(".csv")){
       const result = await importRuidosoPackageCsv(file);
+      const typeLabel = result.detectedType === "photos"
+        ? "Photo CSV"
+        : (result.detectedType === "codes" ? "Codes CSV" : "Combined CSV");
       toast(
-        "CSV applied",
-        `Matched ${result.matchedRows} points. Added codes to ${result.rowsWithCodes} and photos to ${result.rowsWithPhotos}.`
+        `${typeLabel} applied`,
+        `Rows ${result.processedRows}. Matched ${result.matchedRows} points. Added codes to ${result.rowsWithCodes} and photos to ${result.rowsWithPhotos}.`
       );
       return;
     } else {
