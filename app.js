@@ -10495,18 +10495,23 @@ function closeMessagesModal(){
 }
 
 function openMenuModal(){
-  if (!isMapViewActive()){
-    setActiveView("viewMap");
-  }
-  if (state.map.drawerTab !== "data" && state.map.drawerTab !== "legend"){
-    setDrawerTab("data", { open: true });
-  }
-  setDrawerOpen(true);
-  renderMapLayerPanel();
+  const modal = $("menuModal");
+  if (!modal) return;
+  const isRoot = SpecCom.helpers.isRoot();
+  const canAdmin = isPrivilegedRole();
+  document.querySelectorAll("#menuModal .menu-root-only").forEach((el) => {
+    if (el instanceof HTMLElement) el.style.display = isRoot ? "" : "none";
+  });
+  document.querySelectorAll("#menuModal .menu-admin-only").forEach((el) => {
+    if (el instanceof HTMLElement) el.style.display = canAdmin ? "" : "none";
+  });
+  modal.style.display = "";
 }
 
 function closeMenuModal(){
-  setDrawerOpen(false);
+  const modal = $("menuModal");
+  if (!modal) return;
+  modal.style.display = "none";
 }
 
 function openPriceSheetModal(){
@@ -18781,11 +18786,15 @@ function wireUI(){
     }
   };
   if (menuBtn){
-    menuBtn.addEventListener("click", togglePlacesDrawer);
+    menuBtn.addEventListener("click", () => openMenuModal());
   }
   const mapSidebarToggleBtn = $("mapSidebarToggle");
   if (mapSidebarToggleBtn){
     mapSidebarToggleBtn.addEventListener("click", togglePlacesDrawer);
+  }
+  const menuCloseBtn = $("btnMenuClose");
+  if (menuCloseBtn){
+    menuCloseBtn.addEventListener("click", () => closeMenuModal());
   }
   const grantAccessBtn = $("btnGrantProjectAccess");
   if (grantAccessBtn){

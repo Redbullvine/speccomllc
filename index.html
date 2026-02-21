@@ -24,7 +24,7 @@
         </button>
         <button id="btnProjects" class="topbar-btn" type="button" data-i18n="projectsNav">Projects</button>
         <button id="btnMapToggle" class="topbar-btn" type="button" data-i18n="mapToggle" aria-pressed="false">Map</button>
-        <button id="btnMenu" class="icon-btn" type="button" aria-label="Places">
+        <button id="btnMenu" class="icon-btn" type="button" aria-label="Menu">
           <span class="hamburger">
             <span></span>
             <span></span>
@@ -662,6 +662,30 @@
           <div class="row" style="justify-content:flex-end;">
             <button id="btnSendMessage" class="btn" type="button" data-i18n="sendMessage">Send</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="menuModal" class="modal" style="display:none;">
+      <div class="card modal-card" style="max-width:420px;">
+        <div class="modal-header">
+          <h2 data-i18n="menuTitle">Menu</h2>
+          <button id="btnMenuClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
+        </div>
+        <div class="menu-section">
+          <div class="muted small menu-title">Navigate</div>
+          <button class="menu-link" type="button" data-view="viewDashboard">Home</button>
+          <button class="menu-link" type="button" data-view="viewMap">Map Workspace</button>
+          <button class="menu-link" type="button" data-view="viewAdmin">Admin Panel</button>
+          <button class="menu-link" type="button" data-view="viewInvoices">Invoicing</button>
+        </div>
+        <div class="menu-section">
+          <div class="muted small menu-title">Admin Actions</div>
+          <button id="btnGrantProjectAccess" class="menu-link menu-root-only" type="button">Grant Project Access</button>
+          <button id="btnImportPriceSheet" class="menu-link menu-root-only" type="button">Import Price Sheet</button>
+          <button id="btnCreateProjectFromStaking" class="menu-link menu-root-only" type="button">Create Project from Staking</button>
+          <button id="btnImportTestResults" class="menu-link menu-root-only" type="button">Import Test Results</button>
+          <button id="btnInvoiceAgent" class="menu-link menu-admin-only" type="button">Invoice Agent</button>
         </div>
       </div>
     </div>
