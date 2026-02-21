@@ -3518,11 +3518,12 @@ function parseKmlText(kmlText){
         const value = node.textContent?.trim();
         if (key && value) row[key] = value;
       });
+      row.__display_name = getKmzPreferredLocationName(row) || placemarkName;
       rows.push(row);
       parentNode.children.push({
         id: `kmz-leaf-${row.__feature_id}`,
         type: "leaf",
-        label: placemarkName,
+        label: row.__display_name,
         featureId: row.__feature_id,
       });
       featureSeq += 1;
@@ -5118,8 +5119,8 @@ function buildKmzFeatureFromRow(row, groupName = "KMZ Import"){
     properties: {
       id: row?.__feature_id || row?.id || row?.__rowNumber || "",
       type: "KMZ",
-      name: row?.placemark_name || row?.location_name || "KMZ Point",
-      location_name: row?.placemark_name || row?.location_name || "",
+      name: getKmzPreferredLocationName(row) || "KMZ Point",
+      location_name: getKmzPreferredLocationName(row) || "",
       notes: row?.notes || "",
       gps_lat: resolvedLat,
       gps_lng: resolvedLng,
@@ -5589,6 +5590,12 @@ function syncMapViewBasemapControls(){
       input.checked = input.value === basemap;
     }
   });
+  document.querySelectorAll("[data-map-basemap-quick]").forEach((btn) => {
+    if (!(btn instanceof HTMLButtonElement)) return;
+    const isActive = String(btn.dataset.mapBasemapQuick || "") === basemap;
+    btn.classList.toggle("is-active", isActive);
+    btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
 }
 
 function renderMapViewOverlayControls(){
@@ -6006,6 +6013,12 @@ function registerMapUiBindings(){
       handleMapViewMenuChange(event.target);
     });
   }
+  document.querySelectorAll("[data-map-basemap-quick]").forEach((btn) => {
+    if (!(btn instanceof HTMLButtonElement)) return;
+    btn.addEventListener("click", () => {
+      setMapBasemap(String(btn.dataset.mapBasemapQuick || "street"));
+    });
+  });
   document.addEventListener("click", (event) => {
     closeMapViewDropdownIfOutside(event.target);
   });
@@ -6307,6 +6320,8 @@ function normalizePopupRowKey(value){
 
 function getKmzPreferredLocationName(row){
   const candidates = [
+    row?.ruidoso_network_point_name,
+    row?.ruidosonetworkpointname,
     row?.ruidosonetworkname,
     row?.ruidoso_network_name,
     row?.networkname,
@@ -6319,6 +6334,40 @@ function getKmzPreferredLocationName(row){
     if (value) return value;
   }
   return "";
+}
+
+function getKmzBillingCodes(row){
+  if (Array.isArray(row?.billing_codes)){
+    return Array.from(new Set(
+      row.billing_codes.map((code) => String(code || "").trim()).filter(Boolean)
+    ));
+  }
+  return buildBillingCodesFromRow(row || {});
+}
+
+function getKmzPhotoUrls(row){
+  if (Array.isArray(row?.photo_urls)){
+    return Array.from(new Set(
+      row.photo_urls
+        .map((url) => String(url || "").trim())
+        .filter((url) => /^https?:\/\//i.test(url))
+    ));
+  }
+  return buildPhotoUrlsFromRow(row || {});
+}
+
+function appendKmzSupplementalRows(rows, row){
+  const list = Array.isArray(rows) ? rows.slice() : [];
+  const existingKeys = new Set(list.map((entry) => normalizePopupRowKey(entry?.key)));
+  const billingCodes = getKmzBillingCodes(row);
+  if (billingCodes.length && !existingKeys.has("billing codes")){
+    list.push({ key: "Billing Codes", value: billingCodes.join(", ") });
+  }
+  const photoUrls = getKmzPhotoUrls(row);
+  if (photoUrls.length && !existingKeys.has("photo urls")){
+    list.push({ key: "Photo URLs", value: photoUrls.join(" | ") });
+  }
+  return list;
 }
 
 function applyKmzPopupLocationOverride(rows, locationName){
@@ -6400,12 +6449,15 @@ function buildKmzFallbackAttributeRows(row){
 
 function getKmzPopupContentModel(row){
   const preferredLocation = getKmzPreferredLocationName(row);
-  const descRows = applyKmzPopupLocationOverride(
+  const descRows = appendKmzSupplementalRows(applyKmzPopupLocationOverride(
     parseKmzDescriptionRows(row?.raw_description_html || ""),
     preferredLocation
-  );
+  ), row);
   if (descRows.length){
-    const trimmedRows = isKmzPathFeatureRow(row) ? trimRowsUntilKey(descRows, "Path Name") : descRows;
+    const trimmedRows = appendKmzSupplementalRows(
+      isKmzPathFeatureRow(row) ? trimRowsUntilKey(descRows, "Path Name") : descRows,
+      row
+    );
     if (trimmedRows.length){
       return { kind: "table", rows: trimmedRows };
     }
@@ -6719,7 +6771,7 @@ function buildFallbackKmzTree(rows){
     parent.children.push({
       id: `kmz-leaf-${featureId}`,
       type: "leaf",
-      label: row?.placemark_name || row?.location_name || `Placemark ${idx + 1}`,
+      label: getKmzPreferredLocationName(row) || `Placemark ${idx + 1}`,
       featureId,
     });
   });
@@ -10013,10 +10065,15 @@ function renderProjects(){
     }
     setText("jobTitle", state.activeProject.job_number ? `Job ${state.activeProject.job_number}` : "Job -");
     setText("jobSubtitle", state.activeProject.name || "Project");
+    const mapProjectLabel = state.activeProject.location
+      ? `${state.activeProject.name || "Project"} - ${state.activeProject.location}`
+      : (state.activeProject.name || "Project");
+    setText("mapProjectLabel", mapProjectLabel.toUpperCase());
   } else if (meta){
     meta.textContent = "";
     setText("jobTitle", "Job -");
     setText("jobSubtitle", "Project");
+    setText("mapProjectLabel", "SELECT PROJECT");
   }
   renderProjectInfo();
   renderProjectsList();
@@ -18324,6 +18381,10 @@ function wireUI(){
   const projectsBtn = $("btnProjects");
   if (projectsBtn){
     projectsBtn.addEventListener("click", () => openProjectsModal());
+  }
+  const mapProjectLabelBtn = $("mapProjectLabel");
+  if (mapProjectLabelBtn){
+    mapProjectLabelBtn.addEventListener("click", () => openProjectsModal());
   }
   const mapToggleBtn = $("btnMapToggle");
   if (mapToggleBtn){

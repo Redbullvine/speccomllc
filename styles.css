@@ -2606,6 +2606,50 @@ body.map-mode .gis-sidebar{
   transform:translateX(0);
   transition:transform .18s ease, opacity .18s ease;
 }
+body.map-mode .wired-sidebar-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  padding:8px 10px 4px;
+}
+body.map-mode .wired-logo-lockup{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+body.map-mode .wired-logo-mark{
+  width:24px;
+  height:24px;
+  border:3px solid #22d3ee;
+  border-top-left-radius:16px;
+  border-top-right-radius:10px;
+  border-bottom-left-radius:10px;
+  border-bottom-right-radius:16px;
+  border-right-color:transparent;
+  transform:rotate(-26deg);
+}
+body.map-mode .wired-logo-text{
+  font-size:26px;
+  font-weight:700;
+  letter-spacing:0.03em;
+  color:#334155;
+  text-transform:uppercase;
+}
+body.map-mode .wired-project-pill{
+  max-width:54%;
+  border:none;
+  background:transparent;
+  color:#475569;
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:0.05em;
+  text-transform:uppercase;
+  text-align:right;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
 body.map-mode .right-drawer,
 body.map-mode .gis-drawer{
   max-height:calc(100vh - 88px);
@@ -2709,6 +2753,36 @@ body.map-mode .map-view-floating{
   box-shadow:0 14px 30px rgba(15,23,42,.2);
   padding:8px;
   gap:4px;
+}
+body.map-mode .map-basemap-switch{
+  position:absolute;
+  top:74px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:740;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  border-radius:999px;
+  border:1px solid rgba(15,23,42,.14);
+  background:rgba(245,247,250,.98);
+  box-shadow:0 14px 30px rgba(15,23,42,.2);
+  padding:6px;
+}
+body.map-mode .map-basemap-chip{
+  border:none;
+  background:transparent;
+  color:#6b7280;
+  font-size:14px;
+  font-weight:600;
+  border-radius:999px;
+  padding:6px 14px;
+  cursor:pointer;
+}
+body.map-mode .map-basemap-chip.is-active{
+  background:#fff;
+  color:#111827;
+  box-shadow:0 2px 6px rgba(15,23,42,.14);
 }
 body.map-mode .map-view-floating .site-panel-title{
   font-size:24px;
@@ -2881,6 +2955,11 @@ body.map-mode .map-canvas .leaflet-control-zoom a{
     top:54px;
     min-width:162px;
     max-width:min(170px, calc(100vw - 20px));
+  }
+  body.map-mode .map-basemap-switch{
+    top:10px;
+    left:62%;
+    transform:translateX(-50%);
   }
   body.map-mode .map-canvas .leaflet-top.leaflet-left{
     bottom:12px;

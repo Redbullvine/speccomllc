@@ -75,6 +75,13 @@
     <div id="viewApp" class="app-shell" style="display:none;">
       <aside id="leftControlRail" class="sidebar gis-sidebar">
         <aside id="rightDrawer" class="right-drawer gis-drawer">
+          <div class="wired-sidebar-top">
+            <div class="wired-logo-lockup">
+              <span class="wired-logo-mark" aria-hidden="true"></span>
+              <span class="wired-logo-text">Wired</span>
+            </div>
+            <button id="mapProjectLabel" class="wired-project-pill" type="button">Select project</button>
+          </div>
           <div class="sidebar-header gis-header">
             <div class="sidebar-title">Places</div>
             <div class="sidebar-header-actions">
@@ -378,6 +385,10 @@
               </span>
             </button>
             <main id="mapCanvas" class="map-canvas">
+              <div id="mapBasemapSwitch" class="map-basemap-switch" role="group" aria-label="Basemap">
+                <button type="button" class="map-basemap-chip is-active" data-map-basemap-quick="street">Map</button>
+                <button type="button" class="map-basemap-chip" data-map-basemap-quick="satellite">Satellite</button>
+              </div>
               <div id="mapViewFloating" class="map-view-floating">
                 <div class="site-panel-title">Layers</div>
                 <div id="mapViewDropdown" class="map-view-dropdown">
