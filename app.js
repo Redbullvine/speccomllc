@@ -6305,6 +6305,38 @@ function normalizePopupRowKey(value){
   return String(value || "").trim().toLowerCase();
 }
 
+function getKmzPreferredLocationName(row){
+  const candidates = [
+    row?.ruidosonetworkname,
+    row?.ruidoso_network_name,
+    row?.networkname,
+    row?.network_name,
+    row?.placemark_name,
+    row?.location_name,
+  ];
+  for (const candidate of candidates){
+    const value = String(candidate || "").trim();
+    if (value) return value;
+  }
+  return "";
+}
+
+function applyKmzPopupLocationOverride(rows, locationName){
+  const list = Array.isArray(rows) ? rows.slice() : [];
+  const preferred = String(locationName || "").trim();
+  if (!preferred || !list.length) return list;
+  const locationIndex = list.findIndex((entry) => {
+    const key = normalizePopupRowKey(entry?.key);
+    return key === "location" || key === "location / name" || key === "location/name";
+  });
+  if (locationIndex >= 0){
+    const existing = list[locationIndex] || {};
+    list[locationIndex] = { ...existing, value: preferred };
+    return list;
+  }
+  return [{ key: "Location", value: preferred }, ...list];
+}
+
 function isKmzPathFeatureRow(row){
   const name = String(row?.placemark_name || row?.location_name || "").trim();
   if (/^ruidosopath/i.test(name)) return true;
@@ -6329,8 +6361,9 @@ function trimRowsUntilKey(rows, keyName){
 
 function buildKmzFallbackAttributeRows(row){
   const center = getGeometryCenter(row?.geometry || null);
+  const preferredLocation = getKmzPreferredLocationName(row);
   const fallback = [
-    ["Location / Name", row?.placemark_name || row?.location_name || ""],
+    ["Location / Name", preferredLocation],
     ["Feature ID", row?.__feature_id || row?.id || row?.__rowNumber || ""],
     ["Coordinates", center ? `${center.lat.toFixed(6)}, ${center.lng.toFixed(6)}` : ""],
     ["Folder", row?.folder_path || row?.folder_name || row?.__kml_layer || ""],
@@ -6366,7 +6399,11 @@ function buildKmzFallbackAttributeRows(row){
 }
 
 function getKmzPopupContentModel(row){
-  const descRows = parseKmzDescriptionRows(row?.raw_description_html || "");
+  const preferredLocation = getKmzPreferredLocationName(row);
+  const descRows = applyKmzPopupLocationOverride(
+    parseKmzDescriptionRows(row?.raw_description_html || ""),
+    preferredLocation
+  );
   if (descRows.length){
     const trimmedRows = isKmzPathFeatureRow(row) ? trimRowsUntilKey(descRows, "Path Name") : descRows;
     if (trimmedRows.length){
@@ -6487,7 +6524,7 @@ function buildKmzFeaturePopupHtml(featureId){
   if (!row){
     return `<div class="kmz-popup"><div class="muted small">Feature unavailable.</div></div>`;
   }
-  const title = String(row.placemark_name || row.location_name || "Placemark").trim() || "Placemark";
+  const title = getKmzPreferredLocationName(row) || "Placemark";
   const model = getKmzPopupContentModel(row);
   const tableHtml = model.kind === "table"
     ? `
@@ -6524,7 +6561,7 @@ async function openMapDetailsDrawerForKmzFeature(featureId){
   const bodyEl = $("mapDetailsBody");
   if (!drawer || !titleEl || !bodyEl) return;
   state.map.materialFeatureId = key;
-  titleEl.textContent = row.placemark_name || row.location_name || "Feature details";
+  titleEl.textContent = getKmzPreferredLocationName(row) || "Feature details";
   bodyEl.innerHTML = buildMapDetailsDrawerBodyHtml(row, {
     featureTotals: [],
     loadingMaterials: true,
