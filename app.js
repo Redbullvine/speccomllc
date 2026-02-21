@@ -10197,7 +10197,7 @@ function setWhoami(){
   const authed = isDemo || Boolean(state.user);
   const signOutBtn = $("btnSignOut");
   if (signOutBtn) signOutBtn.style.display = authed ? "" : "none";
-  ["btnProjects", "btnMenu", "btnOpenProjects", "btnMapToggle"].forEach((id) => {
+  ["btnHome", "btnProjects", "btnMenu", "btnOpenProjects", "btnMapToggle"].forEach((id) => {
     const el = $(id);
     if (el) el.style.display = authed ? "" : "none";
   });
@@ -18669,6 +18669,14 @@ function wireUI(){
         setActiveView("viewDashboard");
       }
       openProjectsModal();
+    });
+  }
+  const homeBtn = $("btnHome");
+  if (homeBtn){
+    homeBtn.addEventListener("click", () => {
+      if (isViewAllowed("viewDashboard")){
+        setActiveView("viewDashboard");
+      }
     });
   }
   const mapProjectLabelBtn = $("mapProjectLabel");
