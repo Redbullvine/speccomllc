@@ -5553,6 +5553,20 @@ function getMapViewOverlayState(key){
       note: "",
     };
   }
+  if (normalized === "paths"){
+    const overlays = state.map.mapViewOverlays || getDefaultMapViewOverlays();
+    const kmzMeta = state.map.kmzOverlayGroups?.paths || null;
+    const kmzAvailable = Boolean(kmzMeta?.available && kmzMeta?.featureIds?.size);
+    const spansAvailable = Boolean(state.map.layers?.spans?.getLayers?.()?.length);
+    const available = true;
+    const checked = overlays.paths !== false;
+    const note = (kmzAvailable || spansAvailable) ? "" : " (not in KMZ)";
+    return {
+      available,
+      checked,
+      note,
+    };
+  }
   const meta = state.map.kmzOverlayGroups?.[normalized] || null;
   const available = Boolean(meta?.available && meta?.featureIds?.size);
   const overlays = state.map.mapViewOverlays || getDefaultMapViewOverlays();
@@ -5618,12 +5632,16 @@ function setMapViewOverlayEnabled(overlayKey, visible){
     setMapLayerVisibility("pins", Boolean(visible));
     return;
   }
-  if (!MAP_VIEW_KMZ_OVERLAY_KEYS.includes(key)) return;
-  const stateInfo = getMapViewOverlayState(key);
-  if (!stateInfo.available){
-    renderMapViewOverlayControls();
-    return;
+  if (key === "paths"){
+    const nextLayerVisibility = {
+      ...(state.map.layerVisibility || getDefaultMapLayerVisibility()),
+      spans: Boolean(visible),
+    };
+    state.map.layerVisibility = nextLayerVisibility;
+    saveLayerVisibility(nextLayerVisibility);
+    applyMapLayerVisibility();
   }
+  if (!MAP_VIEW_KMZ_OVERLAY_KEYS.includes(key)) return;
   const next = {
     ...(state.map.mapViewOverlays || getDefaultMapViewOverlays()),
     [key]: Boolean(visible),
