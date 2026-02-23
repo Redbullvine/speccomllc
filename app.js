@@ -5923,7 +5923,7 @@ function syncKmzOverlayGroups(){
 function logKmzOverlayLayerCounts(){
   const pathsCount = state.map.kmzOverlayGroups?.paths?.group?.getLayers?.()?.length || 0;
   const boundariesCount = state.map.kmzOverlayGroups?.boundaries?.group?.getLayers?.()?.length || 0;
-  console.log("[kmz overlay counts] paths:", pathsCount, "boundaries:", boundariesCount);
+  dlog("[kmz overlay counts] paths:", pathsCount, "boundaries:", boundariesCount);
 }
 
 function getMapViewOverlayState(key){
