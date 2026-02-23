@@ -9792,15 +9792,42 @@ function primeSitePopupCachesFromRuidosoEvidence(rows = null){
   }
 }
 
-function applyRuidosoPackageDataToRows(rows, { codeByKey, photosByKey, enclosureKeyCounts }){
+function applyRuidosoPackageDataToRows(rows, {
+  codeByKey,
+  photosByKey,
+  enclosureKeyCounts,
+  codeByNameKey = new Map(),
+  photosByNameKey = new Map(),
+}){
   const list = Array.isArray(rows) ? rows : [];
   let matchedRows = 0;
   let rowsWithCodes = 0;
   let rowsWithPhotos = 0;
   list.forEach((row) => {
+    const nameKeys = getRuidosoRowCandidateNameKeys(row);
     const jobMaps = getRuidosoRowCandidateJobMaps(row);
     const enclosures = getRuidosoRowCandidateEnclosures(row);
-    if (!enclosures.length) return;
+    const codeSet = new Set((Array.isArray(row.billing_codes) ? row.billing_codes : [])
+      .map((value) => String(value || "").trim()).filter(Boolean));
+    const photoSet = new Set((Array.isArray(row.photo_urls) ? row.photo_urls : [])
+      .map((value) => String(value || "").trim()).filter((url) => /^https?:\/\//i.test(url)));
+    let matchedAny = false;
+
+    nameKeys.forEach((key) => {
+      if (!key) return;
+      const nameCodes = codeByNameKey.get(key) || [];
+      const namePhotos = photosByNameKey.get(key) || [];
+      if (nameCodes.length || namePhotos.length){
+        matchedAny = true;
+      }
+      nameCodes.forEach((code) => codeSet.add(String(code || "").trim()));
+      namePhotos.forEach((url) => {
+        const clean = String(url || "").trim();
+        if (/^https?:\/\//i.test(clean)) photoSet.add(clean);
+      });
+    });
+
+    if (!enclosures.length && !matchedAny) return;
     let matchedKey = "";
     for (const enclosure of enclosures){
       for (const jobMap of jobMaps){
@@ -9818,16 +9845,20 @@ function applyRuidosoPackageDataToRows(rows, { codeByKey, photosByKey, enclosure
         break;
       }
     }
-    if (!matchedKey) return;
+    if (matchedKey){
+      matchedAny = true;
+      (codeByKey.get(matchedKey) || []).forEach((code) => {
+        codeSet.add(String(code || "").trim());
+      });
+      (photosByKey.get(matchedKey) || []).forEach((url) => {
+        const clean = String(url || "").trim();
+        if (/^https?:\/\//i.test(clean)) photoSet.add(clean);
+      });
+    }
+    if (!matchedAny) return;
     matchedRows += 1;
-    const nextCodes = Array.from(new Set([
-      ...(Array.isArray(row.billing_codes) ? row.billing_codes : []),
-      ...(codeByKey.get(matchedKey) || []),
-    ].map((value) => String(value || "").trim()).filter(Boolean)));
-    const nextPhotos = Array.from(new Set([
-      ...(Array.isArray(row.photo_urls) ? row.photo_urls : []),
-      ...(photosByKey.get(matchedKey) || []),
-    ].map((value) => String(value || "").trim()).filter((url) => /^https?:\/\//i.test(url))));
+    const nextCodes = Array.from(codeSet).filter(Boolean);
+    const nextPhotos = Array.from(photoSet).filter((url) => /^https?:\/\//i.test(url));
     if (nextCodes.length){
       row.billing_codes = nextCodes;
       rowsWithCodes += 1;
@@ -10003,11 +10034,23 @@ async function importRuidosoPackageCsv(file){
 
   const codeByKey = new Map();
   const photosByKey = new Map();
+  const codeByNameKey = new Map();
+  const photosByNameKey = new Map();
   const enclosureKeyCounts = new Map();
   let processedRows = 0;
   let codeRows = 0;
   let photoRows = 0;
   const upsertMapSet = (map, key, values) => {
+    if (!key || !values?.length) return;
+    const next = new Set(map.get(key) || []);
+    values.forEach((value) => {
+      const cleaned = String(value || "").trim();
+      if (cleaned) next.add(cleaned);
+    });
+    if (next.size) map.set(key, Array.from(next));
+  };
+  const upsertNameSet = (map, rawKey, values) => {
+    const key = normalizeRuidosoNameKey(rawKey);
     if (!key || !values?.length) return;
     const next = new Set(map.get(key) || []);
     values.forEach((value) => {
@@ -10031,27 +10074,38 @@ async function importRuidosoPackageCsv(file){
     const enclosure = normalizeRuidosoEnclosure(
       (enclosureIdx >= 0 ? row[enclosureIdx] : "") || parsedLoc.enclosure || ""
     );
-    if (!enclosure) return;
+    const locText = String(
+      (locIdx >= 0 ? row[locIdx] : "")
+      || (enclosureIdx >= 0 ? row[enclosureIdx] : "")
+      || ""
+    ).trim();
+    if (!enclosure && !locText) return;
 
     if (hasCodesColumns && codesIdx >= 0){
       const codes = parseRuidosoCodesRaw(row[codesIdx] || "");
       if (codes.length) codeRows += 1;
-      if (jobMap){
+      if (locText) upsertNameSet(codeByNameKey, locText, codes);
+      if (jobMap && enclosure){
         upsertMapSet(codeByKey, `${jobMap}|${enclosure}`, codes);
         bumpEnclosureCount(`*|${enclosure}`);
       }
-      upsertMapSet(codeByKey, `*|${enclosure}`, codes);
+      if (enclosure){
+        upsertMapSet(codeByKey, `*|${enclosure}`, codes);
+      }
     }
 
     if (hasPhotoColumns && urlIdx >= 0){
       const url = String(row[urlIdx] || "").trim();
       if (!/^https?:\/\//i.test(url)) return;
       photoRows += 1;
-      if (jobMap){
+      if (locText) upsertNameSet(photosByNameKey, locText, [url]);
+      if (jobMap && enclosure){
         upsertMapSet(photosByKey, `${jobMap}|${enclosure}`, [url]);
         bumpEnclosureCount(`*|${enclosure}`);
       }
-      upsertMapSet(photosByKey, `*|${enclosure}`, [url]);
+      if (enclosure){
+        upsertMapSet(photosByKey, `*|${enclosure}`, [url]);
+      }
     }
   });
 
@@ -10059,7 +10113,13 @@ async function importRuidosoPackageCsv(file){
   if (!kmzRows.length){
     throw new Error("Import a KMZ first, then apply this CSV package.");
   }
-  const result = applyRuidosoPackageDataToRows(kmzRows, { codeByKey, photosByKey, enclosureKeyCounts });
+  const result = applyRuidosoPackageDataToRows(kmzRows, {
+    codeByKey,
+    photosByKey,
+    enclosureKeyCounts,
+    codeByNameKey,
+    photosByNameKey,
+  });
   rebuildRuidosoEvidenceIndex(kmzRows);
   primeSitePopupCachesFromRuidosoEvidence(state.projectSites || []);
 
