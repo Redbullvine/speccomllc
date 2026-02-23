@@ -9941,11 +9941,56 @@ async function importRuidosoPackageCsv(file){
     throw new Error("CSV is empty.");
   }
   const headers = (rows[0] || []).map(SpecCom.helpers.normalizeImportHeader);
-  const jobIdx = findHeaderIndex(headers, ["job_map", "jobmap", "node", "node_id"]);
-  const enclosureIdx = findHeaderIndex(headers, ["enclosure", "drop_number"]);
-  const codesIdx = findHeaderIndex(headers, ["codes_raw", "codes", "billing_codes", "billing_code"]);
-  const locIdx = findHeaderIndex(headers, ["loc", "location", "location_name"]);
-  const urlIdx = findHeaderIndex(headers, ["photo_url", "url", "image_url", "photo"]);
+  const findHeaderContains = (tokens = []) => headers.findIndex((header) => (
+    tokens.some((token) => header.includes(token))
+  ));
+  const jobIdx = (() => {
+    const direct = findHeaderIndex(headers, ["job_map", "jobmap", "node", "node_id"]);
+    if (direct >= 0) return direct;
+    return findHeaderContains(["job_map", "jobmap", "node", "network_node"]);
+  })();
+  const enclosureIdx = (() => {
+    const direct = findHeaderIndex(headers, [
+      "enclosure",
+      "drop_number",
+      "network_point",
+      "network_point_name",
+      "ruidoso_network_point_name",
+    ]);
+    if (direct >= 0) return direct;
+    return findHeaderContains(["enclosure", "drop", "network_point", "point_name", "site_name"]);
+  })();
+  const codesIdx = (() => {
+    const direct = findHeaderIndex(headers, ["codes_raw", "codes", "billing_codes", "billing_code", "work_codes"]);
+    if (direct >= 0) return direct;
+    return findHeaderContains(["codes", "billing_code", "work_code"]);
+  })();
+  const locIdx = (() => {
+    const direct = findHeaderIndex(headers, [
+      "loc",
+      "location",
+      "location_name",
+      "site_name",
+      "name",
+      "network_point_name",
+      "ruidoso_network_point_name",
+    ]);
+    if (direct >= 0) return direct;
+    return findHeaderContains(["loc", "location", "site_name", "point_name", "network_point", "name"]);
+  })();
+  const urlIdx = (() => {
+    const direct = findHeaderIndex(headers, [
+      "photo_url",
+      "url",
+      "image_url",
+      "photo",
+      "photo_link",
+      "image_link",
+      "link",
+    ]);
+    if (direct >= 0) return direct;
+    return findHeaderContains(["photo_url", "image_url", "photo", "image", "url", "link"]);
+  })();
 
   const hasCodesColumns = codesIdx >= 0 && (jobIdx >= 0 || enclosureIdx >= 0 || locIdx >= 0);
   const hasPhotoColumns = urlIdx >= 0 && (locIdx >= 0 || enclosureIdx >= 0 || jobIdx >= 0);
