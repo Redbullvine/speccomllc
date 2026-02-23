@@ -5016,20 +5016,24 @@ async function renderMapPopupActiveSite({ syncSelection = true } = {}){
       hasPhotosCache ? Promise.resolve(cachedPhotos) : withPopupLoadTimeout(fetchSitePhotosForMapPopup(site.id), 5000, []),
     ]);
     const latest = getMapPopupSnapshot();
-    if (!latest) return;
-    if (toSiteIdKey(latest.site?.id) !== toSiteIdKey(site.id)) return;
-    bindSiteMarkerPopup(latest.marker, latest.site, {
-      requiredCodes: latest.requiredCodes,
+    const siteKey = toSiteIdKey(site.id);
+    const activeSite = latest && toSiteIdKey(latest.site?.id) === siteKey
+      ? latest.site
+      : (getVisibleSiteByIdKey(siteKey) || site);
+    const activeMarker = latest?.marker || marker;
+    const requiredCodesForPopup = latest?.requiredCodes || requiredCodes;
+    bindSiteMarkerPopup(activeMarker, activeSite, {
+      requiredCodes: requiredCodesForPopup,
       siteCodes,
       loadingCodes: false,
       sitePhotos,
       loadingPhotos: false,
-      pageIndex: latest.index,
-      pageTotal: latest.total,
-      nearbySites: latest.nearby,
+      pageIndex: latest?.index ?? index,
+      pageTotal: latest?.total ?? total,
+      nearbySites: latest?.nearby ?? nearby,
     });
-    if (!latest.marker.isPopupOpen || latest.marker.isPopupOpen()){
-      if (latest.marker.openPopup) latest.marker.openPopup();
+    if (!activeMarker?.isPopupOpen || activeMarker.isPopupOpen()){
+      if (activeMarker?.openPopup) activeMarker.openPopup();
     }
   } catch (error){
     debugLog("[map] marker popup update failed", error);
