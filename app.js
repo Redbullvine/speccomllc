@@ -7446,7 +7446,45 @@ function renderKmzPreviewFeatures(rows, sourceName = "KMZ Import"){
   syncKmzOverlayGroups();
   logKmzOverlayLayerCounts();
   renderMapLayerPanel();
+  fitMapToKmzRows(rows, { maxZoom: 16 });
   queueSaveKmzSnapshotForActiveProject();
+}
+
+function fitMapToKmzRows(rows, { maxZoom = 16 } = {}){
+  if (!state.map.instance || !window.L) return;
+  const points = [];
+  const addPoint = (lat, lng) => {
+    const latNum = Number(lat);
+    const lngNum = Number(lng);
+    if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return;
+    if (latNum < -90 || latNum > 90) return;
+    if (lngNum < -180 || lngNum > 180) return;
+    points.push([latNum, lngNum]);
+  };
+  const walkCoords = (node) => {
+    if (!Array.isArray(node)) return;
+    if (node.length >= 2 && Number.isFinite(Number(node[0])) && Number.isFinite(Number(node[1]))){
+      // GeoJSON coordinates are [lng, lat].
+      addPoint(node[1], node[0]);
+      return;
+    }
+    node.forEach((child) => walkCoords(child));
+  };
+  (rows || []).forEach((row) => {
+    addPoint(row?.latitude, row?.longitude);
+    if (row?.geometry && typeof row.geometry === "object"){
+      walkCoords(row.geometry.coordinates);
+    }
+  });
+  if (!points.length) return;
+  if (points.length === 1){
+    state.map.instance.setView(points[0], Math.max(state.map.instance.getZoom() || 0, 17));
+    return;
+  }
+  const bounds = window.L.latLngBounds(points);
+  if (bounds?.isValid?.()){
+    state.map.instance.fitBounds(bounds, { padding: [24, 24], maxZoom });
+  }
 }
 
 function ensureMapPanes(){
@@ -14898,9 +14936,10 @@ async function loadProjectSites(projectId){
   }
   renderSiteList();
   if (state.map.instance){
-    const rows = getSiteSearchResultSet().rows;
-    updateMapMarkers(rows);
-    renderDerivedMapLayers(rows);
+    const resultSet = getSiteSearchResultSet();
+    updateMapMarkers(resultSet.rows);
+    renderDerivedMapLayers(resultSet.rows);
+    syncMapToSearchResults(resultSet);
   }
 }
 
