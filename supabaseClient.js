@@ -2,6 +2,7 @@ export let SUPABASE_URL = "";
 export let SUPABASE_ANON_KEY = "";
 export let APP_MODE = "real";
 let _clientPromise = null;
+let _client = null;
 
 // Some browser states can throw AbortError from the default Web Locks flow.
 // Use a simple in-process lock to keep auth initialization stable.
@@ -87,6 +88,7 @@ export async function makeClient() {
     return null;
   }
 
+  if (_client) return _client;
   if (_clientPromise) return _clientPromise;
   _clientPromise = (async () => {
     try {
@@ -97,11 +99,20 @@ export async function makeClient() {
           lock: safeAuthLock,
         },
       });
+      _client = client;
+      if (typeof window !== "undefined") {
+        window.supabase = client;
+      }
       return client;
     } catch (error) {
       _clientPromise = null;
+      _client = null;
       throw error;
     }
   })();
   return _clientPromise;
+}
+
+export function getClientSync() {
+  return _client || null;
 }
