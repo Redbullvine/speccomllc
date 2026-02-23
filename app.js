@@ -10156,6 +10156,215 @@ function findHeaderIndex(headers, names){
   return -1;
 }
 
+function decodePdfLiteralString(value){
+  const src = String(value || "");
+  let out = "";
+  for (let i = 0; i < src.length; i += 1){
+    const ch = src[i];
+    if (ch !== "\\"){
+      out += ch;
+      continue;
+    }
+    i += 1;
+    if (i >= src.length) break;
+    const next = src[i];
+    if (next === "n") out += "\n";
+    else if (next === "r") out += "\r";
+    else if (next === "t") out += "\t";
+    else if (next === "b") out += "\b";
+    else if (next === "f") out += "\f";
+    else if (next === "(") out += "(";
+    else if (next === ")") out += ")";
+    else if (next === "\\") out += "\\";
+    else if (/[0-7]/.test(next)){
+      let octal = next;
+      for (let j = 0; j < 2; j += 1){
+        const peek = src[i + 1];
+        if (!peek || !/[0-7]/.test(peek)) break;
+        octal += peek;
+        i += 1;
+      }
+      out += String.fromCharCode(parseInt(octal, 8));
+    } else {
+      out += next;
+    }
+  }
+  return out;
+}
+
+function decodePdfHexString(hexValue){
+  const clean = String(hexValue || "").replace(/\s+/g, "");
+  if (!clean) return "";
+  const padded = clean.length % 2 === 1 ? `${clean}0` : clean;
+  let out = "";
+  for (let i = 0; i < padded.length; i += 2){
+    const pair = padded.slice(i, i + 2);
+    const code = Number.parseInt(pair, 16);
+    if (!Number.isFinite(code)) continue;
+    out += String.fromCharCode(code);
+  }
+  return out;
+}
+
+function extractPhotoLinksFromPdfBuffer(buffer){
+  const text = new TextDecoder("latin1").decode(new Uint8Array(buffer));
+  const links = [];
+  const literalRegex = /\/URI\s*\(((?:\\.|[^\\)])*)\)/g;
+  const hexRegex = /\/URI\s*<([0-9A-Fa-f\s]+)>/g;
+  let match;
+  while ((match = literalRegex.exec(text))){
+    const url = decodePdfLiteralString(match[1] || "").trim();
+    if (!/^https?:\/\//i.test(url)) continue;
+    const start = Math.max(0, match.index - 420);
+    const context = text.slice(start, match.index);
+    links.push({ url, context });
+  }
+  while ((match = hexRegex.exec(text))){
+    const url = decodePdfHexString(match[1] || "").trim();
+    if (!/^https?:\/\//i.test(url)) continue;
+    const start = Math.max(0, match.index - 420);
+    const context = text.slice(start, match.index);
+    links.push({ url, context });
+  }
+  return links;
+}
+
+function extractLocationHintsFromText(text){
+  const src = String(text || "");
+  const out = new Set();
+  const pointRegex = /\bRUIDOSONETWORKPOINT[-_\s]?\d+\b/ig;
+  const nodeRegex = /\bNODE\d+_[A-Z0-9]+(?:_[A-Z0-9]+)?\b/ig;
+  let match;
+  while ((match = pointRegex.exec(src))){
+    const raw = String(match[0] || "").trim();
+    if (raw) out.add(raw);
+  }
+  while ((match = nodeRegex.exec(src))){
+    const raw = String(match[0] || "").trim();
+    if (raw) out.add(raw);
+  }
+  return Array.from(out);
+}
+
+function extractNameHintsFromUrl(url){
+  const src = String(url || "").trim();
+  if (!src) return [];
+  const out = new Set();
+  const noQuery = src.split("?")[0] || src;
+  const fileName = noQuery.split("/").pop() || "";
+  [src, fileName].forEach((segment) => {
+    extractLocationHintsFromText(segment).forEach((token) => out.add(token));
+    String(segment || "")
+      .split(/[\/?&=_\-.]+/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .forEach((part) => {
+        if (/^ruidosonetworkpoint\d+$/i.test(part)){
+          const normalized = part.replace(/(ruidosonetworkpoint)(\d+)/i, "$1-$2");
+          out.add(normalized);
+        }
+      });
+  });
+  return Array.from(out);
+}
+
+async function importRuidosoPhotoReportPdf(file){
+  const buffer = await file.arrayBuffer();
+  const links = extractPhotoLinksFromPdfBuffer(buffer);
+  if (!links.length){
+    throw new Error("No http(s) photo links found in PDF.");
+  }
+  const kmzRows = Array.from(state.map.kmzFeatureRows?.values?.() || []);
+  if (!kmzRows.length){
+    throw new Error("Import a KMZ first, then apply this PDF report.");
+  }
+
+  const photosByKey = new Map();
+  const photosByNameKey = new Map();
+  const enclosureKeyCounts = new Map();
+  const upsertMapSet = (map, key, values) => {
+    if (!key || !values?.length) return;
+    const next = new Set(map.get(key) || []);
+    values.forEach((value) => {
+      const cleaned = String(value || "").trim();
+      if (cleaned) next.add(cleaned);
+    });
+    if (next.size) map.set(key, Array.from(next));
+  };
+  const upsertNameSet = (map, rawKey, values) => {
+    const key = normalizeRuidosoNameKey(rawKey);
+    if (!key || !values?.length) return;
+    const next = new Set(map.get(key) || []);
+    values.forEach((value) => {
+      const cleaned = String(value || "").trim();
+      if (cleaned) next.add(cleaned);
+    });
+    if (next.size) map.set(key, Array.from(next));
+  };
+  const bumpEnclosureCount = (key) => {
+    if (!key) return;
+    enclosureKeyCounts.set(key, (enclosureKeyCounts.get(key) || 0) + 1);
+  };
+
+  let mappedByName = 0;
+  let mappedByEnclosure = 0;
+  links.forEach((entry) => {
+    const url = String(entry?.url || "").trim();
+    if (!/^https?:\/\//i.test(url)) return;
+    const contextHints = extractLocationHintsFromText(entry?.context || "");
+    const urlHints = extractNameHintsFromUrl(url);
+    const allHints = Array.from(new Set([...contextHints, ...urlHints]));
+    if (allHints.length){
+      mappedByName += 1;
+      allHints.forEach((hint) => upsertNameSet(photosByNameKey, hint, [url]));
+    }
+    const enclosureRaw = extractEnclosureToken(`${entry?.context || ""} ${url}`);
+    const enclosure = normalizeRuidosoEnclosure(enclosureRaw);
+    if (enclosure){
+      mappedByEnclosure += 1;
+      upsertMapSet(photosByKey, `*|${enclosure}`, [url]);
+      bumpEnclosureCount(`*|${enclosure}`);
+      const nodeHint = allHints.find((hint) => /NODE\d+_/i.test(hint)) || "";
+      const jobMap = normalizeRuidosoToken(nodeHint);
+      if (jobMap){
+        upsertMapSet(photosByKey, `${jobMap}|${enclosure}`, [url]);
+      }
+    }
+  });
+
+  const result = applyRuidosoPackageDataToRows(kmzRows, {
+    codeByKey: new Map(),
+    photosByKey,
+    enclosureKeyCounts,
+    codeByNameKey: new Map(),
+    photosByNameKey,
+  });
+  rebuildRuidosoEvidenceIndex(kmzRows);
+  primeSitePopupCachesFromRuidosoEvidence(state.projectSites || []);
+
+  const previewRows = state.importPreview?.rawRows;
+  if (Array.isArray(previewRows) && previewRows.length){
+    const byFeatureId = new Map(kmzRows.map((row) => [String(row.__feature_id || ""), row]));
+    previewRows.forEach((row) => {
+      const key = String(row?.__feature_id || "");
+      const match = byFeatureId.get(key);
+      if (!match) return;
+      row.photo_urls = Array.isArray(match.photo_urls) ? match.photo_urls.slice() : [];
+    });
+  }
+  renderMapLayerPanel();
+  const selectedId = String(state.map.kmzSelectedFeatureId || "").trim();
+  if (selectedId && state.map.kmzFeatureRows.has(selectedId)){
+    void openKmzFeaturePopup(selectedId, { focusMap: false });
+  }
+  return {
+    ...result,
+    linkCount: links.length,
+    mappedByName,
+    mappedByEnclosure,
+  };
+}
+
 async function readLocationImportRows(file){
   const name = String(file?.name || "").toLowerCase();
   if (name.endsWith(".kmz")){
@@ -10350,8 +10559,15 @@ async function handleLocationImport(file){
         `Rows ${result.processedRows}. Matched ${result.matchedRows} points. Added codes to ${result.rowsWithCodes} and photos to ${result.rowsWithPhotos}.`
       );
       return;
+    } else if (name.endsWith(".pdf")){
+      const result = await importRuidosoPhotoReportPdf(file);
+      toast(
+        "Photo PDF applied",
+        `Links ${result.linkCount}. Matched ${result.matchedRows} points. Added photos to ${result.rowsWithPhotos}.`
+      );
+      return;
     } else {
-      toast("Import error", "Unsupported file type. Upload KMZ, RUIDOSO ZIP, or CSV.");
+      toast("Import error", "Unsupported file type. Upload KMZ, ZIP, CSV, or PDF.");
       return;
     }
   } catch (error){
