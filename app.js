@@ -191,6 +191,8 @@ const state = {
     kmzFeatureLayers: new Map(),
     kmzFeatureRows: new Map(),
     kmzPhotoOverrides: new Map(),
+    kmzSnapshotSaveTimer: null,
+    evidenceSyncToken: 0,
     ruidosoEvidenceByName: new Map(),
     ruidosoEvidenceByEnclosure: new Map(),
     ruidosoEvidenceByCoord: new Map(),
@@ -1100,6 +1102,8 @@ const LEGACY_DRAWER_OPEN_KEY = "speccom.ui.drawerOpen";
 const LEGACY_DRAWER_TAB_KEY = "speccom.ui.drawerTab";
 const LEGACY_DRAWER_WIDTH_KEY = "speccom.ui.drawerWidth";
 const KMZ_PHOTO_OVERRIDES_KEY_PREFIX = "speccom.kmzPhotoOverrides.";
+const KMZ_SNAPSHOT_TABLE = "project_kmz_snapshots";
+const KMZ_SNAPSHOT_SAVE_DEBOUNCE_MS = 900;
 const SIDEBAR_MIN_WIDTH = 320;
 const SIDEBAR_MAX_WIDTH = 520;
 
@@ -1153,6 +1157,162 @@ function saveKmzPhotoOverridesForActiveProject(){
     payload[key] = urls;
   });
   safeLocalStorageSet(getKmzPhotoOverridesStorageKey(), JSON.stringify(payload));
+}
+
+function toJsonClone(value, fallback){
+  try{
+    const json = JSON.stringify(value);
+    if (json == null) return fallback;
+    const parsed = JSON.parse(json);
+    return parsed == null ? fallback : parsed;
+  } catch {
+    return fallback;
+  }
+}
+
+async function saveKmzSnapshotForProject(projectId, {
+  rows = null,
+  layerNames = null,
+  folderTree = null,
+  silent = true,
+} = {}){
+  const projectKey = String(projectId || "").trim();
+  if (!projectKey || !state.client || isDemo) return { saved: false, reason: "unavailable" };
+  const kmzRows = Array.isArray(rows)
+    ? rows
+    : Array.from(state.map.kmzFeatureRows?.values?.() || []);
+  const payload = {
+    project_id: projectKey,
+    kmz_rows: toJsonClone(kmzRows, []),
+    kmz_layer_names: Array.isArray(layerNames)
+      ? layerNames.slice()
+      : (Array.isArray(state.map.kmzLayerCatalog) ? state.map.kmzLayerCatalog.slice() : []),
+    kmz_folder_tree: toJsonClone(
+      folderTree != null ? folderTree : (state.map.kmzFolderTree || null),
+      null
+    ),
+    updated_by: state.user?.id || null,
+    updated_at: new Date().toISOString(),
+  };
+  const optionalColumns = ["updated_by", "updated_at", "kmz_folder_tree", "kmz_layer_names"];
+  for (;;){
+    const { error } = await state.client
+      .from(KMZ_SNAPSHOT_TABLE)
+      .upsert(payload, { onConflict: "project_id" });
+    if (!error){
+      return { saved: true, rows: Array.isArray(payload.kmz_rows) ? payload.kmz_rows.length : 0 };
+    }
+    if (isMissingTable(error)){
+      return { saved: false, reason: "missing_table" };
+    }
+    let removed = false;
+    for (const col of optionalColumns){
+      if (Object.prototype.hasOwnProperty.call(payload, col) && isMissingColumnError(error, col)){
+        delete payload[col];
+        removed = true;
+        break;
+      }
+    }
+    if (removed) continue;
+    if (!silent){
+      toast("KMZ save failed", error.message || "Could not save KMZ snapshot.", "error");
+    }
+    return { saved: false, reason: "error", error };
+  }
+}
+
+function queueSaveKmzSnapshotForActiveProject({ immediate = false, silent = true } = {}){
+  if (isDemo) return;
+  const projectId = state.activeProject?.id || null;
+  if (!projectId || !state.client) return;
+  if (state.map.kmzSnapshotSaveTimer){
+    clearTimeout(state.map.kmzSnapshotSaveTimer);
+    state.map.kmzSnapshotSaveTimer = null;
+  }
+  const runSave = () => {
+    state.map.kmzSnapshotSaveTimer = null;
+    void saveKmzSnapshotForProject(projectId, { silent });
+  };
+  if (immediate){
+    runSave();
+    return;
+  }
+  state.map.kmzSnapshotSaveTimer = setTimeout(runSave, KMZ_SNAPSHOT_SAVE_DEBOUNCE_MS);
+}
+
+function buildKmzRowsFromSnapshot(payload){
+  const rows = Array.isArray(payload?.kmz_rows) ? payload.kmz_rows.slice() : [];
+  try{
+    Object.defineProperty(rows, "__kmlLayerNames", {
+      value: Array.isArray(payload?.kmz_layer_names) ? payload.kmz_layer_names.slice() : [],
+      enumerable: false,
+      writable: true,
+    });
+    Object.defineProperty(rows, "__kmlFolderTree", {
+      value: payload?.kmz_folder_tree && typeof payload.kmz_folder_tree === "object"
+        ? payload.kmz_folder_tree
+        : null,
+      enumerable: false,
+      writable: true,
+    });
+  } catch {}
+  return rows;
+}
+
+async function loadKmzSnapshotForProject(projectId, { silent = true } = {}){
+  const projectKey = String(projectId || "").trim();
+  if (!projectKey || !state.client || isDemo){
+    clearImportPreviewMarkers();
+    return { loaded: false, reason: "unavailable" };
+  }
+  let data = null;
+  let error = null;
+  ({ data, error } = await state.client
+    .from(KMZ_SNAPSHOT_TABLE)
+    .select("kmz_rows, kmz_layer_names, kmz_folder_tree")
+    .eq("project_id", projectKey)
+    .maybeSingle());
+  if (error && isMissingColumnError(error, "kmz_layer_names")){
+    ({ data, error } = await state.client
+      .from(KMZ_SNAPSHOT_TABLE)
+      .select("kmz_rows, kmz_folder_tree")
+      .eq("project_id", projectKey)
+      .maybeSingle());
+  }
+  if (error && isMissingColumnError(error, "kmz_folder_tree")){
+    ({ data, error } = await state.client
+      .from(KMZ_SNAPSHOT_TABLE)
+      .select("kmz_rows")
+      .eq("project_id", projectKey)
+      .maybeSingle());
+  }
+  if (error){
+    if (isMissingTable(error) || isNoRowsError(error)){
+      clearImportPreviewMarkers();
+      return { loaded: false, reason: "missing_table" };
+    }
+    if (!silent){
+      toast("KMZ load failed", error.message || "Could not load saved KMZ.", "error");
+    }
+    clearImportPreviewMarkers();
+    return { loaded: false, reason: "error", error };
+  }
+  const rows = buildKmzRowsFromSnapshot(data || {});
+  if (String(state.activeProject?.id || "") !== projectKey){
+    return { loaded: false, reason: "stale_project" };
+  }
+  if (!rows.length){
+    clearImportPreviewMarkers();
+    return { loaded: false, reason: "empty" };
+  }
+  renderKmzPreviewFeatures(rows, "Saved KMZ");
+  primeSitePopupCachesFromRuidosoEvidence(state.projectSites || []);
+  if (state.map.instance){
+    const visibleRows = getSiteSearchResultSet().rows;
+    updateMapMarkers(visibleRows);
+    renderDerivedMapLayers(visibleRows);
+  }
+  return { loaded: true, rows: rows.length };
 }
 
 function getRuntimeEnv(){
@@ -2389,13 +2549,12 @@ function clearPendingPinMarker(){
 }
 
 function clearImportPreviewMarkers(){
-  if (!state.map.instance) return;
   const map = state.map.instance;
   const kmzLayer = state.map.layers?.kmz;
   const kmzPathsLayer = state.map.layers?.kmzPaths;
   const kmzBoundsLayer = state.map.layers?.kmzBounds;
   const kmzPinsLayer = state.map.layers?.kmzPins;
-  if (state.map.importPreviewMarkers?.length){
+  if (map && state.map.importPreviewMarkers?.length){
     state.map.importPreviewMarkers.forEach((marker) => {
       try{
         if (kmzLayer?.removeLayer) kmzLayer.removeLayer(marker);
@@ -2422,7 +2581,7 @@ function clearImportPreviewMarkers(){
   [kmzPinsLayer, kmzPathsLayer, kmzBoundsLayer].forEach((layerGroup) => {
     if (!layerGroup) return;
     try{
-      if (map.hasLayer(layerGroup)) map.removeLayer(layerGroup);
+      if (map?.hasLayer && map.hasLayer(layerGroup)) map.removeLayer(layerGroup);
     } catch {}
     try{
       if (layerGroup.clearLayers) layerGroup.clearLayers();
@@ -3819,6 +3978,18 @@ function buildItemsFromRow(row){
 function extractEnclosureToken(text){
   const raw = String(text || "").trim();
   if (!raw) return "";
+  const numericTokens = raw.match(/\d+(?:\/@[\w.]+)?/g) || [];
+  if (numericTokens.length > 1 && /(node\s*\d+|1635\s*ca)/i.test(raw)){
+    const candidates = numericTokens.filter((token) => {
+      const base = String(token).split("/@")[0] || token;
+      const num = Number.parseInt(base, 10);
+      return Number.isFinite(num) && (num >= 100 || base.length >= 3);
+    });
+    if (candidates.length){
+      return candidates[candidates.length - 1];
+    }
+    return numericTokens[numericTokens.length - 1];
+  }
   const direct = raw.match(/^\d+(?:\/@[\w.]+)?$/);
   if (direct) return direct[0];
   const token = raw.match(/\b(\d+(?:\/@[\w.]+)?)\b/);
@@ -4627,7 +4798,7 @@ function buildSiteMarkerPopupHtml(site, {
       : `<div class="scSitePopup-photo-empty">No photos yet.</div>`;
   const photoUploadRow = canManagePhotos ? `
     <div class="scSitePopup-actions" style="margin-top:8px;">
-      <input type="file" accept="image/*" data-popup-field="photo-file" />
+      <input type="file" accept="image/*" multiple data-popup-field="photo-file" />
       <button type="button" class="scSitePopup-action" data-popup-action="upload-photo" data-popup-site-id="${escapeHtml(siteId)}">Upload photo</button>
     </div>
   ` : "";
@@ -5086,20 +5257,24 @@ async function deleteMapPopupSite(siteIdKey){
   await renderMapPopupActiveSite({ syncSelection: true });
 }
 
-async function uploadMapPopupSitePhoto(siteIdKey, file){
+async function uploadMapPopupSitePhoto(siteIdKey, file, { silentToast = false } = {}){
   const key = toSiteIdKey(siteIdKey);
   if (!key || !file){
-    toast("Photo required", "Choose a photo before upload.", "error");
-    return;
+    if (!silentToast){
+      toast("Photo required", "Choose a photo before upload.", "error");
+    }
+    return false;
   }
   const site = getVisibleSiteByIdKey(key);
   if (!site){
-    toast("Site missing", "This location is no longer available.", "error");
-    return;
+    if (!silentToast){
+      toast("Site missing", "This location is no longer available.", "error");
+    }
+    return false;
   }
   const gps = await getCurrentGps();
   const uploadPath = await uploadSiteMediaForSite(file, site, gps, new Date().toISOString());
-  if (!uploadPath) return;
+  if (!uploadPath) return false;
   state.map.sitePhotosBySiteId.delete(key);
   await fetchSitePhotosForMapPopup(site.id);
   const marker = state.map.markers.get(key) || state.map.popupMarker || null;
@@ -5111,7 +5286,10 @@ async function uploadMapPopupSitePhoto(siteIdKey, file){
     await loadSiteMedia(site.id);
     renderSitePanel();
   }
-  toast("Photo uploaded", "Photo attached to location.");
+  if (!silentToast){
+    toast("Photo uploaded", "Photo attached to location.");
+  }
+  return true;
 }
 
 async function deleteMapPopupSitePhoto(siteIdKey, photoId){
@@ -6325,17 +6503,29 @@ function registerMapUiBindings(){
         if (uploadBtn.disabled) return;
         const siteKey = String(uploadBtn.dataset.popupSiteId || popupRoot.dataset.popupSiteId || "").trim();
         const input = popupRoot.querySelector("[data-popup-field='photo-file']");
-        const file = input?.files?.[0] || null;
-        if (!file){
+        const files = Array.from(input?.files || []);
+        if (!files.length){
           toast("Photo required", "Choose a photo before upload.", "error");
           return;
         }
         uploadBtn.disabled = true;
-        void uploadMapPopupSitePhoto(siteKey, file)
-          .finally(() => {
-            uploadBtn.disabled = false;
-            if (input) input.value = "";
-          });
+        void (async () => {
+          let uploadedCount = 0;
+          for (const file of files){
+            const uploaded = await uploadMapPopupSitePhoto(siteKey, file, { silentToast: true });
+            if (uploaded) uploadedCount += 1;
+          }
+          if (uploadedCount === 1){
+            toast("Photo uploaded", "Photo attached to location.");
+          } else if (uploadedCount > 1){
+            toast("Photos uploaded", `${uploadedCount} photos attached to location.`);
+          } else {
+            toast("Upload failed", "No photos were uploaded.", "error");
+          }
+        })().finally(() => {
+          uploadBtn.disabled = false;
+          if (input) input.value = "";
+        });
         return;
       }
       const removePhotoBtn = e.target.closest("[data-popup-action='remove-photo']");
@@ -6668,6 +6858,7 @@ function setKmzFeaturePhotoUrls(featureId, urls){
     state.map.kmzPhotoOverrides.delete(key);
   }
   saveKmzPhotoOverridesForActiveProject();
+  queueSaveKmzSnapshotForActiveProject();
 }
 
 function addKmzFeaturePhotoUrl(featureId, url){
@@ -7248,6 +7439,7 @@ function renderKmzPreviewFeatures(rows, sourceName = "KMZ Import"){
   syncKmzOverlayGroups();
   logKmzOverlayLayerCounts();
   renderMapLayerPanel();
+  queueSaveKmzSnapshotForActiveProject();
 }
 
 function ensureMapPanes(){
@@ -9557,6 +9749,38 @@ function normalizeRuidosoToken(value){
     .replace(/[^A-Z0-9]/g, "");
 }
 
+function hasNode54AliasSignal(value){
+  const text = String(value || "").trim();
+  if (!text) return false;
+  if (/\b1635\s*CA\b/i.test(text)) return true;
+  if (/\bNODE\s*54\b/i.test(text)) return true;
+  const normalized = normalizeRuidosoToken(text);
+  return normalized === "54"
+    || normalized === "NODE54"
+    || normalized.includes("NODE54")
+    || normalized.includes("1635CA");
+}
+
+function expandRuidosoJobMapTokens(value){
+  const text = String(value || "").trim();
+  const out = new Set();
+  if (!text) return [];
+  const normalized = normalizeRuidosoToken(text);
+  if (normalized) out.add(normalized);
+  if (hasNode54AliasSignal(text)){
+    out.add("1635CA");
+  }
+  const nodeMatch = text.match(/NODE\d+_[A-Z0-9]+(?:_[A-Z0-9]+)?/i);
+  if (nodeMatch?.[0]){
+    const normalizedNode = normalizeRuidosoToken(nodeMatch[0]);
+    if (normalizedNode) out.add(normalizedNode);
+    if (hasNode54AliasSignal(nodeMatch[0])){
+      out.add("1635CA");
+    }
+  }
+  return Array.from(out);
+}
+
 function normalizeRuidosoEnclosure(value){
   const clean = String(value || "")
     .trim()
@@ -9573,12 +9797,18 @@ function parseRuidosoPhotoLoc(value){
   const cleaned = raw.replace(/-REENTRY$/i, "");
   const lastDash = cleaned.lastIndexOf("-");
   if (lastDash > 0){
+    const left = cleaned.slice(0, lastDash).trim();
+    const leftTokens = expandRuidosoJobMapTokens(left);
     return {
-      jobMap: cleaned.slice(0, lastDash).trim(),
+      jobMap: leftTokens.find((token) => token === "1635CA") || left,
       enclosure: cleaned.slice(lastDash + 1).trim(),
     };
   }
-  return { jobMap: "", enclosure: extractEnclosureToken(cleaned) };
+  const tokens = expandRuidosoJobMapTokens(cleaned);
+  return {
+    jobMap: tokens.find((token) => token === "1635CA") || "",
+    enclosure: extractEnclosureToken(cleaned),
+  };
 }
 
 function parseRuidosoCodesRaw(value){
@@ -9600,6 +9830,134 @@ function parseRuidosoCodesRaw(value){
   return Array.from(out);
 }
 
+function normalizeNodeKey(raw){
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  if (/^(?:node\s*)?54$/i.test(text)) return "1635CA";
+  if (/node\s*54/i.test(text)) return "1635CA";
+  if (/1635\s*ca/i.test(text)) return "1635CA";
+  return normalizeRuidosoToken(text);
+}
+
+function normalizeSegmentKey(raw){
+  const text = String(raw || "").trim();
+  if (!text) return null;
+  const upper = text.toUpperCase();
+  const segmentMatch = upper.match(/1635\s*CA[_\s-]*0?(\d{1,2})/i);
+  if (segmentMatch?.[1]){
+    const num = Number.parseInt(segmentMatch[1], 10);
+    if (Number.isFinite(num)){
+      return { type: "segment", key: `1635CA_${String(num).padStart(2, "0")}` };
+    }
+  }
+  const pointMatch = upper.match(/RUIDOSONETWORKPOINT[-_\s]*0*(\d+)/i);
+  if (pointMatch?.[1]){
+    const n = String(Number.parseInt(pointMatch[1], 10));
+    if (n !== "NaN") return { type: "sublocation", key: n };
+  }
+  if (/^\d{3,}$/.test(upper)){
+    return { type: "sublocation", key: String(Number.parseInt(upper, 10)) };
+  }
+  const node = normalizeNodeKey(text);
+  if (node === "1635CA"){
+    return { type: "node", key: "1635CA" };
+  }
+  return null;
+}
+
+function makeSiteSearchTokens(site){
+  const name = String(site?.name || "").trim();
+  const notes = String(site?.notes || "").trim();
+  const drop = String(site?.drop_number || "").trim();
+  const display = String(getSiteDisplayName(site) || "").trim();
+  return [name, notes, drop, display].filter(Boolean);
+}
+
+function resolveEvidenceTargets(projectId, normalized){
+  const projectKey = String(projectId || "").trim();
+  const sites = (state.projectSites || [])
+    .filter((site) => String(site?.project_id || "").trim() === projectKey);
+  if (!normalized || !sites.length) return [];
+  const findById = (id) => sites.find((row) => String(row?.id || "") === String(id || ""));
+  if (normalized.type === "sublocation"){
+    const key = String(normalized.key || "").trim();
+    if (!key) return [];
+    const exactRegex = new RegExp(`(^|\\D)${key}(\\D|$)`, "i");
+    const pointRegex = new RegExp(`RUIDOSONETWORKPOINT[-_\\s]*${key}`, "i");
+    const matches = sites.filter((site) => {
+      if (key === "2054"){
+        const name = String(site?.name || "");
+        return name === "2054" || pointRegex.test(name);
+      }
+      return makeSiteSearchTokens(site).some((value) => exactRegex.test(value));
+    });
+    return Array.from(new Set(matches.map((row) => String(row.id || "")).filter(Boolean)))
+      .map(findById)
+      .filter(Boolean);
+  }
+  if (normalized.type === "segment"){
+    const key = String(normalized.key || "").toUpperCase().trim();
+    if (!key) return [];
+    const matches = sites.filter((site) => {
+      const name = String(site?.name || "").toUpperCase().trim();
+      return name === key;
+    });
+    return Array.from(new Set(matches.map((row) => String(row.id || "")).filter(Boolean)))
+      .map(findById)
+      .filter(Boolean);
+  }
+  if (normalized.type === "node" && normalized.key === "1635CA"){
+    const segments = sites.filter((site) => /^1635CA_\d{2}$/i.test(String(site?.name || "").trim()));
+    if (!segments.length) return [];
+    const preferred = segments.find((site) => /^1635CA_01$/i.test(String(site?.name || "").trim()));
+    if (preferred) return [preferred];
+    const sorted = segments.slice().sort((a, b) => {
+      const aAt = new Date(a?.created_at || 0).getTime() || 0;
+      const bAt = new Date(b?.created_at || 0).getTime() || 0;
+      return aAt - bAt;
+    });
+    return sorted.length ? [sorted[0]] : [];
+  }
+  return [];
+}
+
+function buildEvidenceItem({
+  rawSegment = "",
+  rawNode = "",
+  rawEnclosure = "",
+  photoUrls = [],
+  codesUsed = [],
+  source = "import",
+  meta = {},
+} = {}){
+  const normalized = normalizeSegmentKey(rawSegment)
+    || normalizeSegmentKey(rawEnclosure)
+    || normalizeSegmentKey(rawNode)
+    || null;
+  const nodeKey = normalizeNodeKey(rawNode || rawSegment || "");
+  const urls = Array.from(new Set((Array.isArray(photoUrls) ? photoUrls : [])
+    .map((url) => String(url || "").trim())
+    .filter((url) => /^https?:\/\//i.test(url))));
+  const codes = Array.from(new Set((Array.isArray(codesUsed) ? codesUsed : [])
+    .map((code) => String(code || "").trim())
+    .filter(Boolean)));
+  if (!normalized && !nodeKey) return null;
+  if (!urls.length && !codes.length) return null;
+  return {
+    normalized: normalized || (nodeKey === "1635CA" ? { type: "node", key: "1635CA" } : null),
+    nodeKey,
+    photoUrls: urls,
+    codesUsed: codes,
+    source: String(source || "import"),
+    meta: {
+      rawSegment: String(rawSegment || ""),
+      rawNode: String(rawNode || ""),
+      rawEnclosure: String(rawEnclosure || ""),
+      ...(meta && typeof meta === "object" ? meta : {}),
+    },
+  };
+}
+
 function getRuidosoRowCandidateJobMaps(row){
   const candidates = [
     row?.job_map,
@@ -9618,13 +9976,7 @@ function getRuidosoRowCandidateJobMaps(row){
   candidates.forEach((raw) => {
     const text = String(raw || "").trim();
     if (!text) return;
-    const nodeMatch = text.match(/NODE\d+_[A-Z0-9]+(?:_[A-Z0-9]+)?/i);
-    if (nodeMatch?.[0]){
-      const normalizedNode = normalizeRuidosoToken(nodeMatch[0]);
-      if (normalizedNode) out.add(normalizedNode);
-    }
-    const normalized = normalizeRuidosoToken(text);
-    if (normalized) out.add(normalized);
+    expandRuidosoJobMapTokens(text).forEach((token) => out.add(token));
   });
   return Array.from(out);
 }
@@ -9778,11 +10130,13 @@ function primeSitePopupCachesFromRuidosoEvidence(rows = null){
     if (!siteId) return;
     const evidence = getRuidosoSiteEvidence(site);
     if (!evidence) return;
-    if (!hasCachedSiteCodes(siteId) && Array.isArray(evidence.codes) && evidence.codes.length){
+    const cachedCodes = getCachedSiteCodes(siteId);
+    if (!cachedCodes.length && Array.isArray(evidence.codes) && evidence.codes.length){
       setCachedSiteCodes(siteId, evidence.codes);
       seededCodes += 1;
     }
-    if (!hasCachedSitePhotos(siteId) && Array.isArray(evidence.photos) && evidence.photos.length){
+    const cachedPhotos = getCachedSitePhotos(siteId);
+    if (!cachedPhotos.length && Array.isArray(evidence.photos) && evidence.photos.length){
       setCachedSitePhotos(siteId, evidence.photos.map((url) => ({ url })));
       seededPhotos += 1;
     }
@@ -9790,6 +10144,197 @@ function primeSitePopupCachesFromRuidosoEvidence(rows = null){
   if (seededCodes || seededPhotos){
     debugLog("[map] seeded popup cache from evidence", { seededCodes, seededPhotos });
   }
+}
+
+async function upsertImportedCodesToSitesNotes(codesBySiteId){
+  const updates = [];
+  const dateLabel = new Date().toISOString().slice(0, 10);
+  codesBySiteId.forEach((codes, siteId) => {
+    const site = (state.projectSites || []).find((row) => String(row?.id || "") === String(siteId || ""));
+    if (!site || !codes?.size) return;
+    const codeList = Array.from(codes).sort();
+    const block = `CODES USED (imported ${dateLabel}): ${codeList.join(", ")}`;
+    const current = String(site?.notes || "");
+    if (current.includes(block)) return;
+    const nextNotes = current.trim() ? `${current.trim()}\n${block}` : block;
+    updates.push({ siteId, notes: nextNotes });
+  });
+  for (const item of updates){
+    const { error } = await state.client
+      .from("sites")
+      .update({ notes: item.notes })
+      .eq("id", item.siteId);
+    if (error) throw error;
+    const local = (state.projectSites || []).find((row) => String(row?.id || "") === String(item.siteId || ""));
+    if (local) local.notes = item.notes;
+  }
+  return updates.length;
+}
+
+async function syncImportedEvidenceToDb({
+  projectId = state.activeProject?.id || null,
+  evidenceItems = [],
+  silent = true,
+  token = null,
+} = {}){
+  const projectKey = String(projectId || "").trim();
+  if (!projectKey || !state.client || isDemo){
+    return { matchedSites: 0, insertedPhotos: 0, skippedPhotoDuplicates: 0, insertedCodes: 0, noteUpdates: 0, failures: 0 };
+  }
+  if (String(state.activeProject?.id || "") !== projectKey){
+    return { matchedSites: 0, insertedPhotos: 0, skippedPhotoDuplicates: 0, insertedCodes: 0, noteUpdates: 0, failures: 0 };
+  }
+  if (token != null && token !== state.map.evidenceSyncToken){
+    return { matchedSites: 0, insertedPhotos: 0, skippedPhotoDuplicates: 0, insertedCodes: 0, noteUpdates: 0, failures: 0 };
+  }
+  if (!Array.isArray(state.projectSites) || !state.projectSites.length){
+    await loadProjectSites(projectKey);
+  }
+  const photoWanted = [];
+  const codesBySiteId = new Map();
+  let failures = 0;
+  const matchedSites = new Set();
+  for (const item of (Array.isArray(evidenceItems) ? evidenceItems : [])){
+    const normalized = item?.normalized || null;
+    if (!normalized) continue;
+    const targets = resolveEvidenceTargets(projectKey, normalized);
+    if (!targets.length){
+      failures += 1;
+      console.warn("[evidence sync] unresolved mapping", {
+        normalized,
+        source: item?.source || "",
+        meta: item?.meta || {},
+      });
+      continue;
+    }
+    targets.forEach((site) => matchedSites.add(String(site?.id || "")));
+    const urls = Array.isArray(item?.photoUrls) ? item.photoUrls : [];
+    const codes = Array.isArray(item?.codesUsed) ? item.codesUsed : [];
+    targets.forEach((site) => {
+      const siteId = String(site?.id || "").trim();
+      if (!siteId) return;
+      urls.forEach((url) => {
+        const cleanUrl = String(url || "").trim();
+        if (!/^https?:\/\//i.test(cleanUrl)) return;
+        photoWanted.push({ site_id: siteId, media_path: cleanUrl });
+      });
+      if (!codesBySiteId.has(siteId)) codesBySiteId.set(siteId, new Set());
+      const bucket = codesBySiteId.get(siteId);
+      codes.forEach((code) => {
+        const clean = String(code || "").trim();
+        if (clean) bucket.add(clean);
+      });
+    });
+  }
+  const touchedSiteIds = Array.from(new Set(photoWanted.map((row) => row.site_id).concat(Array.from(codesBySiteId.keys()))));
+  if (!touchedSiteIds.length){
+    const summary = { matchedSites: matchedSites.size, insertedPhotos: 0, skippedPhotoDuplicates: 0, insertedCodes: 0, noteUpdates: 0, failures };
+    if (!silent){
+      toast("Evidence sync complete", `Matched ${summary.matchedSites} sites. Inserted 0 photos, 0 codes. Failures ${summary.failures}.`);
+    }
+    return summary;
+  }
+
+  const { data: mediaRows, error: mediaReadError } = await state.client
+    .from("site_media")
+    .select("site_id, media_path")
+    .in("site_id", touchedSiteIds);
+  if (mediaReadError) throw mediaReadError;
+  const existingMedia = new Set((mediaRows || []).map((row) => `${row.site_id}|${String(row.media_path || "").trim()}`));
+  const uniquePhotoWanted = Array.from(new Map(photoWanted.map((row) => [`${row.site_id}|${row.media_path}`, row])).values());
+  const photoInserts = uniquePhotoWanted
+    .filter((row) => !existingMedia.has(`${row.site_id}|${row.media_path}`))
+    .map((row) => ({
+      ...row,
+      created_by: state.user?.id || null,
+      created_at: new Date().toISOString(),
+    }));
+  const skippedPhotoDuplicates = Math.max(0, uniquePhotoWanted.length - photoInserts.length);
+  let insertedPhotos = 0;
+  const insertByChunks = async (table, rows) => {
+    if (!rows.length) return 0;
+    const chunkSize = 200;
+    let inserted = 0;
+    for (let i = 0; i < rows.length; i += chunkSize){
+      const chunk = rows.slice(i, i + chunkSize);
+      let { error } = await state.client.from(table).insert(chunk);
+      if (error && isMissingColumnError(error, "created_by")){
+        ({ error } = await state.client.from(table).insert(chunk.map(({ created_by, ...rest }) => rest)));
+      }
+      if (error) throw error;
+      inserted += chunk.length;
+    }
+    return inserted;
+  };
+  insertedPhotos = await insertByChunks("site_media", photoInserts);
+
+  let insertedCodes = 0;
+  let noteUpdates = 0;
+  let codesTableAvailable = true;
+  let existingCodeRows = [];
+  if (codesBySiteId.size){
+    const codeRead = await state.client
+      .from("site_codes")
+      .select("site_id, code")
+      .in("site_id", touchedSiteIds);
+    if (codeRead.error){
+      if (isMissingTable(codeRead.error)){
+        codesTableAvailable = false;
+      } else {
+        throw codeRead.error;
+      }
+    } else {
+      existingCodeRows = codeRead.data || [];
+    }
+  }
+  if (codesBySiteId.size){
+    if (codesTableAvailable){
+      const existingCodes = new Set(existingCodeRows.map((row) => `${row.site_id}|${String(row.code || "").trim().toUpperCase()}`));
+      const codeInserts = [];
+      codesBySiteId.forEach((codes, siteId) => {
+        codes.forEach((code) => {
+          const key = `${siteId}|${String(code || "").trim().toUpperCase()}`;
+          if (existingCodes.has(key)) return;
+          codeInserts.push({
+            site_id: siteId,
+            code,
+            created_by: state.user?.id || null,
+            created_at: new Date().toISOString(),
+          });
+        });
+      });
+      insertedCodes = await insertByChunks("site_codes", codeInserts);
+    } else {
+      noteUpdates = await upsertImportedCodesToSitesNotes(codesBySiteId);
+    }
+  }
+
+  const touchedKeys = new Set(touchedSiteIds.map((id) => toSiteIdKey(id)).filter(Boolean));
+  touchedKeys.forEach((key) => {
+    state.map.sitePhotosBySiteId.delete(key);
+    state.map.siteCodesBySiteId.delete(key);
+  });
+  const activeSiteKey = toSiteIdKey(state.activeSite?.id);
+  if (activeSiteKey && touchedKeys.has(activeSiteKey)){
+    await loadSiteMedia(state.activeSite.id);
+    await loadSiteCodes(state.activeSite.id);
+    renderSitePanel();
+  }
+  const summary = {
+    matchedSites: matchedSites.size,
+    insertedPhotos,
+    skippedPhotoDuplicates,
+    insertedCodes,
+    noteUpdates,
+    failures,
+  };
+  if (!silent){
+    toast(
+      "Evidence sync complete",
+      `Matched ${summary.matchedSites} sites. Photos +${summary.insertedPhotos} (${summary.skippedPhotoDuplicates} dupes). Codes +${summary.insertedCodes}${summary.noteUpdates ? `, notes +${summary.noteUpdates}` : ""}. Failures ${summary.failures}.`
+    );
+  }
+  return summary;
 }
 
 function applyRuidosoPackageDataToRows(rows, {
@@ -9883,6 +10428,7 @@ async function importRuidosoPackageZip(file){
 
   const codeByKey = new Map();
   const photosByKey = new Map();
+  const evidenceItems = [];
   const enclosureKeyCounts = new Map();
   const upsertMapSet = (map, key, values) => {
     if (!key || !values?.length) return;
@@ -9906,15 +10452,24 @@ async function importRuidosoPackageZip(file){
     const enclosureIdx = findHeaderIndex(headers, ["enclosure"]);
     const codesIdx = findHeaderIndex(headers, ["codes_raw", "codes"]);
     rows.slice(1).forEach((row) => {
-      const jobMap = normalizeRuidosoToken(row[jobIdx] || "");
+      const jobMapKeys = expandRuidosoJobMapTokens(row[jobIdx] || "");
       const enclosure = normalizeRuidosoEnclosure(row[enclosureIdx] || "");
       const codes = parseRuidosoCodesRaw(row[codesIdx] || "");
       if (!enclosure) return;
-      if (jobMap){
-        upsertMapSet(codeByKey, `${jobMap}|${enclosure}`, codes);
+      if (jobMapKeys.length){
+        jobMapKeys.forEach((jobMap) => upsertMapSet(codeByKey, `${jobMap}|${enclosure}`, codes));
         bumpEnclosureCount(`*|${enclosure}`);
       }
       upsertMapSet(codeByKey, `*|${enclosure}`, codes);
+      const evidence = buildEvidenceItem({
+        rawSegment: row[enclosureIdx] || "",
+        rawNode: row[jobIdx] || "",
+        rawEnclosure: enclosure,
+        codesUsed: codes,
+        source: "zip",
+        meta: { entry: "ruidoso_production_codes.csv" },
+      });
+      if (evidence) evidenceItems.push(evidence);
     });
   }
 
@@ -9926,15 +10481,24 @@ async function importRuidosoPackageZip(file){
     const urlIdx = findHeaderIndex(headers, ["photo_url", "url"]);
     rows.slice(1).forEach((row) => {
       const parsed = parseRuidosoPhotoLoc(row[locIdx] || "");
-      const jobMap = normalizeRuidosoToken(parsed.jobMap);
+      const jobMapKeys = expandRuidosoJobMapTokens(parsed.jobMap || row[locIdx] || "");
       const enclosure = normalizeRuidosoEnclosure(parsed.enclosure);
       const url = String(row[urlIdx] || "").trim();
       if (!enclosure || !/^https?:\/\//i.test(url)) return;
-      if (jobMap){
-        upsertMapSet(photosByKey, `${jobMap}|${enclosure}`, [url]);
+      if (jobMapKeys.length){
+        jobMapKeys.forEach((jobMap) => upsertMapSet(photosByKey, `${jobMap}|${enclosure}`, [url]));
         bumpEnclosureCount(`*|${enclosure}`);
       }
       upsertMapSet(photosByKey, `*|${enclosure}`, [url]);
+      const evidence = buildEvidenceItem({
+        rawSegment: row[locIdx] || parsed.enclosure || "",
+        rawNode: parsed.jobMap || "",
+        rawEnclosure: enclosure,
+        photoUrls: [url],
+        source: "zip",
+        meta: { entry: "ruidoso_photo_links.csv" },
+      });
+      if (evidence) evidenceItems.push(evidence);
     });
   }
 
@@ -9962,7 +10526,8 @@ async function importRuidosoPackageZip(file){
   if (selectedId && state.map.kmzFeatureRows.has(selectedId)){
     void openKmzFeaturePopup(selectedId, { focusMap: false });
   }
-  return result;
+  queueSaveKmzSnapshotForActiveProject({ immediate: true });
+  return { ...result, evidenceItems };
 }
 
 async function importRuidosoPackageCsv(file){
@@ -10040,6 +10605,7 @@ async function importRuidosoPackageCsv(file){
   let processedRows = 0;
   let codeRows = 0;
   let photoRows = 0;
+  const evidenceItems = [];
   const upsertMapSet = (map, key, values) => {
     if (!key || !values?.length) return;
     const next = new Set(map.get(key) || []);
@@ -10068,9 +10634,10 @@ async function importRuidosoPackageCsv(file){
     processedRows += 1;
     const rawLoc = locIdx >= 0 ? row[locIdx] : "";
     const parsedLoc = parseRuidosoPhotoLoc(rawLoc || "");
-    const jobMap = normalizeRuidosoToken(
-      (jobIdx >= 0 ? row[jobIdx] : "") || parsedLoc.jobMap || ""
-    );
+    const jobMapKeys = Array.from(new Set([
+      ...expandRuidosoJobMapTokens(jobIdx >= 0 ? row[jobIdx] : ""),
+      ...expandRuidosoJobMapTokens(parsedLoc.jobMap || rawLoc || ""),
+    ]));
     const enclosure = normalizeRuidosoEnclosure(
       (enclosureIdx >= 0 ? row[enclosureIdx] : "") || parsedLoc.enclosure || ""
     );
@@ -10085,13 +10652,22 @@ async function importRuidosoPackageCsv(file){
       const codes = parseRuidosoCodesRaw(row[codesIdx] || "");
       if (codes.length) codeRows += 1;
       if (locText) upsertNameSet(codeByNameKey, locText, codes);
-      if (jobMap && enclosure){
-        upsertMapSet(codeByKey, `${jobMap}|${enclosure}`, codes);
+      if (jobMapKeys.length && enclosure){
+        jobMapKeys.forEach((jobMap) => upsertMapSet(codeByKey, `${jobMap}|${enclosure}`, codes));
         bumpEnclosureCount(`*|${enclosure}`);
       }
       if (enclosure){
         upsertMapSet(codeByKey, `*|${enclosure}`, codes);
       }
+      const evidence = buildEvidenceItem({
+        rawSegment: locText || row[enclosureIdx] || "",
+        rawNode: row[jobIdx] || parsedLoc.jobMap || "",
+        rawEnclosure: enclosure,
+        codesUsed: codes,
+        source: "csv",
+        meta: { type: "codes" },
+      });
+      if (evidence) evidenceItems.push(evidence);
     }
 
     if (hasPhotoColumns && urlIdx >= 0){
@@ -10099,13 +10675,22 @@ async function importRuidosoPackageCsv(file){
       if (!/^https?:\/\//i.test(url)) return;
       photoRows += 1;
       if (locText) upsertNameSet(photosByNameKey, locText, [url]);
-      if (jobMap && enclosure){
-        upsertMapSet(photosByKey, `${jobMap}|${enclosure}`, [url]);
+      if (jobMapKeys.length && enclosure){
+        jobMapKeys.forEach((jobMap) => upsertMapSet(photosByKey, `${jobMap}|${enclosure}`, [url]));
         bumpEnclosureCount(`*|${enclosure}`);
       }
       if (enclosure){
         upsertMapSet(photosByKey, `*|${enclosure}`, [url]);
       }
+      const evidence = buildEvidenceItem({
+        rawSegment: locText || row[enclosureIdx] || "",
+        rawNode: row[jobIdx] || parsedLoc.jobMap || "",
+        rawEnclosure: enclosure,
+        photoUrls: [url],
+        source: "csv",
+        meta: { type: "photo_url" },
+      });
+      if (evidence) evidenceItems.push(evidence);
     }
   });
 
@@ -10139,12 +10724,14 @@ async function importRuidosoPackageCsv(file){
   if (selectedId && state.map.kmzFeatureRows.has(selectedId)){
     void openKmzFeaturePopup(selectedId, { focusMap: false });
   }
+  queueSaveKmzSnapshotForActiveProject({ immediate: true });
   return {
     ...result,
     detectedType,
     processedRows,
     codeRows,
     photoRows,
+    evidenceItems,
   };
 }
 
@@ -10229,6 +10816,38 @@ function extractPhotoLinksFromPdfBuffer(buffer){
   return links;
 }
 
+async function extractPhotoLinksFromPdfAnnotations(buffer){
+  const pdfjsLib = await loadPdfJs();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  const rows = [];
+  const seen = new Set();
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1){
+    const page = await pdf.getPage(pageNumber);
+    const annots = await page.getAnnotations({ intent: "display" });
+    const textContent = await page.getTextContent();
+    const pageText = String((textContent?.items || []).map((item) => item?.str || "").join(" ")).slice(0, 800);
+    (annots || []).forEach((annot) => {
+      const url = String(
+        annot?.url
+        || annot?.unsafeUrl
+        || annot?.a?.uri
+        || annot?.action
+        || ""
+      ).trim();
+      if (!/^https?:\/\//i.test(url)) return;
+      const key = `${pageNumber}|${url}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      rows.push({
+        url,
+        context: pageText,
+        page: pageNumber,
+      });
+    });
+  }
+  return rows;
+}
+
 function extractLocationHintsFromText(text){
   const src = String(text || "");
   const out = new Set();
@@ -10270,7 +10889,10 @@ function extractNameHintsFromUrl(url){
 
 async function importRuidosoPhotoReportPdf(file){
   const buffer = await file.arrayBuffer();
-  const links = extractPhotoLinksFromPdfBuffer(buffer);
+  let links = await extractPhotoLinksFromPdfAnnotations(buffer);
+  if (!links.length){
+    links = extractPhotoLinksFromPdfBuffer(buffer);
+  }
   if (!links.length){
     throw new Error("No http(s) photo links found in PDF.");
   }
@@ -10308,6 +10930,7 @@ async function importRuidosoPhotoReportPdf(file){
 
   let mappedByName = 0;
   let mappedByEnclosure = 0;
+  const evidenceItems = [];
   links.forEach((entry) => {
     const url = String(entry?.url || "").trim();
     if (!/^https?:\/\//i.test(url)) return;
@@ -10325,11 +10948,20 @@ async function importRuidosoPhotoReportPdf(file){
       upsertMapSet(photosByKey, `*|${enclosure}`, [url]);
       bumpEnclosureCount(`*|${enclosure}`);
       const nodeHint = allHints.find((hint) => /NODE\d+_/i.test(hint)) || "";
-      const jobMap = normalizeRuidosoToken(nodeHint);
-      if (jobMap){
+      const jobMapKeys = expandRuidosoJobMapTokens(nodeHint);
+      jobMapKeys.forEach((jobMap) => {
         upsertMapSet(photosByKey, `${jobMap}|${enclosure}`, [url]);
-      }
+      });
     }
+    const evidence = buildEvidenceItem({
+      rawSegment: `${allHints.join(" ")} ${entry?.context || ""}`,
+      rawNode: allHints.find((hint) => /NODE\s*54|1635CA/i.test(String(hint || ""))) || "",
+      rawEnclosure: enclosure || enclosureRaw,
+      photoUrls: [url],
+      source: "pdf",
+      meta: { page: entry?.page || null },
+    });
+    if (evidence) evidenceItems.push(evidence);
   });
 
   const result = applyRuidosoPackageDataToRows(kmzRows, {
@@ -10357,11 +10989,13 @@ async function importRuidosoPhotoReportPdf(file){
   if (selectedId && state.map.kmzFeatureRows.has(selectedId)){
     void openKmzFeaturePopup(selectedId, { focusMap: false });
   }
+  queueSaveKmzSnapshotForActiveProject({ immediate: true });
   return {
     ...result,
     linkCount: links.length,
     mappedByName,
     mappedByEnclosure,
+    evidenceItems,
   };
 }
 
@@ -10538,32 +11172,52 @@ async function handleLocationImport(file){
 
   dlog("Import handler reached, file selected:", file.name);
   const name = file.name.toLowerCase();
+  const syncToken = (state.map.evidenceSyncToken || 0) + 1;
+  state.map.evidenceSyncToken = syncToken;
   let rows = [];
   try{
     if (name.endsWith(".kmz")){
       rows = await parseKmzFile(file);
     } else if (name.endsWith(".zip")){
       const result = await importRuidosoPackageZip(file);
+      const sync = await syncImportedEvidenceToDb({
+        projectId: activeProjectId,
+        evidenceItems: result.evidenceItems || [],
+        silent: true,
+        token: syncToken,
+      });
       toast(
         "Package applied",
-        `Matched ${result.matchedRows} points. Added codes to ${result.rowsWithCodes} and photos to ${result.rowsWithPhotos}.`
+        `Matched ${result.matchedRows} points. DB sync: ${sync.matchedSites} sites, +${sync.insertedPhotos} photos (${sync.skippedPhotoDuplicates} dupes), +${sync.insertedCodes} codes${sync.noteUpdates ? `, +${sync.noteUpdates} notes` : ""}, failures ${sync.failures}.`
       );
       return;
     } else if (name.endsWith(".csv")){
       const result = await importRuidosoPackageCsv(file);
+      const sync = await syncImportedEvidenceToDb({
+        projectId: activeProjectId,
+        evidenceItems: result.evidenceItems || [],
+        silent: true,
+        token: syncToken,
+      });
       const typeLabel = result.detectedType === "photos"
         ? "Photo CSV"
         : (result.detectedType === "codes" ? "Codes CSV" : "Combined CSV");
       toast(
         `${typeLabel} applied`,
-        `Rows ${result.processedRows}. Matched ${result.matchedRows} points. Added codes to ${result.rowsWithCodes} and photos to ${result.rowsWithPhotos}.`
+        `Rows ${result.processedRows}. Matched ${result.matchedRows} points. DB sync: ${sync.matchedSites} sites, +${sync.insertedPhotos} photos (${sync.skippedPhotoDuplicates} dupes), +${sync.insertedCodes} codes${sync.noteUpdates ? `, +${sync.noteUpdates} notes` : ""}, failures ${sync.failures}.`
       );
       return;
     } else if (name.endsWith(".pdf")){
       const result = await importRuidosoPhotoReportPdf(file);
+      const sync = await syncImportedEvidenceToDb({
+        projectId: activeProjectId,
+        evidenceItems: result.evidenceItems || [],
+        silent: true,
+        token: syncToken,
+      });
       toast(
         "Photo PDF applied",
-        `Links ${result.linkCount}. Matched ${result.matchedRows} points. Added photos to ${result.rowsWithPhotos}.`
+        `Links ${result.linkCount}. Matched ${result.matchedRows} points. DB sync: ${sync.matchedSites} sites, +${sync.insertedPhotos} photos (${sync.skippedPhotoDuplicates} dupes), +${sync.insertedCodes} codes${sync.noteUpdates ? `, +${sync.noteUpdates} notes` : ""}, failures ${sync.failures}.`
       );
       return;
     } else {
@@ -16045,7 +16699,9 @@ async function loadBillingLocations(projectId){
 function setActiveProjectById(id){
   const next = state.projects.find(p => p.id === id) || null;
   state.activeProject = next;
+  clearImportPreviewMarkers();
   loadKmzPhotoOverridesForActiveProject();
+  void loadKmzSnapshotForProject(next?.id || null, { silent: true });
   state.map.materialFeatureId = "";
   state.map.materialFeatureTotals.clear();
   state.mapFilters.search = "";
