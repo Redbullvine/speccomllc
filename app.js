@@ -10242,6 +10242,7 @@ async function syncImportedEvidenceToDb({
   const photoWanted = [];
   const codesBySiteId = new Map();
   let failures = 0;
+  const unresolvedSamples = [];
   const matchedSites = new Set();
   for (const item of (Array.isArray(evidenceItems) ? evidenceItems : [])){
     const normalized = item?.normalized || null;
@@ -10249,11 +10250,13 @@ async function syncImportedEvidenceToDb({
     const targets = resolveEvidenceTargets(projectKey, normalized);
     if (!targets.length){
       failures += 1;
-      console.warn("[evidence sync] unresolved mapping", {
-        normalized,
-        source: item?.source || "",
-        meta: item?.meta || {},
-      });
+      if (unresolvedSamples.length < 5){
+        unresolvedSamples.push({
+          normalized,
+          source: item?.source || "",
+          meta: item?.meta || {},
+        });
+      }
       continue;
     }
     targets.forEach((site) => matchedSites.add(String(site?.id || "")));
@@ -10276,10 +10279,13 @@ async function syncImportedEvidenceToDb({
     });
   }
   const touchedSiteIds = Array.from(new Set(photoWanted.map((row) => row.site_id).concat(Array.from(codesBySiteId.keys()))));
+  if (failures){
+    dlog("[evidence sync] unresolved mappings", { count: failures, samples: unresolvedSamples });
+  }
   if (!touchedSiteIds.length){
     const summary = { matchedSites: matchedSites.size, insertedPhotos: 0, skippedPhotoDuplicates: 0, insertedCodes: 0, noteUpdates: 0, failures };
     if (!silent){
-      toast("Evidence sync complete", `Matched ${summary.matchedSites} sites. Inserted 0 photos, 0 codes. Failures ${summary.failures}.`);
+      toast("Evidence sync complete", `Matched ${summary.matchedSites} sites. Inserted 0 photos, 0 codes. Unmapped rows skipped ${summary.failures}.`);
     }
     return summary;
   }
@@ -10380,7 +10386,7 @@ async function syncImportedEvidenceToDb({
   if (!silent){
     toast(
       "Evidence sync complete",
-      `Matched ${summary.matchedSites} sites. Photos +${summary.insertedPhotos} (${summary.skippedPhotoDuplicates} dupes). Codes +${summary.insertedCodes}${summary.noteUpdates ? `, notes +${summary.noteUpdates}` : ""}. Failures ${summary.failures}.`
+      `Matched ${summary.matchedSites} sites. Photos +${summary.insertedPhotos} (${summary.skippedPhotoDuplicates} dupes). Codes +${summary.insertedCodes}${summary.noteUpdates ? `, notes +${summary.noteUpdates}` : ""}. Unmapped rows skipped ${summary.failures}.`
     );
   }
   return summary;
@@ -11241,7 +11247,7 @@ async function handleLocationImport(file){
       });
       toast(
         "Package applied",
-        `Matched ${result.matchedRows} points. DB sync: ${sync.matchedSites} sites, +${sync.insertedPhotos} photos (${sync.skippedPhotoDuplicates} dupes), +${sync.insertedCodes} codes${sync.noteUpdates ? `, +${sync.noteUpdates} notes` : ""}, failures ${sync.failures}.`
+        `Matched ${result.matchedRows} points. DB sync: ${sync.matchedSites} sites, +${sync.insertedPhotos} photos (${sync.skippedPhotoDuplicates} dupes), +${sync.insertedCodes} codes${sync.noteUpdates ? `, +${sync.noteUpdates} notes` : ""}, unmapped rows skipped ${sync.failures}.`
       );
       return;
     } else if (name.endsWith(".csv")){
@@ -11257,7 +11263,7 @@ async function handleLocationImport(file){
         : (result.detectedType === "codes" ? "Codes CSV" : "Combined CSV");
       toast(
         `${typeLabel} applied`,
-        `Rows ${result.processedRows}. Matched ${result.matchedRows} points. DB sync: ${sync.matchedSites} sites, +${sync.insertedPhotos} photos (${sync.skippedPhotoDuplicates} dupes), +${sync.insertedCodes} codes${sync.noteUpdates ? `, +${sync.noteUpdates} notes` : ""}, failures ${sync.failures}.`
+        `Rows ${result.processedRows}. Matched ${result.matchedRows} points. DB sync: ${sync.matchedSites} sites, +${sync.insertedPhotos} photos (${sync.skippedPhotoDuplicates} dupes), +${sync.insertedCodes} codes${sync.noteUpdates ? `, +${sync.noteUpdates} notes` : ""}, unmapped rows skipped ${sync.failures}.`
       );
       return;
     } else if (name.endsWith(".pdf")){
@@ -11270,7 +11276,7 @@ async function handleLocationImport(file){
       });
       toast(
         "Photo PDF applied",
-        `Links ${result.linkCount}. Matched ${result.matchedRows} points. DB sync: ${sync.matchedSites} sites, +${sync.insertedPhotos} photos (${sync.skippedPhotoDuplicates} dupes), +${sync.insertedCodes} codes${sync.noteUpdates ? `, +${sync.noteUpdates} notes` : ""}, failures ${sync.failures}.`
+        `Links ${result.linkCount}. Matched ${result.matchedRows} points. DB sync: ${sync.matchedSites} sites, +${sync.insertedPhotos} photos (${sync.skippedPhotoDuplicates} dupes), +${sync.insertedCodes} codes${sync.noteUpdates ? `, +${sync.noteUpdates} notes` : ""}, unmapped rows skipped ${sync.failures}.`
       );
       return;
     } else {
