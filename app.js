@@ -10548,13 +10548,15 @@ async function importRuidosoPackageCsv(file){
   const enclosureIdx = (() => {
     const direct = findHeaderIndex(headers, [
       "enclosure",
+      "segment",
+      "location_segment",
       "drop_number",
       "network_point",
       "network_point_name",
       "ruidoso_network_point_name",
     ]);
     if (direct >= 0) return direct;
-    return findHeaderContains(["enclosure", "drop", "network_point", "point_name", "site_name"]);
+    return findHeaderContains(["enclosure", "segment", "drop", "network_point", "point_name", "site_name"]);
   })();
   const codesIdx = (() => {
     const direct = findHeaderIndex(headers, ["codes_raw", "codes", "billing_codes", "billing_code", "work_codes"]);
@@ -10564,6 +10566,8 @@ async function importRuidosoPackageCsv(file){
   const locIdx = (() => {
     const direct = findHeaderIndex(headers, [
       "loc",
+      "segment",
+      "location_segment",
       "location",
       "location_name",
       "site_name",
@@ -10572,7 +10576,7 @@ async function importRuidosoPackageCsv(file){
       "ruidoso_network_point_name",
     ]);
     if (direct >= 0) return direct;
-    return findHeaderContains(["loc", "location", "site_name", "point_name", "network_point", "name"]);
+    return findHeaderContains(["loc", "segment", "location", "site_name", "point_name", "network_point", "name"]);
   })();
   const urlIdx = (() => {
     const direct = findHeaderIndex(headers, [
