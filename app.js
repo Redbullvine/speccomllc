@@ -1,4 +1,11 @@
-import { APP_MODE, hasSupabaseConfig, makeClient, refreshConfig } from "./supabaseClient.js";
+import {
+  APP_MODE,
+  clearSupabaseAuthStorage,
+  hasSupabaseConfig,
+  isInvalidRefreshError,
+  makeClient,
+  refreshConfig,
+} from "./supabaseClient.js";
 
 const isDebug = new URLSearchParams(location.search).has("debug");
 const dlog = (...args) => { if (isDebug) console.log(...args); };
@@ -19831,9 +19838,31 @@ async function initAuth(){
     }
 
   // Supabase session
-  const { data } = await state.client.auth.getSession();
-  state.session = data.session;
-  state.user = data.session?.user || null;
+  try {
+    const { data, error } = await state.client.auth.getSession();
+    if (error && isInvalidRefreshError(error)) {
+      clearSupabaseAuthStorage();
+      try {
+        await state.client.auth.signOut({ scope: "local" });
+      } catch {}
+      state.session = null;
+      state.user = null;
+    } else {
+      state.session = data?.session || null;
+      state.user = data?.session?.user || null;
+    }
+  } catch (error) {
+    if (isInvalidRefreshError(error)) {
+      clearSupabaseAuthStorage();
+      try {
+        await state.client.auth.signOut({ scope: "local" });
+      } catch {}
+      state.session = null;
+      state.user = null;
+    } else {
+      throw error;
+    }
+  }
 
   state.client.auth.onAuthStateChange(async (_event, session) => {
     state.session = session;
