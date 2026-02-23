@@ -13337,12 +13337,67 @@ async function createProject(){
     return;
   }
 
-  const orgId = state.profile?.org_id || null;
+  let orgId = state.profile?.org_id || null;
   const creatorId = state.user?.id || null;
+  const refreshProfileOrgId = async () => {
+    const { data, error } = await state.client
+      .from("profiles")
+      .select("org_id")
+      .eq("id", state.user?.id || "")
+      .maybeSingle();
+    if (error) return null;
+    const nextOrgId = String(data?.org_id || "").trim() || null;
+    if (nextOrgId){
+      state.profile = { ...(state.profile || {}), org_id: nextOrgId };
+      window.currentUserProfile = state.profile;
+    }
+    return nextOrgId;
+  };
+  const ensureProjectOrgId = async () => {
+    if (orgId) return orgId;
+    try { await state.client.rpc("fn_claim_profile_invite"); } catch {}
+    orgId = await refreshProfileOrgId();
+    if (orgId) return orgId;
+    // Single-org fallback: attach this profile to the only org when unambiguous.
+    const { data: orgRows, error: orgReadError } = await state.client
+      .from("orgs")
+      .select("id")
+      .limit(2);
+    if (!orgReadError && Array.isArray(orgRows) && orgRows.length === 1){
+      const onlyOrgId = String(orgRows[0]?.id || "").trim();
+      if (onlyOrgId){
+        const { error: updateError } = await state.client
+          .from("profiles")
+          .update({ org_id: onlyOrgId })
+          .eq("id", state.user?.id || "");
+        if (!updateError){
+          orgId = onlyOrgId;
+          state.profile = { ...(state.profile || {}), org_id: orgId };
+          window.currentUserProfile = state.profile;
+          return orgId;
+        }
+      }
+    }
+    return null;
+  };
+  await ensureProjectOrgId();
   let { data: projectId, error } = await state.client
     .rpc("fn_create_project", { p_name: name, p_description: description ?? null, p_org_id: orgId });
   if (error){
     debugLog("[createProject] rpc error", error);
+    const errMsg = String(error?.message || "").toLowerCase();
+    if (errMsg.includes("profile organization is required")){
+      await ensureProjectOrgId();
+      ({ data: projectId, error } = await state.client
+        .rpc("fn_create_project", { p_name: name, p_description: description ?? null, p_org_id: orgId }));
+      if (!error){
+        await loadProfile(state.client, state.user?.id);
+      } else {
+        debugLog("[createProject] rpc retry error", error);
+      }
+    }
+  }
+  if (error){
     if (isRpc404(error)){
       const fallback = await state.client
         .from("projects")
