@@ -2439,9 +2439,13 @@ function stopLocationPolling(){
   }
 }
 
-const SITE_SELECT_COLUMNS = "id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, lat, lng, created_at";
-const SITE_SELECT_COLUMNS_GPS_ONLY = "id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at";
-const SITE_SELECT_COLUMNS_LEGACY_ONLY = "id, project_id, name, notes, lat, lng, created_at";
+const SITE_BILLING_COLUMNS = "units_allowed, units_billed, allowed_units, billed_units, allowed_qty, billed_qty";
+const SITE_SELECT_COLUMNS = `id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, lat, lng, created_at, ${SITE_BILLING_COLUMNS}`;
+const SITE_SELECT_COLUMNS_GPS_ONLY = `id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at, ${SITE_BILLING_COLUMNS}`;
+const SITE_SELECT_COLUMNS_LEGACY_ONLY = `id, project_id, name, notes, lat, lng, created_at, ${SITE_BILLING_COLUMNS}`;
+const SITE_SELECT_COLUMNS_NO_BILLING = "id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, lat, lng, created_at";
+const SITE_SELECT_COLUMNS_GPS_ONLY_NO_BILLING = "id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at";
+const SITE_SELECT_COLUMNS_LEGACY_ONLY_NO_BILLING = "id, project_id, name, notes, lat, lng, created_at";
 
 function isMissingColumnError(error, column){
   const message = String(error?.message || "").toLowerCase();
@@ -2456,6 +2460,11 @@ function isMissingGpsColumnError(error){
 
 function isMissingLatLngColumnError(error){
   return ["lat", "lng"].some((col) => isMissingColumnError(error, col));
+}
+
+function isMissingSiteBillingColumnError(error){
+  return ["units_allowed", "units_billed", "allowed_units", "billed_units", "allowed_qty", "billed_qty"]
+    .some((col) => isMissingColumnError(error, col));
 }
 
 function isMissingTable(err){
@@ -2504,19 +2513,26 @@ async function fetchSiteById(siteId){
     .select(SITE_SELECT_COLUMNS)
     .eq("id", siteId)
     .maybeSingle();
+  if (isMissingSiteBillingColumnError(res.error)){
+    res = await state.client
+      .from("sites")
+      .select(SITE_SELECT_COLUMNS_NO_BILLING)
+      .eq("id", siteId)
+      .maybeSingle();
+  }
   if (res.error && isNoRowsError(res.error)) return { data: null, error: null };
   if (!res.error) return res;
   if (isMissingGpsColumnError(res.error)){
     return await state.client
       .from("sites")
-      .select(SITE_SELECT_COLUMNS_LEGACY_ONLY)
+      .select(isMissingSiteBillingColumnError(res.error) ? SITE_SELECT_COLUMNS_LEGACY_ONLY_NO_BILLING : SITE_SELECT_COLUMNS_LEGACY_ONLY)
       .eq("id", siteId)
       .maybeSingle();
   }
   if (isMissingLatLngColumnError(res.error)){
     return await state.client
       .from("sites")
-      .select(SITE_SELECT_COLUMNS_GPS_ONLY)
+      .select(isMissingSiteBillingColumnError(res.error) ? SITE_SELECT_COLUMNS_GPS_ONLY_NO_BILLING : SITE_SELECT_COLUMNS_GPS_ONLY)
       .eq("id", siteId)
       .maybeSingle();
   }
@@ -2529,18 +2545,25 @@ async function fetchSitesByProject(projectId){
     .select(SITE_SELECT_COLUMNS)
     .eq("project_id", projectId)
     .order("created_at", { ascending: true });
+  if (isMissingSiteBillingColumnError(res.error)){
+    res = await state.client
+      .from("sites")
+      .select(SITE_SELECT_COLUMNS_NO_BILLING)
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: true });
+  }
   if (!res.error) return res;
   if (isMissingGpsColumnError(res.error)){
     return await state.client
       .from("sites")
-      .select(SITE_SELECT_COLUMNS_LEGACY_ONLY)
+      .select(isMissingSiteBillingColumnError(res.error) ? SITE_SELECT_COLUMNS_LEGACY_ONLY_NO_BILLING : SITE_SELECT_COLUMNS_LEGACY_ONLY)
       .eq("project_id", projectId)
       .order("created_at", { ascending: true });
   }
   if (isMissingLatLngColumnError(res.error)){
     return await state.client
       .from("sites")
-      .select(SITE_SELECT_COLUMNS_GPS_ONLY)
+      .select(isMissingSiteBillingColumnError(res.error) ? SITE_SELECT_COLUMNS_GPS_ONLY_NO_BILLING : SITE_SELECT_COLUMNS_GPS_ONLY)
       .eq("project_id", projectId)
       .order("created_at", { ascending: true });
   }
@@ -5028,6 +5051,13 @@ async function renderMapPopupActiveSite({ syncSelection = true } = {}){
   const snap = getMapPopupSnapshot();
   if (!snap) return;
   const { marker, site, index, total, nearby, requiredCodes } = snap;
+  if (isDebug){
+    console.log({
+      loc: getSiteDisplayName(site),
+      units_allowed: getSiteField(site, ["units_allowed", "unit_allowed", "allowed_units", "allowed_qty"]),
+      units_billed: getSiteField(site, ["units_billed", "unit_billed", "billed_units", "billed_qty"]),
+    });
+  }
   const hasCodesCache = hasCachedSiteCodes(site.id);
   const hasPhotosCache = hasCachedSitePhotos(site.id);
   const cachedCodes = getCachedSiteCodes(site.id);
@@ -10008,7 +10038,9 @@ function normalizeCsvHeaders(headers){
   const canonicalFields = Object.entries(indexes)
     .filter(([, idx]) => idx >= 0)
     .map(([key]) => key);
-  const hasLongCodeRows = indexes.loc >= 0 && indexes.code >= 0 && (indexes.allowed >= 0 || indexes.billed >= 0);
+  const hasLongCodeRows = indexes.loc >= 0
+    && indexes.code >= 0
+    && (indexes.allowed >= 0 || indexes.billed >= 0 || indexes.units_allowed >= 0 || indexes.units_billed >= 0);
   if (hasLongCodeRows){
     canonicalFields.push("code_rows[]");
   }
@@ -10068,6 +10100,10 @@ function buildBillingCodesPayload(codeRows){
       return `${code}|allowed=${allowed}|billed=${billed}`;
     })
     .join(";");
+}
+
+function isImportDryRunEnabled(){
+  return Boolean($("importLocationsDryRun")?.checked);
 }
 
 function normalizeNodeKey(raw){
@@ -10501,6 +10537,84 @@ async function upsertImportedBillingToSites(billingBySiteId){
     }
   }
   return { updatedSites, firstSiteIds, firstSample };
+}
+
+function buildDryRunBillingSummaryBySite({
+  projectId = state.activeProject?.id || null,
+  evidenceItems = [],
+} = {}){
+  const projectKey = String(projectId || "").trim();
+  const items = Array.isArray(evidenceItems) ? evidenceItems : [];
+  const matchedSiteIds = new Set();
+  const unresolved = new Set();
+  const billingBySiteId = new Map();
+
+  const mergeBillingForSite = (siteId, incoming) => {
+    if (!siteId || !incoming) return;
+    const bucket = billingBySiteId.get(siteId) || {
+      units_allowed: 0,
+      units_billed: 0,
+      code_rows: new Map(),
+      codes_payload: "",
+    };
+    const allowed = Number(incoming.units_allowed);
+    const billed = Number(incoming.units_billed);
+    if (Number.isFinite(allowed)) bucket.units_allowed += allowed;
+    if (Number.isFinite(billed)) bucket.units_billed += billed;
+    const rows = Array.isArray(incoming.code_rows) ? incoming.code_rows : [];
+    rows.forEach((row) => {
+      const code = String(row?.code || "").trim();
+      if (!code) return;
+      const prev = bucket.code_rows.get(code) || { code, allowed: 0, billed: 0 };
+      const rAllowed = Number(row?.allowed);
+      const rBilled = Number(row?.billed);
+      if (Number.isFinite(rAllowed)) prev.allowed += rAllowed;
+      if (Number.isFinite(rBilled)) prev.billed += rBilled;
+      bucket.code_rows.set(code, prev);
+    });
+    if (incoming.codes_payload){
+      bucket.codes_payload = String(incoming.codes_payload);
+    }
+    billingBySiteId.set(siteId, bucket);
+  };
+
+  items.forEach((item) => {
+    const normalized = item?.normalized || null;
+    if (!normalized || !projectKey) return;
+    const targets = resolveEvidenceTargets(projectKey, normalized);
+    if (!targets.length){
+      const rawLoc = String(item?.meta?.rawSegment || item?.meta?.rawEnclosure || item?.meta?.rawNode || "").trim();
+      if (rawLoc) unresolved.add(rawLoc);
+      return;
+    }
+    targets.forEach((site) => {
+      const siteId = String(site?.id || "").trim();
+      if (!siteId) return;
+      matchedSiteIds.add(siteId);
+      if (item?.billing && typeof item.billing === "object"){
+        mergeBillingForSite(siteId, item.billing);
+      }
+    });
+  });
+
+  const sampleUpdates = Array.from(billingBySiteId.entries()).slice(0, 3).map(([siteId, bucket]) => {
+    const site = (state.projectSites || []).find((row) => String(row?.id || "") === String(siteId || ""));
+    const codeRows = Array.from(bucket.code_rows?.values?.() || []);
+    const payload = String(bucket.codes_payload || "").trim() || buildBillingCodesPayload(codeRows);
+    return {
+      site_id: siteId,
+      loc: getSiteDisplayName(site || { name: siteId }),
+      units_allowed: bucket.units_allowed,
+      units_billed: bucket.units_billed,
+      codes_payload_preview: payload.slice(0, 140),
+    };
+  });
+
+  return {
+    matchedLocCount: matchedSiteIds.size,
+    notFoundLocs: Array.from(unresolved),
+    sampleUpdates,
+  };
 }
 
 async function syncImportedEvidenceToDb({
@@ -11028,8 +11142,8 @@ async function importRuidosoPackageCsv(file){
   const unitsAllowedIdx = canonicalIdx.units_allowed;
   const unitsBilledIdx = canonicalIdx.units_billed;
   const longCodeIdx = canonicalIdx.code;
-  const longAllowedIdx = canonicalIdx.allowed;
-  const longBilledIdx = canonicalIdx.billed;
+  const longAllowedIdx = canonicalIdx.allowed >= 0 ? canonicalIdx.allowed : (longCodeIdx >= 0 ? canonicalIdx.units_allowed : -1);
+  const longBilledIdx = canonicalIdx.billed >= 0 ? canonicalIdx.billed : (longCodeIdx >= 0 ? canonicalIdx.units_billed : -1);
   const urlIdx = (() => {
     if (canonicalIdx.photo_url >= 0) return canonicalIdx.photo_url;
     const direct = findHeaderIndex(headers, [
@@ -11045,12 +11159,13 @@ async function importRuidosoPackageCsv(file){
     return findHeaderContains(["photo_url", "image_url", "photo", "image", "url", "link"]);
   })();
 
-  const hasLongFormat = canonical.hasLongCodeRows;
+  const hasLongFormat = locIdx >= 0 && longCodeIdx >= 0 && (longAllowedIdx >= 0 || longBilledIdx >= 0);
   const hasLegacyCodesColumns = codesIdx >= 0 && (jobIdx >= 0 || enclosureIdx >= 0 || locIdx >= 0);
   const hasCodesColumns = hasLegacyCodesColumns || hasLongFormat;
   const hasPhotoColumns = urlIdx >= 0 && (locIdx >= 0 || enclosureIdx >= 0 || jobIdx >= 0);
   if (!hasCodesColumns && !hasPhotoColumns){
-    throw new Error("CSV must include billing headers. Supported: legacy loc+job__map/enclosure/codes, optional units_allowed/units_billed, or long format loc+code+allowed/billed (plus optional photo_url).");
+    const found = (rawHeaders || []).map((h) => String(h || "").trim()).filter(Boolean);
+    throw new Error(`CSV headers not recognized. Required one of: (1) loc + job__map/enclosure/codes, (2) loc + code + allowed/billed, or (3) photo columns. Detected: ${found.join(", ") || "(none)"}`);
   }
   const detectedFormat = hasLongFormat
     ? "C"
@@ -11768,6 +11883,33 @@ async function handleLocationImport(file){
       return;
     } else if (name.endsWith(".csv")){
       const result = await importRuidosoPackageCsv(file);
+      if (isImportDryRunEnabled()){
+        const dryRun = buildDryRunBillingSummaryBySite({
+          projectId: activeProjectId,
+          evidenceItems: result.evidenceItems || [],
+        });
+        const missingPreview = dryRun.notFoundLocs.slice(0, 10);
+        const samplePreview = dryRun.sampleUpdates.slice(0, 3);
+        toast(
+          "CSV dry run",
+          `Format ${result.detectedFormat || "?"}. Matched ${dryRun.matchedLocCount} locs. Not found ${dryRun.notFoundLocs.length}.`
+        );
+        dlog("[csv import] dry run summary", {
+          detectedFormat: result.detectedFormat || null,
+          canonicalFields: result.canonicalFields || [],
+          matchedLocCount: dryRun.matchedLocCount,
+          notFoundLocs: missingPreview,
+          sampleUpdates: samplePreview,
+        });
+        console.log("[CSV dry run]", {
+          format_detected: result.detectedFormat || null,
+          canonical_fields: result.canonicalFields || [],
+          matched_locs: dryRun.matchedLocCount,
+          not_found_locs_first_10: missingPreview,
+          sample_updates_first_3: samplePreview,
+        });
+        return;
+      }
       const sync = await syncImportedEvidenceToDb({
         projectId: activeProjectId,
         evidenceItems: result.evidenceItems || [],
