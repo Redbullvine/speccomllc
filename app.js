@@ -280,6 +280,8 @@ const state = {
   storageUrlCache: new Map(),
   storageAvailable: true,
   storageWarningShown: false,
+  profileSetupDismissed: false,
+  pendingPreferredLanguage: "",
   messagesEnabled: true,
   messagesDisabledReason: null,
   features: {
@@ -1408,6 +1410,7 @@ function getPreferredLanguage(){
 
 function setPreferredLanguage(lang, { persist = true } = {}){
   const next = normalizeLanguage(lang);
+  state.pendingPreferredLanguage = next;
   if (persist){
     safeLocalStorageSet("preferred_language", next);
   }
@@ -8029,7 +8032,19 @@ async function refreshLocations(){
 function showProfileSetupModal(show){
   const modal = $("profileSetupModal");
   if (!modal) return;
+  if (show && state.profileSetupDismissed){
+    modal.style.display = "none";
+    return;
+  }
   modal.style.display = show ? "flex" : "none";
+}
+
+function hasPreferredLanguageChoice(){
+  const allowed = new Set(["en", "es", "pt"]);
+  const profileLang = String(state.profile?.preferred_language || window.currentUserProfile?.preferred_language || "").trim().toLowerCase();
+  const pendingLang = String(state.pendingPreferredLanguage || "").trim().toLowerCase();
+  const storedLang = String(safeLocalStorageGet("preferred_language") || "").trim().toLowerCase();
+  return allowed.has(profileLang) || allowed.has(pendingLang) || allowed.has(storedLang);
 }
 
 function syncLanguageControls(){
@@ -8099,7 +8114,10 @@ async function savePreferredLanguage(lang, { closeModal = false } = {}){
           if (closeModal) showProfileSetupModal(false);
           return;
         }
+        safeLocalStorageSet("preferred_language", next);
+        if (closeModal) showProfileSetupModal(false);
         toast("Profile needed", "Ask an Admin to create your profile. Language saved locally.");
+        return;
       }
     } catch (err){
       console.warn("preferred_language missing; using local fallback", err);
@@ -8109,9 +8127,7 @@ async function savePreferredLanguage(lang, { closeModal = false } = {}){
     }
   }
   await loadProfile(state.client, state.user?.id);
-  if (closeModal){
-    showProfileSetupModal(!(state.profile && state.profile.preferred_language));
-  }
+  if (closeModal) showProfileSetupModal(false);
 }
 
 function refreshLanguageSensitiveUI(){
@@ -8238,7 +8254,7 @@ function getDefaultView(){
 
 function isViewAllowed(viewId){
   if (isFieldRole()){
-    return ["viewTechnician", "viewMap", "viewSettings", "viewDailyReport"].includes(viewId);
+    return ["viewDashboard", "viewTechnician", "viewMap", "viewSettings", "viewDailyReport"].includes(viewId);
   }
   if (viewId === "viewTechnician") return false;
   if (viewId === "viewInvoices") return canViewInvoiceVault();
@@ -8922,7 +8938,7 @@ function updateKPI(){
 function setRoleBasedVisibility(){
   const isTech = isTechnician();
   const allowedViews = isTech
-    ? new Set(["viewTechnician", "viewMap", "viewSettings", "viewDailyReport"])
+    ? new Set(["viewDashboard", "viewTechnician", "viewMap", "viewSettings", "viewDailyReport"])
     : new Set(["viewDashboard", "viewNodes", "viewPhotos", "viewBilling", "viewInvoices", "viewMap", "viewCatalog", "viewAlerts", "viewAdmin", "viewSettings", "viewLabor", "viewDispatch", "viewDailyReport"]);
 
   document.querySelectorAll(".nav-item").forEach((btn) => {
@@ -19277,7 +19293,11 @@ async function loadInvoiceFiles(projectId = state.activeProject?.id || null){
   const { data, error } = await query;
   if (error){
     const message = String(error?.message || "").toLowerCase();
-    if (message.includes("invoice_files") && message.includes("does not exist")){
+    if (
+      (message.includes("invoice_files") && message.includes("does not exist"))
+      || (message.includes("invoice_files") && message.includes("could not find the table"))
+      || (message.includes("invoice_files") && message.includes("schema cache"))
+    ){
       state.invoiceFiles = [];
       renderInvoiceFilesPanel();
       return;
@@ -21171,11 +21191,13 @@ async function initAuth(){
         setActiveView(getDefaultView());
         startLocationPolling();
         syncPendingSites();
-      } else {
+    } else {
         showAuth(true);
         state.activeNode = null;
         state.usageEvents = [];
         clearProof();
+      state.profileSetupDismissed = false;
+      state.pendingPreferredLanguage = "";
       showProfileSetupModal(false);
       stopLocationWatch();
       stopLocationPolling();
@@ -21279,7 +21301,7 @@ async function loadProfile(client, userId){
     setPreferredLanguage(state.profile.preferred_language);
   }
   syncLanguageControls();
-  showProfileSetupModal(!state.profile || !state.profile.preferred_language);
+  showProfileSetupModal(!hasPreferredLanguageChoice());
   setRoleUI();
   setDemoBadge();
   applyDemoRestrictions();
@@ -22045,9 +22067,21 @@ function wireUI(){
   }
   const profileLanguageBtn = $("btnSaveProfileLanguage");
   if (profileLanguageBtn){
-    profileLanguageBtn.addEventListener("click", () => {
+    profileLanguageBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
       const value = $("profileLanguageSelect")?.value || "en";
-      savePreferredLanguage(value, { closeModal: true });
+      state.profileSetupDismissed = true;
+      showProfileSetupModal(false);
+      profileLanguageBtn.disabled = true;
+      try{
+        await savePreferredLanguage(value, { closeModal: true });
+      } finally {
+        profileLanguageBtn.disabled = false;
+      }
+      if (!hasPreferredLanguageChoice()){
+        state.profileSetupDismissed = false;
+        showProfileSetupModal(true);
+      }
     });
   }
   const mapActiveOnly = $("mapActiveOnly");
