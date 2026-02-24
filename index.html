@@ -116,6 +116,23 @@
 
       <main class="content">
         <section id="viewDashboard" class="view active">
+          <div class="card profile-home-card">
+            <div class="profile-home-row">
+              <div id="profileAvatarCircle" class="profile-avatar-circle" aria-hidden="true">
+                <span id="profileAvatarInitials">PR</span>
+                <img id="profileAvatarImg" alt="Profile photo" style="display:none;" />
+              </div>
+              <div class="profile-home-meta">
+                <h2 id="profileCardName">Profile</h2>
+                <div id="profileCardRole" class="muted small">Role: -</div>
+              </div>
+              <div class="profile-home-actions">
+                <input id="profilePhotoInput" type="file" accept="image/*" style="display:none;" />
+                <button id="btnProfilePhotoUpload" class="btn secondary small" type="button">Add photo</button>
+                <button id="btnProfilePhotoClear" class="btn ghost small" type="button">Remove</button>
+              </div>
+            </div>
+          </div>
           <div class="card job-card">
             <div class="row" style="justify-content:space-between;">
               <div>

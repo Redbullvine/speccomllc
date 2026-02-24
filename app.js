@@ -1110,6 +1110,7 @@ const LEGACY_DRAWER_OPEN_KEY = "speccom.ui.drawerOpen";
 const LEGACY_DRAWER_TAB_KEY = "speccom.ui.drawerTab";
 const LEGACY_DRAWER_WIDTH_KEY = "speccom.ui.drawerWidth";
 const KMZ_PHOTO_OVERRIDES_KEY_PREFIX = "speccom.kmzPhotoOverrides.";
+const PROFILE_PHOTO_KEY_PREFIX = "speccom.profilePhoto.";
 const KMZ_SNAPSHOT_TABLE = "project_kmz_snapshots";
 const KMZ_SNAPSHOT_SAVE_DEBOUNCE_MS = 900;
 const SIDEBAR_MIN_WIDTH = 320;
@@ -9004,6 +9005,7 @@ function setRoleUI(){
   renderDispatchTable();
   renderDispatchWarnings();
   setDprEditState();
+  renderProfileHomeCard();
 }
 
 function getLocalDateISO(){
@@ -12705,6 +12707,85 @@ function setWhoami(){
   if (messagesBtn) messagesBtn.style.display = authed && state.messagesEnabled && state.features.messages ? "" : "none";
   updateMessagesBadge();
   setDemoBadge();
+  renderProfileHomeCard();
+}
+
+function getProfilePhotoStorageKey(userId = state.user?.id){
+  const uid = String(userId || "").trim();
+  return uid ? `${PROFILE_PHOTO_KEY_PREFIX}${uid}` : null;
+}
+
+function getProfilePhotoDataUrl(userId = state.user?.id){
+  const key = getProfilePhotoStorageKey(userId);
+  if (!key) return "";
+  return String(safeLocalStorageGet(key) || "").trim();
+}
+
+function getProfileDisplayName(){
+  const displayName = String(state.profile?.display_name || "").trim();
+  if (displayName) return displayName;
+  const email = String(state.user?.email || "").trim();
+  if (!email) return "Profile";
+  const base = email.split("@")[0] || email;
+  return base.split(/[._-]+/).filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+}
+
+function getInitials(name){
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "U";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase();
+}
+
+function renderProfileHomeCard(){
+  const cardName = $("profileCardName");
+  const cardRole = $("profileCardRole");
+  const initialsEl = $("profileAvatarInitials");
+  const imageEl = $("profileAvatarImg");
+  if (!cardName || !cardRole || !initialsEl || !imageEl) return;
+
+  const name = getProfileDisplayName();
+  const roleCode = getRoleCode();
+  const photoUrl = getProfilePhotoDataUrl();
+  cardName.textContent = name;
+  cardRole.textContent = `Role: ${formatRoleLabel(roleCode)}`;
+  initialsEl.textContent = getInitials(name);
+  if (photoUrl){
+    imageEl.src = photoUrl;
+    imageEl.style.display = "";
+    initialsEl.style.display = "none";
+  } else {
+    imageEl.removeAttribute("src");
+    imageEl.style.display = "none";
+    initialsEl.style.display = "";
+  }
+}
+
+async function saveProfilePhotoFromFile(file){
+  if (!file) return;
+  if (!file.type || !file.type.startsWith("image/")){
+    toast("Invalid file", "Choose an image file.", "error");
+    return;
+  }
+  const userId = state.user?.id;
+  const key = getProfilePhotoStorageKey(userId);
+  if (!key){
+    toast("Not signed in", "Sign in first to save profile photo.", "error");
+    return;
+  }
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed to read image"));
+    reader.readAsDataURL(file);
+  });
+  const ok = safeLocalStorageSet(key, dataUrl);
+  if (!ok){
+    toast("Save failed", "Could not save profile photo in this browser.", "error");
+    return;
+  }
+  renderProfileHomeCard();
+  toast("Profile photo saved", "Your photo was updated.");
 }
 
 function setDemoBadge(){
@@ -21357,6 +21438,27 @@ function wireUI(){
     signOutBtn.addEventListener("click", async (e) => {
       e.preventDefault();
       await SpecCom.helpers.handleSignOut();
+    });
+  }
+
+  const profilePhotoInput = $("profilePhotoInput");
+  const profilePhotoUploadBtn = $("btnProfilePhotoUpload");
+  const profilePhotoClearBtn = $("btnProfilePhotoClear");
+  if (profilePhotoUploadBtn && profilePhotoInput){
+    profilePhotoUploadBtn.addEventListener("click", () => profilePhotoInput.click());
+    profilePhotoInput.addEventListener("change", async () => {
+      const file = profilePhotoInput.files?.[0] || null;
+      profilePhotoInput.value = "";
+      if (!file) return;
+      await saveProfilePhotoFromFile(file);
+    });
+  }
+  if (profilePhotoClearBtn){
+    profilePhotoClearBtn.addEventListener("click", () => {
+      const key = getProfilePhotoStorageKey(state.user?.id);
+      if (key) safeLocalStorageRemove(key);
+      renderProfileHomeCard();
+      toast("Profile photo removed", "Photo removed from this browser.");
     });
   }
 
