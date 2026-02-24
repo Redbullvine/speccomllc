@@ -14513,7 +14513,7 @@ const MESSAGE_READ_KEY = "messages_last_read_";
 function getMessageIdentityLabel(userId){
   if (!userId) return t("messageSenderUnknown");
   if (userId === state.user?.id) return t("messageSenderYou");
-  return state.messageIdentityMap.get(userId) || String(userId).slice(0, 8);
+  return state.messageIdentityMap.get(userId) || `User ${String(userId).slice(0, 6)}`;
 }
 
 function setMessagesFilter(filter = "board"){
@@ -14583,25 +14583,63 @@ async function loadMessageRecipients(){
     renderMessageRecipients();
     return;
   }
-  let query = state.client
-    .from("profiles")
-    .select("id, display_name")
-    .neq("id", state.user.id)
-    .limit(500);
-  if (!SpecCom.helpers.isRoot()){
-    query = query.eq("org_id", orgId);
+  const isIdLikeName = (value) => /^[a-f0-9]{8}$/i.test(String(value || "").trim());
+  const formatRecipientLabel = (row) => {
+    const name = String(row?.display_name || "").trim();
+    if (name && !isIdLikeName(name)) return name;
+    return `User ${String(row?.id || "").slice(0, 6)}`;
+  };
+
+  let data = [];
+  let error = null;
+
+  // Prefer current project members so the direct-message list stays clean and relevant.
+  if (state.activeProject?.id){
+    const { data: members, error: membersError } = await state.client
+      .from("project_members")
+      .select("user_id")
+      .eq("project_id", state.activeProject.id);
+    if (!membersError){
+      const memberIds = Array.from(new Set((members || []).map((m) => String(m?.user_id || "").trim()).filter(Boolean)))
+        .filter((id) => id !== state.user.id);
+      if (memberIds.length){
+        const profilesRes = await state.client
+          .from("profiles")
+          .select("id, display_name")
+          .in("id", memberIds)
+          .limit(500);
+        data = profilesRes.data || [];
+        error = profilesRes.error || null;
+      }
+    }
   }
-  const { data, error } = await query;
+
+  // Fallback for legacy projects: org-wide recipients.
+  if ((!data || !data.length) && !error){
+    let query = state.client
+      .from("profiles")
+      .select("id, display_name")
+      .neq("id", state.user.id)
+      .limit(500);
+    if (!SpecCom.helpers.isRoot()){
+      query = query.eq("org_id", orgId);
+    }
+    const fallbackRes = await query;
+    data = fallbackRes.data || [];
+    error = fallbackRes.error || null;
+  }
+
   if (error){
     toast("Messages load error", error.message);
     renderMessageRecipients();
     return;
   }
+
   const recipients = (data || []).map((row) => {
-    const label = String(row.display_name || "").trim() || String(row.id || "").slice(0, 8);
+    const label = formatRecipientLabel(row);
     if (row.id) state.messageIdentityMap.set(row.id, label);
     return { id: row.id, name: label };
-  }).filter((row) => row.id);
+  }).filter((row) => row.id && row.id !== state.user.id);
   state.messageRecipients = recipients.sort((a, b) => a.name.localeCompare(b.name));
   renderMessageRecipients();
 }
