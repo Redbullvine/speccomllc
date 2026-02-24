@@ -1105,6 +1105,7 @@ const MAP_PANEL_VISIBLE_KEY = "map_panel_visible";
 const SIDEBAR_OPEN_KEY = "speccom.ui.sidebarOpen";
 const SIDEBAR_TAB_KEY = "speccom.ui.sidebarTab";
 const SIDEBAR_WIDTH_KEY = "speccom.ui.sidebarWidth";
+const LAYERS_PANEL_OPEN_KEY = "speccom.ui.layersPanelOpen";
 const LEGACY_DRAWER_OPEN_KEY = "speccom.ui.drawerOpen";
 const LEGACY_DRAWER_TAB_KEY = "speccom.ui.drawerTab";
 const LEGACY_DRAWER_WIDTH_KEY = "speccom.ui.drawerWidth";
@@ -1436,6 +1437,12 @@ function getSavedMapPanelVisible(){
   return raw === "1";
 }
 
+function getSavedLayersPanelOpen(){
+  const raw = safeLocalStorageGet(LAYERS_PANEL_OPEN_KEY);
+  if (raw == null) return true;
+  return raw === "1";
+}
+
 function isMobileViewport(){
   return window.matchMedia("(max-width: 900px)").matches;
 }
@@ -1681,11 +1688,13 @@ function initMapWorkspaceUi(){
     btn.dataset.drawerBound = "1";
     btn.addEventListener("click", () => setDrawerTab(btn.dataset.sidebarTab || "layers"));
   });
+  setLayersPanelOpen(getSavedLayersPanelOpen(), { persist: false });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape"){
-      if (isMobileViewport()){
-        setDrawerOpen(false);
-      }
+      if (state.map.instance?.closePopup) state.map.instance.closePopup();
+      setMapViewDropdownOpen(false);
+      closeMapDetailsDrawer();
+      if (isMobileViewport()) setDrawerOpen(false);
     }
   });
   initDrawerResizer();
@@ -1926,6 +1935,18 @@ function getSiteCoords(site){
   const lngNum = Number(lng);
   if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return null;
   return { lat: latNum, lng: lngNum };
+}
+
+function setLayersPanelOpen(openBool, { persist = true } = {}){
+  const open = Boolean(openBool);
+  state.map.layersPanelOpen = open;
+  const panel = $("mapViewFloating");
+  const showBtn = $("btnLayersShow");
+  if (panel) panel.style.display = open ? "" : "none";
+  if (showBtn) showBtn.style.display = open ? "none" : "";
+  if (persist){
+    safeLocalStorageSet(LAYERS_PANEL_OPEN_KEY, open ? "1" : "0");
+  }
 }
 
 function normalizeCodeList(list){
@@ -21567,6 +21588,18 @@ function wireUI(){
   const mapSidebarToggleBtn = $("mapSidebarToggle");
   if (mapSidebarToggleBtn){
     mapSidebarToggleBtn.addEventListener("click", togglePlacesDrawer);
+  }
+  const placesHideBtn = $("btnPlacesHide");
+  if (placesHideBtn){
+    placesHideBtn.addEventListener("click", () => setDrawerOpen(false));
+  }
+  const layersHideBtn = $("btnLayersHide");
+  if (layersHideBtn){
+    layersHideBtn.addEventListener("click", () => setLayersPanelOpen(false));
+  }
+  const layersShowBtn = $("btnLayersShow");
+  if (layersShowBtn){
+    layersShowBtn.addEventListener("click", () => setLayersPanelOpen(true));
   }
   const menuCloseBtn = $("btnMenuClose");
   if (menuCloseBtn){
