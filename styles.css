@@ -395,6 +395,17 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
   position: relative;
   z-index: 1;
 }
+#viewDashboard .card,
+#viewTechnician .card{
+  background: rgba(251, 252, 255, 0.68);
+  border-color: rgba(191, 205, 224, 0.9);
+  backdrop-filter: blur(2px);
+}
+#viewDashboard .kpi .tile,
+#viewTechnician .kpi .tile{
+  background: rgba(245, 248, 253, 0.55);
+  border-color: rgba(191, 205, 224, 0.9);
+}
 @media (max-width: 900px){
   #viewDashboard::before,
   #viewTechnician::before{
