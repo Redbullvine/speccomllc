@@ -5131,6 +5131,72 @@ function jumpMapPopupSite(index){
   void renderMapPopupActiveSite({ syncSelection: true });
 }
 
+function resolveSiteForKmzFeatureRow(row){
+  if (!row) return null;
+  const projectKey = String(state.activeProject?.id || "").trim();
+  if (!projectKey) return null;
+  const sites = (state.projectSites || []).filter((site) => String(site?.project_id || "").trim() === projectKey);
+  if (!sites.length) return null;
+
+  const preferredName = String(getKmzPreferredLocationName(row) || row?.location_name || row?.name || "").trim();
+  const normalizedSegment = normalizeSegmentKey(preferredName);
+  if (normalizedSegment){
+    const targets = resolveEvidenceTargets(projectKey, normalizedSegment);
+    if (targets.length){
+      if (isDebug){
+        dlog("[kmz->site popup] matched by existing target resolver", {
+          feature: preferredName,
+          siteId: targets[0]?.id || null,
+          siteName: getSiteDisplayName(targets[0] || {}),
+        });
+      }
+      return targets[0];
+    }
+  }
+
+  if (preferredName){
+    const lower = preferredName.toLowerCase();
+    const exact = sites.find((site) => {
+      const siteName = String(getSiteDisplayName(site) || site?.name || "").trim().toLowerCase();
+      return siteName === lower;
+    });
+    if (exact){
+      if (isDebug){
+        dlog("[kmz->site popup] matched by exact name", {
+          feature: preferredName,
+          siteId: exact?.id || null,
+          siteName: getSiteDisplayName(exact || {}),
+        });
+      }
+      return exact;
+    }
+  }
+
+  const candidateKeys = getRuidosoRowCandidateNameKeys(row);
+  if (candidateKeys.length){
+    const keyed = sites.find((site) => {
+      const keys = [
+        normalizeRuidosoNameKey(site?.name),
+        normalizeRuidosoNameKey(getSiteDisplayName(site)),
+        normalizeRuidosoNameKey(extractEnclosureToken(site?.name)),
+      ].filter(Boolean);
+      return keys.some((key) => candidateKeys.includes(key));
+    });
+    if (keyed){
+      if (isDebug){
+        dlog("[kmz->site popup] matched by normalized key", {
+          feature: preferredName,
+          featureKeys: candidateKeys,
+          siteId: keyed?.id || null,
+          siteName: getSiteDisplayName(keyed || {}),
+        });
+      }
+      return keyed;
+    }
+  }
+  return null;
+}
+
 function getVisibleSiteByIdKey(siteIdKey){
   const key = toSiteIdKey(siteIdKey);
   if (!key) return null;
@@ -7346,6 +7412,27 @@ async function openKmzFeaturePopup(featureId, { focusMap = true } = {}){
       if (bounds?.isValid?.()){
         map.fitBounds(bounds.pad(0.25));
       }
+    }
+  }
+  const mappedSite = resolveSiteForKmzFeatureRow(row);
+  if (mappedSite){
+    const siteKey = toSiteIdKey(mappedSite?.id);
+    if (siteKey){
+      state.map.popupSiteKeys = [siteKey];
+      state.map.popupSiteIndex = 0;
+      state.map.popupMarker = layer || null;
+      state.map.popupRequiredCodes = normalizeCodeList(getCodesRequiredForActiveProject());
+      await renderMapPopupActiveSite({ syncSelection: false });
+      if (isDebug){
+        dlog("[kmz->site popup] using SpecCom popup for KMZ feature", {
+          featureId: key,
+          featureName: getKmzPreferredLocationName(row) || row?.location_name || null,
+          siteId: mappedSite?.id || null,
+          siteName: getSiteDisplayName(mappedSite || {}),
+        });
+      }
+      renderMapLayerPanel();
+      return;
     }
   }
   const popupHtml = buildKmzFeaturePopupHtml(key);
