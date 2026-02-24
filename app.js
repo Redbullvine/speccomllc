@@ -332,7 +332,7 @@ function isPatrickIdentity(value){
 
 function resolveProvisionedRoleCode(identity, requestedRole = DEFAULT_ROLE){
   const normalized = normalizeRole(requestedRole || DEFAULT_ROLE);
-  if (isPatrickIdentity(identity)) return ROLES.SUPPORT;
+  if (isPatrickIdentity(identity)) return ROLES.ADMIN;
   return normalized || DEFAULT_ROLE;
 }
 
@@ -4189,6 +4189,18 @@ function downloadLocationImportTemplate(){
   ];
   const csv = [headers.map(escapeCsv).join(","), sample.map(escapeCsv).join(",")].join("\n");
   downloadFile("locations-import-template.csv", csv, "text/csv");
+}
+
+function downloadBillingCsvTemplate(){
+  const headers = ["loc", "code", "allowed", "billed"];
+  const sample = [
+    ["RuidosoNetworkPoint-2002", "HO-1(48)", "12", "9"],
+    ["RuidosoNetworkPoint-2002", "1635CA", "5", "5"],
+    ["RuidosoNetworkPoint-2003", "HO-1(48)", "7", "6"],
+  ];
+  const lines = [headers.map(escapeCsv).join(",")]
+    .concat(sample.map((row) => row.map(escapeCsv).join(",")));
+  downloadFile("billing-import-template.csv", lines.join("\n"), "text/csv");
 }
 
 function downloadLocationImportErrorReport(){
@@ -9907,6 +9919,157 @@ function parseRuidosoCodesRaw(value){
   return Array.from(out);
 }
 
+function parseOptionalNumber(value){
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const cleaned = raw.replace(/,/g, "");
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatImportNumber(value){
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "0";
+  if (Number.isInteger(num)) return String(num);
+  return String(num);
+}
+
+function normalizeBillingCsvHeaderKey(value){
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[\s-]+/g, "_");
+}
+
+function normalizeCsvHeaders(headers){
+  const aliasMap = new Map([
+    ["loc", "loc"],
+    ["location", "loc"],
+    ["place", "loc"],
+    ["place_name", "loc"],
+    ["site", "loc"],
+    ["site_name", "loc"],
+    ["name", "loc"],
+    ["job__map/enclosure/codes", "codes_payload"],
+    ["codes", "codes_payload"],
+    ["billing_codes", "codes_payload"],
+    ["enclosure_codes", "codes_payload"],
+    ["code_payload", "codes_payload"],
+    ["codes_payload", "codes_payload"],
+    ["units_allowed", "units_allowed"],
+    ["allowed_units", "units_allowed"],
+    ["allowed_total", "units_allowed"],
+    ["total_allowed", "units_allowed"],
+    ["units_billed", "units_billed"],
+    ["billed_units", "units_billed"],
+    ["billed_total", "units_billed"],
+    ["total_billed", "units_billed"],
+    ["code", "code"],
+    ["billing_code", "code"],
+    ["item_code", "code"],
+    ["allowed", "allowed"],
+    ["qty_allowed", "allowed"],
+    ["units_allowed_code", "allowed"],
+    ["billed", "billed"],
+    ["qty_billed", "billed"],
+    ["units_billed_code", "billed"],
+    ["photo_url", "photo_url"],
+    ["image_url", "photo_url"],
+    ["photo", "photo_url"],
+    ["image", "photo_url"],
+    ["url", "photo_url"],
+    ["link", "photo_url"],
+  ]);
+
+  const indexes = {
+    loc: -1,
+    codes_payload: -1,
+    units_allowed: -1,
+    units_billed: -1,
+    code: -1,
+    allowed: -1,
+    billed: -1,
+    photo_url: -1,
+  };
+  const canonicalByIndex = [];
+
+  (Array.isArray(headers) ? headers : []).forEach((rawHeader, idx) => {
+    const raw = String(rawHeader || "").trim();
+    const direct = raw.toLowerCase();
+    const normalized = normalizeBillingCsvHeaderKey(raw);
+    const canonical = aliasMap.get(direct) || aliasMap.get(normalized) || "";
+    canonicalByIndex[idx] = canonical || normalized;
+    if (canonical && indexes[canonical] < 0){
+      indexes[canonical] = idx;
+    }
+  });
+
+  const canonicalFields = Object.entries(indexes)
+    .filter(([, idx]) => idx >= 0)
+    .map(([key]) => key);
+  const hasLongCodeRows = indexes.loc >= 0 && indexes.code >= 0 && (indexes.allowed >= 0 || indexes.billed >= 0);
+  if (hasLongCodeRows){
+    canonicalFields.push("code_rows[]");
+  }
+
+  return {
+    indexes,
+    canonicalByIndex,
+    canonicalFields,
+    hasLongCodeRows,
+  };
+}
+
+function parseBillingCodesPayload(value){
+  const source = String(value || "").trim();
+  if (!source) return [];
+  const out = [];
+  source
+    .split(/[;\n]+/)
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .forEach((segment) => {
+      const bits = segment.split("|").map((part) => String(part || "").trim()).filter(Boolean);
+      if (!bits.length) return;
+      const code = bits[0];
+      if (!code) return;
+      let allowed = null;
+      let billed = null;
+      bits.slice(1).forEach((token) => {
+        const match = token.match(/^([a-z_]+)\s*=\s*([-\d.,]+)$/i);
+        if (!match) return;
+        const key = normalizeBillingCsvHeaderKey(match[1]);
+        const valueNum = parseOptionalNumber(match[2]);
+        if (!Number.isFinite(valueNum)) return;
+        if (["allowed", "qty_allowed", "units_allowed", "units_allowed_code"].includes(key)){
+          allowed = valueNum;
+        } else if (["billed", "qty_billed", "units_billed", "units_billed_code"].includes(key)){
+          billed = valueNum;
+        }
+      });
+      out.push({
+        code,
+        allowed: Number.isFinite(allowed) ? allowed : 0,
+        billed: Number.isFinite(billed) ? billed : 0,
+      });
+    });
+  return out;
+}
+
+function buildBillingCodesPayload(codeRows){
+  const list = Array.isArray(codeRows) ? codeRows : [];
+  return list
+    .filter((row) => String(row?.code || "").trim())
+    .map((row) => {
+      const code = String(row.code || "").trim();
+      const allowed = formatImportNumber(row.allowed);
+      const billed = formatImportNumber(row.billed);
+      return `${code}|allowed=${allowed}|billed=${billed}`;
+    })
+    .join(";");
+}
+
 function normalizeNodeKey(raw){
   const text = String(raw || "").trim();
   if (!text) return "";
@@ -10248,6 +10411,98 @@ async function upsertImportedCodesToSitesNotes(codesBySiteId){
   return updates.length;
 }
 
+async function upsertImportedBillingToSites(billingBySiteId){
+  if (!state.client || !billingBySiteId?.size){
+    return { updatedSites: 0, firstSiteIds: [], firstSample: null };
+  }
+  const firstSiteIds = [];
+  let firstSample = null;
+  let updatedSites = 0;
+  const dateLabel = new Date().toISOString().slice(0, 10);
+
+  for (const [siteId, billing] of billingBySiteId.entries()){
+    const unitsAllowed = Number(billing?.units_allowed);
+    const unitsBilled = Number(billing?.units_billed);
+    const hasUnitsAllowed = Number.isFinite(unitsAllowed);
+    const hasUnitsBilled = Number.isFinite(unitsBilled);
+    const codeRows = Array.isArray(billing?.code_rows) ? billing.code_rows : [];
+    const codesPayload = String(billing?.codes_payload || "").trim() || buildBillingCodesPayload(codeRows);
+
+    if (!firstSample){
+      firstSample = {
+        siteId: String(siteId || ""),
+        units_allowed: hasUnitsAllowed ? unitsAllowed : null,
+        units_billed: hasUnitsBilled ? unitsBilled : null,
+      };
+    }
+
+    let wroteUnits = false;
+    if (hasUnitsAllowed || hasUnitsBilled){
+      const unitPayloads = [
+        { units_allowed: unitsAllowed, units_billed: unitsBilled },
+        { allowed_units: unitsAllowed, billed_units: unitsBilled },
+        { allowed_qty: unitsAllowed, billed_qty: unitsBilled },
+      ].map((payload) => Object.fromEntries(
+        Object.entries(payload).filter(([, val]) => Number.isFinite(val))
+      )).filter((payload) => Object.keys(payload).length > 0);
+
+      for (const payload of unitPayloads){
+        const { error } = await state.client
+          .from("sites")
+          .update(payload)
+          .eq("id", siteId);
+        if (!error){
+          wroteUnits = true;
+          break;
+        }
+        const missingCols = Object.keys(payload).filter((col) => isMissingColumnError(error, col));
+        if (missingCols.length === Object.keys(payload).length){
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    let wrotePayloadNote = false;
+    if (codesPayload){
+      const site = (state.projectSites || []).find((row) => String(row?.id || "") === String(siteId || ""));
+      const current = String(site?.notes || "");
+      const payloadBlock = `BILLING CODES PAYLOAD (imported ${dateLabel}): ${codesPayload}`;
+      if (!current.includes(payloadBlock)){
+        const nextNotes = current.trim() ? `${current.trim()}\n${payloadBlock}` : payloadBlock;
+        const { error } = await state.client
+          .from("sites")
+          .update({ notes: nextNotes })
+          .eq("id", siteId);
+        if (error) throw error;
+        if (site) site.notes = nextNotes;
+        wrotePayloadNote = true;
+      }
+    }
+
+    const local = (state.projectSites || []).find((row) => String(row?.id || "") === String(siteId || ""));
+    if (local){
+      if (hasUnitsAllowed){
+        local.units_allowed = unitsAllowed;
+        local.allowed_units = unitsAllowed;
+        local.allowed_qty = unitsAllowed;
+      }
+      if (hasUnitsBilled){
+        local.units_billed = unitsBilled;
+        local.billed_units = unitsBilled;
+        local.billed_qty = unitsBilled;
+      }
+    }
+    if (wroteUnits || wrotePayloadNote){
+      updatedSites += 1;
+      if (firstSiteIds.length < 2){
+        firstSiteIds.push(String(siteId || ""));
+      }
+    }
+  }
+  return { updatedSites, firstSiteIds, firstSample };
+}
+
 async function syncImportedEvidenceToDb({
   projectId = state.activeProject?.id || null,
   evidenceItems = [],
@@ -10256,22 +10511,83 @@ async function syncImportedEvidenceToDb({
 } = {}){
   const projectKey = String(projectId || "").trim();
   if (!projectKey || !state.client || isDemo){
-    return { matchedSites: 0, insertedPhotos: 0, skippedPhotoDuplicates: 0, insertedCodes: 0, noteUpdates: 0, failures: 0 };
+    return {
+      matchedSites: 0,
+      insertedPhotos: 0,
+      skippedPhotoDuplicates: 0,
+      insertedCodes: 0,
+      noteUpdates: 0,
+      billingUpdatedSites: 0,
+      failures: 0,
+      sampleResolvedSiteIds: [],
+      firstBillingSample: null,
+    };
   }
   if (String(state.activeProject?.id || "") !== projectKey){
-    return { matchedSites: 0, insertedPhotos: 0, skippedPhotoDuplicates: 0, insertedCodes: 0, noteUpdates: 0, failures: 0 };
+    return {
+      matchedSites: 0,
+      insertedPhotos: 0,
+      skippedPhotoDuplicates: 0,
+      insertedCodes: 0,
+      noteUpdates: 0,
+      billingUpdatedSites: 0,
+      failures: 0,
+      sampleResolvedSiteIds: [],
+      firstBillingSample: null,
+    };
   }
   if (token != null && token !== state.map.evidenceSyncToken){
-    return { matchedSites: 0, insertedPhotos: 0, skippedPhotoDuplicates: 0, insertedCodes: 0, noteUpdates: 0, failures: 0 };
+    return {
+      matchedSites: 0,
+      insertedPhotos: 0,
+      skippedPhotoDuplicates: 0,
+      insertedCodes: 0,
+      noteUpdates: 0,
+      billingUpdatedSites: 0,
+      failures: 0,
+      sampleResolvedSiteIds: [],
+      firstBillingSample: null,
+    };
   }
   if (!Array.isArray(state.projectSites) || !state.projectSites.length){
     await loadProjectSites(projectKey);
   }
   const photoWanted = [];
   const codesBySiteId = new Map();
+  const billingBySiteId = new Map();
   let failures = 0;
   const unresolvedSamples = [];
   const matchedSites = new Set();
+  const sampleResolvedSiteIds = [];
+
+  const mergeBillingForSite = (siteId, incoming) => {
+    if (!siteId || !incoming) return;
+    const bucket = billingBySiteId.get(siteId) || {
+      units_allowed: 0,
+      units_billed: 0,
+      code_rows: new Map(),
+    };
+    const allowed = Number(incoming.units_allowed);
+    const billed = Number(incoming.units_billed);
+    if (Number.isFinite(allowed)) bucket.units_allowed += allowed;
+    if (Number.isFinite(billed)) bucket.units_billed += billed;
+    const rows = Array.isArray(incoming.code_rows) ? incoming.code_rows : [];
+    rows.forEach((row) => {
+      const code = String(row?.code || "").trim();
+      if (!code) return;
+      const prev = bucket.code_rows.get(code) || { code, allowed: 0, billed: 0 };
+      const rAllowed = Number(row?.allowed);
+      const rBilled = Number(row?.billed);
+      if (Number.isFinite(rAllowed)) prev.allowed += rAllowed;
+      if (Number.isFinite(rBilled)) prev.billed += rBilled;
+      bucket.code_rows.set(code, prev);
+    });
+    if (incoming.codes_payload){
+      bucket.codes_payload = String(incoming.codes_payload);
+    }
+    billingBySiteId.set(siteId, bucket);
+  };
+
   for (const item of (Array.isArray(evidenceItems) ? evidenceItems : [])){
     const normalized = item?.normalized || null;
     if (!normalized) continue;
@@ -10288,6 +10604,12 @@ async function syncImportedEvidenceToDb({
       continue;
     }
     targets.forEach((site) => matchedSites.add(String(site?.id || "")));
+    targets.forEach((site) => {
+      const id = String(site?.id || "");
+      if (id && sampleResolvedSiteIds.length < 2 && !sampleResolvedSiteIds.includes(id)){
+        sampleResolvedSiteIds.push(id);
+      }
+    });
     const urls = Array.isArray(item?.photoUrls) ? item.photoUrls : [];
     const codes = Array.isArray(item?.codesUsed) ? item.codesUsed : [];
     targets.forEach((site) => {
@@ -10304,14 +10626,31 @@ async function syncImportedEvidenceToDb({
         const clean = String(code || "").trim();
         if (clean) bucket.add(clean);
       });
+      if (item?.billing && typeof item.billing === "object"){
+        mergeBillingForSite(siteId, item.billing);
+      }
     });
   }
-  const touchedSiteIds = Array.from(new Set(photoWanted.map((row) => row.site_id).concat(Array.from(codesBySiteId.keys()))));
+  const touchedSiteIds = Array.from(new Set(
+    photoWanted.map((row) => row.site_id)
+      .concat(Array.from(codesBySiteId.keys()))
+      .concat(Array.from(billingBySiteId.keys()))
+  ));
   if (failures){
     dlog("[evidence sync] unresolved mappings", { count: failures, samples: unresolvedSamples });
   }
   if (!touchedSiteIds.length){
-    const summary = { matchedSites: matchedSites.size, insertedPhotos: 0, skippedPhotoDuplicates: 0, insertedCodes: 0, noteUpdates: 0, failures };
+    const summary = {
+      matchedSites: matchedSites.size,
+      insertedPhotos: 0,
+      skippedPhotoDuplicates: 0,
+      insertedCodes: 0,
+      noteUpdates: 0,
+      billingUpdatedSites: 0,
+      failures,
+      sampleResolvedSiteIds,
+      firstBillingSample: null,
+    };
     if (!silent){
       toast("Evidence sync complete", `Matched ${summary.matchedSites} sites. Inserted 0 photos, 0 codes. Unmapped rows skipped ${summary.failures}.`);
     }
@@ -10370,6 +10709,23 @@ async function syncImportedEvidenceToDb({
       existingCodeRows = codeRead.data || [];
     }
   }
+
+  let billingUpdatedSites = 0;
+  let firstBillingSample = null;
+  if (billingBySiteId.size){
+    const normalizedBilling = new Map();
+    billingBySiteId.forEach((bucket, siteId) => {
+      normalizedBilling.set(siteId, {
+        units_allowed: bucket.units_allowed,
+        units_billed: bucket.units_billed,
+        code_rows: Array.from(bucket.code_rows?.values?.() || []),
+        codes_payload: bucket.codes_payload || buildBillingCodesPayload(Array.from(bucket.code_rows?.values?.() || [])),
+      });
+    });
+    const billingSummary = await upsertImportedBillingToSites(normalizedBilling);
+    billingUpdatedSites = billingSummary.updatedSites || 0;
+    firstBillingSample = billingSummary.firstSample || null;
+  }
   if (codesBySiteId.size){
     if (codesTableAvailable){
       const existingCodes = new Set(existingCodeRows.map((row) => `${row.site_id}|${String(row.code || "").trim().toUpperCase()}`));
@@ -10409,7 +10765,10 @@ async function syncImportedEvidenceToDb({
     skippedPhotoDuplicates,
     insertedCodes,
     noteUpdates,
+    billingUpdatedSites,
     failures,
+    sampleResolvedSiteIds,
+    firstBillingSample,
   };
   if (!silent){
     toast(
@@ -10619,7 +10978,10 @@ async function importRuidosoPackageCsv(file){
   if (!rows.length){
     throw new Error("CSV is empty.");
   }
-  const headers = (rows[0] || []).map(SpecCom.helpers.normalizeImportHeader);
+  const rawHeaders = rows[0] || [];
+  const headers = rawHeaders.map(SpecCom.helpers.normalizeImportHeader);
+  const canonical = normalizeCsvHeaders(rawHeaders);
+  const canonicalIdx = canonical.indexes;
   const findHeaderContains = (tokens = []) => headers.findIndex((header) => (
     tokens.some((token) => header.includes(token))
   ));
@@ -10642,11 +11004,13 @@ async function importRuidosoPackageCsv(file){
     return findHeaderContains(["enclosure", "segment", "drop", "network_point", "point_name", "site_name"]);
   })();
   const codesIdx = (() => {
+    if (canonicalIdx.codes_payload >= 0) return canonicalIdx.codes_payload;
     const direct = findHeaderIndex(headers, ["codes_raw", "codes", "billing_codes", "billing_code", "work_codes"]);
     if (direct >= 0) return direct;
     return findHeaderContains(["codes", "billing_code", "work_code"]);
   })();
   const locIdx = (() => {
+    if (canonicalIdx.loc >= 0) return canonicalIdx.loc;
     const direct = findHeaderIndex(headers, [
       "loc",
       "segment",
@@ -10661,7 +11025,13 @@ async function importRuidosoPackageCsv(file){
     if (direct >= 0) return direct;
     return findHeaderContains(["loc", "segment", "location", "site_name", "point_name", "network_point", "name"]);
   })();
+  const unitsAllowedIdx = canonicalIdx.units_allowed;
+  const unitsBilledIdx = canonicalIdx.units_billed;
+  const longCodeIdx = canonicalIdx.code;
+  const longAllowedIdx = canonicalIdx.allowed;
+  const longBilledIdx = canonicalIdx.billed;
   const urlIdx = (() => {
+    if (canonicalIdx.photo_url >= 0) return canonicalIdx.photo_url;
     const direct = findHeaderIndex(headers, [
       "photo_url",
       "url",
@@ -10675,11 +11045,16 @@ async function importRuidosoPackageCsv(file){
     return findHeaderContains(["photo_url", "image_url", "photo", "image", "url", "link"]);
   })();
 
-  const hasCodesColumns = codesIdx >= 0 && (jobIdx >= 0 || enclosureIdx >= 0 || locIdx >= 0);
+  const hasLongFormat = canonical.hasLongCodeRows;
+  const hasLegacyCodesColumns = codesIdx >= 0 && (jobIdx >= 0 || enclosureIdx >= 0 || locIdx >= 0);
+  const hasCodesColumns = hasLegacyCodesColumns || hasLongFormat;
   const hasPhotoColumns = urlIdx >= 0 && (locIdx >= 0 || enclosureIdx >= 0 || jobIdx >= 0);
   if (!hasCodesColumns && !hasPhotoColumns){
-    throw new Error("CSV must include codes columns (job_map/enclosure/codes) or photo columns (loc/photo_url).");
+    throw new Error("CSV must include billing headers. Supported: legacy loc+job__map/enclosure/codes, optional units_allowed/units_billed, or long format loc+code+allowed/billed (plus optional photo_url).");
   }
+  const detectedFormat = hasLongFormat
+    ? "C"
+    : ((unitsAllowedIdx >= 0 || unitsBilledIdx >= 0) ? "B" : "A");
   const detectedType = hasCodesColumns && hasPhotoColumns
     ? "combined"
     : (hasPhotoColumns ? "photos" : "codes");
@@ -10689,6 +11064,7 @@ async function importRuidosoPackageCsv(file){
   const codeByNameKey = new Map();
   const photosByNameKey = new Map();
   const enclosureKeyCounts = new Map();
+  const billingByLoc = new Map();
   let processedRows = 0;
   let codeRows = 0;
   let photoRows = 0;
@@ -10716,6 +11092,34 @@ async function importRuidosoPackageCsv(file){
     if (!key) return;
     enclosureKeyCounts.set(key, (enclosureKeyCounts.get(key) || 0) + 1);
   };
+  const getBillingBucket = (rawLoc) => {
+    const locText = String(rawLoc || "").trim();
+    if (!locText) return null;
+    const key = normalizeRuidosoNameKey(locText) || locText.toLowerCase();
+    const existing = billingByLoc.get(key);
+    if (existing) return existing;
+    const created = {
+      loc: locText,
+      codeRows: new Map(),
+      explicitAllowedTotal: 0,
+      explicitBilledTotal: 0,
+      hasExplicitAllowed: false,
+      hasExplicitBilled: false,
+    };
+    billingByLoc.set(key, created);
+    return created;
+  };
+  const addBillingCodeRow = (bucket, code, allowed, billed) => {
+    if (!bucket) return;
+    const cleanCode = String(code || "").trim();
+    if (!cleanCode) return;
+    const prev = bucket.codeRows.get(cleanCode) || { code: cleanCode, allowed: 0, billed: 0 };
+    const allowedNum = Number(allowed);
+    const billedNum = Number(billed);
+    if (Number.isFinite(allowedNum)) prev.allowed += allowedNum;
+    if (Number.isFinite(billedNum)) prev.billed += billedNum;
+    bucket.codeRows.set(cleanCode, prev);
+  };
 
   rows.slice(1).forEach((row) => {
     processedRows += 1;
@@ -10735,8 +11139,42 @@ async function importRuidosoPackageCsv(file){
     ).trim();
     if (!enclosure && !locText) return;
 
-    if (hasCodesColumns && codesIdx >= 0){
-      const codes = parseRuidosoCodesRaw(row[codesIdx] || "");
+    if (hasLongFormat && locIdx >= 0 && longCodeIdx >= 0){
+      const codeValue = String(row[longCodeIdx] || "").trim();
+      const allowedValue = parseOptionalNumber(longAllowedIdx >= 0 ? row[longAllowedIdx] : null);
+      const billedValue = parseOptionalNumber(longBilledIdx >= 0 ? row[longBilledIdx] : null);
+      const allowedNum = Number.isFinite(allowedValue) ? allowedValue : 0;
+      const billedNum = Number.isFinite(billedValue) ? billedValue : 0;
+      if (codeValue){
+        codeRows += 1;
+        const bucket = getBillingBucket(locText);
+        addBillingCodeRow(bucket, codeValue, allowedNum, billedNum);
+        upsertNameSet(codeByNameKey, locText, [codeValue]);
+        if (jobMapKeys.length && enclosure){
+          jobMapKeys.forEach((jobMap) => upsertMapSet(codeByKey, `${jobMap}|${enclosure}`, [codeValue]));
+          bumpEnclosureCount(`*|${enclosure}`);
+        }
+        if (enclosure){
+          upsertMapSet(codeByKey, `*|${enclosure}`, [codeValue]);
+        }
+        const evidence = buildEvidenceItem({
+          rawSegment: locText || row[enclosureIdx] || "",
+          rawNode: row[jobIdx] || parsedLoc.jobMap || "",
+          rawEnclosure: enclosure,
+          codesUsed: [codeValue],
+          source: "csv",
+          meta: { type: "codes_long" },
+        });
+        if (evidence) evidenceItems.push(evidence);
+      }
+    }
+
+    if (hasLegacyCodesColumns && codesIdx >= 0){
+      const codesPayloadRaw = String(row[codesIdx] || "").trim();
+      const parsedPayloadRows = parseBillingCodesPayload(codesPayloadRaw);
+      const codes = parsedPayloadRows.length
+        ? parsedPayloadRows.map((entry) => entry.code)
+        : parseRuidosoCodesRaw(codesPayloadRaw);
       if (codes.length) codeRows += 1;
       if (locText) upsertNameSet(codeByNameKey, locText, codes);
       if (jobMapKeys.length && enclosure){
@@ -10745,6 +11183,20 @@ async function importRuidosoPackageCsv(file){
       }
       if (enclosure){
         upsertMapSet(codeByKey, `*|${enclosure}`, codes);
+      }
+      if (locText){
+        const bucket = getBillingBucket(locText);
+        parsedPayloadRows.forEach((entry) => addBillingCodeRow(bucket, entry.code, entry.allowed, entry.billed));
+        const explicitAllowed = parseOptionalNumber(unitsAllowedIdx >= 0 ? row[unitsAllowedIdx] : null);
+        const explicitBilled = parseOptionalNumber(unitsBilledIdx >= 0 ? row[unitsBilledIdx] : null);
+        if (Number.isFinite(explicitAllowed)){
+          bucket.explicitAllowedTotal += explicitAllowed;
+          bucket.hasExplicitAllowed = true;
+        }
+        if (Number.isFinite(explicitBilled)){
+          bucket.explicitBilledTotal += explicitBilled;
+          bucket.hasExplicitBilled = true;
+        }
       }
       const evidence = buildEvidenceItem({
         rawSegment: locText || row[enclosureIdx] || "",
@@ -10781,6 +11233,32 @@ async function importRuidosoPackageCsv(file){
     }
   });
 
+  billingByLoc.forEach((bucket) => {
+    const codeRowsList = Array.from(bucket.codeRows.values());
+    const sumAllowed = codeRowsList.reduce((total, row) => total + (Number(row.allowed) || 0), 0);
+    const sumBilled = codeRowsList.reduce((total, row) => total + (Number(row.billed) || 0), 0);
+    const unitsAllowed = bucket.hasExplicitAllowed ? bucket.explicitAllowedTotal : sumAllowed;
+    const unitsBilled = bucket.hasExplicitBilled ? bucket.explicitBilledTotal : sumBilled;
+    const codesPayload = buildBillingCodesPayload(codeRowsList);
+    const codesUsed = codeRowsList.map((row) => row.code).filter(Boolean);
+    const evidence = buildEvidenceItem({
+      rawSegment: bucket.loc,
+      rawNode: bucket.loc,
+      rawEnclosure: bucket.loc,
+      codesUsed,
+      source: "csv",
+      meta: { type: "billing_totals", format: detectedFormat },
+    });
+    if (!evidence) return;
+    evidence.billing = {
+      units_allowed: unitsAllowed,
+      units_billed: unitsBilled,
+      codes_payload: codesPayload,
+      code_rows: codeRowsList,
+    };
+    evidenceItems.push(evidence);
+  });
+
   const kmzRows = Array.from(state.map.kmzFeatureRows?.values?.() || []);
   if (!kmzRows.length){
     throw new Error("Import a KMZ first, then apply this CSV package.");
@@ -10812,9 +11290,19 @@ async function importRuidosoPackageCsv(file){
     void openKmzFeaturePopup(selectedId, { focusMap: false });
   }
   queueSaveKmzSnapshotForActiveProject({ immediate: true });
+  dlog("[csv import] billing detection", {
+    detectedFormat,
+    canonicalFields: canonical.canonicalFields,
+    codeRows,
+    photoRows,
+    billingLocs: billingByLoc.size,
+  });
   return {
     ...result,
     detectedType,
+    detectedFormat,
+    canonicalFields: canonical.canonicalFields,
+    billingLocCount: billingByLoc.size,
     processedRows,
     codeRows,
     photoRows,
@@ -11291,8 +11779,23 @@ async function handleLocationImport(file){
         : (result.detectedType === "codes" ? "Codes CSV" : "Combined CSV");
       toast(
         `${typeLabel} applied`,
-        `Rows ${result.processedRows}. Matched ${result.matchedRows} points. DB sync: ${sync.matchedSites} sites, +${sync.insertedPhotos} photos (${sync.skippedPhotoDuplicates} dupes), +${sync.insertedCodes} codes${sync.noteUpdates ? `, +${sync.noteUpdates} notes` : ""}, unmapped rows skipped ${sync.failures}.`
+        `Rows ${result.processedRows}. Matched ${result.matchedRows} points. DB sync: ${sync.matchedSites} sites, +${sync.insertedPhotos} photos (${sync.skippedPhotoDuplicates} dupes), +${sync.insertedCodes} codes${sync.noteUpdates ? `, +${sync.noteUpdates} notes` : ""}${sync.billingUpdatedSites ? `, +${sync.billingUpdatedSites} billing updates` : ""}, unmapped rows skipped ${sync.failures}.`
       );
+      if (isDebug){
+        const first = sync.firstBillingSample || {};
+        toast(
+          "CSV debug",
+          `Format ${result.detectedFormat || "?"} | fields: ${(result.canonicalFields || []).join(", ") || "(none)"} | locs updated: ${sync.billingUpdatedSites || 0} | ids: ${(sync.sampleResolvedSiteIds || []).slice(0, 2).join(", ") || "(none)"} | first units: ${first.units_allowed ?? "-"} / ${first.units_billed ?? "-"}`
+        );
+      }
+      dlog("[csv import] debug summary", {
+        detectedFormat: result.detectedFormat || null,
+        canonicalFields: result.canonicalFields || [],
+        billingLocCount: result.billingLocCount || 0,
+        billingUpdatedSites: sync.billingUpdatedSites || 0,
+        sampleResolvedSiteIds: (sync.sampleResolvedSiteIds || []).slice(0, 2),
+        firstBillingSample: sync.firstBillingSample || null,
+      });
       return;
     } else if (name.endsWith(".pdf")){
       const result = await importRuidosoPhotoReportPdf(file);
@@ -14608,9 +15111,9 @@ async function createAdminProfile(){
   const email = $("adminUserEmail")?.value.trim();
   const roleInput = $("adminUserRole");
   let nextRole = resolveProvisionedRoleCode(email, roleInput?.value || DEFAULT_ROLE);
-  if (isPatrickIdentity(email) && roleInput?.value !== ROLES.SUPPORT){
-    if (roleInput) roleInput.value = ROLES.SUPPORT;
-    toast("Role adjusted", "Patrick is mapped to SUPPORT by default.");
+  if (isPatrickIdentity(email) && roleInput?.value !== ROLES.ADMIN){
+    if (roleInput) roleInput.value = ROLES.ADMIN;
+    toast("Role adjusted", "Patrick is mapped to ADMIN by default.");
   }
   const nextRoleCode = normalizeRole(nextRole);
   let targetUserId = userId;
@@ -14667,9 +15170,9 @@ async function inviteAdminUserAccount(){
     return;
   }
   let roleCode = resolveProvisionedRoleCode(email, $("adminUserRole")?.value || DEFAULT_ROLE);
-  if (isPatrickIdentity(email) && $("adminUserRole")?.value !== ROLES.SUPPORT){
-    if ($("adminUserRole")) $("adminUserRole").value = ROLES.SUPPORT;
-    toast("Role adjusted", "Patrick is mapped to SUPPORT by default.");
+  if (isPatrickIdentity(email) && $("adminUserRole")?.value !== ROLES.ADMIN){
+    if ($("adminUserRole")) $("adminUserRole").value = ROLES.ADMIN;
+    toast("Role adjusted", "Patrick is mapped to ADMIN by default.");
   }
 
   const { error: inviteError } = await state.client.auth.signInWithOtp({
@@ -20975,6 +21478,10 @@ function wireUI(){
   const importTemplateBtn = $("btnImportLocationsTemplate");
   if (importTemplateBtn){
     importTemplateBtn.addEventListener("click", () => downloadLocationImportTemplate());
+  }
+  const importBillingTemplateBtn = $("btnImportBillingTemplate");
+  if (importBillingTemplateBtn){
+    importBillingTemplateBtn.addEventListener("click", () => downloadBillingCsvTemplate());
   }
   const importErrorsBtn = $("btnImportLocationsErrors");
   if (importErrorsBtn){
