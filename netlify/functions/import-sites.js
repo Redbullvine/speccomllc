@@ -5,8 +5,11 @@ const { createClient } = require("@supabase/supabase-js");
 
 const LAT_HEADERS = ["lat", "latitude", "gps_lat"];
 const LNG_HEADERS = ["lng", "lon", "longitude", "gps_lng"];
-const NAME_HEADERS = ["name", "site", "location", "drop", "node"];
+const NAME_HEADERS = ["name", "location_name", "site", "location", "drop", "node"];
 const NOTES_HEADERS = ["notes", "comment", "remarks"];
+const BILLING_CODE_HEADERS = ["billing_codes", "billing_code", "codes"];
+const PHOTO_URL_HEADERS = ["photo_urls", "photo_url", "photos"];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function json(statusCode, payload){
   return {
@@ -124,6 +127,9 @@ exports.handler = async function handler(event){
   if (!projectId){
     return json(400, { error: "project_id is required" });
   }
+  if (!UUID_RE.test(projectId)){
+    return json(400, { error: "project_id must be a valid UUID" });
+  }
   if (!parsed.file?.buffer){
     return json(400, { error: "File is required" });
   }
@@ -144,6 +150,8 @@ exports.handler = async function handler(event){
   const lngIdx = findHeaderIndex(headers, LNG_HEADERS);
   const nameIdx = findHeaderIndex(headers, NAME_HEADERS);
   const notesIdx = findHeaderIndex(headers, NOTES_HEADERS);
+  const codesIdx = findHeaderIndex(headers, BILLING_CODE_HEADERS);
+  const photosIdx = findHeaderIndex(headers, PHOTO_URL_HEADERS);
 
   if (latIdx < 0 || lngIdx < 0){
     return json(400, { error: "Missing latitude/longitude columns" });
@@ -155,7 +163,8 @@ exports.handler = async function handler(event){
 
   const payloads = [];
   let skipped = 0;
-  dataRows.forEach((row) => {
+  const parseWarnings = [];
+  dataRows.forEach((row, rowIdx) => {
     const lat = Number(String(row[latIdx] ?? "").trim());
     const lng = Number(String(row[lngIdx] ?? "").trim());
     if (!Number.isFinite(lat) || !Number.isFinite(lng)){
@@ -167,14 +176,37 @@ exports.handler = async function handler(event){
     const notes = notesIdx >= 0 ? String(row[notesIdx] ?? "").trim() : "";
     const payload = {
       project_id: projectId,
-      gps_lat: lat,
-      gps_lng: lng,
-      lat,
-      lng,
-      name,
-      created_by: userData.user.id,
+      latitude: lat,
+      longitude: lng,
+      location_name: name,
     };
     if (notes) payload.notes = notes;
+
+    const rawCodes = codesIdx >= 0 ? String(row[codesIdx] ?? "").trim() : "";
+    if (rawCodes) {
+      payload.billing_codes = rawCodes
+        .split("|")
+        .map((c) => c.trim())
+        .filter(Boolean);
+    }
+
+    const rawPhotos = photosIdx >= 0 ? String(row[photosIdx] ?? "").trim() : "";
+    if (rawPhotos) {
+      const parsedUrls = rawPhotos
+        .split("|")
+        .map((u) => u.trim())
+        .filter(Boolean);
+      const validUrls = parsedUrls.filter((u) => /^https?:\/\//i.test(u));
+      const invalidUrls = parsedUrls.filter((u) => !/^https?:\/\//i.test(u));
+      if (validUrls.length) payload.photo_urls = validUrls;
+      if (invalidUrls.length) {
+        parseWarnings.push({
+          row: rowIdx + 2,
+          error: `Skipped ${invalidUrls.length} invalid photo URL(s)`,
+        });
+      }
+    }
+
     payloads.push(payload);
   });
 
@@ -182,22 +214,25 @@ exports.handler = async function handler(event){
     return json(200, { ok: true, total_rows: dataRows.length, inserted_rows: 0, skipped_rows: skipped });
   }
 
-  let inserted = 0;
-  const chunkSize = 500;
-  for (let i = 0; i < payloads.length; i += chunkSize){
-    const chunk = payloads.slice(i, i + chunkSize);
-    const { error } = await supabase.from("sites").insert(chunk);
-    if (error){
-      const status = /permission|rls|not allowed|forbidden/i.test(error.message || "") ? 403 : 500;
-      return json(status, { error: error.message || "Insert failed" });
-    }
-    inserted += chunk.length;
+  const { data: rpcResult, error: rpcError } = await supabase.rpc("fn_import_sites", {
+    p_project_id: projectId,
+    p_sites: payloads,
+  });
+  if (rpcError){
+    const status = /permission|rls|not allowed|forbidden|not authorized/i.test(rpcError.message || "") ? 403 : 500;
+    return json(status, { error: rpcError.message || "Import failed" });
   }
+
+  const inserted = rpcResult?.imported ?? 0;
+  const rpcSkipped = rpcResult?.skipped ?? 0;
+  const rowErrors = rpcResult?.errors ?? [];
+  const errors = [...parseWarnings, ...rowErrors];
 
   return json(200, {
     ok: true,
     total_rows: dataRows.length,
     inserted_rows: inserted,
-    skipped_rows: skipped,
+    skipped_rows: skipped + rpcSkipped,
+    errors,
   });
 };

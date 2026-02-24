@@ -2,6 +2,7 @@
 const API_ENDPOINTS = {
   GET_PROJECTS: "/get-projects",
   UPLOAD_FILE: "/process-data",
+  IMPORT_SITES: "/import-sites",
 };
 
 const DEFAULT_API_BASE = "/api";
@@ -199,6 +200,7 @@ export function createApiClient({ authToken, apiBase = DEFAULT_API_BASE, fetchIm
 
   async function uploadFile({ file, projectId, table = "sites", fields = {} } = {}, { signal } = {}) {
     if (!file) throw new ApiError("file is required", { status: 0 });
+    const endpoint = table === "sites" ? API_ENDPOINTS.IMPORT_SITES : API_ENDPOINTS.UPLOAD_FILE;
 
     const formData = new FormData();
     formData.append("file", file);
@@ -212,7 +214,7 @@ export function createApiClient({ authToken, apiBase = DEFAULT_API_BASE, fetchIm
 
     return request({
       method: "POST",
-      path: API_ENDPOINTS.UPLOAD_FILE,
+      path: endpoint,
       body: formData,
       signal,
       retry: false,

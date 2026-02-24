@@ -4761,8 +4761,65 @@ function sanitizeE164Phone(value){
   return phone;
 }
 
+function getSiteField(site, keys = []){
+  if (!site || typeof site !== "object") return "";
+  const entries = Object.entries(site);
+  for (const key of keys){
+    const wanted = String(key || "").trim().toLowerCase();
+    if (!wanted) continue;
+    const direct = site[key];
+    if (direct != null && String(direct).trim() !== "") return direct;
+    const hit = entries.find(([k, v]) => String(k || "").trim().toLowerCase() === wanted && v != null && String(v).trim() !== "");
+    if (hit) return hit[1];
+  }
+  return "";
+}
+
+function formatPopupDateTime(value){
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString();
+}
+
+function buildPopupValueRows(site, locationName, coordText, siteCodes){
+  const projectName = String(getSiteField(site, ["project_name"]) || state.activeProject?.name || site?.project_id || "-").trim() || "-";
+  const marketName = String(getSiteField(site, ["market_name", "marketname"]) || state.activeProject?.location || "-").trim() || "-";
+  const createdBy = String(getSiteField(site, ["creation_user", "created_by_email", "created_by_user", "created_by"]) || "-").trim() || "-";
+  const createdAt = formatPopupDateTime(getSiteField(site, ["created_date", "created_at"]));
+  const updatedBy = String(getSiteField(site, ["last_modification_user", "last_modified_user", "updated_by_email", "updated_by"]) || "-").trim() || "-";
+  const updatedAt = formatPopupDateTime(getSiteField(site, ["last_modified_date", "updated_at", "modified_at"]));
+  const dateValue = formatPopupDateTime(getSiteField(site, ["date", "finish_date", "created_at"]));
+  const nodeValue = String(getSiteField(site, ["node", "node_name", "node_number"]) || projectName.split("_")[0] || "-").trim() || "-";
+  const unitsAllowed = String(getSiteField(site, ["units_allowed", "unit_allowed", "allowed_units", "allowed_qty"]) || "-").trim() || "-";
+  const unitsBilled = String(getSiteField(site, ["units_billed", "unit_billed", "billed_units", "billed_qty"]) || "-").trim() || "-";
+  const committed = String(getSiteField(site, ["committed_to_record", "committed"]) || "No").trim() || "No";
+  const objectId = String(getSiteField(site, ["objectid", "object_id", "objectId"]) || "-").trim() || "-";
+  const globalId = String(getSiteField(site, ["globalid", "global_id", "globalId"]) || "-").trim() || "-";
+  const projectGid = String(getSiteField(site, ["project_gid", "projectgid", "PROJECT_GID"]) || "-").trim() || "-";
+
+  return [
+    ["Name", locationName],
+    ["GPS Coordinates", coordText],
+    ["Date", dateValue],
+    ["Units Allowed", unitsAllowed],
+    ["Units Billed", unitsBilled],
+    ["Project", projectName],
+    ["Node", nodeValue],
+    ["MarketName", marketName],
+    ["Creation User", createdBy],
+    ["Created Date", createdAt],
+    ["Last Modification User", updatedBy],
+    ["Last Modified Date", updatedAt],
+    ["Committed to Record", committed],
+    ["ObjectID", objectId],
+    ["GlobalID", globalId],
+    ["PROJECT_GID", projectGid],
+    ["Billing Codes", summarizeCodesForPopup(siteCodes)],
+  ];
+}
+
 function buildSiteMarkerPopupHtml(site, {
-  requiredCodes = [],
   siteCodes = null,
   loadingCodes = false,
   sitePhotos = [],
@@ -4775,23 +4832,14 @@ function buildSiteMarkerPopupHtml(site, {
   const siteId = toSiteIdKey(site?.id) || "-";
   const coords = getSiteCoords(site);
   const coordText = coords ? `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : "-";
-  const createdText = site?.created_at ? new Date(site.created_at).toLocaleString() : "-";
   const statusText = site?.is_pending ? t("siteStatusPending") : "Active";
   const effectiveSiteCodes = normalizeCodeList(siteCodes);
-  const effectiveRequiredCodes = normalizeCodeList(requiredCodes);
-  const showBillingCodes = effectiveSiteCodes.length > 0;
-  const codesLabel = showBillingCodes ? "Billing Codes" : "Required Codes";
-  const codesValue = loadingCodes
-    ? "Loading..."
-    : summarizeCodesForPopup(showBillingCodes ? effectiveSiteCodes : effectiveRequiredCodes);
   const notesRaw = String(site?.notes || "");
-  const trimmedNotes = notesRaw.trim();
-  const canManualProofEdit = !site?.is_pending && (SpecCom.helpers.isRoot() || isOwner());
   const canDeleteSite = !site?.is_pending && SpecCom.helpers.isRoot();
-  const canEditSite = !site?.is_pending;
-  const notesText = notesRaw.length > 240 ? `${notesRaw.slice(0, 237)}...` : notesRaw;
   const photos = normalizePopupPhotos(sitePhotos);
   const canManagePhotos = !site?.is_pending;
+  const photoUrlsText = photos.map((item) => item.url).filter(Boolean).join("\n");
+  const gridRows = buildPopupValueRows(site, locationName, coordText, loadingCodes ? [] : effectiveSiteCodes);
   const photosHtml = loadingPhotos
     ? `<div class="scSitePopup-photo-empty">Loading photos...</div>`
     : photos.length
@@ -4833,12 +4881,6 @@ function buildSiteMarkerPopupHtml(site, {
       </div>
     `
     : "";
-  const editorDisabledAttr = canEditSite ? "" : " disabled";
-  const manualDisabledAttr = canManualProofEdit ? "" : " disabled";
-  const codesInputValue = effectiveSiteCodes.join(", ");
-  const saveHint = canEditSite
-    ? (canManualProofEdit ? "Edit fields and save." : "Name and billing codes can be edited here.")
-    : "Pending locations are read-only.";
   const deleteButtonHtml = canDeleteSite
     ? `<button type="button" class="scSitePopup-action is-danger" data-popup-action="delete" data-popup-site-id="${escapeHtml(siteId)}">Delete location</button>`
     : "";
@@ -4853,41 +4895,27 @@ function buildSiteMarkerPopupHtml(site, {
       </div>
       ${locationsHtml}
       <div class="scSitePopup-grid">
-        <div class="k">Location</div><div class="v">${escapeHtml(locationName)}</div>
-        <div class="k">Site ID</div><div class="v">${escapeHtml(siteId)}</div>
-        <div class="k">Coordinates</div><div class="v mono">${escapeHtml(coordText)}</div>
-        <div class="k">${escapeHtml(codesLabel)}</div><div class="v">${escapeHtml(codesValue)}</div>
-        <div class="k">Created</div><div class="v">${escapeHtml(createdText)}</div>
-        ${trimmedNotes ? `<div class="k">Notes</div><div class="v">${escapeHtml(notesText)}</div>` : ""}
+        ${gridRows.map((row) => `
+          <div class="k">${escapeHtml(row[0])}</div><div class="v mono">${escapeHtml(String(row[1] || "-"))}</div>
+        `).join("")}
       </div>
-      <div class="scSitePopup-edit-head">Edit</div>
+      <div class="scSitePopup-edit-head">Photo urls</div>
       <div class="scSitePopup-edit-grid">
-        <label class="scSitePopup-field">
-          <span>Location</span>
-          <input type="text" value="${escapeHtml(locationName)}" data-popup-field="name"${editorDisabledAttr} />
-        </label>
-        <label class="scSitePopup-field">
-          <span>Billing Codes</span>
-          <input type="text" value="${escapeHtml(codesInputValue)}" placeholder="${loadingCodes ? "Loading..." : "CODE-A, CODE-B"}" data-popup-field="codes"${editorDisabledAttr} />
-        </label>
-        <label class="scSitePopup-field">
-          <span>Latitude</span>
-          <input type="number" step="any" value="${coords ? escapeHtml(String(coords.lat)) : ""}" data-popup-field="lat"${manualDisabledAttr} />
-        </label>
-        <label class="scSitePopup-field">
-          <span>Longitude</span>
-          <input type="number" step="any" value="${coords ? escapeHtml(String(coords.lng)) : ""}" data-popup-field="lng"${manualDisabledAttr} />
-        </label>
         <label class="scSitePopup-field is-full">
-          <span>Notes</span>
-          <textarea rows="3" data-popup-field="notes"${manualDisabledAttr}>${escapeHtml(notesRaw)}</textarea>
+          <span>Photo URLs</span>
+          <textarea rows="4" readonly>${escapeHtml(photoUrlsText || "-")}</textarea>
         </label>
       </div>
       <div class="scSitePopup-actions">
-        <button type="button" class="scSitePopup-action" data-popup-action="save" data-popup-site-id="${escapeHtml(siteId)}"${editorDisabledAttr}>Save changes</button>
         ${deleteButtonHtml}
       </div>
-      <div class="scSitePopup-edit-hint">${escapeHtml(saveHint)}</div>
+      <div class="scSitePopup-edit-head">Notes</div>
+      <div class="scSitePopup-edit-grid">
+        <label class="scSitePopup-field is-full">
+          <span>Notes</span>
+          <textarea rows="4" readonly>${escapeHtml(notesRaw || "-")}</textarea>
+        </label>
+      </div>
       <div class="scSitePopup-photo-head">Photos</div>
       ${photosHtml}
       ${photoUploadRow}
