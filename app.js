@@ -2480,7 +2480,7 @@ function stopLocationPolling(){
   }
 }
 
-const SITE_BILLING_COLUMNS = "units_allowed, units_billed, allowed_units, billed_units, allowed_qty, billed_qty";
+const SITE_BILLING_COLUMNS = "units_allowed, units_billed";
 const SITE_SELECT_COLUMNS = `id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, lat, lng, created_at, ${SITE_BILLING_COLUMNS}`;
 const SITE_SELECT_COLUMNS_GPS_ONLY = `id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at, ${SITE_BILLING_COLUMNS}`;
 const SITE_SELECT_COLUMNS_LEGACY_ONLY = `id, project_id, name, notes, lat, lng, created_at, ${SITE_BILLING_COLUMNS}`;
@@ -2504,8 +2504,7 @@ function isMissingLatLngColumnError(error){
 }
 
 function isMissingSiteBillingColumnError(error){
-  return ["units_allowed", "units_billed", "allowed_units", "billed_units", "allowed_qty", "billed_qty"]
-    .some((col) => isMissingColumnError(error, col));
+  return ["units_allowed", "units_billed"].some((col) => isMissingColumnError(error, col));
 }
 
 function isMissingTable(err){
@@ -10633,8 +10632,6 @@ async function upsertImportedBillingToSites(billingBySiteId){
     if (hasUnitsAllowed || hasUnitsBilled){
       const unitPayloads = [
         { units_allowed: unitsAllowed, units_billed: unitsBilled },
-        { allowed_units: unitsAllowed, billed_units: unitsBilled },
-        { allowed_qty: unitsAllowed, billed_qty: unitsBilled },
       ].map((payload) => Object.fromEntries(
         Object.entries(payload).filter(([, val]) => Number.isFinite(val))
       )).filter((payload) => Object.keys(payload).length > 0);
@@ -10677,13 +10674,9 @@ async function upsertImportedBillingToSites(billingBySiteId){
     if (local){
       if (hasUnitsAllowed){
         local.units_allowed = unitsAllowed;
-        local.allowed_units = unitsAllowed;
-        local.allowed_qty = unitsAllowed;
       }
       if (hasUnitsBilled){
         local.units_billed = unitsBilled;
-        local.billed_units = unitsBilled;
-        local.billed_qty = unitsBilled;
       }
     }
     if (wroteUnits || wrotePayloadNote){
