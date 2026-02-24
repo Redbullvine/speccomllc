@@ -19860,7 +19860,43 @@ async function createInvoice(){
   renderInvoicePanel();
 }
 
+let invalidRefreshGuardInstalled = false;
+let invalidRefreshRecoveryRunning = false;
+
+async function recoverInvalidRefreshToken(reason){
+  if (!isInvalidRefreshError(reason)) return false;
+  if (invalidRefreshRecoveryRunning) return true;
+  invalidRefreshRecoveryRunning = true;
+  try {
+    clearSupabaseAuthStorage();
+    const client = state.client || await makeClient();
+    if (client?.auth?.signOut) {
+      try {
+        await client.auth.signOut({ scope: "local" });
+      } catch {}
+    }
+    state.session = null;
+    state.user = null;
+    showAuth(true);
+    setWhoami();
+    return true;
+  } finally {
+    invalidRefreshRecoveryRunning = false;
+  }
+}
+
+function installInvalidRefreshTokenGuard(){
+  if (invalidRefreshGuardInstalled || typeof window === "undefined") return;
+  invalidRefreshGuardInstalled = true;
+  window.addEventListener("unhandledrejection", (event) => {
+    if (!isInvalidRefreshError(event?.reason)) return;
+    event.preventDefault();
+    recoverInvalidRefreshToken(event.reason).catch(() => {});
+  });
+}
+
 async function initAuth(){
+  installInvalidRefreshTokenGuard();
   setAppModeUI();
   setEnvWarning();
 
