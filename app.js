@@ -1940,6 +1940,26 @@ function summarizeCodesForPopup(list, maxItems = 10){
   return `${cleaned.slice(0, maxItems).join(", ")} (+${cleaned.length - maxItems} more)`;
 }
 
+function normalizeCodeForMatch(value){
+  const raw = String(value || "").trim().toUpperCase();
+  if (!raw) return "";
+  return raw
+    .replace(/\s+QTY\s*=\s*[\d.]+$/i, "")
+    .replace(/\s+X\s*[\d.]+$/i, "")
+    .replace(/\s*\([\d.]+\)\s*$/i, "")
+    .trim();
+}
+
+function evaluateCodeMatch(requiredCodes, billedCodes){
+  const required = normalizeCodeList(requiredCodes).map(normalizeCodeForMatch).filter(Boolean);
+  const billed = normalizeCodeList(billedCodes).map(normalizeCodeForMatch).filter(Boolean);
+  const requiredSet = new Set(required);
+  const billedSet = new Set(billed);
+  const missing = required.filter((code) => !billedSet.has(code));
+  const extra = billed.filter((code) => !requiredSet.has(code));
+  return { ok: missing.length === 0 && extra.length === 0, missing, extra };
+}
+
 function getCachedSiteCodes(siteId){
   const key = toSiteIdKey(siteId);
   if (!key) return [];
@@ -4817,7 +4837,7 @@ function formatPopupDateTime(value){
   return date.toLocaleString();
 }
 
-function buildPopupValueRows(site, locationName, coordText, siteCodes){
+function buildPopupValueRows(site, locationName, coordText, siteCodes, requiredCodes){
   const projectName = String(getSiteField(site, ["project_name"]) || state.activeProject?.name || site?.project_id || "-").trim() || "-";
   const marketName = String(getSiteField(site, ["market_name", "marketname"]) || state.activeProject?.location || "-").trim() || "-";
   const createdBy = String(getSiteField(site, ["creation_user", "created_by_email", "created_by_user", "created_by"]) || "-").trim() || "-";
@@ -4850,12 +4870,14 @@ function buildPopupValueRows(site, locationName, coordText, siteCodes){
     ["ObjectID", objectId],
     ["GlobalID", globalId],
     ["PROJECT_GID", projectGid],
-    ["Billing Codes", summarizeCodesForPopup(siteCodes)],
+    ["Allowed Codes", summarizeCodesForPopup(requiredCodes)],
+    ["Billed Codes", summarizeCodesForPopup(siteCodes)],
   ];
 }
 
 function buildSiteMarkerPopupHtml(site, {
   siteCodes = null,
+  requiredCodes = null,
   loadingCodes = false,
   sitePhotos = [],
   loadingPhotos = false,
@@ -4869,12 +4891,27 @@ function buildSiteMarkerPopupHtml(site, {
   const coordText = coords ? `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : "-";
   const statusText = site?.is_pending ? t("siteStatusPending") : "Active";
   const effectiveSiteCodes = normalizeCodeList(siteCodes);
+  const effectiveRequiredCodes = normalizeCodeList(requiredCodes);
+  const codeMatch = evaluateCodeMatch(effectiveRequiredCodes, effectiveSiteCodes);
   const notesRaw = String(site?.notes || "");
   const canDeleteSite = !site?.is_pending && SpecCom.helpers.isRoot();
   const photos = normalizePopupPhotos(sitePhotos);
   const canManagePhotos = !site?.is_pending;
   const photoUrlsText = photos.map((item) => item.url).filter(Boolean).join("\n");
-  const gridRows = buildPopupValueRows(site, locationName, coordText, loadingCodes ? [] : effectiveSiteCodes);
+  const gridRows = buildPopupValueRows(
+    site,
+    locationName,
+    coordText,
+    loadingCodes ? [] : effectiveSiteCodes,
+    effectiveRequiredCodes
+  );
+  const codeStatusHtml = loadingCodes
+    ? `<div class="muted small" style="margin-top:8px;">Checking billed vs allowed codes...</div>`
+    : (effectiveRequiredCodes.length
+      ? (codeMatch.ok
+        ? `<div class="small" style="margin-top:8px; color:#166534; font-weight:700;">Codes match allowed list.</div>`
+        : `<div class="small" style="margin-top:8px; color:#b91c1c; font-weight:700;">Code mismatch: ${codeMatch.missing.length ? `missing ${codeMatch.missing.join(", ")}` : ""}${codeMatch.missing.length && codeMatch.extra.length ? " | " : ""}${codeMatch.extra.length ? `not allowed ${codeMatch.extra.join(", ")}` : ""}</div>`)
+      : `<div class="muted small" style="margin-top:8px;">No allowed-code list configured for this project.</div>`);
   const photosHtml = loadingPhotos
     ? `<div class="scSitePopup-photo-empty">Loading photos...</div>`
     : photos.length
@@ -4934,6 +4971,7 @@ function buildSiteMarkerPopupHtml(site, {
           <div class="k">${escapeHtml(row[0])}</div><div class="v mono">${escapeHtml(String(row[1] || "-"))}</div>
         `).join("")}
       </div>
+      ${codeStatusHtml}
       <div class="scSitePopup-edit-head">Photo urls</div>
       <div class="scSitePopup-edit-grid">
         <label class="scSitePopup-field is-full">
