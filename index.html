@@ -331,6 +331,23 @@
               <div id="invoicePanel"></div>
             </div>
           </div>
+          <div id="invoiceFilesGate" class="note warning" style="margin-top:12px; display:none;">
+            Invoice files are private. ROOT must grant you invoice access before you can view this vault.
+          </div>
+          <div id="invoiceFilesPanel" class="card" style="margin-top:12px; display:none;">
+            <div class="row" style="justify-content:space-between; align-items:center;">
+              <h2>Invoice Files</h2>
+              <div class="row">
+                <button id="btnInvoiceFilesRefresh" class="btn ghost small" type="button">Refresh</button>
+                <label class="btn secondary small file-btn">
+                  Upload file
+                  <input id="invoiceFileInput" type="file" accept=".pdf,.xlsx,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg,.zip,.txt,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/zip,image/*,text/plain" />
+                </label>
+              </div>
+            </div>
+            <div id="invoiceFilesProjectScope" class="muted small" style="margin-top:8px;"></div>
+            <div id="invoiceFilesList" style="margin-top:10px;"></div>
+          </div>
         </section>
 
         <section id="viewBilling" class="view">

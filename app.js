@@ -100,6 +100,7 @@ const state = {
   },
   orgs: [],
   invoices: [],
+  invoiceFiles: [],
   pendingSites: [],
   billingLocations: [],
   billingLocation: null,
@@ -1111,6 +1112,7 @@ const LEGACY_DRAWER_TAB_KEY = "speccom.ui.drawerTab";
 const LEGACY_DRAWER_WIDTH_KEY = "speccom.ui.drawerWidth";
 const KMZ_PHOTO_OVERRIDES_KEY_PREFIX = "speccom.kmzPhotoOverrides.";
 const PROFILE_PHOTO_KEY_PREFIX = "speccom.profilePhoto.";
+const INVOICE_FILES_BUCKET = "invoice-files";
 const KMZ_SNAPSHOT_TABLE = "project_kmz_snapshots";
 const KMZ_SNAPSHOT_SAVE_DEBOUNCE_MS = 900;
 const SIDEBAR_MIN_WIDTH = 320;
@@ -8192,6 +8194,10 @@ function canViewDispatch(){
   return isPrivilegedRole();
 }
 
+function canViewInvoiceVault(){
+  return SpecCom.helpers.isRoot() || Boolean(state.profile?.can_view_invoices);
+}
+
 function canCreateProjects(){
   return isPrivilegedRole();
 }
@@ -8235,6 +8241,7 @@ function isViewAllowed(viewId){
     return ["viewTechnician", "viewMap", "viewSettings", "viewDailyReport"].includes(viewId);
   }
   if (viewId === "viewTechnician") return false;
+  if (viewId === "viewInvoices") return canViewInvoiceVault();
   if (viewId === "viewLabor") return canViewLabor();
   if (viewId === "viewDispatch") return canViewDispatch();
   return true;
@@ -9006,6 +9013,7 @@ function setRoleUI(){
   renderDispatchWarnings();
   setDprEditState();
   renderProfileHomeCard();
+  renderInvoiceFilesPanel();
 }
 
 function getLocalDateISO(){
@@ -15448,13 +15456,30 @@ async function loadAdminProfiles(){
   }
   const { data, error } = await state.client
     .from("profiles")
-    .select("id, display_name, role, role_code, created_at")
+    .select("id, display_name, role, role_code, created_at, can_view_invoices")
     .order("created_at", { ascending: true });
   if (error){
+    const message = String(error?.message || "").toLowerCase();
+    if (message.includes("can_view_invoices") && message.includes("does not exist")){
+      const fallback = await state.client
+        .from("profiles")
+        .select("id, display_name, role, role_code, created_at")
+        .order("created_at", { ascending: true });
+      if (fallback.error){
+        toast("Profiles load error", fallback.error.message);
+        return;
+      }
+      state.adminProfiles = (fallback.data || []).map((row) => ({ ...row, can_view_invoices: false }));
+      renderAdminProfiles();
+      return;
+    }
     toast("Profiles load error", error.message);
     return;
   }
-  state.adminProfiles = data || [];
+  state.adminProfiles = (data || []).map((row) => ({
+    ...row,
+    can_view_invoices: Boolean(row?.can_view_invoices),
+  }));
   renderAdminProfiles();
 }
 
@@ -15477,6 +15502,7 @@ function renderAdminProfiles(){
           <th>User id</th>
           <th>Name</th>
           <th>Role</th>
+          <th>Invoice Access</th>
           <th>Created</th>
           <th></th>
         </tr>
@@ -15494,6 +15520,12 @@ function renderAdminProfiles(){
                   <option value="${role}" ${String(row.role || "").toUpperCase() === role ? "selected" : ""}>${formatRoleLabel(role)}</option>
                 `).join("")}
               </select>
+            </td>
+            <td>
+              <label class="row" style="gap:8px; align-items:center;">
+                <input type="checkbox" data-field="can_view_invoices" data-id="${row.id}" ${row.can_view_invoices ? "checked" : ""} ${SpecCom.helpers.isRoot() ? "" : "disabled"} />
+                <span class="muted small">${SpecCom.helpers.isRoot() ? "Granted by ROOT" : "ROOT only"}</span>
+              </label>
             </td>
             <td class="muted small">${row.created_at ? new Date(row.created_at).toLocaleDateString() : "-"}</td>
             <td>
@@ -15638,18 +15670,32 @@ async function updateAdminProfile(userId){
   }
   const roleEl = document.querySelector(`[data-field="role"][data-id="${userId}"]`);
   const nameEl = document.querySelector(`[data-field="display_name"][data-id="${userId}"]`);
+  const invoiceAccessEl = document.querySelector(`[data-field="can_view_invoices"][data-id="${userId}"]`);
   if (!roleEl || !nameEl) return;
   const nextRole = roleEl.value;
   const nextRoleCode = normalizeRole(nextRole);
   const nextName = String(nameEl.value || "").trim();
+  const existing = (state.adminProfiles || []).find((row) => String(row?.id || "") === String(userId || ""));
+  const nextInvoiceAccess = SpecCom.helpers.isRoot()
+    ? Boolean(invoiceAccessEl?.checked)
+    : Boolean(existing?.can_view_invoices);
   if (isDemo){
     toast("Demo disabled", "Profiles are not available in demo mode.");
     return;
   }
-  const { error } = await state.client
+  let { error } = await state.client
     .from("profiles")
-    .update({ role: nextRole, role_code: nextRoleCode, display_name: nextName || null })
+    .update({ role: nextRole, role_code: nextRoleCode, display_name: nextName || null, can_view_invoices: nextInvoiceAccess })
     .eq("id", userId);
+  if (error){
+    const message = String(error?.message || "").toLowerCase();
+    if (message.includes("can_view_invoices") && message.includes("does not exist")){
+      ({ error } = await state.client
+        .from("profiles")
+        .update({ role: nextRole, role_code: nextRoleCode, display_name: nextName || null })
+        .eq("id", userId));
+    }
+  }
   if (error){
     toast("Update failed", error.message);
     return;
@@ -17776,6 +17822,7 @@ function setActiveProjectById(id){
   loadLocationProofRequirements(state.activeProject?.id || null);
   loadBillingLocations(state.activeProject?.id || null);
   SpecCom.helpers.loadYourInvoices(state.activeProject?.id || null);
+  loadInvoiceFiles(state.activeProject?.id || null);
   state.billingLocation = null;
   state.billingInvoice = null;
   state.billingItems = [];
@@ -19156,6 +19203,160 @@ function renderInvoicePanel(){
       <tbody>${rows}</tbody>
     </table>
   `;
+}
+
+function getInvoiceScopeOrgId(){
+  return state.activeProject?.org_id || state.profile?.org_id || null;
+}
+
+function renderInvoiceFilesPanel(){
+  const gate = $("invoiceFilesGate");
+  const panel = $("invoiceFilesPanel");
+  const scope = $("invoiceFilesProjectScope");
+  const list = $("invoiceFilesList");
+  if (!gate || !panel || !scope || !list) return;
+
+  const allowed = canViewInvoiceVault();
+  gate.style.display = allowed ? "none" : "";
+  panel.style.display = allowed ? "" : "none";
+  if (!allowed){
+    list.innerHTML = "";
+    return;
+  }
+
+  const projectLabel = state.activeProject?.name || "All accessible projects";
+  scope.textContent = `Scope: ${projectLabel}`;
+
+  const rows = state.invoiceFiles || [];
+  if (!rows.length){
+    list.innerHTML = `<div class="muted small">No invoice files uploaded yet.</div>`;
+    return;
+  }
+  const canDelete = SpecCom.helpers.isRoot();
+  list.innerHTML = `
+    <div class="invoice-files-list">
+      ${rows.map((row) => `
+        <div class="invoice-file-row">
+          <div class="invoice-file-meta">
+            <div class="invoice-file-name">${escapeHtml(row.file_name || "invoice-file")}</div>
+            <div class="muted small">
+              ${escapeHtml(row.project_name || row.project_id || "Org file")} | ${new Date(row.created_at || Date.now()).toLocaleString()}
+            </div>
+          </div>
+          <div class="row">
+            <a class="btn ghost small" href="${escapeHtml(row.file_url || "#")}" target="_blank" rel="noopener noreferrer">Open</a>
+            ${canDelete ? `<button class="btn danger small" type="button" data-action="deleteInvoiceFile" data-id="${escapeHtml(row.id)}">Delete</button>` : ""}
+          </div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+async function loadInvoiceFiles(projectId = state.activeProject?.id || null){
+  if (!state.client || !canViewInvoiceVault()){
+    state.invoiceFiles = [];
+    renderInvoiceFilesPanel();
+    return;
+  }
+  const orgId = getInvoiceScopeOrgId();
+  if (!orgId){
+    state.invoiceFiles = [];
+    renderInvoiceFilesPanel();
+    return;
+  }
+  let query = state.client
+    .from("invoice_files")
+    .select("id, org_id, project_id, file_name, file_path, uploaded_by, created_at")
+    .eq("org_id", orgId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (projectId){
+    query = query.or(`project_id.is.null,project_id.eq.${projectId}`);
+  }
+  const { data, error } = await query;
+  if (error){
+    const message = String(error?.message || "").toLowerCase();
+    if (message.includes("invoice_files") && message.includes("does not exist")){
+      state.invoiceFiles = [];
+      renderInvoiceFilesPanel();
+      return;
+    }
+    toast("Invoice files load error", error.message, "error");
+    return;
+  }
+  const rows = data || [];
+  const projectNameById = new Map((state.projects || []).map((p) => [String(p.id), p.name || p.id]));
+  const withUrls = await Promise.all(rows.map(async (row) => {
+    const fileUrl = row.file_path ? await getPublicOrSignedUrl(INVOICE_FILES_BUCKET, row.file_path) : "";
+    return {
+      ...row,
+      file_url: fileUrl,
+      project_name: row.project_id ? (projectNameById.get(String(row.project_id)) || row.project_id) : null,
+    };
+  }));
+  state.invoiceFiles = withUrls;
+  renderInvoiceFilesPanel();
+}
+
+async function uploadInvoiceFile(file){
+  if (!file){
+    toast("File required", "Choose a file first.", "error");
+    return;
+  }
+  if (!state.client || !canViewInvoiceVault()){
+    toast("Not allowed", "ROOT must grant invoice access first.", "error");
+    return;
+  }
+  const orgId = getInvoiceScopeOrgId();
+  if (!orgId){
+    toast("Missing org", "No organization context for invoice files.", "error");
+    return;
+  }
+  const projectId = state.activeProject?.id || null;
+  const safeName = String(file.name || "invoice-file").replace(/[^\w.\-() ]+/g, "_");
+  const path = `${orgId}/${projectId || "org"}/${Date.now()}-${safeName}`;
+  const { error: uploadError } = await state.client.storage
+    .from(INVOICE_FILES_BUCKET)
+    .upload(path, file, { upsert: false });
+  if (uploadError){
+    toast("Upload failed", uploadError.message, "error");
+    return;
+  }
+  const payload = {
+    org_id: orgId,
+    project_id: projectId,
+    file_name: safeName,
+    file_path: path,
+    uploaded_by: state.user?.id || null,
+  };
+  const { error: insertError } = await state.client.from("invoice_files").insert(payload);
+  if (insertError){
+    toast("Save failed", insertError.message, "error");
+    return;
+  }
+  toast("Invoice file uploaded", safeName);
+  await loadInvoiceFiles(projectId);
+}
+
+async function deleteInvoiceFile(fileId){
+  if (!SpecCom.helpers.isRoot()){
+    toast("Not allowed", "Only ROOT can delete invoice files.", "error");
+    return;
+  }
+  const row = (state.invoiceFiles || []).find((item) => String(item?.id || "") === String(fileId || ""));
+  if (!row) return;
+  if (!confirm(`Delete invoice file "${row.file_name}"?`)) return;
+  const { error } = await state.client.from("invoice_files").delete().eq("id", row.id);
+  if (error){
+    toast("Delete failed", error.message, "error");
+    return;
+  }
+  if (row.file_path){
+    await state.client.storage.from(INVOICE_FILES_BUCKET).remove([row.file_path]);
+  }
+  toast("Invoice file deleted", row.file_name);
+  await loadInvoiceFiles(state.activeProject?.id || null);
 }
 
 
@@ -21021,7 +21222,7 @@ async function loadProfile(client, userId){
   // Expect a public.profiles row keyed by auth.uid()
   let { data, error } = await client
     .from("profiles")
-    .select("role, role_code, display_name, preferred_language, is_demo, current_project_id, org_id")
+    .select("role, role_code, display_name, preferred_language, is_demo, current_project_id, org_id, can_view_invoices")
     .eq("id", userId)
     .maybeSingle();
 
@@ -21054,7 +21255,7 @@ async function loadProfile(client, userId){
       }, { onConflict: "id" });
     ({ data } = await client
       .from("profiles")
-      .select("role, role_code, display_name, preferred_language, is_demo, current_project_id, org_id")
+      .select("role, role_code, display_name, preferred_language, is_demo, current_project_id, org_id, can_view_invoices")
       .eq("id", userId)
       .maybeSingle());
   }
@@ -21063,7 +21264,7 @@ async function loadProfile(client, userId){
     if (!claimError){
       ({ data } = await client
         .from("profiles")
-        .select("role, role_code, display_name, preferred_language, is_demo, current_project_id, org_id")
+        .select("role, role_code, display_name, preferred_language, is_demo, current_project_id, org_id, can_view_invoices")
         .eq("id", userId)
         .maybeSingle());
     }
@@ -21071,6 +21272,7 @@ async function loadProfile(client, userId){
   state.profile = data || null;
   if (state.profile){
     state.profile.role = normalizeRole(state.profile.role);
+    state.profile.can_view_invoices = Boolean(state.profile.can_view_invoices);
   }
   window.currentUserProfile = state.profile;
   if (state.profile?.preferred_language){
@@ -22149,6 +22351,31 @@ function wireUI(){
   const btnCreateInvoice = $("btnCreateInvoice");
   if (btnCreateInvoice){
     btnCreateInvoice.addEventListener("click", () => createInvoice());
+  }
+  const btnInvoiceFilesRefresh = $("btnInvoiceFilesRefresh");
+  if (btnInvoiceFilesRefresh){
+    btnInvoiceFilesRefresh.addEventListener("click", () => {
+      void loadInvoiceFiles(state.activeProject?.id || null);
+    });
+  }
+  const invoiceFileInput = $("invoiceFileInput");
+  if (invoiceFileInput){
+    invoiceFileInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0] || null;
+      e.target.value = "";
+      if (!file) return;
+      await uploadInvoiceFile(file);
+    });
+  }
+  const invoiceFilesList = $("invoiceFilesList");
+  if (invoiceFilesList){
+    invoiceFilesList.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-action='deleteInvoiceFile']");
+      if (!btn) return;
+      const id = String(btn.dataset.id || "").trim();
+      if (!id) return;
+      void deleteInvoiceFile(id);
+    });
   }
 
   document.body.addEventListener("click", (e) => {
