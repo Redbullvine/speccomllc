@@ -4919,6 +4919,7 @@ function buildSiteMarkerPopupHtml(site, {
   const photos = normalizePopupPhotos(sitePhotos);
   const canManagePhotos = !site?.is_pending;
   const photoUrlsText = photos.map((item) => item.url).filter(Boolean).join("\n");
+  const billedCodesCsv = effectiveSiteCodes.join(", ");
   const gridRows = buildPopupValueRows(
     site,
     locationName,
@@ -4993,6 +4994,16 @@ function buildSiteMarkerPopupHtml(site, {
         `).join("")}
       </div>
       ${codeStatusHtml}
+      <div class="scSitePopup-edit-head">Billed Codes</div>
+      <div class="scSitePopup-edit-grid">
+        <label class="scSitePopup-field is-full">
+          <span>Comma-separated codes</span>
+          <textarea rows="3" data-popup-field="codes" placeholder="Example: HO-1(48), 1635CA">${escapeHtml(billedCodesCsv)}</textarea>
+        </label>
+      </div>
+      <div class="scSitePopup-actions">
+        <button type="button" class="scSitePopup-action" data-popup-action="save" data-popup-site-id="${escapeHtml(siteId)}">Save Codes</button>
+      </div>
       <div class="scSitePopup-edit-head">Photo urls</div>
       <div class="scSitePopup-edit-grid">
         <label class="scSitePopup-field is-full">
