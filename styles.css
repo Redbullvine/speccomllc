@@ -371,11 +371,13 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
 }
 .view{display:none}
 .view.active{display:block}
-#viewDashboard{
+#viewDashboard,
+#viewTechnician{
   position: relative;
   isolation: isolate;
 }
-#viewDashboard::before{
+#viewDashboard::before,
+#viewTechnician::before{
   content: "";
   position: absolute;
   inset: 0;
@@ -388,12 +390,14 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
   opacity: 0.08;
   filter: saturate(0.95) contrast(0.96);
 }
-#viewDashboard > *{
+#viewDashboard > *,
+#viewTechnician > *{
   position: relative;
   z-index: 1;
 }
 @media (max-width: 900px){
-  #viewDashboard::before{
+  #viewDashboard::before,
+  #viewTechnician::before{
     background-size: min(92vw, 520px);
     background-position: center 24%;
     opacity: 0.07;
