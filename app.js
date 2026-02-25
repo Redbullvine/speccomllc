@@ -1977,6 +1977,24 @@ function normalizeCodeForMatch(value){
     .trim();
 }
 
+function getPopupBilledCodeDisplayList(site, siteCodes){
+  const payloadRows = parseBillingCodesPayload(site?.codes_payload);
+  if (!payloadRows.length){
+    return normalizeCodeList(siteCodes);
+  }
+  return payloadRows
+    .map((row) => {
+      const code = String(row?.code || "").trim();
+      if (!code) return "";
+      const billedQty = Number(row?.billed);
+      if (Number.isFinite(billedQty) && billedQty !== 0){
+        return `${code} [${formatImportNumber(billedQty)}]`;
+      }
+      return code;
+    })
+    .filter(Boolean);
+}
+
 function evaluateCodeMatch(requiredCodes, billedCodes){
   const required = normalizeCodeList(requiredCodes).map(normalizeCodeForMatch).filter(Boolean);
   const billed = normalizeCodeList(billedCodes).map(normalizeCodeForMatch).filter(Boolean);
@@ -2486,7 +2504,7 @@ function stopLocationPolling(){
   }
 }
 
-const SITE_BILLING_COLUMNS = "units_allowed, units_billed";
+const SITE_BILLING_COLUMNS = "units_allowed, units_billed, codes_payload";
 const SITE_SELECT_COLUMNS = `id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, lat, lng, created_at, ${SITE_BILLING_COLUMNS}`;
 const SITE_SELECT_COLUMNS_GPS_ONLY = `id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at, ${SITE_BILLING_COLUMNS}`;
 const SITE_SELECT_COLUMNS_LEGACY_ONLY = `id, project_id, name, notes, lat, lng, created_at, ${SITE_BILLING_COLUMNS}`;
@@ -2510,7 +2528,7 @@ function isMissingLatLngColumnError(error){
 }
 
 function isMissingSiteBillingColumnError(error){
-  return ["units_allowed", "units_billed"].some((col) => isMissingColumnError(error, col));
+  return ["units_allowed", "units_billed", "codes_payload"].some((col) => isMissingColumnError(error, col));
 }
 
 function isMissingTable(err){
@@ -4863,7 +4881,7 @@ function formatPopupDateTime(value){
   return date.toLocaleString();
 }
 
-function buildPopupValueRows(site, locationName, coordText, siteCodes, requiredCodes){
+function buildPopupValueRows(site, locationName, coordText, siteCodes, requiredCodes, billedCodesDisplay = null){
   const projectName = String(getSiteField(site, ["project_name"]) || state.activeProject?.name || site?.project_id || "-").trim() || "-";
   const marketName = String(getSiteField(site, ["market_name", "marketname"]) || state.activeProject?.location || "-").trim() || "-";
   const createdBy = String(getSiteField(site, ["creation_user", "created_by_email", "created_by_user", "created_by"]) || "-").trim() || "-";
@@ -4897,7 +4915,7 @@ function buildPopupValueRows(site, locationName, coordText, siteCodes, requiredC
     ["GlobalID", globalId],
     ["PROJECT_GID", projectGid],
     ["Allowed Codes", summarizeCodesForPopup(requiredCodes)],
-    ["Billed Codes", summarizeCodesForPopup(siteCodes)],
+    ["Billed Codes", summarizeCodesForPopup(Array.isArray(billedCodesDisplay) ? billedCodesDisplay : siteCodes)],
   ];
 }
 
@@ -4917,6 +4935,7 @@ function buildSiteMarkerPopupHtml(site, {
   const coordText = coords ? `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : "-";
   const statusText = site?.is_pending ? t("siteStatusPending") : "Active";
   const effectiveSiteCodes = normalizeCodeList(siteCodes);
+  const billedCodesDisplay = getPopupBilledCodeDisplayList(site, effectiveSiteCodes);
   const effectiveRequiredCodes = normalizeCodeList(requiredCodes);
   const codeMatch = evaluateCodeMatch(effectiveRequiredCodes, effectiveSiteCodes);
   const notesRaw = String(site?.notes || "");
@@ -4930,7 +4949,8 @@ function buildSiteMarkerPopupHtml(site, {
     locationName,
     coordText,
     loadingCodes ? [] : effectiveSiteCodes,
-    effectiveRequiredCodes
+    effectiveRequiredCodes,
+    loadingCodes ? [] : billedCodesDisplay
   );
   const codeStatusHtml = loadingCodes
     ? `<div class="muted small" style="margin-top:8px;">Checking billed vs allowed codes...</div>`
