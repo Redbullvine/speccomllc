@@ -4,6 +4,12 @@
 supabase/.temp/
 supabase/.temp/**
 
+# local dependencies and transient artifacts
+node_modules/
+.tmp_*/
+.tmp_public_schema.sql
+project_uploads/
+
 # generated/local artifacts
 env_generated.js
 mapboard.*
