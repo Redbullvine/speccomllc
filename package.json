@@ -2,7 +2,7 @@
   "name": "speccom",
   "private": true,
   "dependencies": {
-    "@supabase/supabase-js": "^2.48.1",
+    "@supabase/supabase-js": "^2.97.0",
     "busboy": "^1.6.0",
     "csv-parse": "^5.5.3",
     "papaparse": "^5.4.1",
