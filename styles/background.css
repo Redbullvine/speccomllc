@@ -1,0 +1,35 @@
+.speccom-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 30% 40%, rgba(0, 115, 255, 0.12), transparent 55%),
+    radial-gradient(circle at 80% 20%, rgba(80, 150, 255, 0.08), transparent 60%),
+    linear-gradient(180deg, #0b1c3d 0%, #122a57 100%);
+}
+
+.speccom-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("/assets/ks-logo.svg");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 700px;
+  opacity: 0.06;
+  filter: blur(40px);
+  mix-blend-mode: soft-light;
+}
+
+.app-container {
+  position: relative;
+  z-index: 1;
+}
+
+#viewDashboard::before,
+#viewTechnician::before {
+  content: none;
+  background-image: none;
+}
