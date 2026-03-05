@@ -14,12 +14,12 @@
   content: "";
   position: absolute;
   inset: 0;
-  background-image: url("/assets/ks-logo.svg");
+  background-image: url("/assets/ks-electric-logo.jpg");
   background-repeat: no-repeat;
   background-position: center;
-  background-size: 700px;
-  opacity: 0.06;
-  filter: blur(40px);
+  background-size: 760px;
+  opacity: 0.14;
+  filter: blur(24px) saturate(1.15) contrast(1.08);
   mix-blend-mode: soft-light;
 }
 
@@ -32,4 +32,53 @@
 #viewTechnician::before {
   content: none;
   background-image: none;
+}
+
+#viewDashboard,
+#viewTechnician {
+  background: transparent;
+}
+
+#viewDashboard .card,
+#viewTechnician .card {
+  background: rgba(245, 250, 255, 0.86);
+  border-color: rgba(172, 191, 219, 0.82);
+  color: #0f172a;
+  backdrop-filter: blur(3px);
+}
+
+#viewDashboard .kpi .tile,
+#viewTechnician .kpi .tile {
+  background: rgba(234, 243, 255, 0.94);
+  border-color: rgba(172, 191, 219, 0.9);
+}
+
+#viewDashboard .muted,
+#viewTechnician .muted {
+  color: #3b4f69;
+}
+
+.topbar .brand-title {
+  color: #f8fbff;
+}
+
+.topbar .muted.small {
+  color: rgba(240, 247, 255, 0.88);
+}
+
+.topbar-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.58);
+  color: #ffffff;
+}
+
+.topbar-btn:hover,
+.topbar-btn.is-active {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.8);
+}
+
+.icon-btn {
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.7);
 }
