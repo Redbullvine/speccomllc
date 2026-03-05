@@ -446,6 +446,7 @@ const I18N = {
     navAlerts: "Alerts",
     navAdmin: "Admin",
     navSettings: "Settings",
+    timesheetNav: "Timesheet",
     techClockTitle: "Time tracking",
     techClockIn: "Clock In",
     techClockOut: "Clock Out",
@@ -776,6 +777,7 @@ const I18N = {
     navAlerts: "Alertas",
     navAdmin: "Admin",
     navSettings: "Configuración",
+    timesheetNav: "Hoja de tiempo",
     techClockTitle: "Registro de tiempo",
     techClockIn: "Entrada",
     techClockOut: "Salida",
@@ -8267,7 +8269,7 @@ function getDefaultView(){
   const hashView = parseViewFromHash();
   if (hashView && isViewAllowed(hashView)) return hashView;
   if (isFieldRole()){
-    return isViewAllowed("viewTechnician") ? "viewTechnician" : "viewMap";
+    return isViewAllowed("viewDashboard") ? "viewDashboard" : "viewMap";
   }
   return "viewDashboard";
 }
@@ -8977,6 +8979,12 @@ function setRoleBasedVisibility(){
     if (!isTech && viewId === "viewDispatch") visible = canViewDispatch();
     if (!isTech && viewId === "viewTechnician") visible = false;
     view.style.display = visible ? "" : "none";
+  });
+
+  document.querySelectorAll(".menu-link[data-view]").forEach((btn) => {
+    const viewId = btn.dataset.view;
+    if (!viewId) return;
+    btn.style.display = isViewAllowed(viewId) ? "" : "none";
   });
 
   const activeView = document.querySelector(".view.active");
@@ -12747,6 +12755,8 @@ function setWhoami(){
     const el = $(id);
     if (el) el.style.display = authed ? "" : "none";
   });
+  const timesheetBtn = $("btnTimesheet");
+  if (timesheetBtn) timesheetBtn.style.display = authed && isViewAllowed("viewTechnician") ? "" : "none";
   const messagesBtn = $("btnMessages");
   if (messagesBtn) messagesBtn.style.display = authed && state.messagesEnabled && state.features.messages ? "" : "none";
   updateMessagesBadge();
@@ -21869,6 +21879,14 @@ function wireUI(){
       }
     });
   }
+  const timesheetBtn = $("btnTimesheet");
+  if (timesheetBtn){
+    timesheetBtn.addEventListener("click", () => {
+      if (isViewAllowed("viewTechnician")){
+        setActiveView("viewTechnician");
+      }
+    });
+  }
   const mapProjectLabelBtn = $("mapProjectLabel");
   if (mapProjectLabelBtn){
     mapProjectLabelBtn.addEventListener("click", () => openProjectsModal());
@@ -22025,6 +22043,7 @@ function wireUI(){
     btn.addEventListener("click", () => {
       const viewId = btn.dataset.view;
       if (!viewId) return;
+      if (!isViewAllowed(viewId)) return;
       setActiveView(viewId);
       closeMenuModal();
     });
