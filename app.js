@@ -272,6 +272,7 @@ const state = {
   testResultsImportRunning: false,
   labor: {
     rows: [],
+    snapshot: null,
   },
   mapFilters: {
     activeOnly: true,
@@ -9128,6 +9129,111 @@ function computeTechnicianSummary(events){
   };
 }
 
+function getProjectLabelById(projectId){
+  const match = (state.projects || []).find((project) => project.id === projectId);
+  if (!match) return "Project";
+  return match.job_number || match.name || "Project";
+}
+
+function renderDashboardTimesheetActivity(){
+  if (!state.features.labor){
+    return "";
+  }
+
+  const projectLabel = state.activeProject?.job_number || state.activeProject?.name || "No project selected";
+
+  if (isTechnician()){
+    const timesheet = state.technician.timesheet;
+    const summary = state.technician.summary || computeTechnicianSummary(state.technician.events || []);
+    const activeEvent = state.technician.activeEvent;
+    const hasOpenTimesheet = Boolean(timesheet && !timesheet.clock_out_at);
+    const activeJob = Boolean(activeEvent && activeEvent.event_type === "START_JOB");
+    const currentJobLabel = timesheet?.project_id ? getProjectLabelById(timesheet.project_id) : projectLabel;
+    const stateLabel = activeEvent
+      ? formatEventLabel(activeEvent.event_type)
+      : (hasOpenTimesheet ? t("techStateIdle") : t("techStateOffClock"));
+
+    return `
+      <div class="field-stack" style="gap:10px;">
+        <div class="muted small">Job: ${escapeHtml(currentJobLabel)}</div>
+        <div class="chip"><span class="dot ${hasOpenTimesheet ? "ok" : "bad"}"></span><span>${escapeHtml(stateLabel)}</span></div>
+        <div class="kpi">
+          <div class="tile">
+            <div class="label">${t("techSummaryTotal")}</div>
+            <div class="value">${formatDurationMinutes(summary.totalMinutes)}</div>
+          </div>
+          <div class="tile">
+            <div class="label">${t("techSummaryPaid")}</div>
+            <div class="value">${formatDurationMinutes(summary.paidMinutes)}</div>
+          </div>
+          <div class="tile">
+            <div class="label">${t("techSummaryUnpaid")}</div>
+            <div class="value">${formatDurationMinutes(summary.unpaidMinutes)}</div>
+          </div>
+        </div>
+        <div class="row" style="gap:8px;">
+          <button class="btn small" type="button" data-timesheet-action="clockIn" ${!state.activeProject || hasOpenTimesheet ? "disabled" : ""}>${t("techClockIn")}</button>
+          <button class="btn secondary small" type="button" data-timesheet-action="clockOut" ${!hasOpenTimesheet || activeJob ? "disabled" : ""}>${t("techClockOut")}</button>
+          <button class="btn ghost small" type="button" data-timesheet-action="start" ${!hasOpenTimesheet ? "disabled" : ""}>${t("techStartJob")}</button>
+          <button class="btn ghost small" type="button" data-timesheet-action="pause" ${!hasOpenTimesheet ? "disabled" : ""}>${t("techPauseJob")}</button>
+          <button class="btn ghost small" type="button" data-timesheet-action="lunch" ${!hasOpenTimesheet ? "disabled" : ""}>${t("techLunch")}</button>
+          <button class="btn ghost small" type="button" data-timesheet-action="break" ${!hasOpenTimesheet ? "disabled" : ""}>${t("techBreak")}</button>
+          <button class="btn ghost small" type="button" data-timesheet-action="inspect" ${!hasOpenTimesheet ? "disabled" : ""}>${t("techTruckInspection")}</button>
+          <button class="btn danger small" type="button" data-timesheet-action="end" ${!hasOpenTimesheet ? "disabled" : ""}>${t("techEndJob")}</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (!canViewLabor()){
+    return "";
+  }
+  if (!state.activeProject){
+    return `<div class="muted small">Select a project to view timesheet activity.</div>`;
+  }
+
+  const snapshotRows = state.labor.snapshot?.rows || [];
+  const openRows = snapshotRows.filter((row) => !row.clock_out_at);
+  const totalPaidMinutes = snapshotRows.reduce((sum, row) => sum + Number(row.paid_minutes || 0), 0);
+
+  if (!snapshotRows.length){
+    return `
+      <div class="field-stack" style="gap:8px;">
+        <div class="muted small">Job: ${escapeHtml(projectLabel)}</div>
+        <div class="muted small">No timesheet entries for today.</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="field-stack" style="gap:10px;">
+      <div class="muted small">Job: ${escapeHtml(projectLabel)}</div>
+      <div class="kpi">
+        <div class="tile">
+          <div class="label">Clocked in now</div>
+          <div class="value">${openRows.length}</div>
+        </div>
+        <div class="tile">
+          <div class="label">Today paid</div>
+          <div class="value">${formatDurationMinutes(totalPaidMinutes)}</div>
+        </div>
+        <div class="tile">
+          <div class="label">Techs tracked</div>
+          <div class="value">${snapshotRows.length}</div>
+        </div>
+      </div>
+      <div class="field-stack" style="gap:6px;">
+        ${snapshotRows.slice(0, 6).map((row) => `
+          <div class="row" style="justify-content:space-between; gap:8px;">
+            <div>${escapeHtml(row.name || "User")}</div>
+            <div class="muted small">${row.clock_out_at ? "Off clock" : "On clock"} | ${formatDurationMinutes(row.paid_minutes || 0)}</div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
 function renderTechnicianDashboard(){
   const logWrap = $("techEventLog");
   if (!logWrap) return;
@@ -9237,6 +9343,7 @@ function renderTechnicianDashboard(){
   eventButtons.forEach((btn) => {
     btn.disabled = !hasOpenTimesheet;
   });
+  renderAlerts();
 }
 
 function recordTechnicianTrail(pos){
@@ -12685,6 +12792,82 @@ async function loadLaborRows(){
   renderLaborTable();
 }
 
+async function loadLaborSnapshotForDashboard(){
+  if (!state.features.labor){
+    state.labor.snapshot = null;
+    renderAlerts();
+    return;
+  }
+  if (!canViewLabor() || !state.activeProject || !state.client || isDemo){
+    state.labor.snapshot = null;
+    renderAlerts();
+    return;
+  }
+
+  const workDate = getLocalDateISO();
+  const { data, error } = await state.client
+    .from("technician_timesheets")
+    .select("id, user_id, work_date, total_minutes_worked, clock_in_at, clock_out_at, created_at")
+    .eq("project_id", state.activeProject.id)
+    .eq("work_date", workDate)
+    .order("created_at", { ascending: false });
+  if (error){
+    if (isMissingTable(error)){
+      state.features.labor = false;
+      state.labor.snapshot = null;
+      renderAlerts();
+      return;
+    }
+    toast("Timesheet snapshot error", error.message);
+    return;
+  }
+
+  const rows = data || [];
+  const userIds = [...new Set(rows.map((row) => row.user_id).filter(Boolean))];
+  let nameById = new Map();
+  if (userIds.length){
+    const { data: profiles, error: profileError } = await state.client
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", userIds);
+    if (!profileError){
+      nameById = new Map((profiles || []).map((row) => [row.id, row.display_name || row.id]));
+    }
+  }
+
+  const pendingIds = rows.filter((row) => row.total_minutes_worked == null).map((row) => row.id);
+  const paidByTimesheet = new Map();
+  if (pendingIds.length){
+    const { data: events } = await state.client
+      .from("technician_time_events")
+      .select("timesheet_id, event_type, duration_minutes, started_at, ended_at")
+      .in("timesheet_id", pendingIds);
+    const bySheet = new Map();
+    (events || []).forEach((event) => {
+      if (!bySheet.has(event.timesheet_id)) bySheet.set(event.timesheet_id, []);
+      bySheet.get(event.timesheet_id).push(event);
+    });
+    bySheet.forEach((eventsForSheet, timesheetId) => {
+      const summary = computeTechnicianSummary(eventsForSheet);
+      paidByTimesheet.set(timesheetId, summary.paidMinutes);
+    });
+  }
+
+  state.labor.snapshot = {
+    project_id: state.activeProject.id,
+    work_date: workDate,
+    rows: rows.map((row) => ({
+      id: row.id,
+      user_id: row.user_id,
+      name: nameById.get(row.user_id) || row.user_id,
+      clock_in_at: row.clock_in_at,
+      clock_out_at: row.clock_out_at,
+      paid_minutes: Number(row.total_minutes_worked ?? paidByTimesheet.get(row.id) ?? 0),
+    })),
+  };
+  renderAlerts();
+}
+
 function renderLaborTable(){
   const wrap = $("laborTable");
   if (!wrap) return;
@@ -12762,6 +12945,12 @@ function setWhoami(){
   updateMessagesBadge();
   setDemoBadge();
   renderProfileHomeCard();
+  if (authed && state.features.labor && isTechnician()){
+    loadTechnicianTimesheet();
+  }
+  if (authed && state.features.labor && canViewLabor()){
+    loadLaborSnapshotForDashboard();
+  }
 }
 
 function getProfilePhotoStorageKey(userId = state.user?.id){
@@ -17874,11 +18063,14 @@ function setActiveProjectById(id){
   state.billingItems = [];
   renderBillingDetail();
   const activeViewId = document.querySelector(".view.active")?.id || null;
-  if (activeViewId === "viewTechnician" && state.features.labor){
+  if (state.features.labor && isTechnician()){
     loadTechnicianTimesheet();
   }
   if (activeViewId === "viewLabor" && state.features.labor){
     loadLaborRows();
+  }
+  if (state.features.labor && canViewLabor()){
+    loadLaborSnapshotForDashboard();
   }
   if (activeViewId === "viewDispatch" && state.features.dispatch){
     loadDispatchTechnicians();
@@ -20304,9 +20496,10 @@ function renderAlerts(){
   const roleCode = getRoleCode();
   const canSeeAlerts = SpecCom.helpers.isRoot() || roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN" || roleCode === "SUPPORT";
   const list = canSeeAlerts ? (state.alerts || []) : [];
-  const targets = [$("alertsFeed"), $("alertsFeedFull")].filter(Boolean);
-  if (!targets.length) return;
-  const html = list.length
+  const dashboardTarget = $("alertsFeed");
+  const fullTarget = $("alertsFeedFull");
+  if (!dashboardTarget && !fullTarget) return;
+  const alertsHtml = list.length
     ? list.map((alert) => {
         const unit = getUnitTypeMeta(alert.unit_type_id);
         const unitCode = alert.unit_types?.code || unit.code;
@@ -20329,9 +20522,13 @@ function renderAlerts(){
         `;
       }).join("")
     : `<div class="muted small">${canSeeAlerts ? "No alerts right now." : "Alerts are available to Admin / Project Manager."}</div>`;
-  targets.forEach((el) => {
-    el.innerHTML = html;
-  });
+  if (dashboardTarget){
+    const activityHtml = renderDashboardTimesheetActivity();
+    dashboardTarget.innerHTML = activityHtml || alertsHtml;
+  }
+  if (fullTarget){
+    fullTarget.innerHTML = alertsHtml;
+  }
 }
 
 function renderAllowedQuantities(){
@@ -21594,6 +21791,22 @@ function wireUI(){
   const techEndBtn = $("btnTechEndJob");
   if (techEndBtn){
     techEndBtn.addEventListener("click", () => logTechnicianEvent("END_JOB"));
+  }
+  const activityTimesheet = $("alertsFeed");
+  if (activityTimesheet){
+    activityTimesheet.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-timesheet-action]");
+      if (!btn) return;
+      const action = btn.dataset.timesheetAction;
+      if (action === "clockIn") startTechnicianTimesheet();
+      else if (action === "clockOut") endTechnicianTimesheet();
+      else if (action === "start") logTechnicianEvent("START_JOB");
+      else if (action === "pause") logTechnicianEvent("PAUSE_JOB");
+      else if (action === "lunch") logTechnicianEvent("LUNCH");
+      else if (action === "break") logTechnicianEvent("BREAK_15");
+      else if (action === "inspect") logTechnicianEvent("TRUCK_INSPECTION");
+      else if (action === "end") logTechnicianEvent("END_JOB");
+    });
   }
 
   const techOrdersToday = $("techWorkOrdersToday");
