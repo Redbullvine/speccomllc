@@ -1,8 +1,8 @@
 window.__ENV = {
-  "SUPABASE_URL": "https://xrbpogikmuqpcxemcvhe.supabase.co",
-  "SUPABASE_ANON_KEY": "****************IQj4",
+  "SUPABASE_URL": "",
+  "SUPABASE_ANON_KEY": "",
   "APP_MODE": "real",
-  "DEMO_BOOTSTRAP_ENABLED": true,
-  "DEMO_ADMIN_EMAIL": "demo_admin@speccom.llc",
-  "DEMO_PASSWORD": "DemoOnly-2026!"
+  "DEMO_BOOTSTRAP_ENABLED": "",
+  "DEMO_ADMIN_EMAIL": "",
+  "DEMO_PASSWORD": ""
 };

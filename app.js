@@ -1359,7 +1359,50 @@ function isLikelyMaskedSecret(value){
 
 function isDemoBootstrapEnabled(){
   const env = getRuntimeEnv();
-  return parseBooleanFlag(env.DEMO_BOOTSTRAP_ENABLED);
+  return parseBooleanFlag(env.DEMO_BOOTSTRAP_ENABLED) && String(appMode || "real").toLowerCase() === "real";
+}
+
+function getLiveAuthConfigStatus(){
+  const env = getRuntimeEnv();
+  const url = String(env?.SUPABASE_URL || "").trim();
+  const anon = String(env?.SUPABASE_ANON_KEY || "").trim();
+  const masked = isLikelyMaskedSecret(anon);
+  return {
+    urlPresent: Boolean(url),
+    keyPresent: Boolean(anon),
+    keyMasked: masked,
+    usable: Boolean(url) && Boolean(anon) && !masked,
+  };
+}
+
+function getDemoBootstrapConfig(){
+  const env = getRuntimeEnv();
+  return {
+    enabled: isDemoBootstrapEnabled(),
+    allowWithLiveAuth: parseBooleanFlag(env?.DEMO_BOOTSTRAP_ALLOW_WITH_LIVE_AUTH),
+    email: String(env?.DEMO_ADMIN_EMAIL || "").trim(),
+    password: String(env?.DEMO_PASSWORD || ""),
+  };
+}
+
+function canUseDemoBootstrap({ email, password } = {}){
+  const cfg = getDemoBootstrapConfig();
+  const live = getLiveAuthConfigStatus();
+  if (!cfg.enabled){
+    return { allowed: false, reason: "bootstrap_disabled" };
+  }
+  if (!cfg.email || !cfg.password){
+    return { allowed: false, reason: "bootstrap_credentials_missing" };
+  }
+  const emailMatches = String(email || "").trim().toLowerCase() === cfg.email.toLowerCase();
+  const passwordMatches = String(password || "") === cfg.password;
+  if (!emailMatches || !passwordMatches){
+    return { allowed: false, reason: "bootstrap_credentials_mismatch" };
+  }
+  if (live.usable && !cfg.allowWithLiveAuth){
+    return { allowed: false, reason: "live_auth_available" };
+  }
+  return { allowed: true, reason: "allowed" };
 }
 
 function hasPersistedDemoBootstrapSession(){
@@ -1400,16 +1443,13 @@ async function loadRuntimeEnv(){
 
   window.__ENV = window.__ENV || { SUPABASE_URL: "", SUPABASE_ANON_KEY: "", APP_MODE: "real" };
   const env = window.__ENV;
-  if (
-    parseBooleanFlag(env?.DEMO_BOOTSTRAP_ENABLED)
-    && String(env?.APP_MODE || "").trim().toLowerCase() !== "demo"
-    && (
-      !String(env?.SUPABASE_URL || "").trim()
-      || !String(env?.SUPABASE_ANON_KEY || "").trim()
-      || isLikelyMaskedSecret(env?.SUPABASE_ANON_KEY)
-    )
-  ){
+  const liveConfigMissing = !String(env?.SUPABASE_URL || "").trim()
+    || !String(env?.SUPABASE_ANON_KEY || "").trim()
+    || isLikelyMaskedSecret(env?.SUPABASE_ANON_KEY);
+  if (parseBooleanFlag(env?.DEMO_BOOTSTRAP_ENABLED) && liveConfigMissing){
     env.DEMO_BOOTSTRAP_REASON = "Supabase auth config missing or masked; demo bootstrap fallback enabled.";
+  } else {
+    delete env.DEMO_BOOTSTRAP_REASON;
   }
   return window.__ENV;
 }
@@ -2197,17 +2237,11 @@ async function fetchSitePhotosForMapPopup(siteId){
 }
 
 function getDemoCredentials(){
-  const env = getRuntimeEnv();
+  const cfg = getDemoBootstrapConfig();
   return {
-    email: String(env.DEMO_ADMIN_EMAIL || "demo_admin@speccom.llc").trim(),
-    password: String(env.DEMO_PASSWORD || "DemoOnly-2026!").trim(),
+    email: cfg.email,
+    password: cfg.password,
   };
-}
-
-function isDemoBootstrapCredentialMatch(email, password){
-  const creds = getDemoCredentials();
-  return String(email || "").trim().toLowerCase() === String(creds.email || "").trim().toLowerCase()
-    && String(password || "") === String(creds.password || "");
 }
 
 function normalizeTerminalPorts(value){
@@ -2385,10 +2419,15 @@ function setAppModeUI(){
 function setEnvWarning(){
   const banner = $("envWarning");
   if (!banner) return;
-  if (appMode === "real" && !hasSupabaseConfig){
+  const live = getLiveAuthConfigStatus();
+  if (appMode === "real" && !live.usable){
     banner.style.display = "";
     banner.classList.add("warning-banner");
-    banner.textContent = "Supabase auth config is missing. Set SUPABASE_URL and SUPABASE_ANON_KEY, or enable DEMO_BOOTSTRAP_ENABLED for demo login fallback.";
+    if (!isDemoBootstrapEnabled()){
+      banner.textContent = "Supabase auth config is missing/invalid and demo bootstrap is disabled.";
+    } else {
+      banner.textContent = "Supabase auth config is missing/invalid. Demo bootstrap is enabled.";
+    }
   } else {
     const env = getRuntimeEnv();
     if (String(env?.DEMO_BOOTSTRAP_REASON || "").trim()){
@@ -13110,7 +13149,8 @@ function showAuth(show){
 function syncDemoLoginButton(){
   const btn = $("btnDemoLogin");
   if (!btn) return;
-  const show = !isDemo && !state.user && isDemoBootstrapEnabled();
+  const cfg = getDemoBootstrapConfig();
+  const show = !isDemo && !state.user && cfg.enabled && Boolean(cfg.email) && Boolean(cfg.password);
   btn.style.display = show ? "" : "none";
 }
 
@@ -21475,7 +21515,7 @@ function installInvalidRefreshTokenGuard(){
   });
 }
 
-async function enterDemoBootstrapSession({ persistSession = true, toastMessage = "" } = {}){
+async function enterDemoBootstrapSession({ persistSession = true, toastMessage = "", userEmail = "" } = {}){
   isDemo = true;
   appMode = "demo";
   state.demo.role = ROLES.USER_LEVEL_1;
@@ -21483,7 +21523,7 @@ async function enterDemoBootstrapSession({ persistSession = true, toastMessage =
     persistDemoBootstrapSession(true);
   }
   const creds = getDemoCredentials();
-  const email = String(creds.email || "demo_admin@speccom.llc").trim() || "demo_admin@speccom.llc";
+  const email = String(userEmail || creds.email || "demo-bootstrap-user@local").trim();
   state.user = { id: "demo-bootstrap-user", email };
   state.session = { user: state.user, access_token: "demo-bootstrap-token", token_type: "bearer" };
   state.profile = {
@@ -21762,14 +21802,11 @@ async function loadProfile(client, userId){
 
 async function demoLogin(){
   if (isDemo) return;
-  const creds = getDemoCredentials();
   if (isDemoBootstrapEnabled()){
-    await enterDemoBootstrapSession({
-      persistSession: true,
-      toastMessage: "Signed in with demo bootstrap mode.",
-    });
+    await handleSignIn();
     return;
   }
+  const creds = getDemoCredentials();
   if (!state.client){
     toast("Demo login unavailable", "Supabase client unavailable.");
     return;
@@ -21838,34 +21875,42 @@ async function handleSignIn(e) {
   const client = await supabaseReady;
   const email = emailInput?.value.trim() || "";
   const password = passwordInput?.value || "";
-  const bootstrapAllowed = isDemoBootstrapEnabled();
-  const bootstrapCreds = isDemoBootstrapCredentialMatch(email, password);
-  const canBootstrap = bootstrapAllowed && bootstrapCreds;
-  const env = getRuntimeEnv();
-  const liveAuthConfigUsable = hasSupabaseConfig() && !isLikelyMaskedSecret(env?.SUPABASE_ANON_KEY);
+  const bootstrapDecision = canUseDemoBootstrap({ email, password });
+  const liveAuth = getLiveAuthConfigStatus();
 
-  if (canBootstrap && !liveAuthConfigUsable){
+  if (!email || !password){
+    showToast("Enter email and password.");
+    return;
+  }
+
+  if (bootstrapDecision.allowed){
     await enterDemoBootstrapSession({
       persistSession: true,
-      toastMessage: "Signed in with demo bootstrap mode (live auth config unavailable).",
+      toastMessage: "Signed in with demo bootstrap mode.",
+      userEmail: email,
     });
     return;
   }
 
   if (!client) {
-    if (canBootstrap){
-      await enterDemoBootstrapSession({
-        persistSession: true,
-        toastMessage: "Signed in with demo bootstrap mode (live auth unavailable).",
-      });
+    setEnvWarning();
+    if (!liveAuth.usable){
+      if (!isDemoBootstrapEnabled()){
+        showToast("Live auth config is invalid/missing and demo bootstrap is disabled.");
+        return;
+      }
+      if (bootstrapDecision.reason === "bootstrap_credentials_missing"){
+        showToast("Demo bootstrap is enabled but DEMO_ADMIN_EMAIL/DEMO_PASSWORD are not configured.");
+        return;
+      }
+      if (bootstrapDecision.reason === "bootstrap_credentials_mismatch"){
+        showToast("Live auth is unavailable. Enter the configured demo bootstrap email/password.");
+        return;
+      }
+      showToast("Live auth config is invalid/missing. Demo bootstrap is enabled but not permitted for these credentials.");
       return;
     }
     showToast("Supabase client unavailable. Check SUPABASE_URL and SUPABASE_ANON_KEY.");
-    return;
-  }
-
-  if (!email || !password){
-    showToast("Enter email and password.");
     return;
   }
 
@@ -21875,12 +21920,20 @@ async function handleSignIn(e) {
   });
 
   if (error) {
-    if (canBootstrap){
-      await enterDemoBootstrapSession({
-        persistSession: true,
-        toastMessage: "Signed in with demo bootstrap mode (real auth failed).",
-      });
-      return;
+    setEnvWarning();
+    if (isDemoBootstrapEnabled()){
+      if (bootstrapDecision.reason === "bootstrap_credentials_missing"){
+        showToast(`Live auth failed: ${error.message}. Demo bootstrap credentials are not configured.`);
+        return;
+      }
+      if (bootstrapDecision.reason === "bootstrap_credentials_mismatch"){
+        showToast(`Live auth failed: ${error.message}. Demo bootstrap credentials entered are incorrect.`);
+        return;
+      }
+      if (bootstrapDecision.reason === "live_auth_available"){
+        showToast(`Live auth failed: ${error.message}. Demo bootstrap is blocked while live auth config is valid.`);
+        return;
+      }
     }
     showToast(error.message);
     return;
@@ -21888,13 +21941,6 @@ async function handleSignIn(e) {
 
   // IMPORTANT: data.session is the truth
   if (!data?.session) {
-    if (canBootstrap){
-      await enterDemoBootstrapSession({
-        persistSession: true,
-        toastMessage: "Signed in with demo bootstrap mode (no live session returned).",
-      });
-      return;
-    }
     showToast("No session returned");
     return;
   }
