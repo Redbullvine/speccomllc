@@ -9,6 +9,9 @@ const env = {
   SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || "",
   APP_MODE: process.env.APP_MODE || "real",
   LIVE_MODE: process.env.LIVE_MODE || undefined,
+  DEMO_BOOTSTRAP_ENABLED: process.env.DEMO_BOOTSTRAP_ENABLED || undefined,
+  DEMO_ADMIN_EMAIL: process.env.DEMO_ADMIN_EMAIL || undefined,
+  DEMO_PASSWORD: process.env.DEMO_PASSWORD || undefined,
 };
 
 Object.keys(env).forEach((key) => env[key] === undefined && delete env[key]);

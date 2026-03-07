@@ -316,6 +316,8 @@ const state = {
     workOrders: [],
     messages: [],
     dprReports: [],
+    timesheets: [],
+    timeEvents: [],
   },
 };
 
@@ -1121,6 +1123,7 @@ const INVOICE_FILES_BUCKET = "invoice-files";
 const KMZ_SNAPSHOT_TABLE = "project_kmz_snapshots";
 const KMZ_SNAPSHOT_SAVE_DEBOUNCE_MS = 900;
 const SIDEBAR_MIN_WIDTH = 320;
+const DEMO_BOOTSTRAP_SESSION_KEY = "speccom_demo_bootstrap_session";
 const SIDEBAR_MAX_WIDTH = 520;
 
 function storageOk(){
@@ -1343,6 +1346,34 @@ function getRuntimeEnv(){
   };
 }
 
+function parseBooleanFlag(value){
+  const normalized = String(value || "").trim().toLowerCase();
+  return ["1", "true", "yes", "on"].includes(normalized);
+}
+
+function isLikelyMaskedSecret(value){
+  const text = String(value || "").trim();
+  if (!text) return false;
+  return /^\*+$/.test(text) || /\*{4,}/.test(text) || /redacted|masked/i.test(text);
+}
+
+function isDemoBootstrapEnabled(){
+  const env = getRuntimeEnv();
+  return parseBooleanFlag(env.DEMO_BOOTSTRAP_ENABLED);
+}
+
+function hasPersistedDemoBootstrapSession(){
+  return safeLocalStorageGet(DEMO_BOOTSTRAP_SESSION_KEY) === "1";
+}
+
+function persistDemoBootstrapSession(enabled){
+  if (enabled){
+    safeLocalStorageSet(DEMO_BOOTSTRAP_SESSION_KEY, "1");
+  } else {
+    safeLocalStorageRemove(DEMO_BOOTSTRAP_SESSION_KEY);
+  }
+}
+
 async function tryFetchAppConfig(){
   try{
     const res = await fetch("/.netlify/functions/app-config", { cache: "no-store" });
@@ -1368,6 +1399,18 @@ async function loadRuntimeEnv(){
   }
 
   window.__ENV = window.__ENV || { SUPABASE_URL: "", SUPABASE_ANON_KEY: "", APP_MODE: "real" };
+  const env = window.__ENV;
+  if (
+    parseBooleanFlag(env?.DEMO_BOOTSTRAP_ENABLED)
+    && String(env?.APP_MODE || "").trim().toLowerCase() !== "demo"
+    && (
+      !String(env?.SUPABASE_URL || "").trim()
+      || !String(env?.SUPABASE_ANON_KEY || "").trim()
+      || isLikelyMaskedSecret(env?.SUPABASE_ANON_KEY)
+    )
+  ){
+    env.DEMO_BOOTSTRAP_REASON = "Supabase auth config missing or masked; demo bootstrap fallback enabled.";
+  }
   return window.__ENV;
 }
 
@@ -2161,6 +2204,12 @@ function getDemoCredentials(){
   };
 }
 
+function isDemoBootstrapCredentialMatch(email, password){
+  const creds = getDemoCredentials();
+  return String(email || "").trim().toLowerCase() === String(creds.email || "").trim().toLowerCase()
+    && String(password || "") === String(creds.password || "");
+}
+
 function normalizeTerminalPorts(value){
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return DEFAULT_TERMINAL_PORTS;
@@ -2339,8 +2388,15 @@ function setEnvWarning(){
   if (appMode === "real" && !hasSupabaseConfig){
     banner.style.display = "";
     banner.classList.add("warning-banner");
-    banner.textContent = "";
+    banner.textContent = "Supabase auth config is missing. Set SUPABASE_URL and SUPABASE_ANON_KEY, or enable DEMO_BOOTSTRAP_ENABLED for demo login fallback.";
   } else {
+    const env = getRuntimeEnv();
+    if (String(env?.DEMO_BOOTSTRAP_REASON || "").trim()){
+      banner.style.display = "";
+      banner.classList.add("warning-banner");
+      banner.textContent = String(env.DEMO_BOOTSTRAP_REASON).trim();
+      return;
+    }
     banner.style.display = "none";
     banner.textContent = "";
   }
@@ -8426,8 +8482,12 @@ SpecCom.helpers.applyAuthModeFromHash = function(){
 };
 
 SpecCom.helpers.handleSignOut = async function(){
+  persistDemoBootstrapSession(false);
   if (isDemo){
     state.activeNode = null;
+    state.session = null;
+    state.user = null;
+    state.profile = null;
     showAuth(true);
     setWhoami();
     clearProof();
@@ -12615,6 +12675,18 @@ async function loadTechnicianTimesheet(){
     renderTechnicianDashboard();
     return;
   }
+  if (isDemo){
+    const workDate = getLocalDateISO();
+    const userId = state.user?.id || "demo-bootstrap-user";
+    const rows = Array.isArray(state.demo.timesheets) ? state.demo.timesheets : [];
+    const match = rows
+      .filter((row) => row.user_id === userId && row.work_date === workDate)
+      .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))[0] || null;
+    state.technician.timesheet = match;
+    await loadTechnicianEvents();
+    await loadAssignedWorkOrders();
+    return;
+  }
   if (!state.client || !state.user || isDemo){
     state.technician.timesheet = null;
     state.technician.events = [];
@@ -12648,6 +12720,21 @@ async function loadTechnicianTimesheet(){
 }
 
 async function loadTechnicianEvents(){
+  if (isDemo){
+    if (!state.technician.timesheet){
+      state.technician.events = [];
+      state.technician.activeEvent = null;
+      renderTechnicianDashboard();
+      return;
+    }
+    const tsId = state.technician.timesheet.id;
+    state.technician.events = (state.demo.timeEvents || [])
+      .filter((row) => row.timesheet_id === tsId)
+      .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")));
+    state.technician.activeEvent = state.technician.events.find(e => e.started_at && !e.ended_at) || null;
+    renderTechnicianDashboard();
+    return;
+  }
   if (!state.client || !state.user || isDemo || !state.technician.timesheet){
     state.technician.events = [];
     state.technician.activeEvent = null;
@@ -12671,6 +12758,34 @@ async function loadTechnicianEvents(){
 async function startTechnicianTimesheet(){
   if (!state.activeProject){
     toast("Project required", "Select a project before clocking in.");
+    return;
+  }
+  if (isDemo){
+    const now = nowISO();
+    const workDate = getLocalDateISO();
+    const userId = state.user?.id || "demo-bootstrap-user";
+    state.demo.timesheets = Array.isArray(state.demo.timesheets) ? state.demo.timesheets : [];
+    const existing = state.demo.timesheets.find((row) => row.user_id === userId && row.work_date === workDate && !row.clock_out_at);
+    if (existing){
+      state.technician.timesheet = existing;
+      await loadTechnicianEvents();
+      toast("Clock in", "Already clocked in (demo).");
+      return;
+    }
+    const row = {
+      id: `demo-timesheet-${Date.now()}`,
+      user_id: userId,
+      project_id: state.activeProject.id,
+      work_date: workDate,
+      clock_in_at: now,
+      clock_out_at: null,
+      total_minutes_worked: 0,
+      created_at: now,
+    };
+    state.demo.timesheets.unshift(row);
+    state.technician.timesheet = row;
+    await loadTechnicianEvents();
+    toast("Clock in", "Clocked in (demo).");
     return;
   }
   if (isDemoUser()){
@@ -12700,6 +12815,21 @@ async function logTechnicianEvent(eventType){
     toast("Clocked out", "Clock back in before logging events.");
     return;
   }
+  if (isDemo){
+    state.demo.timeEvents = Array.isArray(state.demo.timeEvents) ? state.demo.timeEvents : [];
+    const now = nowISO();
+    state.demo.timeEvents.push({
+      id: `demo-time-event-${Date.now()}`,
+      timesheet_id: state.technician.timesheet.id,
+      event_type: eventType,
+      started_at: now,
+      ended_at: now,
+      duration_minutes: 0,
+      created_at: now,
+    });
+    await loadTechnicianEvents();
+    return;
+  }
   if (isDemoUser()){
     toast("Demo restriction", t("availableInProduction"));
     return;
@@ -12717,6 +12847,22 @@ async function logTechnicianEvent(eventType){
 
 async function endTechnicianTimesheet(){
   if (!state.technician.timesheet) return;
+  if (isDemo){
+    const now = nowISO();
+    const ts = state.technician.timesheet;
+    const startMs = ts.clock_in_at ? new Date(ts.clock_in_at).getTime() : Date.now();
+    const endMs = new Date(now).getTime();
+    const worked = Math.max(0, Math.round((endMs - startMs) / 60000));
+    state.demo.timesheets = (state.demo.timesheets || []).map((row) => (
+      row.id === ts.id
+        ? { ...row, clock_out_at: now, total_minutes_worked: worked }
+        : row
+    ));
+    state.technician.timesheet = state.demo.timesheets.find((row) => row.id === ts.id) || null;
+    await loadTechnicianEvents();
+    toast("Clock out", "Clocked out (demo).");
+    return;
+  }
   if (isDemoUser()){
     toast("Demo restriction", t("availableInProduction"));
     return;
@@ -12961,6 +13107,13 @@ function showAuth(show){
   $("viewApp").style.display = show ? "none" : "";
 }
 
+function syncDemoLoginButton(){
+  const btn = $("btnDemoLogin");
+  if (!btn) return;
+  const show = !isDemo && !state.user && isDemoBootstrapEnabled();
+  btn.style.display = show ? "" : "none";
+}
+
 function setWhoami(){
   const authed = isDemo || Boolean(state.user);
   const signOutBtn = $("btnSignOut");
@@ -12975,6 +13128,7 @@ function setWhoami(){
   if (messagesBtn) messagesBtn.style.display = authed && state.messagesEnabled && state.features.messages ? "" : "none";
   const menuMessagesBtn = $("btnMenuMessages");
   if (menuMessagesBtn) menuMessagesBtn.style.display = authed && state.messagesEnabled && state.features.messages ? "" : "none";
+  syncDemoLoginButton();
   syncDemoFeatureHubVisibility();
   updateMessagesBadge();
   setDemoBadge();
@@ -13112,6 +13266,8 @@ function applyDemoRestrictions(root = document){
 
 function ensureDemoSeed(){
   if (!isDemo) return;
+  state.demo.timesheets = Array.isArray(state.demo.timesheets) ? state.demo.timesheets : [];
+  state.demo.timeEvents = Array.isArray(state.demo.timeEvents) ? state.demo.timeEvents : [];
   if (state.demo.seeded) return;
   const projectId = state.demo.project?.id || "demo-project-1";
   const today = new Date();
@@ -21319,6 +21475,57 @@ function installInvalidRefreshTokenGuard(){
   });
 }
 
+async function enterDemoBootstrapSession({ persistSession = true, toastMessage = "" } = {}){
+  isDemo = true;
+  appMode = "demo";
+  state.demo.role = ROLES.USER_LEVEL_1;
+  if (persistSession){
+    persistDemoBootstrapSession(true);
+  }
+  const creds = getDemoCredentials();
+  const email = String(creds.email || "demo_admin@speccom.llc").trim() || "demo_admin@speccom.llc";
+  state.user = { id: "demo-bootstrap-user", email };
+  state.session = { user: state.user, access_token: "demo-bootstrap-token", token_type: "bearer" };
+  state.profile = {
+    role: ROLES.USER_LEVEL_1,
+    role_code: ROLES.USER_LEVEL_1,
+    display_name: "Demo Technician",
+    preferred_language: getPreferredLanguage(),
+    is_demo: false,
+    can_view_invoices: true,
+  };
+  ensureDemoSeed();
+  showAuth(false);
+  await loadProjects();
+  await loadProjectNodes(state.activeProject?.id || null);
+  await loadProjectSites(state.activeProject?.id || null);
+  await loadUnitTypes();
+  await loadWorkCodes();
+  await loadRateCards(state.activeProject?.id || null);
+  await loadLocationProofRequirements(state.activeProject?.id || null);
+  await loadBillingLocations(state.activeProject?.id || null);
+  await loadMaterialCatalog();
+  setWhoami();
+  setRoleUI();
+  renderLocations();
+  renderInventory();
+  renderInvoicePanel();
+  renderAllowedQuantities();
+  renderAlerts();
+  renderProofChecklist();
+  renderBillingLocations();
+  updateKPI();
+  setProofStatus();
+  renderCatalogResults("catalogResults", "");
+  renderCatalogResults("catalogResultsQuick", "");
+  setAppModeUI();
+  setEnvWarning();
+  setActiveView(getDefaultView());
+  if (toastMessage){
+    toast("Demo bootstrap", toastMessage);
+  }
+}
+
 async function initAuth(){
   installInvalidRefreshTokenGuard();
   setAppModeUI();
@@ -21349,6 +21556,10 @@ async function initAuth(){
 
   state.client = await makeClient();
   if (!state.client){
+    if (isDemoBootstrapEnabled() && hasPersistedDemoBootstrapSession()){
+      await enterDemoBootstrapSession({ persistSession: false });
+      return;
+    }
     showAuth(true);
     setAuthButtonsDisabled(false);
     return;
@@ -21369,37 +21580,15 @@ async function initAuth(){
   }
 
   // Demo: choose role via prompt for now
-    if (isDemo){
-      ensureDemoSeed();
-      showAuth(false);
-      const pick = prompt(`Demo mode: choose a role (${APP_ROLE_OPTIONS.join(", ")})`, state.demo.role) || state.demo.role;
-      const normalized = normalizeRole(pick);
-      state.demo.role = normalized;
-      await loadProjects();
-      await loadProjectNodes(state.activeProject?.id || null);
-      await loadProjectSites(state.activeProject?.id || null);
-      await loadUnitTypes();
-      await loadWorkCodes();
-      await loadRateCards(state.activeProject?.id || null);
-      await loadLocationProofRequirements(state.activeProject?.id || null);
-      await loadBillingLocations(state.activeProject?.id || null);
-      await loadMaterialCatalog();
-    setWhoami();
-    setRoleUI();
-    renderLocations();
-    renderInventory();
-    renderInvoicePanel();
-    renderAllowedQuantities();
-    renderAlerts();
-    renderProofChecklist();
-    renderBillingLocations();
-    updateKPI();
-    setProofStatus();
-      renderCatalogResults("catalogResults", "");
-      renderCatalogResults("catalogResultsQuick", "");
-      setActiveView(getDefaultView());
-      return;
-    }
+  if (isDemo){
+    await enterDemoBootstrapSession({ persistSession: false });
+    return;
+  }
+
+  if (isDemoBootstrapEnabled() && hasPersistedDemoBootstrapSession()){
+    await enterDemoBootstrapSession({ persistSession: false });
+    return;
+  }
 
   // Supabase session
   try {
@@ -21573,8 +21762,18 @@ async function loadProfile(client, userId){
 
 async function demoLogin(){
   if (isDemo) return;
-  if (!state.client) return;
   const creds = getDemoCredentials();
+  if (isDemoBootstrapEnabled()){
+    await enterDemoBootstrapSession({
+      persistSession: true,
+      toastMessage: "Signed in with demo bootstrap mode.",
+    });
+    return;
+  }
+  if (!state.client){
+    toast("Demo login unavailable", "Supabase client unavailable.");
+    return;
+  }
   if (!creds.password){
     toast("Demo login unavailable", "Set DEMO_PASSWORD to enable demo login.");
     return;
@@ -21637,14 +21836,38 @@ async function handleSignIn(e) {
   dlog("SIGN IN CLICKED");
 
   const client = await supabaseReady;
+  const email = emailInput?.value.trim() || "";
+  const password = passwordInput?.value || "";
+  const bootstrapAllowed = isDemoBootstrapEnabled();
+  const bootstrapCreds = isDemoBootstrapCredentialMatch(email, password);
+  const canBootstrap = bootstrapAllowed && bootstrapCreds;
+  const env = getRuntimeEnv();
+  const liveAuthConfigUsable = hasSupabaseConfig() && !isLikelyMaskedSecret(env?.SUPABASE_ANON_KEY);
 
-  if (!client) {
-    showToast("Supabase client unavailable");
+  if (canBootstrap && !liveAuthConfigUsable){
+    await enterDemoBootstrapSession({
+      persistSession: true,
+      toastMessage: "Signed in with demo bootstrap mode (live auth config unavailable).",
+    });
     return;
   }
 
-  const email = emailInput?.value.trim() || "";
-  const password = passwordInput?.value || "";
+  if (!client) {
+    if (canBootstrap){
+      await enterDemoBootstrapSession({
+        persistSession: true,
+        toastMessage: "Signed in with demo bootstrap mode (live auth unavailable).",
+      });
+      return;
+    }
+    showToast("Supabase client unavailable. Check SUPABASE_URL and SUPABASE_ANON_KEY.");
+    return;
+  }
+
+  if (!email || !password){
+    showToast("Enter email and password.");
+    return;
+  }
 
   const { data, error } = await client.auth.signInWithPassword({
     email,
@@ -21652,18 +21875,33 @@ async function handleSignIn(e) {
   });
 
   if (error) {
+    if (canBootstrap){
+      await enterDemoBootstrapSession({
+        persistSession: true,
+        toastMessage: "Signed in with demo bootstrap mode (real auth failed).",
+      });
+      return;
+    }
     showToast(error.message);
     return;
   }
 
   // IMPORTANT: data.session is the truth
   if (!data?.session) {
+    if (canBootstrap){
+      await enterDemoBootstrapSession({
+        persistSession: true,
+        toastMessage: "Signed in with demo bootstrap mode (no live session returned).",
+      });
+      return;
+    }
     showToast("No session returned");
     return;
   }
 
   // Success path
   dlog("Logged in:", data.user.email);
+  persistDemoBootstrapSession(false);
 
   await postLoginBootstrap(client, data.user); // projects, profile, etc.
   navigateToApp(); // or window.location = "/"

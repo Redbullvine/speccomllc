@@ -59,6 +59,12 @@ function readWindowEnv() {
   return window.__ENV || null;
 }
 
+function isLikelyMaskedSecret(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  return /^\*+$/.test(text) || /\*{4,}/.test(text) || /redacted|masked/i.test(text);
+}
+
 export function refreshConfig() {
   const env = readWindowEnv();
   SUPABASE_URL = (env?.SUPABASE_URL || "").trim();
@@ -69,7 +75,7 @@ export function refreshConfig() {
 
 export function hasSupabaseConfig() {
   refreshConfig();
-  return !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
+  return !!SUPABASE_URL && !!SUPABASE_ANON_KEY && !isLikelyMaskedSecret(SUPABASE_ANON_KEY);
 }
 
 async function loadSupabaseCreateClient() {
@@ -84,7 +90,7 @@ async function loadSupabaseCreateClient() {
 export async function makeClient() {
   refreshConfig();
 
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || isLikelyMaskedSecret(SUPABASE_ANON_KEY)) {
     return null;
   }
 

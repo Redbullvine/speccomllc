@@ -7,7 +7,10 @@ export async function handler() {
     body: JSON.stringify({
       SUPABASE_URL: process.env.SUPABASE_URL,
       SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
-      LIVE_MODE: true
+      LIVE_MODE: true,
+      DEMO_BOOTSTRAP_ENABLED: process.env.DEMO_BOOTSTRAP_ENABLED,
+      DEMO_ADMIN_EMAIL: process.env.DEMO_ADMIN_EMAIL,
+      DEMO_PASSWORD: process.env.DEMO_PASSWORD
     })
   };
 }
