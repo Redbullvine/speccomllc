@@ -2418,6 +2418,30 @@ function setActiveView(viewId, { syncHash = true } = {}){
   }
 }
 
+function openDemoFeature(featureId){
+  const target = String(featureId || "").trim();
+  if (!target) return;
+  if (target === "messages"){
+    if (isMapViewActive() && isViewAllowed("viewDashboard")){
+      setActiveView("viewDashboard");
+    }
+    openMessagesModal();
+    return;
+  }
+  if (!isViewAllowed(target)) return;
+  setActiveView(target);
+}
+
+function syncDemoFeatureHubVisibility(){
+  document.querySelectorAll("[data-demo-feature]").forEach((btn) => {
+    const featureId = btn.dataset.demoFeature;
+    const enabled = featureId === "messages"
+      ? (state.messagesEnabled && state.features.messages)
+      : isViewAllowed(featureId);
+    btn.disabled = !enabled;
+  });
+}
+
 function startVisibilityWatch(){
   document.addEventListener("visibilitychange", () => {
     state.lastVisibilityChangeAt = Date.now();
@@ -8237,6 +8261,24 @@ function canViewInvoiceVault(){
   return SpecCom.helpers.isRoot() || Boolean(state.profile?.can_view_invoices);
 }
 
+function hasAuthenticatedSession(){
+  return isDemo || Boolean(state.user);
+}
+
+function canAccessTimesheetModule(){
+  // Demo readiness: keep auth + RLS intact, but surface timesheet UI to logged-in users.
+  return hasAuthenticatedSession();
+}
+
+function canAccessInvoiceModule(){
+  // Demo readiness: allow module visibility; private invoice file vault remains separately gated.
+  return hasAuthenticatedSession();
+}
+
+function canAccessMaterialSearchModule(){
+  return hasAuthenticatedSession();
+}
+
 function canCreateProjects(){
   return isPrivilegedRole();
 }
@@ -8276,11 +8318,12 @@ function getDefaultView(){
 }
 
 function isViewAllowed(viewId){
+  if (viewId === "viewTechnician") return canAccessTimesheetModule();
+  if (viewId === "viewInvoices") return canAccessInvoiceModule();
+  if (viewId === "viewCatalog") return canAccessMaterialSearchModule();
   if (isFieldRole()){
-    return ["viewDashboard", "viewTechnician", "viewMap", "viewSettings", "viewDailyReport"].includes(viewId);
+    return ["viewDashboard", "viewMap", "viewSettings", "viewDailyReport"].includes(viewId);
   }
-  if (viewId === "viewTechnician") return false;
-  if (viewId === "viewInvoices") return canViewInvoiceVault();
   if (viewId === "viewLabor") return canViewLabor();
   if (viewId === "viewDispatch") return canViewDispatch();
   return true;
@@ -8959,27 +9002,14 @@ function updateKPI(){
 }
 
 function setRoleBasedVisibility(){
-  const isTech = isTechnician();
-  const allowedViews = isTech
-    ? new Set(["viewDashboard", "viewTechnician", "viewMap", "viewSettings", "viewDailyReport"])
-    : new Set(["viewDashboard", "viewNodes", "viewPhotos", "viewBilling", "viewInvoices", "viewMap", "viewCatalog", "viewAlerts", "viewAdmin", "viewSettings", "viewLabor", "viewDispatch", "viewDailyReport"]);
-
   document.querySelectorAll(".nav-item").forEach((btn) => {
     const viewId = btn.dataset.view;
-    let visible = allowedViews.has(viewId);
-    if (!isTech && viewId === "viewLabor") visible = canViewLabor();
-    if (!isTech && viewId === "viewDispatch") visible = canViewDispatch();
-    if (!isTech && viewId === "viewTechnician") visible = false;
-    btn.style.display = visible ? "" : "none";
+    btn.style.display = isViewAllowed(viewId) ? "" : "none";
   });
 
   document.querySelectorAll(".view").forEach((view) => {
     const viewId = view.id;
-    let visible = allowedViews.has(viewId);
-    if (!isTech && viewId === "viewLabor") visible = canViewLabor();
-    if (!isTech && viewId === "viewDispatch") visible = canViewDispatch();
-    if (!isTech && viewId === "viewTechnician") visible = false;
-    view.style.display = visible ? "" : "none";
+    view.style.display = isViewAllowed(viewId) ? "" : "none";
   });
 
   document.querySelectorAll(".menu-link[data-view]").forEach((btn) => {
@@ -8987,6 +9017,7 @@ function setRoleBasedVisibility(){
     if (!viewId) return;
     btn.style.display = isViewAllowed(viewId) ? "" : "none";
   });
+  syncDemoFeatureHubVisibility();
 
   const activeView = document.querySelector(".view.active");
   if (activeView && !isViewAllowed(activeView.id)){
@@ -12942,6 +12973,9 @@ function setWhoami(){
   if (timesheetBtn) timesheetBtn.style.display = authed && isViewAllowed("viewTechnician") ? "" : "none";
   const messagesBtn = $("btnMessages");
   if (messagesBtn) messagesBtn.style.display = authed && state.messagesEnabled && state.features.messages ? "" : "none";
+  const menuMessagesBtn = $("btnMenuMessages");
+  if (menuMessagesBtn) menuMessagesBtn.style.display = authed && state.messagesEnabled && state.features.messages ? "" : "none";
+  syncDemoFeatureHubVisibility();
   updateMessagesBadge();
   setDemoBadge();
   renderProfileHomeCard();
@@ -22150,6 +22184,14 @@ function wireUI(){
       openMessagesModal();
     });
   }
+  const featureHubGrid = $("featureHubGrid");
+  if (featureHubGrid){
+    featureHubGrid.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-demo-feature]");
+      if (!btn) return;
+      openDemoFeature(btn.dataset.demoFeature);
+    });
+  }
   const messagesCloseBtn = $("btnMessagesClose");
   if (messagesCloseBtn){
     messagesCloseBtn.addEventListener("click", () => closeMessagesModal());
@@ -22223,6 +22265,13 @@ function wireUI(){
   const menuCloseBtn = $("btnMenuClose");
   if (menuCloseBtn){
     menuCloseBtn.addEventListener("click", () => closeMenuModal());
+  }
+  const menuMessagesBtn = $("btnMenuMessages");
+  if (menuMessagesBtn){
+    menuMessagesBtn.addEventListener("click", () => {
+      closeMenuModal();
+      openDemoFeature("messages");
+    });
   }
   const grantAccessBtn = $("btnGrantProjectAccess");
   if (grantAccessBtn){
