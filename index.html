@@ -120,7 +120,8 @@
 
       <main class="content">
         <section id="viewDashboard" class="view active">
-          <div class="card profile-home-card">
+          <div id="demoShowcaseHome" style="display:none;"></div>
+          <div id="dashboardProfileCard" class="card profile-home-card">
             <div class="profile-home-row">
               <div id="profileAvatarCircle" class="profile-avatar-circle" aria-hidden="true">
                 <span id="profileAvatarInitials">PR</span>
@@ -137,7 +138,7 @@
               </div>
             </div>
           </div>
-          <div class="card job-card">
+          <div id="dashboardJobCard" class="card job-card">
             <div class="row" style="justify-content:space-between;">
               <div>
                 <h2 id="jobTitle">Job 731022136</h2>
@@ -148,7 +149,7 @@
             <div id="nodeCards" class="node-grid" style="margin-top:12px;"></div>
           </div>
           <div class="grid cols-2">
-            <div class="card">
+            <div id="dashboardActiveSiteCard" class="card">
               <h2 data-i18n="activeNodeTitle">Active site</h2>
               <div class="kpi">
                 <div class="tile">
@@ -173,13 +174,13 @@
               <div class="hr"></div>
               <div id="photoChecklistSummary" class="note"></div>
             </div>
-            <div class="card">
+            <div id="dashboardActivityCard" class="card">
               <h2>Activity</h2>
               <div id="alertsFeed"></div>
             </div>
           </div>
           <div class="grid cols-2" style="margin-top:16px;">
-            <div class="card">
+            <div id="dashboardFeatureHubCard" class="card">
               <h2>Feature Hub</h2>
               <div class="muted small">Demo shortcuts for core platform capabilities.</div>
               <div id="featureHubGrid" class="feature-hub-grid" style="margin-top:12px;">
@@ -189,11 +190,11 @@
                 <button class="btn feature-hub-btn" type="button" data-demo-feature="messages">Messaging</button>
               </div>
             </div>
-            <div class="card">
+            <div id="dashboardAllowedQtyCard" class="card">
               <h2 data-i18n="allowedQuantitiesTitle">Allowed quantities</h2>
               <div id="allowedQuantities"></div>
             </div>
-            <div class="card">
+            <div id="dashboardCatalogQuickCard" class="card">
               <h2 data-i18n="catalogQuickSearchTitle">Catalog quick search</h2>
               <input id="catalogSearchQuick" class="input" placeholder="Search Millennium part, MFG SKU, description" data-i18n-placeholder="catalogSearchPlaceholder" />
               <div id="catalogResultsQuick" class="catalog-list" style="margin-top:12px;"></div>

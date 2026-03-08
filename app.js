@@ -81,6 +81,34 @@ const APP_ROLE_OPTIONS = [
 ];
 const DEFAULT_ROLE = ROLES.USER_LEVEL_1;
 
+const SHOWCASE_GROUPS = [
+  { key: "office", title: "Office", summary: "Invoicing, billing review, reporting, approvals." },
+  { key: "admin", title: "Admin", summary: "User roles, settings, project controls, permission overview." },
+  { key: "splicer", title: "Splicer", summary: "Splice work, closures, node workflow, quantity controls." },
+  { key: "tech", title: "Tech", summary: "Trouble tickets, service orders, timesheets, close-out flow." },
+  { key: "warehouse", title: "Warehouse", summary: "Material search, catalog lookup, inventory assignment." },
+  { key: "supervisor", title: "Supervisor", summary: "Progress overview, daily summaries, verification trails." },
+  { key: "network", title: "Network / Map", summary: "KMZ map, site pins, route points, photo-linked locations." },
+];
+
+const SHOWCASE_MODULES = [
+  { key: "office_invoicing", title: "Invoicing", group: "office", chips: ["Invoice actions", "Billing review", "Invoice files"], summary: "Billing and invoice workflows.", action: { type: "view", target: "viewInvoices" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
+  { key: "office_reporting", title: "Reporting", group: "office", chips: ["Daily report", "Metrics", "Comments"], summary: "Generate and review daily reporting.", action: { type: "view", target: "viewDailyReport" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
+  { key: "office_billing", title: "Billing Review", group: "office", chips: ["Location billing", "Usage import", "Status controls"], summary: "Review billable work by site.", action: { type: "view", target: "viewBilling" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER] },
+  { key: "admin_roles", title: "User Roles", group: "admin", chips: ["Invite users", "Role assignment", "Profile management"], summary: "Manage platform access and users.", action: { type: "view", target: "viewAdmin" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN] },
+  { key: "admin_project_controls", title: "Project Controls", group: "admin", chips: ["Create project", "Access grants", "Project governance"], summary: "Project and permission administration.", action: { type: "modal", target: "projects" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER] },
+  { key: "splicer_work", title: "Splice Work", group: "splicer", chips: ["Site workspace", "Closures", "Fiber counts"], summary: "Track splice execution and documentation.", action: { type: "view", target: "viewNodes" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
+  { key: "splicer_quantities", title: "Allowed vs Billed", group: "splicer", chips: ["Allowed quantities", "Usage events", "Proof readiness"], summary: "Compare planned and billed quantities.", action: { type: "view", target: "viewDashboard" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
+  { key: "tech_service", title: "Service + Trouble", group: "tech", chips: ["Trouble tickets", "Service orders", "Close-out"], summary: "Dispatch and technician workflows.", action: { type: "view", target: "viewDispatch" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_1, ROLES.SUPPORT] },
+  { key: "tech_timesheet", title: "Timesheet", group: "tech", chips: ["Clock in/out", "Event log", "Daily summary"], summary: "Technician time tracking and activity.", action: { type: "view", target: "viewTechnician" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_1, ROLES.SUPPORT] },
+  { key: "warehouse_catalog", title: "Material Search", group: "warehouse", chips: ["Catalog search", "Parts lookup", "Item metadata"], summary: "Search parts and material references.", action: { type: "view", target: "viewCatalog" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
+  { key: "warehouse_inventory", title: "Inventory Controls", group: "warehouse", chips: ["Inventory table", "SMS alerts", "Assigned stock"], summary: "Warehouse and stock visibility.", action: { type: "view", target: "viewAdmin" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN] },
+  { key: "supervisor_dashboard", title: "Job Progress", group: "supervisor", chips: ["KPI status", "Team activity", "Daily summary"], summary: "Supervisor monitoring and review.", action: { type: "view", target: "viewDashboard" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
+  { key: "supervisor_photos", title: "Field Verification", group: "supervisor", chips: ["Field photos", "Proof checks", "Readiness"], summary: "Photo and proof validation workflows.", action: { type: "view", target: "viewPhotos" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
+  { key: "network_map", title: "Map Workspace", group: "network", chips: ["KMZ map", "Site pins", "Route points"], summary: "Network map and geospatial workflows.", action: { type: "view", target: "viewMap" }, rolesAllowed: Object.values(ROLES) },
+  { key: "platform_messages", title: "Messaging", group: "network", chips: ["Main board", "Direct messages", "Team coordination"], summary: "Communication and updates.", action: { type: "modal", target: "messages" }, rolesAllowed: Object.values(ROLES) },
+];
+
 const state = {
   client: null,
   session: null,
@@ -8344,6 +8372,33 @@ function isFieldRole(roleCode = getRoleCode()){
   return roleCode === ROLES.USER_LEVEL_1 || roleCode === ROLES.USER_LEVEL_2;
 }
 
+function isDemoShowcaseMode(){
+  if (String(appMode || "").toLowerCase() === "demo") return true;
+  const env = getRuntimeEnv();
+  return parseBooleanFlag(env?.DEMO_SHOWCASE_ENABLED);
+}
+
+function canShowModule(moduleKey){
+  const module = SHOWCASE_MODULES.find((item) => item.key === moduleKey);
+  if (!module) return false;
+  if (isDemoShowcaseMode()) return true;
+  return module.rolesAllowed.includes(getRoleCode());
+}
+
+function getProductionAllowedViews(){
+  const role = getRoleCode();
+  if (role === ROLES.USER_LEVEL_1){
+    return new Set(["viewDashboard", "viewTechnician", "viewMap", "viewSettings", "viewDailyReport"]);
+  }
+  if (role === ROLES.USER_LEVEL_2){
+    return new Set(["viewDashboard", "viewNodes", "viewPhotos", "viewMap", "viewCatalog", "viewAlerts", "viewSettings", "viewDailyReport"]);
+  }
+  if (role === ROLES.SUPPORT){
+    return new Set(["viewDashboard", "viewTechnician", "viewNodes", "viewPhotos", "viewInvoices", "viewMap", "viewCatalog", "viewAlerts", "viewDispatch", "viewSettings", "viewDailyReport"]);
+  }
+  return new Set(["viewDashboard", "viewTechnician", "viewNodes", "viewPhotos", "viewBilling", "viewInvoices", "viewMap", "viewCatalog", "viewAlerts", "viewAdmin", "viewSettings", "viewLabor", "viewDispatch", "viewDailyReport"]);
+}
+
 function canViewLabor(){
   return isPrivilegedRole();
 }
@@ -8354,24 +8409,6 @@ function canViewDispatch(){
 
 function canViewInvoiceVault(){
   return SpecCom.helpers.isRoot() || Boolean(state.profile?.can_view_invoices);
-}
-
-function hasAuthenticatedSession(){
-  return isDemo || Boolean(state.user);
-}
-
-function canAccessTimesheetModule(){
-  // Demo readiness: keep auth + RLS intact, but surface timesheet UI to logged-in users.
-  return hasAuthenticatedSession();
-}
-
-function canAccessInvoiceModule(){
-  // Demo readiness: allow module visibility; private invoice file vault remains separately gated.
-  return hasAuthenticatedSession();
-}
-
-function canAccessMaterialSearchModule(){
-  return hasAuthenticatedSession();
 }
 
 function canCreateProjects(){
@@ -8413,12 +8450,12 @@ function getDefaultView(){
 }
 
 function isViewAllowed(viewId){
-  if (viewId === "viewTechnician") return canAccessTimesheetModule();
-  if (viewId === "viewInvoices") return canAccessInvoiceModule();
-  if (viewId === "viewCatalog") return canAccessMaterialSearchModule();
-  if (isFieldRole()){
-    return ["viewDashboard", "viewMap", "viewSettings", "viewDailyReport"].includes(viewId);
+  if (isDemoShowcaseMode()){
+    return true;
   }
+  const allowed = getProductionAllowedViews();
+  if (!allowed.has(viewId)) return false;
+  if (viewId === "viewInvoices") return canViewInvoiceVault();
   if (viewId === "viewLabor") return canViewLabor();
   if (viewId === "viewDispatch") return canViewDispatch();
   return true;
@@ -9117,6 +9154,7 @@ function setRoleBasedVisibility(){
     btn.style.display = isViewAllowed(viewId) ? "" : "none";
   });
   syncDemoFeatureHubVisibility();
+  renderDemoShowcaseHome();
 
   const activeView = document.querySelector(".view.active");
   if (activeView && !isViewAllowed(activeView.id)){
@@ -13170,6 +13208,8 @@ function setWhoami(){
   if (menuMessagesBtn) menuMessagesBtn.style.display = authed && state.messagesEnabled && state.features.messages ? "" : "none";
   syncDemoLoginButton();
   syncDemoFeatureHubVisibility();
+  renderDemoShowcaseHome();
+  applyShowcaseReadOnlyRestrictions();
   updateMessagesBadge();
   setDemoBadge();
   renderProfileHomeCard();
@@ -13302,6 +13342,25 @@ function applyDemoRestrictions(root = document){
     "#btnAdminInventoryRefresh",
     "#btnAdminInventorySave",
   ].forEach((selector) => applyDemoLock(root.querySelector(selector)));
+}
+
+function applyShowcaseReadOnlyRestrictions(root = document){
+  if (!isDemoShowcaseMode() || isDemo) return;
+  [
+    "#btnCreateInvoice",
+    "#btnMarkNodeReady",
+    "#btnAddLocation",
+    "#btnDispatchCreate",
+    "#btnDispatchSave",
+    "#btnAdminCreateUser",
+    "#btnDeleteProjectConfirm",
+    "#btnDeleteNode",
+  ].forEach((selector) => {
+    const el = root.querySelector(selector);
+    if (!el) return;
+    el.disabled = true;
+    el.title = "Read-only in Demo Showcase Mode";
+  });
 }
 
 function ensureDemoSeed(){
@@ -20853,6 +20912,118 @@ function renderCatalogResults(targetId, term){
   `).join("");
 }
 
+function runShowcaseAction(action){
+  if (!action) return;
+  if (action.type === "view"){
+    if (isViewAllowed(action.target)){
+      setActiveView(action.target);
+    }
+    return;
+  }
+  if (action.type === "modal" && action.target === "messages"){
+    openMessagesModal();
+    return;
+  }
+  if (action.type === "modal" && action.target === "projects"){
+    openProjectsModal();
+    return;
+  }
+}
+
+function renderDemoShowcaseHome(){
+  const wrap = $("demoShowcaseHome");
+  if (!wrap) return;
+  const showcase = isDemoShowcaseMode();
+  const legacyIds = [
+    "dashboardProfileCard",
+    "dashboardJobCard",
+    "dashboardActiveSiteCard",
+    "dashboardActivityCard",
+    "dashboardFeatureHubCard",
+    "dashboardAllowedQtyCard",
+    "dashboardCatalogQuickCard",
+  ];
+  legacyIds.forEach((id) => {
+    const el = $(id);
+    if (el) el.style.display = showcase ? "none" : "";
+  });
+  if (!showcase){
+    wrap.style.display = "none";
+    wrap.innerHTML = "";
+    return;
+  }
+  const quickActions = [
+    { label: "Timesheet", action: { type: "view", target: "viewTechnician" } },
+    { label: "Projects", action: { type: "modal", target: "projects" } },
+    { label: "Map", action: { type: "view", target: "viewMap" } },
+    { label: "Messages", action: { type: "modal", target: "messages" } },
+    { label: "Invoicing", action: { type: "view", target: "viewInvoices" } },
+    { label: "Materials", action: { type: "view", target: "viewCatalog" } },
+  ];
+  const highlights = [
+    "office_invoicing",
+    "tech_timesheet",
+    "platform_messages",
+    "warehouse_catalog",
+    "supervisor_dashboard",
+  ];
+  const grouped = SHOWCASE_GROUPS.map((group) => {
+    const modules = SHOWCASE_MODULES.filter((item) => item.group === group.key && canShowModule(item.key));
+    return { ...group, modules };
+  }).filter((group) => group.modules.length > 0);
+
+  wrap.style.display = "";
+  wrap.innerHTML = `
+    <div class="showcase-header card">
+      <div class="showcase-badge">Demo Showcase Mode — All platform modules visible</div>
+      <h2 style="margin-top:10px;">Browse platform capabilities by team role</h2>
+      <div class="muted small">Production access rules remain strict outside demo showcase mode.</div>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify({ type: "view", target: "viewSettings" }))}'>Language Settings</button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px;">
+      <h3>Quick Actions</h3>
+      <div class="showcase-quick-grid" style="margin-top:10px;">
+        ${quickActions.map((item) => `
+          <button class="btn showcase-quick-btn" type="button" data-showcase-action='${escapeHtml(JSON.stringify(item.action))}'>${escapeHtml(item.label)}</button>
+        `).join("")}
+      </div>
+    </div>
+    <div class="showcase-role-grid" style="margin-top:12px;">
+      ${grouped.map((group) => `
+        <article class="card showcase-role-card">
+          <div class="showcase-role-title">${escapeHtml(group.title)}</div>
+          <div class="muted small">${escapeHtml(group.summary)}</div>
+          <div class="showcase-module-list">
+            ${group.modules.slice(0, 5).map((item) => `
+              <div class="showcase-module-item">
+                <div class="showcase-module-head">
+                  <div style="font-weight:800;">${escapeHtml(item.title)}</div>
+                  <button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(item.action))}'>Open</button>
+                </div>
+                <div class="muted small">${escapeHtml(item.summary)}</div>
+                <div class="showcase-chip-row">
+                  ${item.chips.slice(0, 3).map((chip) => `<span class="chip">${escapeHtml(chip)}</span>`).join("")}
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        </article>
+      `).join("")}
+    </div>
+    <div class="card" style="margin-top:12px;">
+      <h3>Platform Highlights</h3>
+      <div class="showcase-chip-row" style="margin-top:10px;">
+        ${highlights.map((key) => {
+          const module = SHOWCASE_MODULES.find((item) => item.key === key);
+          return module ? `<button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(module.action))}'>${escapeHtml(module.title)}</button>` : "";
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
 function renderProofChecklist(){
   const wrap = $("photoChecklist");
   const summary = $("photoChecklistSummary");
@@ -21596,6 +21767,10 @@ async function initAuth(){
 
   state.client = await makeClient();
   if (!state.client){
+    if (isDemo){
+      await enterDemoBootstrapSession({ persistSession: false });
+      return;
+    }
     if (isDemoBootstrapEnabled() && hasPersistedDemoBootstrapSession()){
       await enterDemoBootstrapSession({ persistSession: false });
       return;
@@ -22474,6 +22649,20 @@ function wireUI(){
       const btn = e.target.closest("button[data-demo-feature]");
       if (!btn) return;
       openDemoFeature(btn.dataset.demoFeature);
+    });
+  }
+  const demoShowcaseHome = $("demoShowcaseHome");
+  if (demoShowcaseHome){
+    demoShowcaseHome.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-showcase-action]");
+      if (!btn) return;
+      let action = null;
+      try {
+        action = JSON.parse(btn.dataset.showcaseAction || "{}");
+      } catch {
+        action = null;
+      }
+      runShowcaseAction(action);
     });
   }
   const messagesCloseBtn = $("btnMessagesClose");
