@@ -1379,6 +1379,10 @@ function parseBooleanFlag(value){
   return ["1", "true", "yes", "on"].includes(normalized);
 }
 
+function normalizeEmail(value){
+  return String(value || "").trim().toLowerCase();
+}
+
 function isLikelyMaskedSecret(value){
   const text = String(value || "").trim();
   if (!text) return false;
@@ -2452,9 +2456,9 @@ function setEnvWarning(){
     banner.style.display = "";
     banner.classList.add("warning-banner");
     if (!isDemoBootstrapEnabled()){
-      banner.textContent = "Supabase auth config is missing/invalid and demo bootstrap is disabled. For local desktop demos, use APP_MODE=demo or enable demo bootstrap.";
+      banner.textContent = "Supabase auth config is missing/invalid. Live sign-in is unavailable until SUPABASE_URL and SUPABASE_ANON_KEY are valid.";
     } else {
-      banner.textContent = "Supabase auth config is missing/invalid. Demo bootstrap is enabled for desktop demos.";
+      banner.textContent = "Supabase auth config is missing/invalid. Demo bootstrap fallback is enabled for this environment.";
     }
   } else {
     const env = getRuntimeEnv();
@@ -8376,10 +8380,36 @@ function isFieldRole(roleCode = getRoleCode()){
   return roleCode === ROLES.USER_LEVEL_1 || roleCode === ROLES.USER_LEVEL_2;
 }
 
+function getShowcaseAccountEmails(){
+  const env = getRuntimeEnv();
+  const raw = String(env?.LIVE_SHOWCASE_EMAILS || env?.DEMO_SHOWCASE_EMAILS || "").trim();
+  const list = raw
+    .split(/[,\s;]+/)
+    .map((item) => normalizeEmail(item))
+    .filter(Boolean);
+  return new Set(list);
+}
+
+function isShowcaseAccountUser(){
+  const email = normalizeEmail(state.user?.email);
+  if (!email) return false;
+  const allowList = getShowcaseAccountEmails();
+  return allowList.has(email);
+}
+
 function isDemoShowcaseMode(){
   if (String(appMode || "").toLowerCase() === "demo") return true;
   const env = getRuntimeEnv();
-  return parseBooleanFlag(env?.DEMO_SHOWCASE_ENABLED);
+  if (parseBooleanFlag(env?.DEMO_SHOWCASE_ACCOUNT_ENABLED) && isShowcaseAccountUser()){
+    return true;
+  }
+  if (!parseBooleanFlag(env?.DEMO_SHOWCASE_ENABLED)){
+    return false;
+  }
+  if (String(appMode || "").toLowerCase() === "real" && !parseBooleanFlag(env?.DEMO_SHOWCASE_ALLOW_GLOBAL_REAL)){
+    return false;
+  }
+  return true;
 }
 
 function canShowModule(moduleKey){
@@ -13307,7 +13337,7 @@ function setDemoBadge(){
   const badge = $("demoEnvBadge");
   if (!badge) return;
   badge.textContent = t("demoEnvBadge");
-  badge.style.display = isDemoUser() ? "inline-flex" : "none";
+  badge.style.display = (isDemoUser() || isDemoShowcaseMode()) ? "inline-flex" : "none";
 }
 
 function applyDemoLock(el){
@@ -20980,7 +21010,7 @@ function renderDemoShowcaseHome(){
   wrap.style.display = "";
   wrap.innerHTML = `
     <div class="showcase-header card">
-      <div class="showcase-badge">Demo Showcase Mode — All platform modules visible</div>
+      <div class="showcase-badge">Demo Showcase Mode - All platform modules visible</div>
       <h2 style="margin-top:10px;">Browse platform capabilities by team role</h2>
       <div class="muted small">Production access rules remain strict outside demo showcase mode.</div>
       <div class="row" style="margin-top:10px;">
