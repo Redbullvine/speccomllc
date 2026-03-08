@@ -2452,9 +2452,9 @@ function setEnvWarning(){
     banner.style.display = "";
     banner.classList.add("warning-banner");
     if (!isDemoBootstrapEnabled()){
-      banner.textContent = "Supabase auth config is missing/invalid and demo bootstrap is disabled.";
+      banner.textContent = "Supabase auth config is missing/invalid and demo bootstrap is disabled. For local desktop demos, use APP_MODE=demo or enable demo bootstrap.";
     } else {
-      banner.textContent = "Supabase auth config is missing/invalid. Demo bootstrap is enabled.";
+      banner.textContent = "Supabase auth config is missing/invalid. Demo bootstrap is enabled for desktop demos.";
     }
   } else {
     const env = getRuntimeEnv();
@@ -8221,6 +8221,10 @@ function syncLanguageControls(){
   const lang = getPreferredLanguage();
   const select = $("languageSelect");
   if (select) select.value = lang;
+  const topSelect = $("languageSelectTop");
+  if (topSelect) topSelect.value = lang;
+  const menuSelect = $("languageSelectMenu");
+  if (menuSelect) menuSelect.value = lang;
   const profileSelect = $("profileLanguageSelect");
   if (profileSelect) profileSelect.value = lang;
   syncMenuLanguageToggle();
@@ -20961,11 +20965,12 @@ function renderDemoShowcaseHome(){
     { label: "Materials", action: { type: "view", target: "viewCatalog" } },
   ];
   const highlights = [
-    "office_invoicing",
-    "tech_timesheet",
-    "platform_messages",
-    "warehouse_catalog",
-    "supervisor_dashboard",
+    { label: "Work Orders", action: { type: "view", target: "viewDispatch" } },
+    { label: "Allowed Quantities", action: { type: "view", target: "viewDashboard" } },
+    { label: "Messaging", action: { type: "modal", target: "messages" } },
+    { label: "Material Search", action: { type: "view", target: "viewCatalog" } },
+    { label: "Invoicing", action: { type: "view", target: "viewInvoices" } },
+    { label: "Daily Summary", action: { type: "view", target: "viewDailyReport" } },
   ];
   const grouped = SHOWCASE_GROUPS.map((group) => {
     const modules = SHOWCASE_MODULES.filter((item) => item.group === group.key && canShowModule(item.key));
@@ -21015,10 +21020,9 @@ function renderDemoShowcaseHome(){
     <div class="card" style="margin-top:12px;">
       <h3>Platform Highlights</h3>
       <div class="showcase-chip-row" style="margin-top:10px;">
-        ${highlights.map((key) => {
-          const module = SHOWCASE_MODULES.find((item) => item.key === key);
-          return module ? `<button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(module.action))}'>${escapeHtml(module.title)}</button>` : "";
-        }).join("")}
+        ${highlights.map((item) => (
+          `<button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(item.action))}'>${escapeHtml(item.label)}</button>`
+        )).join("")}
       </div>
     </div>
   `;
@@ -22829,6 +22833,20 @@ function wireUI(){
   const languageSelect = $("languageSelect");
   if (languageSelect){
     languageSelect.addEventListener("change", (e) => {
+      setPreferredLanguage(e.target.value);
+      refreshLanguageSensitiveUI();
+    });
+  }
+  const languageSelectTop = $("languageSelectTop");
+  if (languageSelectTop){
+    languageSelectTop.addEventListener("change", (e) => {
+      setPreferredLanguage(e.target.value);
+      refreshLanguageSensitiveUI();
+    });
+  }
+  const languageSelectMenu = $("languageSelectMenu");
+  if (languageSelectMenu){
+    languageSelectMenu.addEventListener("change", (e) => {
       setPreferredLanguage(e.target.value);
       refreshLanguageSensitiveUI();
     });

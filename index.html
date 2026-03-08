@@ -21,7 +21,7 @@
           <div class="muted small" data-i18n="brandSubtitle">Field verification, documentation, and billing control</div>
         </div>
       </div>
-      <div class="row topbar-actions">
+      <div class="row topbar-actions desktop-nav">
         <button id="btnHome" class="topbar-btn" type="button">Home</button>
         <button id="btnMessages" class="topbar-btn" type="button" data-i18n="messagesNav">Messages
           <span id="messagesBadge" class="alert-badge" style="display:none;">0</span>
@@ -29,6 +29,11 @@
         <button id="btnProjects" class="topbar-btn" type="button" data-i18n="projectsNav">Projects</button>
         <button id="btnTimesheet" class="topbar-btn" type="button" data-i18n="timesheetNav">Timesheet</button>
         <button id="btnMapToggle" class="topbar-btn" type="button" data-i18n="mapToggle" aria-pressed="false">Map</button>
+        <select id="languageSelectTop" class="topbar-language-select" aria-label="Language">
+          <option value="en" data-i18n="languageOptionEnglish">English</option>
+          <option value="es" data-i18n="languageOptionSpanish">Spanish</option>
+          <option value="pt" data-i18n="languageOptionPortuguese">Portuguese</option>
+        </select>
         <button id="btnSignOut" class="topbar-btn" type="button" data-i18n="signOut">Sign out</button>
         <button id="btnMenu" class="icon-btn" type="button" aria-label="Menu">
           <span class="hamburger">
@@ -79,7 +84,7 @@
       </div>
     </div>
 
-    <div id="viewApp" class="app-shell" style="display:none;">
+    <div id="viewApp" class="app-shell mobile-shell" style="display:none;">
       <aside id="leftControlRail" class="sidebar gis-sidebar">
         <aside id="rightDrawer" class="right-drawer gis-drawer">
           <div class="wired-sidebar-top">
@@ -742,6 +747,14 @@
           <button class="menu-link" type="button" data-view="viewAdmin">Admin Panel</button>
         </div>
         <div class="menu-section">
+          <div class="muted small menu-title" data-i18n="languageLabel">Language</div>
+          <select id="languageSelectMenu" class="input">
+            <option value="en" data-i18n="languageOptionEnglish">English</option>
+            <option value="es" data-i18n="languageOptionSpanish">Spanish</option>
+            <option value="pt" data-i18n="languageOptionPortuguese">Portuguese</option>
+          </select>
+        </div>
+        <div class="menu-section">
           <div class="muted small menu-title">Admin Actions</div>
           <button id="btnGrantProjectAccess" class="menu-link menu-root-only" type="button">Grant Project Access</button>
           <button id="btnImportPriceSheet" class="menu-link menu-root-only" type="button">Import Price Sheet</button>
@@ -753,7 +766,7 @@
     </div>
 
     <div id="dispatchModal" class="modal" style="display:none;">
-      <div class="card modal-card" style="max-width:720px;">
+      <div class="card modal-card mobile-panel" style="max-width:720px;">
         <h2 data-i18n="dispatchModalTitle">Work order</h2>
         <div class="field-stack" style="margin-top:12px;">
           <select id="dispatchType" class="input">
@@ -980,6 +993,13 @@
     <div id="toastTitle" class="title">Notice</div>
     <div id="toastBody" class="body"></div>
   </div>
+  <nav id="mobileBottomNav" class="mobile-nav" aria-hidden="true" style="display:none;">
+    <button type="button">Home</button>
+    <button type="button">Jobs</button>
+    <button type="button">Map</button>
+    <button type="button">Messages</button>
+    <button type="button">More</button>
+  </nav>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
