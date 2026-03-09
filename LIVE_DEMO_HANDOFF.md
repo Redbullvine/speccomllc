@@ -32,10 +32,12 @@
 
 ## How live showcase mode is enabled
 - `APP_MODE=demo` still enables full showcase globally (demo environments only).
-- In `APP_MODE=real`, showcase is account-scoped:
+- In `APP_MODE=real`, you can enable showcase either way:
+  - `DEMO_SHOWCASE_ENABLED=true` (global showcase for demo sessions)
+  - or account-scoped:
   - `DEMO_SHOWCASE_ACCOUNT_ENABLED=true`
   - signed-in email must match `LIVE_SHOWCASE_EMAILS`.
-- Production users remain role-restricted unless explicitly included in the showcase allowlist.
+- Keep `DEMO_SHOWCASE_ENABLED` off for strict role-based production behavior.
 
 ## Notes
 - `DEMO_PASSWORD` is not exposed in tracked client env output.

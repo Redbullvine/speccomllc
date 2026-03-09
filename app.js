@@ -1461,19 +1461,21 @@ async function tryFetchAppConfig(){
 }
 
 async function loadRuntimeEnv(){
-  if (window.__ENV){
-    dlog("[config] using window.__ENV");
-    return window.__ENV;
-  }
-
+  const localEnv = (window.__ENV && typeof window.__ENV === "object") ? window.__ENV : {};
   const cfg = await tryFetchAppConfig();
-  if (cfg){
-    window.__ENV = cfg;
-    dlog("[config] window.__ENV set from app-config");
-    return cfg;
+  if (cfg && typeof cfg === "object"){
+    window.__ENV = { ...localEnv, ...cfg };
+    dlog("[config] window.__ENV merged with app-config");
+  } else {
+    window.__ENV = {
+      SUPABASE_URL: "",
+      SUPABASE_ANON_KEY: "",
+      APP_MODE: "real",
+      ...localEnv,
+    };
+    dlog("[config] using local window.__ENV fallback");
   }
 
-  window.__ENV = window.__ENV || { SUPABASE_URL: "", SUPABASE_ANON_KEY: "", APP_MODE: "real" };
   const env = window.__ENV;
   const liveConfigMissing = !String(env?.SUPABASE_URL || "").trim()
     || !String(env?.SUPABASE_ANON_KEY || "").trim()
@@ -8387,6 +8389,8 @@ function getShowcaseAccountEmails(){
     .split(/[,\s;]+/)
     .map((item) => normalizeEmail(item))
     .filter(Boolean);
+  const demoAdmin = normalizeEmail(env?.DEMO_ADMIN_EMAIL);
+  if (demoAdmin) list.push(demoAdmin);
   return new Set(list);
 }
 
@@ -8400,16 +8404,13 @@ function isShowcaseAccountUser(){
 function isDemoShowcaseMode(){
   if (String(appMode || "").toLowerCase() === "demo") return true;
   const env = getRuntimeEnv();
+  if (parseBooleanFlag(env?.DEMO_SHOWCASE_ENABLED)){
+    return true;
+  }
   if (parseBooleanFlag(env?.DEMO_SHOWCASE_ACCOUNT_ENABLED) && isShowcaseAccountUser()){
     return true;
   }
-  if (!parseBooleanFlag(env?.DEMO_SHOWCASE_ENABLED)){
-    return false;
-  }
-  if (String(appMode || "").toLowerCase() === "real" && !parseBooleanFlag(env?.DEMO_SHOWCASE_ALLOW_GLOBAL_REAL)){
-    return false;
-  }
-  return true;
+  return false;
 }
 
 function canShowModule(moduleKey){
@@ -8489,7 +8490,6 @@ function isViewAllowed(viewId){
   }
   const allowed = getProductionAllowedViews();
   if (!allowed.has(viewId)) return false;
-  if (viewId === "viewInvoices") return canViewInvoiceVault();
   if (viewId === "viewLabor") return canViewLabor();
   if (viewId === "viewDispatch") return canViewDispatch();
   return true;
