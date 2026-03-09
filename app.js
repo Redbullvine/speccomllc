@@ -93,19 +93,19 @@ const SHOWCASE_GROUPS = [
 
 const SHOWCASE_MODULES = [
   { key: "office_invoicing", title: "Invoicing", group: "office", chips: ["Invoice actions", "Billing review", "Invoice files"], summary: "Billing and invoice workflows.", action: { type: "view", target: "viewInvoices" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
-  { key: "office_reporting", title: "Reporting", group: "office", chips: ["Daily report", "Metrics", "Comments"], summary: "Generate and review daily reporting.", action: { type: "view", target: "viewDailyReport" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
+  { key: "office_reporting", title: "Reporting", group: "office", chips: ["Daily report", "Metrics", "Comments"], summary: "Operations reporting, daily metrics, and review notes.", action: { type: "view", target: "viewDailyReport" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
   { key: "office_billing", title: "Billing Review", group: "office", chips: ["Location billing", "Usage import", "Status controls"], summary: "Review billable work by site.", action: { type: "view", target: "viewBilling" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER] },
   { key: "admin_roles", title: "User Roles", group: "admin", chips: ["Invite users", "Role assignment", "Profile management"], summary: "Manage platform access and users.", action: { type: "view", target: "viewAdmin" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN] },
   { key: "admin_project_controls", title: "Project Controls", group: "admin", chips: ["Create project", "Access grants", "Project governance"], summary: "Project and permission administration.", action: { type: "modal", target: "projects" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER] },
   { key: "splicer_work", title: "Splice Work", group: "splicer", chips: ["Site workspace", "Closures", "Fiber counts"], summary: "Track splice execution and documentation.", action: { type: "view", target: "viewNodes" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
-  { key: "splicer_quantities", title: "Allowed vs Billed", group: "splicer", chips: ["Allowed quantities", "Usage events", "Proof readiness"], summary: "Compare planned and billed quantities.", action: { type: "view", target: "viewDashboard" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
-  { key: "tech_service", title: "Service + Trouble", group: "tech", chips: ["Trouble tickets", "Service orders", "Close-out"], summary: "Dispatch and technician workflows.", action: { type: "view", target: "viewDispatch" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_1, ROLES.SUPPORT] },
+  { key: "splicer_quantities", title: "Allowed vs Billed", group: "splicer", chips: ["Allowed quantities", "Usage events", "Proof readiness"], summary: "Allowed quantity tracking, usage, and billing readiness.", action: { type: "view", target: "viewBilling" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
+  { key: "tech_service", title: "Service + Trouble", group: "tech", chips: ["Trouble tickets", "Service orders", "Close-out"], summary: "Dispatch, service orders, and close-out workflow.", action: { type: "view", target: "viewDispatch" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_1, ROLES.SUPPORT] },
   { key: "tech_timesheet", title: "Timesheet", group: "tech", chips: ["Clock in/out", "Event log", "Daily summary"], summary: "Technician time tracking and activity.", action: { type: "view", target: "viewTechnician" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_1, ROLES.SUPPORT] },
   { key: "warehouse_catalog", title: "Material Search", group: "warehouse", chips: ["Catalog search", "Parts lookup", "Item metadata"], summary: "Search parts and material references.", action: { type: "view", target: "viewCatalog" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
   { key: "warehouse_inventory", title: "Inventory Controls", group: "warehouse", chips: ["Inventory table", "SMS alerts", "Assigned stock"], summary: "Warehouse and stock visibility.", action: { type: "view", target: "viewAdmin" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN] },
-  { key: "supervisor_dashboard", title: "Job Progress", group: "supervisor", chips: ["KPI status", "Team activity", "Daily summary"], summary: "Supervisor monitoring and review.", action: { type: "view", target: "viewDashboard" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
+  { key: "supervisor_dashboard", title: "Job Progress", group: "supervisor", chips: ["KPI status", "Team activity", "Daily summary"], summary: "Supervisor progress tracking and dispatch oversight.", action: { type: "view", target: "viewDispatch" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
   { key: "supervisor_photos", title: "Field Verification", group: "supervisor", chips: ["Field photos", "Proof checks", "Readiness"], summary: "Photo and proof validation workflows.", action: { type: "view", target: "viewPhotos" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
-  { key: "network_map", title: "Map Workspace", group: "network", chips: ["KMZ map", "Site pins", "Route points"], summary: "Network map and geospatial workflows.", action: { type: "view", target: "viewMap" }, rolesAllowed: Object.values(ROLES) },
+  { key: "network_map", title: "Map Workspace", group: "network", chips: ["KMZ map", "Site pins", "Route points"], summary: "KMZ map and geospatial field tools.", action: { type: "view", target: "viewMap" }, rolesAllowed: Object.values(ROLES) },
   { key: "platform_messages", title: "Messaging", group: "network", chips: ["Main board", "Direct messages", "Team coordination"], summary: "Communication and updates.", action: { type: "modal", target: "messages" }, rolesAllowed: Object.values(ROLES) },
 ];
 
@@ -20946,22 +20946,90 @@ function renderCatalogResults(targetId, term){
   `).join("");
 }
 
+const SHOWCASE_VIEW_FALLBACKS = {
+  viewBilling: ["viewInvoices", "viewDashboard"],
+  viewDispatch: ["viewDashboard"],
+  viewNodes: ["viewDashboard"],
+  viewPhotos: ["viewDashboard"],
+  viewAdmin: ["viewDashboard"],
+  viewCatalog: ["viewDashboard"],
+  viewDailyReport: ["viewDashboard"],
+  viewTechnician: ["viewDashboard"],
+  viewInvoices: ["viewDashboard"],
+  viewMap: ["viewDashboard"],
+};
+
+function getShowcaseActionLabel(action, fallbackTarget = ""){
+  const explicit = String(action?.label || "").trim();
+  if (explicit) return explicit;
+  const target = String(fallbackTarget || action?.target || "").trim();
+  const module = SHOWCASE_MODULES.find((item) => item.action?.type === action?.type && item.action?.target === target);
+  if (module?.title) return module.title;
+  return target.replace(/^view/i, "") || "module";
+}
+
+function buildShowcaseActionPayload(action, { label = "", fallbackViews = [] } = {}){
+  const next = { ...(action || {}) };
+  if (label){
+    next.label = label;
+  }
+  if (Array.isArray(fallbackViews) && fallbackViews.length){
+    next.fallbackViews = fallbackViews;
+  }
+  return next;
+}
+
+function parseShowcaseAction(raw){
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(String(raw));
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function hasViewTarget(viewId){
+  const view = $(viewId);
+  return Boolean(view && view.classList.contains("view"));
+}
+
 function runShowcaseAction(action){
   if (!action) return;
   if (action.type === "view"){
-    if (isViewAllowed(action.target)){
-      setActiveView(action.target);
+    const primaryTarget = String(action.target || "").trim();
+    const candidateViews = [
+      primaryTarget,
+      ...(Array.isArray(action.fallbackViews) ? action.fallbackViews : []),
+      ...(SHOWCASE_VIEW_FALLBACKS[primaryTarget] || []),
+      "viewDashboard",
+    ];
+    const visited = new Set();
+    for (const viewId of candidateViews){
+      const normalized = String(viewId || "").trim();
+      if (!normalized || visited.has(normalized)) continue;
+      visited.add(normalized);
+      if (!hasViewTarget(normalized)) continue;
+      if (!isViewAllowed(normalized)) continue;
+      setActiveView(normalized);
+      toast("Showcase", `Opening ${getShowcaseActionLabel(action, normalized)}.`);
+      return;
     }
+    toast("Showcase", "That module is unavailable for this account.", "error");
     return;
   }
   if (action.type === "modal" && action.target === "messages"){
     openMessagesModal();
+    toast("Showcase", `Opening ${getShowcaseActionLabel(action, "messages")}.`);
     return;
   }
   if (action.type === "modal" && action.target === "projects"){
     openProjectsModal();
+    toast("Showcase", `Opening ${getShowcaseActionLabel(action, "projects")}.`);
     return;
   }
+  openProjectsModal();
+  toast("Showcase", "Opening Projects.");
 }
 
 function renderDemoShowcaseHome(){
@@ -21014,14 +21082,14 @@ function renderDemoShowcaseHome(){
       <h2 style="margin-top:10px;">Browse platform capabilities by team role</h2>
       <div class="muted small">Production access rules remain strict outside demo showcase mode.</div>
       <div class="row" style="margin-top:10px;">
-        <button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify({ type: "view", target: "viewSettings" }))}'>Language Settings</button>
+        <button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload({ type: "view", target: "viewSettings" }, { label: "Language Settings" })))}'>Language Settings</button>
       </div>
     </div>
     <div class="card" style="margin-top:12px;">
       <h3>Quick Actions</h3>
       <div class="showcase-quick-grid" style="margin-top:10px;">
         ${quickActions.map((item) => `
-          <button class="btn showcase-quick-btn" type="button" data-showcase-action='${escapeHtml(JSON.stringify(item.action))}'>${escapeHtml(item.label)}</button>
+          <button class="btn showcase-quick-btn" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(item.action, { label: item.label })))}'>${escapeHtml(item.label)}</button>
         `).join("")}
       </div>
     </div>
@@ -21032,10 +21100,10 @@ function renderDemoShowcaseHome(){
           <div class="muted small">${escapeHtml(group.summary)}</div>
           <div class="showcase-module-list">
             ${group.modules.slice(0, 5).map((item) => `
-              <div class="showcase-module-item">
+              <div class="showcase-module-item showcase-module-launcher" tabindex="0" role="button" aria-label="Open ${escapeHtml(item.title)}" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(item.action, { label: item.title })))}'>
                 <div class="showcase-module-head">
                   <div style="font-weight:800;">${escapeHtml(item.title)}</div>
-                  <button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(item.action))}'>Open</button>
+                  <button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(item.action, { label: item.title })))}'>Open</button>
                 </div>
                 <div class="muted small">${escapeHtml(item.summary)}</div>
                 <div class="showcase-chip-row">
@@ -21051,7 +21119,7 @@ function renderDemoShowcaseHome(){
       <h3>Platform Highlights</h3>
       <div class="showcase-chip-row" style="margin-top:10px;">
         ${highlights.map((item) => (
-          `<button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(item.action))}'>${escapeHtml(item.label)}</button>`
+          `<button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(item.action, { label: item.label })))}'>${escapeHtml(item.label)}</button>`
         )).join("")}
       </div>
     </div>
@@ -22688,14 +22756,17 @@ function wireUI(){
   const demoShowcaseHome = $("demoShowcaseHome");
   if (demoShowcaseHome){
     demoShowcaseHome.addEventListener("click", (e) => {
-      const btn = e.target.closest("button[data-showcase-action]");
-      if (!btn) return;
-      let action = null;
-      try {
-        action = JSON.parse(btn.dataset.showcaseAction || "{}");
-      } catch {
-        action = null;
-      }
+      const trigger = e.target.closest("[data-showcase-action]");
+      if (!trigger || !demoShowcaseHome.contains(trigger)) return;
+      const action = parseShowcaseAction(trigger.dataset.showcaseAction);
+      runShowcaseAction(action);
+    });
+    demoShowcaseHome.addEventListener("keydown", (e) => {
+      if (!(e.key === "Enter" || e.key === " ")) return;
+      const trigger = e.target.closest(".showcase-module-launcher[data-showcase-action]");
+      if (!trigger || !demoShowcaseHome.contains(trigger)) return;
+      e.preventDefault();
+      const action = parseShowcaseAction(trigger.dataset.showcaseAction);
       runShowcaseAction(action);
     });
   }

@@ -1919,6 +1919,19 @@ a{color:inherit; text-decoration:none;}
   padding:10px;
   background:rgba(255,255,255,0.72);
 }
+.showcase-module-launcher{
+  cursor:pointer;
+  transition:transform .14s ease, box-shadow .14s ease, border-color .14s ease;
+}
+.showcase-module-launcher:hover{
+  border-color:rgba(15,23,42,0.35);
+  box-shadow:0 8px 20px rgba(15,23,42,0.08);
+  transform:translateY(-1px);
+}
+.showcase-module-launcher:focus-visible{
+  outline:2px solid rgba(37,99,235,0.45);
+  outline-offset:2px;
+}
 .showcase-module-head{
   display:flex;
   align-items:center;
