@@ -6001,11 +6001,13 @@ function beginRedlineDraftForKmzNode(featureId, latlng){
   const point = getRedlinePointFromLatLng(latlng);
   if (!point) return false;
   const nodeName = getKmzPreferredLocationName(row) || row.location_name || featureKey;
+  state.redline.addMode = false;
   openRedlineEditor({
     point,
     attachedNodeId: featureKey,
     nodeName,
   });
+  renderRedlineUi();
   return true;
 }
 
@@ -8802,15 +8804,21 @@ function ensureMap(){
       toast("Pin error", "Invalid map location.");
       return;
     }
-    if (state.redline.enabled && state.redline.addMode){
+    if (state.redline.enabled){
+      if (!state.redline.addMode){
+        return;
+      }
       const backdrop = $("redlineEditorBackdrop");
       if (backdrop && !backdrop.hidden){
         return;
       }
       const point = getRedlinePointFromLatLng(latlng);
-      if (point){
-        openRedlineEditor({ point });
+      if (!point){
+        return;
       }
+      state.redline.addMode = false;
+      openRedlineEditor({ point });
+      renderRedlineUi();
       return;
     }
     state.map.pendingLatLng = { lat: latlng.lat, lng: latlng.lng };
