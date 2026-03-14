@@ -5771,6 +5771,29 @@ function closeRedlineEditor(){
   state.redline.editorMarkerId = null;
 }
 
+function resetRedlineState({ clearMarkers = false, clearSource = false } = {}){
+  closeRedlineEditor();
+  state.redline.enabled = false;
+  state.redline.addMode = false;
+  state.redline.summaryOpen = false;
+  state.redline.draftPoint = null;
+  state.redline.draftAttachedNodeId = null;
+  state.redline.draftNodeName = null;
+  state.redline.editorMarkerId = null;
+  if (clearSource){
+    state.redline.source = null;
+    state.redline.sourceKey = "";
+  }
+  if (clearMarkers){
+    state.redline.markers = [];
+  }
+  const overlay = $("redlineOverlay");
+  if (overlay){
+    overlay.classList.remove("is-add-mode");
+  }
+  document.querySelectorAll(".redline-dot.is-tooltip-open").forEach((el) => el.classList.remove("is-tooltip-open"));
+}
+
 async function uploadRedlinePhoto(file, source){
   if (!file || !state.client) return null;
   return uploadProofPhoto(file, source.location_id || source.project_id || "redline", "redline", {
@@ -5949,12 +5972,7 @@ async function setRedlineMode(nextEnabled){
   state.redline.addMode = false;
   state.redline.summaryOpen = false;
   if (!enabled){
-    closeRedlineEditor();
-    state.redline.draftPoint = null;
-    state.redline.draftAttachedNodeId = null;
-    state.redline.draftNodeName = null;
-    state.redline.editorMarkerId = null;
-    document.querySelectorAll(".redline-dot.is-tooltip-open").forEach((el) => el.classList.remove("is-tooltip-open"));
+    resetRedlineState();
     renderRedlineUi();
     return;
   }
@@ -6107,15 +6125,7 @@ function bindRedlineUiHandlers(){
       closeRedlineEditor();
     }
   });
-  closeRedlineEditor();
-  state.redline.enabled = false;
-  state.redline.addMode = false;
-  state.redline.summaryOpen = false;
-  state.redline.draftPoint = null;
-  state.redline.draftAttachedNodeId = null;
-  state.redline.draftNodeName = null;
-  state.redline.editorMarkerId = null;
-  document.querySelectorAll(".redline-dot.is-tooltip-open").forEach((el) => el.classList.remove("is-tooltip-open"));
+  resetRedlineState();
   ensureRedlineTypeOptions();
   renderRedlineUi();
 }
@@ -9347,12 +9357,13 @@ function syncHashForView(viewId){
   window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${nextHash}`);
 }
 
-function getDefaultView(){
-  const hashView = parseViewFromHash();
-  if (hashView && isViewAllowed(hashView)) return hashView;
-  if (isFieldRole()){
-    return isViewAllowed("viewDashboard") ? "viewDashboard" : "viewMap";
+function getDefaultView({ allowHash = false } = {}){
+  if (allowHash){
+    const hashView = parseViewFromHash();
+    if (hashView && isViewAllowed(hashView)) return hashView;
   }
+  if (isViewAllowed("viewDashboard")) return "viewDashboard";
+  if (isFieldRole() && isViewAllowed("viewMap")) return "viewMap";
   return "viewDashboard";
 }
 
@@ -22714,6 +22725,7 @@ async function enterDemoBootstrapSession({ persistSession = true, toastMessage =
   renderCatalogResults("catalogResultsQuick", "");
   setAppModeUI();
   setEnvWarning();
+  resetRedlineState({ clearMarkers: true, clearSource: true });
   setActiveView(getDefaultView());
   if (toastMessage){
     toast("Demo bootstrap", toastMessage);
@@ -22832,15 +22844,17 @@ async function initAuth(){
         await loadBillingLocations(state.activeProject?.id || null);
         await loadMaterialCatalog();
       await loadAlerts();
-      renderAlerts();
+        renderAlerts();
       renderCatalogResults("catalogResults", "");
         renderCatalogResults("catalogResultsQuick", "");
         renderBillingLocations();
+        resetRedlineState({ clearMarkers: true, clearSource: true });
         setActiveView(getDefaultView());
         startLocationPolling();
         syncPendingSites();
     } else {
         showAuth(true);
+        resetRedlineState({ clearMarkers: true, clearSource: true });
         state.activeNode = null;
         state.usageEvents = [];
         clearProof();
@@ -22872,6 +22886,7 @@ async function initAuth(){
     renderCatalogResults("catalogResults", "");
       renderCatalogResults("catalogResultsQuick", "");
       renderBillingLocations();
+      resetRedlineState({ clearMarkers: true, clearSource: true });
       setActiveView(getDefaultView());
       startLocationPolling();
       syncPendingSites();
@@ -23014,6 +23029,7 @@ async function postLoginBootstrap(client, user){
     renderCatalogResults("catalogResults", "");
     renderCatalogResults("catalogResultsQuick", "");
     renderBillingLocations();
+    resetRedlineState({ clearMarkers: true, clearSource: true });
     setActiveView(getDefaultView());
     startLocationPolling();
     syncPendingSites();
