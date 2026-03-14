@@ -5794,6 +5794,15 @@ function resetRedlineState({ clearMarkers = false, clearSource = false } = {}){
   document.querySelectorAll(".redline-dot.is-tooltip-open").forEach((el) => el.classList.remove("is-tooltip-open"));
 }
 
+function forceHideRedlineUi(){
+  $("redlineToolbar") && ($("redlineToolbar").hidden = true);
+  $("redlinePanel") && ($("redlinePanel").hidden = true);
+  $("redlineLegend") && ($("redlineLegend").hidden = true);
+  $("redlineSummaryPanel") && ($("redlineSummaryPanel").hidden = true);
+  $("redlineOverlay") && ($("redlineOverlay").hidden = true);
+  closeRedlineEditor();
+}
+
 async function uploadRedlinePhoto(file, source){
   if (!file || !state.client) return null;
   return uploadProofPhoto(file, source.location_id || source.project_id || "redline", "redline", {
@@ -5973,7 +5982,13 @@ async function setRedlineMode(nextEnabled){
   state.redline.summaryOpen = false;
   if (!enabled){
     resetRedlineState();
-    renderRedlineUi();
+    forceHideRedlineUi();
+    try{
+      renderRedlineUi();
+    } catch (error){
+      console.error("[redline] failed to render disabled state", error);
+      forceHideRedlineUi();
+    }
     return;
   }
   ensureRedlineTypeOptions();
@@ -6065,6 +6080,7 @@ function bindRedlineUiHandlers(){
   });
   $("btnRedlineExit")?.addEventListener("click", () => {
     if (isDebug) dlog("[redline] exit click");
+    forceHideRedlineUi();
     void setRedlineMode(false);
   });
   $("btnRedlineAddMarker")?.addEventListener("click", () => {
@@ -6087,6 +6103,7 @@ function bindRedlineUiHandlers(){
     renderRedlineUi();
   });
   $("btnRedlinePanelClose")?.addEventListener("click", () => {
+    forceHideRedlineUi();
     void setRedlineMode(false);
   });
   $("btnRedlineCopySummary")?.addEventListener("click", () => {
