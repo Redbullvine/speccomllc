@@ -1859,6 +1859,11 @@ function initMapWorkspaceUi(){
       if (state.map.instance?.closePopup) state.map.instance.closePopup();
       setMapViewDropdownOpen(false);
       closeMapDetailsDrawer();
+      closeRedlineEditor();
+      if (state.redline.addMode){
+        state.redline.addMode = false;
+        renderRedlineUi();
+      }
       if (isMobileViewport()) setDrawerOpen(false);
     }
   });
@@ -5280,6 +5285,7 @@ function setMapPopupSiteContext(marker, site){
   if (state.map.popupSiteIndex < 0) state.map.popupSiteIndex = 0;
   state.map.popupMarker = marker || null;
   state.map.popupRequiredCodes = normalizeCodeList(getCodesRequiredForActiveProject());
+  handleRedlineContextChange();
 }
 
 function getMapPopupSnapshot(){
@@ -5314,6 +5320,650 @@ function getMapPopupSnapshot(){
     nearby,
     requiredCodes: normalizeCodeList(state.map.popupRequiredCodes),
   };
+}
+
+function getRedlineTypeLabel(type){
+  const key = String(type || "").trim();
+  return REDLINE_TYPE_LABELS[key] || key || "Unknown";
+}
+
+function normalizeRedlineStatus(status){
+  const raw = String(status || "").trim().toLowerCase();
+  return raw === "resolved" ? "resolved" : "open";
+}
+
+function canManageRedlineMarker(marker){
+  if (!marker) return false;
+  const own = String(marker.created_by || "") === String(state.user?.id || "");
+  return own || SpecCom.helpers.isRoot() || getRoleCode() === ROLES.ADMIN;
+}
+
+function formatRedlineDateTime(value){
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString();
+}
+
+function resolveRedlineSource(){
+  const projectId = state.activeProject?.id || null;
+  const popupSite = getMapPopupSnapshot()?.site || null;
+  const site = popupSite || state.activeSite || null;
+  const locationId = site?.id || null;
+  const featureId = String(state.map.kmzSelectedFeatureId || state.map.materialFeatureId || "").trim() || null;
+  const featureRow = featureId ? state.map.kmzFeatureRows.get(featureId) : null;
+  const sourceType = featureId ? "sheet" : (locationId ? "location" : "map");
+  const keyParts = [projectId || "", locationId || "", featureId || "", sourceType];
+  return {
+    sourceKey: keyParts.join("|"),
+    company_id: getActiveCompanyId(),
+    site_id: locationId,
+    project_id: projectId,
+    location_id: locationId,
+    sheet_ref: featureId,
+    source_type: sourceType,
+    source_page: null,
+    projectLabel: state.activeProject?.name || "N/A",
+    locationLabel: site ? getSiteDisplayName(site) : "-",
+    sheetLabel: featureRow ? (getKmzPreferredLocationName(featureRow) || featureId) : (featureId || "-"),
+  };
+}
+
+function getRedlineSourceLabel(source){
+  if (!source || !source.project_id){
+    return "Select a project to use redline mode.";
+  }
+  const projectLabel = source.projectLabel || "N/A";
+  const locationLabel = source.locationLabel || "-";
+  const sheetLabel = source.sheetLabel || "-";
+  if (source.source_type === "sheet"){
+    return `Project: ${projectLabel} | Location: ${locationLabel} | Sheet: ${sheetLabel}`;
+  }
+  if (source.source_type === "location"){
+    return `Project: ${projectLabel} | Location: ${locationLabel}`;
+  }
+  return `Project: ${projectLabel} | Map`;
+}
+
+function getRedlineFilteredMarkers(){
+  const markers = Array.isArray(state.redline.markers) ? state.redline.markers : [];
+  if (state.redline.filterType === "all"){
+    return markers;
+  }
+  return markers.filter((row) => String(row.change_type || "") === String(state.redline.filterType || ""));
+}
+
+function getRedlineSummaryText(){
+  const source = state.redline.source || resolveRedlineSource();
+  const markers = Array.isArray(state.redline.markers) ? state.redline.markers : [];
+  const lines = [
+    "REDLINE SUMMARY",
+    `Project: ${source?.projectLabel || "N/A"}`,
+    `Location: ${source?.locationLabel || "-"}`,
+    `Sheet: ${source?.sheetLabel || "-"}`,
+    "",
+  ];
+  if (!markers.length){
+    lines.push("No redline markers saved.");
+    return lines.join("\n");
+  }
+  const byType = new Map();
+  markers.forEach((marker) => {
+    const type = String(marker.change_type || "note");
+    if (!byType.has(type)){
+      byType.set(type, []);
+    }
+    byType.get(type).push(marker);
+  });
+  lines.push("COUNTS BY TYPE");
+  REDLINE_CHANGE_TYPES.forEach((type) => {
+    const rows = byType.get(type) || [];
+    if (!rows.length) return;
+    const openCount = rows.filter((row) => normalizeRedlineStatus(row.status) !== "resolved").length;
+    const resolvedCount = rows.length - openCount;
+    lines.push(`- ${getRedlineTypeLabel(type)}: ${rows.length} (Open ${openCount}, Resolved ${resolvedCount})`);
+  });
+  lines.push("");
+  let markerNumber = 1;
+  REDLINE_CHANGE_TYPES.forEach((type) => {
+    const rows = byType.get(type) || [];
+    if (!rows.length) return;
+    lines.push(`${getRedlineTypeLabel(type).toUpperCase()}`);
+    rows.forEach((marker) => {
+      const status = normalizeRedlineStatus(marker.status) === "resolved" ? "RESOLVED" : "OPEN";
+      const creatorName = state.map.userNames.get(marker.created_by) || marker.created_by || "-";
+      lines.push(
+        `#${markerNumber} ${getRedlineTypeLabel(marker.change_type)} [${status}]`,
+        `Old: ${marker.old_value || "-"}`,
+        `New: ${marker.new_value || "-"}`,
+        `Notes: ${marker.notes || marker.title || "-"}`,
+        `Status: ${status}`,
+        `Created By: ${creatorName}`,
+        `Created At: ${formatRedlineDateTime(marker.created_at)}`,
+        ""
+      );
+      markerNumber += 1;
+    });
+  });
+  return lines.join("\n");
+}
+
+async function loadRedlineMarkers({ silent = false } = {}){
+  const source = resolveRedlineSource();
+  state.redline.source = source;
+  if (!source.project_id){
+    state.redline.markers = [];
+    state.redline.sourceKey = source.sourceKey;
+    renderRedlineUi();
+    return;
+  }
+  state.redline.loading = true;
+  state.redline.sourceKey = source.sourceKey;
+  renderRedlineUi();
+  let rows = [];
+  if (isDemo || isDemoUser()){
+    rows = (state.demo.redlineMarkers || []).filter((row) => (
+      String(row.project_id || "") === String(source.project_id || "")
+      && String(row.source_type || "") === String(source.source_type || "")
+      && String(row.location_id || "") === String(source.location_id || "")
+      && String(row.sheet_ref || "") === String(source.sheet_ref || "")
+    ));
+  } else if (state.client){
+    let query = state.client
+      .from("redline_markers")
+      .select("*")
+      .eq("project_id", source.project_id)
+      .eq("source_type", source.source_type)
+      .order("created_at", { ascending: true });
+    query = source.location_id ? query.eq("location_id", source.location_id) : query.is("location_id", null);
+    query = source.sheet_ref ? query.eq("sheet_ref", source.sheet_ref) : query.is("sheet_ref", null);
+    const { data, error } = await query;
+    if (error){
+      if (!silent){
+        toast("Redline load failed", error.message || "Could not load redline markers.", "error");
+      }
+      state.redline.loading = false;
+      return;
+    }
+    rows = data || [];
+  }
+  const creatorIds = Array.from(new Set(rows.map((row) => String(row.created_by || "")).filter(Boolean)));
+  if (creatorIds.length){
+    await loadLocationNames(creatorIds);
+  }
+  state.redline.markers = rows.map((row, idx) => ({
+    ...row,
+    marker_x: Number(row.marker_x) || 0,
+    marker_y: Number(row.marker_y) || 0,
+    status: normalizeRedlineStatus(row.status),
+    marker_number: idx + 1,
+  }));
+  state.redline.loading = false;
+  renderRedlineUi();
+}
+
+function renderRedlineOverlay(){
+  const overlay = $("redlineOverlay");
+  if (!overlay) return;
+  const active = Boolean(state.redline.enabled && state.redline.source?.project_id);
+  overlay.hidden = !active;
+  overlay.classList.toggle("is-add-mode", Boolean(state.redline.addMode));
+  overlay.classList.toggle("is-interactive", Boolean(state.redline.addMode));
+  if (!active){
+    overlay.innerHTML = "";
+    return;
+  }
+  const markers = getRedlineFilteredMarkers();
+  overlay.innerHTML = markers.map((marker) => {
+    const left = Math.max(0, Math.min(1, Number(marker.marker_x) || 0)) * 100;
+    const top = Math.max(0, Math.min(1, Number(marker.marker_y) || 0)) * 100;
+    const resolved = normalizeRedlineStatus(marker.status) === "resolved";
+    return `
+      <button
+        type="button"
+        class="redline-dot${resolved ? " is-resolved" : ""}"
+        style="left:${left.toFixed(4)}%; top:${top.toFixed(4)}%;"
+        data-redline-marker-id="${escapeHtml(String(marker.id || ""))}"
+        title="#${marker.marker_number} ${escapeHtml(getRedlineTypeLabel(marker.change_type))}"
+      >${marker.marker_number}</button>
+    `;
+  }).join("");
+}
+
+function renderRedlineList(){
+  const listEl = $("redlineList");
+  if (!listEl) return;
+  const loading = state.redline.loading;
+  const markers = getRedlineFilteredMarkers();
+  if (loading){
+    listEl.innerHTML = `<div class="muted small">Loading redline markers...</div>`;
+    return;
+  }
+  if (!markers.length){
+    listEl.innerHTML = `<div class="muted small">No markers for this source.</div>`;
+    return;
+  }
+  listEl.innerHTML = markers.map((marker) => {
+    const canManage = canManageRedlineMarker(marker);
+    const status = normalizeRedlineStatus(marker.status);
+    const summary = marker.title || marker.notes || marker.new_value || marker.old_value || "-";
+    return `
+      <article class="redline-item">
+        <div class="redline-item-top">
+          <div><b>#${marker.marker_number}</b> ${escapeHtml(getRedlineTypeLabel(marker.change_type))}</div>
+          <span class="redline-status ${status}">${escapeHtml(status)}</span>
+        </div>
+        <div class="muted small">${escapeHtml(String(summary).slice(0, 130))}</div>
+        <div class="redline-item-actions">
+          <button type="button" class="btn ghost small" data-redline-action="edit" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">Edit</button>
+          ${canManage ? `<button type="button" class="btn danger small" data-redline-action="delete" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">Delete</button>` : ""}
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+function renderRedlineSummary(){
+  const panel = $("redlineSummaryPanel");
+  const textEl = $("redlineSummaryText");
+  if (!panel || !textEl) return;
+  panel.hidden = !state.redline.summaryOpen;
+  textEl.textContent = getRedlineSummaryText();
+}
+
+function renderRedlineUi(){
+  const source = state.redline.source || resolveRedlineSource();
+  state.redline.source = source;
+  const btn = $("btnRedlineMode");
+  const toolbar = $("redlineToolbar");
+  const panel = $("redlinePanel");
+  const addBtn = $("btnRedlineAddMarker");
+  const filter = $("redlineFilterType");
+  const sourceLabel = $("redlineSourceLabel");
+  const markerCount = $("redlineMarkerCount");
+  const unresolvedCount = $("redlineUnresolvedCount");
+  const lastUpdated = $("redlineLastUpdated");
+  const listEl = $("redlineList");
+  if (btn){
+    btn.textContent = state.redline.enabled ? "Redline Active" : "Redline Mode";
+    btn.classList.toggle("secondary", state.redline.enabled);
+  }
+  if (toolbar) toolbar.hidden = !state.redline.enabled;
+  if (panel) panel.hidden = !state.redline.enabled;
+  if (listEl) listEl.hidden = Boolean(state.redline.summaryOpen);
+  if (addBtn){
+    addBtn.classList.toggle("secondary", state.redline.addMode);
+    addBtn.textContent = state.redline.addMode ? "Adding..." : "Add Marker";
+  }
+  if (filter){
+    if (!filter.options.length){
+      filter.innerHTML = `<option value="all">All Types</option>`;
+    }
+    filter.value = state.redline.filterType || "all";
+  }
+  if (sourceLabel){
+    sourceLabel.textContent = getRedlineSourceLabel(source);
+  }
+  const markers = Array.isArray(state.redline.markers) ? state.redline.markers : [];
+  const unresolved = markers.filter((row) => normalizeRedlineStatus(row.status) !== "resolved").length;
+  const latest = markers.reduce((max, row) => {
+    const ts = Date.parse(row.updated_at || row.created_at || 0) || 0;
+    return Math.max(max, ts);
+  }, 0);
+  if (markerCount) markerCount.textContent = String(markers.length);
+  if (unresolvedCount) unresolvedCount.textContent = String(unresolved);
+  if (lastUpdated) lastUpdated.textContent = `Last updated: ${latest ? new Date(latest).toLocaleString() : "-"}`;
+  renderRedlineOverlay();
+  renderRedlineList();
+  renderRedlineSummary();
+}
+
+function ensureRedlineTypeOptions(){
+  const select = $("redlineChangeType");
+  const filter = $("redlineFilterType");
+  if (select && !select.options.length){
+    select.innerHTML = REDLINE_CHANGE_TYPES.map((type) => (
+      `<option value="${escapeHtml(type)}">${escapeHtml(getRedlineTypeLabel(type))}</option>`
+    )).join("");
+  }
+  if (filter && filter.options.length <= 1){
+    const extra = REDLINE_CHANGE_TYPES.map((type) => (
+      `<option value="${escapeHtml(type)}">${escapeHtml(getRedlineTypeLabel(type))}</option>`
+    )).join("");
+    filter.insertAdjacentHTML("beforeend", extra);
+  }
+}
+
+function openRedlineEditor({ marker = null, point = null } = {}){
+  const backdrop = $("redlineEditorBackdrop");
+  if (!backdrop) return;
+  ensureRedlineTypeOptions();
+  const typeEl = $("redlineChangeType");
+  const titleEl = $("redlineTitleInput");
+  const oldEl = $("redlineOldValueInput");
+  const newEl = $("redlineNewValueInput");
+  const notesEl = $("redlineNotesInput");
+  const statusEl = $("redlineStatusInput");
+  const photoEl = $("redlinePhotoInput");
+  const hintEl = $("redlineEditorPhotoHint");
+  const deleteBtn = $("btnRedlineDeleteMarker");
+  state.redline.editorMarkerId = marker?.id || null;
+  if (point){
+    state.redline.draftPoint = {
+      marker_x: Number(point.marker_x) || 0,
+      marker_y: Number(point.marker_y) || 0,
+    };
+  } else if (marker){
+    state.redline.draftPoint = {
+      marker_x: Number(marker.marker_x) || 0,
+      marker_y: Number(marker.marker_y) || 0,
+    };
+  }
+  if (typeEl) typeEl.value = marker?.change_type || REDLINE_CHANGE_TYPES[0];
+  if (titleEl) titleEl.value = marker?.title || "";
+  if (oldEl) oldEl.value = marker?.old_value || "";
+  if (newEl) newEl.value = marker?.new_value || "";
+  if (notesEl) notesEl.value = marker?.notes || "";
+  if (statusEl) statusEl.value = normalizeRedlineStatus(marker?.status || "open");
+  if (photoEl) photoEl.value = "";
+  if (hintEl){
+    const photoPath = String(marker?.photo_url || "").trim();
+    if (!photoPath){
+      hintEl.textContent = "No photo attached.";
+    } else if (/^https?:\/\//i.test(photoPath)){
+      hintEl.innerHTML = `Existing photo: <a href="${escapeHtml(photoPath)}" target="_blank" rel="noopener noreferrer">open</a>`;
+    } else {
+      hintEl.textContent = `Existing photo path: ${photoPath}`;
+    }
+  }
+  if (deleteBtn){
+    const canDelete = Boolean(marker && canManageRedlineMarker(marker));
+    deleteBtn.style.display = canDelete ? "" : "none";
+  }
+  backdrop.hidden = false;
+}
+
+function closeRedlineEditor(){
+  const backdrop = $("redlineEditorBackdrop");
+  if (backdrop) backdrop.hidden = true;
+  state.redline.draftPoint = null;
+  state.redline.editorMarkerId = null;
+}
+
+async function uploadRedlinePhoto(file, source){
+  if (!file || !state.client) return null;
+  return uploadProofPhoto(file, source.location_id || source.project_id || "redline", "redline", {
+    orgId: source.company_id || state.profile?.org_id || null,
+    projectId: source.project_id || null,
+    locationId: source.location_id || source.project_id || null,
+  });
+}
+
+async function saveRedlineMarkerFromEditor(){
+  const typeEl = $("redlineChangeType");
+  const titleEl = $("redlineTitleInput");
+  const oldEl = $("redlineOldValueInput");
+  const newEl = $("redlineNewValueInput");
+  const notesEl = $("redlineNotesInput");
+  const statusEl = $("redlineStatusInput");
+  const photoEl = $("redlinePhotoInput");
+  const saveBtn = $("btnRedlineSaveMarker");
+  const point = state.redline.draftPoint;
+  const source = state.redline.source || resolveRedlineSource();
+  if (!source?.project_id){
+    toast("Project required", "Select a project first.", "error");
+    return;
+  }
+  if (!point){
+    toast("Marker required", "Tap the map to place a marker first.", "error");
+    return;
+  }
+  const changeType = String(typeEl?.value || "").trim();
+  if (!changeType){
+    toast("Type required", "Select a change type.", "error");
+    return;
+  }
+  if (saveBtn) saveBtn.disabled = true;
+  try{
+    const marker = state.redline.markers.find((row) => String(row.id || "") === String(state.redline.editorMarkerId || "")) || null;
+    const file = photoEl?.files?.[0] || null;
+    let photoUrl = marker?.photo_url || null;
+    if (file){
+      const path = await uploadRedlinePhoto(file, source);
+      if (!path){
+        toast("Upload failed", "Could not upload redline photo.", "error");
+        return;
+      }
+      photoUrl = path;
+    }
+    const payload = {
+      company_id: source.company_id || null,
+      site_id: source.site_id || null,
+      project_id: source.project_id,
+      location_id: source.location_id || null,
+      sheet_ref: source.sheet_ref || null,
+      source_type: source.source_type || "sheet",
+      source_page: source.source_page ?? null,
+      marker_x: Number(point.marker_x),
+      marker_y: Number(point.marker_y),
+      change_type: changeType,
+      title: String(titleEl?.value || "").trim() || null,
+      old_value: String(oldEl?.value || "").trim() || null,
+      new_value: String(newEl?.value || "").trim() || null,
+      notes: String(notesEl?.value || "").trim() || null,
+      status: normalizeRedlineStatus(statusEl?.value || "open"),
+      photo_url: photoUrl || null,
+    };
+    if (isDemo || isDemoUser()){
+      const now = nowISO();
+      state.demo.redlineMarkers = state.demo.redlineMarkers || [];
+      if (marker){
+        state.demo.redlineMarkers = state.demo.redlineMarkers.map((row) => (
+          String(row.id || "") === String(marker.id || "")
+            ? { ...row, ...payload, updated_at: now }
+            : row
+        ));
+      } else {
+        state.demo.redlineMarkers.push({
+          id: `demo-redline-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+          created_by: state.user?.id || null,
+          created_at: now,
+          updated_at: now,
+          ...payload,
+        });
+      }
+    } else {
+      if (!state.client){
+        toast("Save failed", "Client not ready.", "error");
+        return;
+      }
+      if (marker){
+        const { error } = await state.client
+          .from("redline_markers")
+          .update(payload)
+          .eq("id", marker.id);
+        if (error){
+          toast("Save failed", error.message || "Could not update marker.", "error");
+          return;
+        }
+      } else {
+        const { error } = await state.client
+          .from("redline_markers")
+          .insert({
+            ...payload,
+            created_by: state.user?.id || null,
+          });
+        if (error){
+          toast("Save failed", error.message || "Could not save marker.", "error");
+          return;
+        }
+      }
+    }
+    closeRedlineEditor();
+    await loadRedlineMarkers({ silent: true });
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+  }
+}
+
+async function deleteRedlineMarker(markerId){
+  const id = String(markerId || "").trim();
+  const marker = state.redline.markers.find((row) => String(row.id || "") === id) || null;
+  if (!marker) return;
+  if (!canManageRedlineMarker(marker)){
+    toast("Not allowed", "Only creator, Admin, or Root can delete this marker.", "error");
+    return;
+  }
+  if (!confirm("Delete this redline marker?")) return;
+  if (isDemo || isDemoUser()){
+    state.demo.redlineMarkers = (state.demo.redlineMarkers || []).filter((row) => String(row.id || "") !== id);
+    await loadRedlineMarkers({ silent: true });
+    return;
+  }
+  if (!state.client){
+    toast("Delete failed", "Client not ready.", "error");
+    return;
+  }
+  const { error } = await state.client
+    .from("redline_markers")
+    .delete()
+    .eq("id", id);
+  if (error){
+    toast("Delete failed", error.message || "Could not delete marker.", "error");
+    return;
+  }
+  await loadRedlineMarkers({ silent: true });
+}
+
+async function copyRedlineSummaryText(){
+  const text = getRedlineSummaryText();
+  try{
+    if (navigator.clipboard?.writeText){
+      await navigator.clipboard.writeText(text);
+      toast("Copied", "Redline summary copied.");
+      return;
+    }
+  } catch {}
+  const el = document.createElement("textarea");
+  el.value = text;
+  el.style.position = "fixed";
+  el.style.left = "-9999px";
+  document.body.appendChild(el);
+  el.select();
+  document.execCommand("copy");
+  el.remove();
+  toast("Copied", "Redline summary copied.");
+}
+
+async function setRedlineMode(nextEnabled){
+  const enabled = Boolean(nextEnabled);
+  state.redline.enabled = enabled;
+  state.redline.addMode = false;
+  state.redline.summaryOpen = false;
+  if (!enabled){
+    closeRedlineEditor();
+    renderRedlineUi();
+    return;
+  }
+  ensureRedlineTypeOptions();
+  await loadRedlineMarkers({ silent: true });
+}
+
+function handleRedlineContextChange(){
+  if (!state.redline.enabled) return;
+  const source = resolveRedlineSource();
+  if (source.sourceKey === state.redline.sourceKey){
+    state.redline.source = source;
+    renderRedlineUi();
+    return;
+  }
+  void loadRedlineMarkers({ silent: true });
+}
+
+function bindRedlineUiHandlers(){
+  const mapCanvas = $("mapCanvas");
+  if (!mapCanvas || mapCanvas.dataset.redlineBound === "1") return;
+  mapCanvas.dataset.redlineBound = "1";
+  const overlay = $("redlineOverlay");
+  if (overlay){
+    overlay.addEventListener("click", (event) => {
+      if (!state.redline.enabled) return;
+      const markerBtn = event.target.closest("[data-redline-marker-id]");
+      if (markerBtn){
+        const markerId = markerBtn.dataset.redlineMarkerId;
+        const marker = state.redline.markers.find((row) => String(row.id || "") === String(markerId || "")) || null;
+        if (marker){
+          openRedlineEditor({ marker });
+        }
+        return;
+      }
+      if (!state.redline.addMode) return;
+      const bounds = overlay.getBoundingClientRect();
+      if (!bounds.width || !bounds.height) return;
+      const markerX = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+      const markerY = Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height));
+      openRedlineEditor({ point: { marker_x: markerX, marker_y: markerY } });
+    });
+  }
+  $("btnRedlineMode")?.addEventListener("click", () => {
+    void setRedlineMode(!state.redline.enabled);
+  });
+  $("btnRedlineExit")?.addEventListener("click", () => {
+    void setRedlineMode(false);
+  });
+  $("btnRedlineAddMarker")?.addEventListener("click", () => {
+    if (!state.redline.enabled) return;
+    state.redline.addMode = !state.redline.addMode;
+    renderRedlineUi();
+  });
+  $("redlineFilterType")?.addEventListener("change", (event) => {
+    state.redline.filterType = String(event.target?.value || "all");
+    renderRedlineUi();
+  });
+  $("btnRedlineSummary")?.addEventListener("click", () => {
+    state.redline.summaryOpen = !state.redline.summaryOpen;
+    renderRedlineUi();
+  });
+  $("btnRedlinePanelClose")?.addEventListener("click", () => {
+    void setRedlineMode(false);
+  });
+  $("btnRedlineCopySummary")?.addEventListener("click", () => {
+    void copyRedlineSummaryText();
+  });
+  $("redlineList")?.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-redline-action]");
+    if (!btn) return;
+    const action = String(btn.dataset.redlineAction || "");
+    const markerId = String(btn.dataset.redlineMarkerId || "");
+    if (!markerId) return;
+    const marker = state.redline.markers.find((row) => String(row.id || "") === markerId) || null;
+    if (action === "edit"){
+      openRedlineEditor({ marker });
+      return;
+    }
+    if (action === "delete"){
+      void deleteRedlineMarker(markerId);
+    }
+  });
+  const closeEditor = () => closeRedlineEditor();
+  $("btnRedlineEditorClose")?.addEventListener("click", closeEditor);
+  $("btnRedlineCancelMarker")?.addEventListener("click", closeEditor);
+  $("btnRedlineSaveMarker")?.addEventListener("click", () => {
+    void saveRedlineMarkerFromEditor();
+  });
+  $("btnRedlineDeleteMarker")?.addEventListener("click", () => {
+    if (!state.redline.editorMarkerId) return;
+    const markerId = state.redline.editorMarkerId;
+    closeRedlineEditor();
+    void deleteRedlineMarker(markerId);
+  });
+  $("redlineEditorBackdrop")?.addEventListener("click", (event) => {
+    if (event.target === $("redlineEditorBackdrop")){
+      closeRedlineEditor();
+    }
+  });
+  ensureRedlineTypeOptions();
+  renderRedlineUi();
 }
 
 function withPopupLoadTimeout(promise, timeoutMs = 5000, fallback = []){
@@ -7102,6 +7752,7 @@ function registerMapUiBindings(){
       }
     });
   }
+  bindRedlineUiHandlers();
 }
 function getKmzLeafletStyle(row, geometryType){
   const layerType = row?.__layer_type || "networkPoints";
@@ -7601,7 +8252,9 @@ async function openMapDetailsDrawerForKmzFeature(featureId){
   const titleEl = $("mapDetailsTitle");
   const bodyEl = $("mapDetailsBody");
   if (!drawer || !titleEl || !bodyEl) return;
+  state.map.kmzSelectedFeatureId = key;
   state.map.materialFeatureId = key;
+  handleRedlineContextChange();
   titleEl.textContent = getKmzPreferredLocationName(row) || "Feature details";
   bodyEl.innerHTML = buildMapDetailsDrawerBodyHtml(row, {
     featureTotals: [],
@@ -7628,6 +8281,7 @@ function closeMapDetailsDrawer(){
   if (!drawer) return;
   drawer.classList.remove("is-open");
   state.map.materialFeatureId = "";
+  handleRedlineContextChange();
 }
 
 async function handleMapDetailsMaterialAdd(featureId, itemKey){
@@ -7689,6 +8343,7 @@ async function openKmzFeaturePopup(featureId, { focusMap = true } = {}){
   setKmzLeafVisibility(key, true);
   syncKmzOverlayGroups();
   state.map.kmzSelectedFeatureId = key;
+  handleRedlineContextChange();
   const layer = featureMeta.layer;
   const map = state.map.instance;
   if (focusMap){
@@ -18409,6 +19064,10 @@ function setActiveProjectById(id){
   if (mapSearch) mapSearch.value = "";
   state.map.searchJumpKey = "";
   setSiteSearchBanner("");
+  state.redline.addMode = false;
+  state.redline.source = null;
+  state.redline.sourceKey = "";
+  state.redline.markers = [];
   saveCurrentProjectPreference(next?.id || null);
   renderProjects();
   loadProjectNodes(state.activeProject?.id || null);
@@ -18441,6 +19100,11 @@ function setActiveProjectById(id){
   refreshMaterialProjectData({ silent: true });
   if (activeViewId === "viewAdmin"){
     loadAdminMaterialSettings();
+  }
+  if (state.redline.enabled){
+    void loadRedlineMarkers({ silent: true });
+  } else {
+    renderRedlineUi();
   }
 }
 
