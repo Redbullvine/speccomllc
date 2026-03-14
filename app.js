@@ -137,6 +137,8 @@ const REDLINE_TYPE_LABELS = {
 
 // Field request: hide engineering KMZ node dots and route/path linework on the live map.
 const HIDE_KMZ_NETWORK_VISUALS = true;
+// Field request: hide blue site dots and aqua span lines from the map.
+const HIDE_MAP_PINS_AND_SPANS = true;
 
 const state = {
   client: null,
@@ -5768,6 +5770,7 @@ function closeRedlineEditor(){
   const backdrop = $("redlineEditorBackdrop");
   if (backdrop) backdrop.hidden = true;
   if (isDebug) dlog("[redline] close editor");
+  state.redline.addMode = false;
   state.redline.draftPoint = null;
   state.redline.draftAttachedNodeId = null;
   state.redline.draftNodeName = null;
@@ -5804,6 +5807,12 @@ function forceHideRedlineUi(){
   $("redlineSummaryPanel") && ($("redlineSummaryPanel").hidden = true);
   $("redlineOverlay") && ($("redlineOverlay").hidden = true);
   closeRedlineEditor();
+}
+
+function exitRedlineMode(){
+  resetRedlineState();
+  forceHideRedlineUi();
+  renderRedlineUi();
 }
 
 async function uploadRedlinePhoto(file, source){
@@ -5984,14 +5993,7 @@ async function setRedlineMode(nextEnabled){
   state.redline.addMode = false;
   state.redline.summaryOpen = false;
   if (!enabled){
-    resetRedlineState();
-    forceHideRedlineUi();
-    try{
-      renderRedlineUi();
-    } catch (error){
-      console.error("[redline] failed to render disabled state", error);
-      forceHideRedlineUi();
-    }
+    exitRedlineMode();
     return;
   }
   ensureRedlineTypeOptions();
@@ -6083,16 +6085,15 @@ function bindRedlineUiHandlers(){
   });
   $("btnRedlineExit")?.addEventListener("click", () => {
     if (isDebug) dlog("[redline] exit click");
-    forceHideRedlineUi();
-    void setRedlineMode(false);
+    exitRedlineMode();
   });
   $("btnRedlineAddMarker")?.addEventListener("click", () => {
     if (!state.redline.enabled) return;
     if (isDebug) dlog("[redline] add marker click");
-    state.redline.addMode = true;
+    state.redline.addMode = !state.redline.addMode;
     const overlayEl = $("redlineOverlay");
     if (overlayEl){
-      overlayEl.classList.add("is-add-mode");
+      overlayEl.classList.toggle("is-add-mode", state.redline.addMode);
     }
     renderRedlineUi();
   });
@@ -6106,8 +6107,7 @@ function bindRedlineUiHandlers(){
     renderRedlineUi();
   });
   $("btnRedlinePanelClose")?.addEventListener("click", () => {
-    forceHideRedlineUi();
-    void setRedlineMode(false);
+    exitRedlineMode();
   });
   $("btnRedlineCopySummary")?.addEventListener("click", () => {
     void copyRedlineSummaryText();
@@ -6127,7 +6127,10 @@ function bindRedlineUiHandlers(){
       void deleteRedlineMarker(markerId);
     }
   });
-  const closeEditor = () => closeRedlineEditor();
+  const closeEditor = () => {
+    closeRedlineEditor();
+    renderRedlineUi();
+  };
   $("btnRedlineEditorClose")?.addEventListener("click", closeEditor);
   $("btnRedlineCancelMarker")?.addEventListener("click", closeEditor);
   $("btnRedlineSaveMarker")?.addEventListener("click", () => {
@@ -8886,6 +8889,16 @@ function updateMapMarkers(rows){
   if (!state.map.instance) return;
   ensureMapLayerRegistry();
   const pinsLayer = state.map.layers?.pins;
+  if (HIDE_MAP_PINS_AND_SPANS){
+    const markers = state.map.markers;
+    markers.forEach((marker) => {
+      if (pinsLayer?.removeLayer) pinsLayer.removeLayer(marker);
+      else if (state.map.instance?.removeLayer) state.map.instance.removeLayer(marker);
+    });
+    markers.clear();
+    state.map.featureMarkerMeta.clear();
+    return;
+  }
   const activeSearch = String(state.mapFilters.search || "").trim();
   const renderRows = activeSearch ? getSiteSearchResultSet().rows : (rows || []);
   const requiredCodesRaw = getCodesRequiredForActiveProject();
@@ -9021,7 +9034,7 @@ function renderDerivedMapLayers(rows){
     });
     boundaryLayer.addLayer(rectangle);
   }
-  if (sites.length >= 2 && spansLayer){
+  if (!HIDE_MAP_PINS_AND_SPANS && sites.length >= 2 && spansLayer){
     const ordered = sites.slice().sort((a, b) => String(a.site?.name || "").localeCompare(String(b.site?.name || "")));
     const linePoints = ordered.map((x) => [x.coords.lat, x.coords.lng]);
     const span = window.L.polyline(linePoints, {
