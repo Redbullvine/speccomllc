@@ -135,6 +135,9 @@ const REDLINE_TYPE_LABELS = {
   issue_found: "Issue Found",
 };
 
+// Field request: hide engineering KMZ node dots and route/path linework on the live map.
+const HIDE_KMZ_NETWORK_VISUALS = true;
+
 const state = {
   client: null,
   session: null,
@@ -7977,6 +7980,9 @@ function getKmzLeafletStyle(row, geometryType){
 function createKmzLeafletLayer(feature, row){
   if (!window.L || !feature?.geometry) return null;
   const geom = feature.geometry;
+  if (HIDE_KMZ_NETWORK_VISUALS && (geom.type === "Point" || geom.type === "LineString" || geom.type === "MultiLineString")){
+    return null;
+  }
   if (geom.type === "Point"){
     const lat = Number(geom.coordinates?.[1]);
     const lng = Number(geom.coordinates?.[0]);
