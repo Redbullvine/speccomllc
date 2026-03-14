@@ -488,6 +488,14 @@
                 <button id="btnRedlineSummary" class="btn ghost small" type="button">Summary</button>
                 <button id="btnRedlineExit" class="btn danger small" type="button">Exit Redline</button>
               </div>
+              <div id="redlineLegend" class="redline-legend" hidden>
+                <div class="small" style="font-weight:800;">Redline Legend</div>
+                <div class="redline-legend-row"><span class="redline-legend-dot" style="background:#ff3b3b;"></span><span>Route Change</span></div>
+                <div class="redline-legend-row"><span class="redline-legend-dot" style="background:#ff8c00;"></span><span>Span Change</span></div>
+                <div class="redline-legend-row"><span class="redline-legend-dot" style="background:#7c3aed;"></span><span>Closure Change</span></div>
+                <div class="redline-legend-row"><span class="redline-legend-dot" style="background:#ffd60a;"></span><span>Slack Added</span></div>
+                <div class="redline-legend-row"><span class="redline-legend-dot" style="background:#16a34a;"></span><span>Resolved</span></div>
+              </div>
               <button id="btnLayersShow" class="map-menu-btn" type="button" aria-label="Show Layers" style="display:none; right:14px; left:auto; top:16px;">
                 Layers
               </button>
@@ -529,6 +537,7 @@
               </div>
               <label class="small" for="redlineChangeType">Change Type</label>
               <select id="redlineChangeType" class="input"></select>
+              <div id="redlineAttachedNodeHint" class="muted small"></div>
               <label class="small" for="redlineTitleInput">Title</label>
               <input id="redlineTitleInput" class="input" type="text" placeholder="Optional title" />
               <label class="small" for="redlineOldValueInput">Old Value</label>

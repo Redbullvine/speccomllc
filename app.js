@@ -308,6 +308,8 @@ const state = {
     sourceKey: "",
     source: null,
     draftPoint: null,
+    draftAttachedNodeId: null,
+    draftNodeName: null,
     editorMarkerId: null,
     summaryOpen: false,
   },
@@ -5327,9 +5329,46 @@ function getRedlineTypeLabel(type){
   return REDLINE_TYPE_LABELS[key] || key || "Unknown";
 }
 
+function getRedlineColor(type, status){
+  if (normalizeRedlineStatus(status) === "resolved"){
+    return "#16a34a";
+  }
+  switch (String(type || "").trim()){
+    case "route_change": return "#ff3b3b";
+    case "span_length_change": return "#ff8c00";
+    case "closure_change": return "#7c3aed";
+    case "slack_added": return "#ffd60a";
+    case "fiber_change": return "#00d4ff";
+    case "splitter_change": return "#ff00ff";
+    case "pole_added": return "#2b7cff";
+    case "pole_removed": return "#888";
+    case "issue_found": return "#ff8c00";
+    case "note": return "#ffffff";
+    default: return "#ff3b3b";
+  }
+}
+
 function normalizeRedlineStatus(status){
   const raw = String(status || "").trim().toLowerCase();
   return raw === "resolved" ? "resolved" : "open";
+}
+
+function buildRedlineMarkerTooltipHtml(marker){
+  const status = normalizeRedlineStatus(marker?.status || "open");
+  const nodeLabel = String(marker?.node_name || marker?.attached_node_id || "").trim();
+  return `
+    <div class="redline-tooltip">
+      <div class="redline-tooltip-title">${escapeHtml(getRedlineTypeLabel(marker?.change_type))}</div>
+      ${nodeLabel ? `<div class="redline-tooltip-line">Node: ${escapeHtml(nodeLabel)}</div>` : ""}
+      <div class="redline-tooltip-line">Old: ${escapeHtml(marker?.old_value || "-")}</div>
+      <div class="redline-tooltip-line">New: ${escapeHtml(marker?.new_value || "-")}</div>
+      <div class="redline-tooltip-line">Status: ${escapeHtml(status === "resolved" ? "Resolved" : "Open")}</div>
+      <span class="redline-tooltip-status ${status}">${escapeHtml(status)}</span>
+      <div style="margin-top:6px;">
+        <button type="button" class="btn ghost small" data-redline-tooltip-edit="${escapeHtml(String(marker?.id || ""))}">Edit</button>
+      </div>
+    </div>
+  `;
 }
 
 function canManageRedlineMarker(marker){
@@ -5434,6 +5473,7 @@ function getRedlineSummaryText(){
       const creatorName = state.map.userNames.get(marker.created_by) || marker.created_by || "-";
       lines.push(
         `#${markerNumber} ${getRedlineTypeLabel(marker.change_type)} [${status}]`,
+        `Node: ${marker.node_name || marker.attached_node_id || "-"}`,
         `Old: ${marker.old_value || "-"}`,
         `New: ${marker.new_value || "-"}`,
         `Notes: ${marker.notes || marker.title || "-"}`,
@@ -5495,6 +5535,8 @@ async function loadRedlineMarkers({ silent = false } = {}){
     ...row,
     marker_x: Number(row.marker_x) || 0,
     marker_y: Number(row.marker_y) || 0,
+    attached_node_id: row.attached_node_id || null,
+    node_name: row.node_name || null,
     status: normalizeRedlineStatus(row.status),
     marker_number: idx + 1,
   }));
@@ -5508,7 +5550,6 @@ function renderRedlineOverlay(){
   const active = Boolean(state.redline.enabled && state.redline.source?.project_id);
   overlay.hidden = !active;
   overlay.classList.toggle("is-add-mode", Boolean(state.redline.addMode));
-  overlay.classList.toggle("is-interactive", Boolean(state.redline.addMode));
   if (!active){
     overlay.innerHTML = "";
     return;
@@ -5517,15 +5558,23 @@ function renderRedlineOverlay(){
   overlay.innerHTML = markers.map((marker) => {
     const left = Math.max(0, Math.min(1, Number(marker.marker_x) || 0)) * 100;
     const top = Math.max(0, Math.min(1, Number(marker.marker_y) || 0)) * 100;
-    const resolved = normalizeRedlineStatus(marker.status) === "resolved";
+    const status = normalizeRedlineStatus(marker.status);
+    const resolved = status === "resolved";
+    const type = String(marker.change_type || "");
+    const color = getRedlineColor(type, status);
+    const textColor = color === "#ffffff" ? "#0f172a" : "#ffffff";
     return `
       <button
         type="button"
-        class="redline-dot${resolved ? " is-resolved" : ""}"
+        class="redline-dot${resolved ? " is-resolved" : ""}${type === "note" ? " is-note" : ""}"
         style="left:${left.toFixed(4)}%; top:${top.toFixed(4)}%;"
         data-redline-marker-id="${escapeHtml(String(marker.id || ""))}"
         title="#${marker.marker_number} ${escapeHtml(getRedlineTypeLabel(marker.change_type))}"
-      >${marker.marker_number}</button>
+      >
+        <span style="position:absolute; inset:0; border-radius:999px; background:${escapeHtml(color)};"></span>
+        <span style="position:relative; z-index:1; color:${escapeHtml(textColor)};">${marker.marker_number}</span>
+        ${buildRedlineMarkerTooltipHtml(marker)}
+      </button>
     `;
   }).join("");
 }
@@ -5547,12 +5596,14 @@ function renderRedlineList(){
     const canManage = canManageRedlineMarker(marker);
     const status = normalizeRedlineStatus(marker.status);
     const summary = marker.title || marker.notes || marker.new_value || marker.old_value || "-";
+    const nodeLabel = String(marker.node_name || marker.attached_node_id || "").trim();
     return `
       <article class="redline-item">
         <div class="redline-item-top">
           <div><b>#${marker.marker_number}</b> ${escapeHtml(getRedlineTypeLabel(marker.change_type))}</div>
           <span class="redline-status ${status}">${escapeHtml(status)}</span>
         </div>
+        ${nodeLabel ? `<div class="muted small">Node: ${escapeHtml(nodeLabel)}</div>` : ""}
         <div class="muted small">${escapeHtml(String(summary).slice(0, 130))}</div>
         <div class="redline-item-actions">
           <button type="button" class="btn ghost small" data-redline-action="edit" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">Edit</button>
@@ -5584,12 +5635,14 @@ function renderRedlineUi(){
   const unresolvedCount = $("redlineUnresolvedCount");
   const lastUpdated = $("redlineLastUpdated");
   const listEl = $("redlineList");
+  const legendEl = $("redlineLegend");
   if (btn){
     btn.textContent = state.redline.enabled ? "Redline Active" : "Redline Mode";
     btn.classList.toggle("secondary", state.redline.enabled);
   }
   if (toolbar) toolbar.hidden = !state.redline.enabled;
   if (panel) panel.hidden = !state.redline.enabled;
+  if (legendEl) legendEl.hidden = !state.redline.enabled;
   if (listEl) listEl.hidden = Boolean(state.redline.summaryOpen);
   if (addBtn){
     addBtn.classList.toggle("secondary", state.redline.addMode);
@@ -5634,7 +5687,7 @@ function ensureRedlineTypeOptions(){
   }
 }
 
-function openRedlineEditor({ marker = null, point = null } = {}){
+function openRedlineEditor({ marker = null, point = null, attachedNodeId = null, nodeName = null } = {}){
   const backdrop = $("redlineEditorBackdrop");
   if (!backdrop) return;
   ensureRedlineTypeOptions();
@@ -5646,6 +5699,7 @@ function openRedlineEditor({ marker = null, point = null } = {}){
   const statusEl = $("redlineStatusInput");
   const photoEl = $("redlinePhotoInput");
   const hintEl = $("redlineEditorPhotoHint");
+  const nodeHintEl = $("redlineAttachedNodeHint");
   const deleteBtn = $("btnRedlineDeleteMarker");
   state.redline.editorMarkerId = marker?.id || null;
   if (point){
@@ -5659,6 +5713,8 @@ function openRedlineEditor({ marker = null, point = null } = {}){
       marker_y: Number(marker.marker_y) || 0,
     };
   }
+  state.redline.draftAttachedNodeId = marker?.attached_node_id || attachedNodeId || null;
+  state.redline.draftNodeName = marker?.node_name || nodeName || null;
   if (typeEl) typeEl.value = marker?.change_type || REDLINE_CHANGE_TYPES[0];
   if (titleEl) titleEl.value = marker?.title || "";
   if (oldEl) oldEl.value = marker?.old_value || "";
@@ -5676,6 +5732,14 @@ function openRedlineEditor({ marker = null, point = null } = {}){
       hintEl.textContent = `Existing photo path: ${photoPath}`;
     }
   }
+  if (nodeHintEl){
+    if (state.redline.draftAttachedNodeId || state.redline.draftNodeName){
+      const label = state.redline.draftNodeName || state.redline.draftAttachedNodeId || "";
+      nodeHintEl.textContent = `Attached node: ${label}`;
+    } else {
+      nodeHintEl.textContent = "Attached node: none (free map marker)";
+    }
+  }
   if (deleteBtn){
     const canDelete = Boolean(marker && canManageRedlineMarker(marker));
     deleteBtn.style.display = canDelete ? "" : "none";
@@ -5687,6 +5751,8 @@ function closeRedlineEditor(){
   const backdrop = $("redlineEditorBackdrop");
   if (backdrop) backdrop.hidden = true;
   state.redline.draftPoint = null;
+  state.redline.draftAttachedNodeId = null;
+  state.redline.draftNodeName = null;
   state.redline.editorMarkerId = null;
 }
 
@@ -5753,6 +5819,8 @@ async function saveRedlineMarkerFromEditor(){
       notes: String(notesEl?.value || "").trim() || null,
       status: normalizeRedlineStatus(statusEl?.value || "open"),
       photo_url: photoUrl || null,
+      attached_node_id: state.redline.draftAttachedNodeId || null,
+      node_name: state.redline.draftNodeName || null,
     };
     if (isDemo || isDemoUser()){
       const now = nowISO();
@@ -5880,6 +5948,40 @@ function handleRedlineContextChange(){
   void loadRedlineMarkers({ silent: true });
 }
 
+function getRedlinePointFromLatLng(latlng){
+  const overlay = $("redlineOverlay");
+  const map = state.map.instance;
+  if (!overlay || !map || !latlng || typeof map.latLngToContainerPoint !== "function"){
+    return null;
+  }
+  const point = map.latLngToContainerPoint(latlng);
+  const bounds = overlay.getBoundingClientRect();
+  if (!bounds.width || !bounds.height) return null;
+  return {
+    marker_x: Math.max(0, Math.min(1, Number(point.x) / bounds.width)),
+    marker_y: Math.max(0, Math.min(1, Number(point.y) / bounds.height)),
+  };
+}
+
+function beginRedlineDraftForKmzNode(featureId, latlng){
+  if (!state.redline.enabled || !state.redline.addMode) return false;
+  const featureKey = String(featureId || "").trim();
+  if (!featureKey) return false;
+  const row = state.map.kmzFeatureRows.get(featureKey) || null;
+  if (!row) return false;
+  state.map.kmzSelectedFeatureId = featureKey;
+  handleRedlineContextChange();
+  const point = getRedlinePointFromLatLng(latlng);
+  if (!point) return false;
+  const nodeName = getKmzPreferredLocationName(row) || row.location_name || featureKey;
+  openRedlineEditor({
+    point,
+    attachedNodeId: featureKey,
+    nodeName,
+  });
+  return true;
+}
+
 function bindRedlineUiHandlers(){
   const mapCanvas = $("mapCanvas");
   if (!mapCanvas || mapCanvas.dataset.redlineBound === "1") return;
@@ -5888,21 +5990,26 @@ function bindRedlineUiHandlers(){
   if (overlay){
     overlay.addEventListener("click", (event) => {
       if (!state.redline.enabled) return;
-      const markerBtn = event.target.closest("[data-redline-marker-id]");
-      if (markerBtn){
-        const markerId = markerBtn.dataset.redlineMarkerId;
-        const marker = state.redline.markers.find((row) => String(row.id || "") === String(markerId || "")) || null;
+      const tooltipEditBtn = event.target.closest("[data-redline-tooltip-edit]");
+      if (tooltipEditBtn){
+        const markerId = String(tooltipEditBtn.dataset.redlineTooltipEdit || "");
+        const marker = state.redline.markers.find((row) => String(row.id || "") === markerId) || null;
         if (marker){
           openRedlineEditor({ marker });
         }
+        event.stopPropagation();
+        event.preventDefault();
         return;
       }
-      if (!state.redline.addMode) return;
-      const bounds = overlay.getBoundingClientRect();
-      if (!bounds.width || !bounds.height) return;
-      const markerX = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
-      const markerY = Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height));
-      openRedlineEditor({ point: { marker_x: markerX, marker_y: markerY } });
+      const markerBtn = event.target.closest("[data-redline-marker-id]");
+      if (markerBtn){
+        document.querySelectorAll(".redline-dot.is-tooltip-open").forEach((el) => {
+          if (el !== markerBtn) el.classList.remove("is-tooltip-open");
+        });
+        markerBtn.classList.toggle("is-tooltip-open");
+        return;
+      }
+      document.querySelectorAll(".redline-dot.is-tooltip-open").forEach((el) => el.classList.remove("is-tooltip-open"));
     });
   }
   $("btnRedlineMode")?.addEventListener("click", () => {
@@ -8457,7 +8564,14 @@ function registerKmzTreeNode(node, parentNodeId, parentGroup){
     const layer = createKmzLeafletLayer(feature, row);
     if (!layer) return;
     const overlayKey = getKmzOverlayKeyForFeature(row, feature);
-    layer.on("click", () => {
+    layer.on("click", (event) => {
+      const latlng = event?.latlng || (typeof layer.getLatLng === "function" ? layer.getLatLng() : null);
+      if (beginRedlineDraftForKmzNode(node.featureId, latlng)){
+        if (window.L?.DomEvent?.stop && event?.originalEvent){
+          window.L.DomEvent.stop(event.originalEvent);
+        }
+        return;
+      }
       void openKmzFeaturePopup(node.featureId, { focusMap: false });
     });
     const visible = state.map.kmzFeatureVisibility.get(node.featureId) !== false;
@@ -8645,6 +8759,13 @@ function ensureMap(){
     const latlng = event?.latlng;
     if (!latlng){
       toast("Pin error", "Invalid map location.");
+      return;
+    }
+    if (state.redline.enabled && state.redline.addMode){
+      const point = getRedlinePointFromLatLng(latlng);
+      if (point){
+        openRedlineEditor({ point });
+      }
       return;
     }
     state.map.pendingLatLng = { lat: latlng.lat, lng: latlng.lng };
