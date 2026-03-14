@@ -6052,7 +6052,11 @@ function bindRedlineUiHandlers(){
   $("btnRedlineAddMarker")?.addEventListener("click", () => {
     if (!state.redline.enabled) return;
     if (isDebug) dlog("[redline] add marker click");
-    state.redline.addMode = !state.redline.addMode;
+    state.redline.addMode = true;
+    const overlayEl = $("redlineOverlay");
+    if (overlayEl){
+      overlayEl.classList.add("is-add-mode");
+    }
     renderRedlineUi();
   });
   $("redlineFilterType")?.addEventListener("change", (event) => {
