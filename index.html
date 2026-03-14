@@ -479,10 +479,37 @@
                   </div>
                 </div>
               </div>
+              <button id="btnRedlineMode" class="btn ghost small redline-entry-btn" type="button">Redline Mode</button>
+              <div id="redlineToolbar" class="redline-toolbar" hidden>
+                <button id="btnRedlineAddMarker" class="btn secondary small" type="button">Add Marker</button>
+                <select id="redlineFilterType" class="input compact redline-filter-select">
+                  <option value="all">All Types</option>
+                </select>
+                <button id="btnRedlineSummary" class="btn ghost small" type="button">Summary</button>
+                <button id="btnRedlineExit" class="btn danger small" type="button">Exit Redline</button>
+              </div>
               <button id="btnLayersShow" class="map-menu-btn" type="button" aria-label="Show Layers" style="display:none; right:14px; left:auto; top:16px;">
                 Layers
               </button>
               <div id="liveMap" class="map-leaflet map"></div>
+              <div id="redlineOverlay" class="redline-overlay" hidden></div>
+              <aside id="redlinePanel" class="redline-panel" hidden>
+                <div class="redline-panel-head">
+                  <div class="site-panel-title">Redline Markers</div>
+                  <button id="btnRedlinePanelClose" class="btn ghost small" type="button">Close</button>
+                </div>
+                <div id="redlineSourceLabel" class="muted small">Select a sheet or location to start.</div>
+                <div class="redline-metrics">
+                  <div class="chip">Markers: <span id="redlineMarkerCount">0</span></div>
+                  <div class="chip">Unresolved: <span id="redlineUnresolvedCount">0</span></div>
+                </div>
+                <div id="redlineLastUpdated" class="muted small">Last updated: -</div>
+                <div id="redlineList" class="redline-list"></div>
+                <div id="redlineSummaryPanel" class="redline-summary-panel" hidden>
+                  <div id="redlineSummaryText" class="redline-summary-text"></div>
+                  <button id="btnRedlineCopySummary" class="btn secondary small" type="button">Copy Summary</button>
+                </div>
+              </aside>
             </main>
             <aside id="mapDetailsDrawer" class="map-details-drawer">
               <div class="map-details-header">
@@ -493,6 +520,37 @@
                 <div class="muted small">Select a feature and click View Details.</div>
               </div>
             </aside>
+          </div>
+          <div id="redlineEditorBackdrop" class="redline-editor-backdrop" hidden>
+            <div class="card redline-editor">
+              <div class="row" style="justify-content:space-between; align-items:center; gap:10px;">
+                <div class="site-panel-title">Redline Marker</div>
+                <button id="btnRedlineEditorClose" class="btn ghost small" type="button">Close</button>
+              </div>
+              <label class="small" for="redlineChangeType">Change Type</label>
+              <select id="redlineChangeType" class="input"></select>
+              <label class="small" for="redlineTitleInput">Title</label>
+              <input id="redlineTitleInput" class="input" type="text" placeholder="Optional title" />
+              <label class="small" for="redlineOldValueInput">Old Value</label>
+              <input id="redlineOldValueInput" class="input" type="text" placeholder="Old value" />
+              <label class="small" for="redlineNewValueInput">New Value</label>
+              <input id="redlineNewValueInput" class="input" type="text" placeholder="New value" />
+              <label class="small" for="redlineNotesInput">Notes</label>
+              <textarea id="redlineNotesInput" class="input" rows="4" placeholder="Field note"></textarea>
+              <label class="small" for="redlineStatusInput">Status</label>
+              <select id="redlineStatusInput" class="input">
+                <option value="open">Open</option>
+                <option value="resolved">Resolved</option>
+              </select>
+              <label class="small" for="redlinePhotoInput">Photo (optional)</label>
+              <input id="redlinePhotoInput" class="input" type="file" accept="image/*" />
+              <div id="redlineEditorPhotoHint" class="muted small"></div>
+              <div class="row" style="justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+                <button id="btnRedlineDeleteMarker" class="btn danger small" type="button" style="display:none;">Delete</button>
+                <button id="btnRedlineCancelMarker" class="btn ghost small" type="button">Cancel</button>
+                <button id="btnRedlineSaveMarker" class="btn secondary small" type="button">Save Marker</button>
+              </div>
+            </div>
           </div>
         </section>
 

@@ -109,6 +109,32 @@ const SHOWCASE_MODULES = [
   { key: "platform_messages", title: "Messaging", group: "network", chips: ["Main board", "Direct messages", "Team coordination"], summary: "Communication and updates.", action: { type: "modal", target: "messages" }, rolesAllowed: Object.values(ROLES) },
 ];
 
+const REDLINE_CHANGE_TYPES = [
+  "route_change",
+  "span_length_change",
+  "closure_change",
+  "slack_added",
+  "fiber_change",
+  "splitter_change",
+  "pole_added",
+  "pole_removed",
+  "note",
+  "issue_found",
+];
+
+const REDLINE_TYPE_LABELS = {
+  route_change: "Route Change",
+  span_length_change: "Span Length Change",
+  closure_change: "Closure Change",
+  slack_added: "Slack Added",
+  fiber_change: "Fiber Change",
+  splitter_change: "Splitter Change",
+  pole_added: "Pole Added",
+  pole_removed: "Pole Removed",
+  note: "Note",
+  issue_found: "Issue Found",
+};
+
 const state = {
   client: null,
   session: null,
@@ -273,6 +299,18 @@ const state = {
     pendingLatLng: null,
     importPreviewMarkers: [],
   },
+  redline: {
+    enabled: false,
+    addMode: false,
+    loading: false,
+    markers: [],
+    filterType: "all",
+    sourceKey: "",
+    source: null,
+    draftPoint: null,
+    editorMarkerId: null,
+    summaryOpen: false,
+  },
   pinOverview: {
     open: false,
   },
@@ -332,6 +370,7 @@ const state = {
     siteCodes: [],
     siteEntries: [],
     invoices: [],
+    redlineMarkers: [],
     usageEvents: [],
     unitTypes: [],
     allowedQuantities: [],

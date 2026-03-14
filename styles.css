@@ -1207,6 +1207,158 @@ a{color:inherit; text-decoration:none;}
 .map-canvas .leaflet-right{
   right:12px;
 }
+.redline-entry-btn{
+  position:absolute;
+  top:14px;
+  right:14px;
+  z-index:980;
+}
+.redline-toolbar{
+  position:absolute;
+  top:60px;
+  right:14px;
+  z-index:980;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:rgba(7,20,38,.92);
+  box-shadow:0 12px 28px rgba(0,0,0,.28);
+}
+.redline-filter-select{
+  width:170px;
+}
+.redline-overlay{
+  position:absolute;
+  inset:0;
+  z-index:970;
+}
+.redline-overlay.is-add-mode{
+  cursor:crosshair;
+}
+.redline-dot{
+  position:absolute;
+  transform:translate(-50%, -50%);
+  width:26px;
+  height:26px;
+  border-radius:999px;
+  border:2px solid #ffffff;
+  background:#dc2626;
+  color:#ffffff;
+  font-size:12px;
+  font-weight:800;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 8px 16px rgba(0,0,0,.35);
+}
+.redline-dot.is-resolved{
+  background:#166534;
+}
+.redline-panel{
+  position:absolute;
+  right:14px;
+  top:112px;
+  width:min(360px, calc(100% - 28px));
+  max-height:calc(100% - 126px);
+  z-index:985;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:rgba(7,20,38,.96);
+  box-shadow:0 14px 32px rgba(0,0,0,.3);
+  padding:10px;
+}
+.redline-panel-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.redline-metrics{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+.redline-list{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:auto;
+  display:grid;
+  gap:8px;
+}
+.redline-item{
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:8px;
+  background:rgba(10,27,49,.82);
+  display:grid;
+  gap:6px;
+}
+.redline-item-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.redline-item-actions{
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.redline-status{
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  border-radius:999px;
+  padding:2px 7px;
+}
+.redline-status.open{
+  background:rgba(220,38,38,.15);
+  color:#fecaca;
+}
+.redline-status.resolved{
+  background:rgba(22,101,52,.2);
+  color:#bbf7d0;
+}
+.redline-summary-panel{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:auto;
+  display:grid;
+  gap:8px;
+}
+.redline-summary-text{
+  white-space:pre-wrap;
+  font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size:12px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:8px;
+  background:rgba(5,14,28,.88);
+}
+.redline-editor-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:1100;
+  background:rgba(3,10,19,.72);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:14px;
+}
+.redline-editor{
+  width:min(460px, 96vw);
+  max-height:90vh;
+  overflow:auto;
+  display:grid;
+  gap:6px;
+}
 .sc-hover-tooltip{
   border:1px solid rgba(0,0,0,0.12);
   border-radius:10px;
@@ -1815,6 +1967,33 @@ a{color:inherit; text-decoration:none;}
   }
   .pin-overview-task-number{
     font-size:34px;
+  }
+  .redline-entry-btn{
+    top:58px;
+  }
+  .redline-toolbar{
+    top:auto;
+    bottom:12px;
+    left:12px;
+    right:12px;
+    flex-wrap:wrap;
+  }
+  .redline-filter-select{
+    flex:1 1 160px;
+    width:auto;
+  }
+  .redline-panel{
+    left:10px;
+    right:10px;
+    top:auto;
+    bottom:70px;
+    width:auto;
+    max-height:58%;
+  }
+  .redline-editor{
+    width:100%;
+    max-width:100%;
+    max-height:94vh;
   }
 }
 
@@ -3215,5 +3394,22 @@ body.map-mode .map-canvas .leaflet-control-zoom a{
   body.map-mode .map-canvas .leaflet-top.leaflet-left{
     bottom:12px;
     right:10px;
+  }
+  body.map-mode .redline-entry-btn{
+    top:10px;
+    right:10px;
+  }
+  body.map-mode .redline-toolbar{
+    left:10px;
+    right:10px;
+    bottom:10px;
+    top:auto;
+  }
+  body.map-mode .redline-panel{
+    left:10px;
+    right:10px;
+    bottom:68px;
+    top:auto;
+    max-height:52%;
   }
 }
