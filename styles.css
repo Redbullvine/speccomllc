@@ -1239,9 +1239,6 @@ a{color:inherit; text-decoration:none;}
 .redline-overlay.is-add-mode{
   cursor:crosshair;
 }
-.redline-overlay.is-interactive{
-  pointer-events:auto;
-}
 .redline-dot{
   position:absolute;
   transform:translate(-50%, -50%);

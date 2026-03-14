@@ -1741,6 +1741,10 @@ function applyDrawerUiState(){
 
 function setDrawerOpen(openBool, { persist = true } = {}){
   const open = Boolean(openBool);
+  const redlineBackdrop = $("redlineEditorBackdrop");
+  if (open && redlineBackdrop && !redlineBackdrop.hidden){
+    closeRedlineEditor();
+  }
   state.map.drawerOpen = open;
   state.map.panelVisible = open;
   if (persist){
@@ -5550,6 +5554,7 @@ function renderRedlineOverlay(){
   const active = Boolean(state.redline.enabled && state.redline.source?.project_id);
   overlay.hidden = !active;
   overlay.classList.toggle("is-add-mode", Boolean(state.redline.addMode));
+  overlay.classList.remove("is-interactive");
   if (!active){
     overlay.innerHTML = "";
     return;
@@ -5690,6 +5695,8 @@ function ensureRedlineTypeOptions(){
 function openRedlineEditor({ marker = null, point = null, attachedNodeId = null, nodeName = null } = {}){
   const backdrop = $("redlineEditorBackdrop");
   if (!backdrop) return;
+  setDrawerOpen(false, { persist: false });
+  if (isDebug) dlog("[redline] open editor", { markerId: marker?.id || null, attachedNodeId: attachedNodeId || marker?.attached_node_id || null });
   ensureRedlineTypeOptions();
   const typeEl = $("redlineChangeType");
   const titleEl = $("redlineTitleInput");
@@ -5750,6 +5757,7 @@ function openRedlineEditor({ marker = null, point = null, attachedNodeId = null,
 function closeRedlineEditor(){
   const backdrop = $("redlineEditorBackdrop");
   if (backdrop) backdrop.hidden = true;
+  if (isDebug) dlog("[redline] close editor");
   state.redline.draftPoint = null;
   state.redline.draftAttachedNodeId = null;
   state.redline.draftNodeName = null;
@@ -5791,6 +5799,7 @@ async function saveRedlineMarkerFromEditor(){
   }
   if (saveBtn) saveBtn.disabled = true;
   try{
+    if (isDebug) dlog("[redline] save marker click", { editing: Boolean(state.redline.editorMarkerId) });
     const marker = state.redline.markers.find((row) => String(row.id || "") === String(state.redline.editorMarkerId || "")) || null;
     const file = photoEl?.files?.[0] || null;
     let photoUrl = marker?.photo_url || null;
@@ -5869,6 +5878,9 @@ async function saveRedlineMarkerFromEditor(){
     }
     closeRedlineEditor();
     await loadRedlineMarkers({ silent: true });
+  } catch (error){
+    console.error("[redline] save marker failed", error);
+    toast("Save failed", getDetailedErrorMessage(error) || "Unexpected error while saving marker.", "error");
   } finally {
     if (saveBtn) saveBtn.disabled = false;
   }
@@ -5925,6 +5937,7 @@ async function copyRedlineSummaryText(){
 
 async function setRedlineMode(nextEnabled){
   const enabled = Boolean(nextEnabled);
+  if (isDebug) dlog("[redline] set mode", { enabled });
   state.redline.enabled = enabled;
   state.redline.addMode = false;
   state.redline.summaryOpen = false;
@@ -6013,13 +6026,16 @@ function bindRedlineUiHandlers(){
     });
   }
   $("btnRedlineMode")?.addEventListener("click", () => {
+    if (isDebug) dlog("[redline] mode button click");
     void setRedlineMode(!state.redline.enabled);
   });
   $("btnRedlineExit")?.addEventListener("click", () => {
+    if (isDebug) dlog("[redline] exit click");
     void setRedlineMode(false);
   });
   $("btnRedlineAddMarker")?.addEventListener("click", () => {
     if (!state.redline.enabled) return;
+    if (isDebug) dlog("[redline] add marker click");
     state.redline.addMode = !state.redline.addMode;
     renderRedlineUi();
   });
@@ -6028,6 +6044,7 @@ function bindRedlineUiHandlers(){
     renderRedlineUi();
   });
   $("btnRedlineSummary")?.addEventListener("click", () => {
+    if (isDebug) dlog("[redline] summary click");
     state.redline.summaryOpen = !state.redline.summaryOpen;
     renderRedlineUi();
   });
@@ -6056,6 +6073,7 @@ function bindRedlineUiHandlers(){
   $("btnRedlineEditorClose")?.addEventListener("click", closeEditor);
   $("btnRedlineCancelMarker")?.addEventListener("click", closeEditor);
   $("btnRedlineSaveMarker")?.addEventListener("click", () => {
+    if (isDebug) dlog("[redline] save button click");
     void saveRedlineMarkerFromEditor();
   });
   $("btnRedlineDeleteMarker")?.addEventListener("click", () => {
