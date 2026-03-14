@@ -1437,6 +1437,10 @@ a{color:inherit; text-decoration:none;}
   justify-content:center;
   padding:14px;
 }
+.redline-editor-backdrop[hidden]{
+  display:none !important;
+  pointer-events:none !important;
+}
 .redline-editor{
   width:min(460px, 96vw);
   max-height:90vh;

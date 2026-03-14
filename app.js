@@ -5695,6 +5695,13 @@ function ensureRedlineTypeOptions(){
 function openRedlineEditor({ marker = null, point = null, attachedNodeId = null, nodeName = null } = {}){
   const backdrop = $("redlineEditorBackdrop");
   if (!backdrop) return;
+  const isEdit = Boolean(marker && marker.id);
+  if (!isEdit){
+    if (!state.redline.enabled || !state.redline.addMode) return;
+    if (!point || !Number.isFinite(Number(point.marker_x)) || !Number.isFinite(Number(point.marker_y))) return;
+  } else if (!state.redline.enabled){
+    return;
+  }
   setDrawerOpen(false, { persist: false });
   if (isDebug) dlog("[redline] open editor", { markerId: marker?.id || null, attachedNodeId: attachedNodeId || marker?.attached_node_id || null });
   ensureRedlineTypeOptions();
@@ -5943,6 +5950,11 @@ async function setRedlineMode(nextEnabled){
   state.redline.summaryOpen = false;
   if (!enabled){
     closeRedlineEditor();
+    state.redline.draftPoint = null;
+    state.redline.draftAttachedNodeId = null;
+    state.redline.draftNodeName = null;
+    state.redline.editorMarkerId = null;
+    document.querySelectorAll(".redline-dot.is-tooltip-open").forEach((el) => el.classList.remove("is-tooltip-open"));
     renderRedlineUi();
     return;
   }
@@ -5978,6 +5990,8 @@ function getRedlinePointFromLatLng(latlng){
 
 function beginRedlineDraftForKmzNode(featureId, latlng){
   if (!state.redline.enabled || !state.redline.addMode) return false;
+  const backdrop = $("redlineEditorBackdrop");
+  if (backdrop && !backdrop.hidden) return false;
   const featureKey = String(featureId || "").trim();
   if (!featureKey) return false;
   const row = state.map.kmzFeatureRows.get(featureKey) || null;
@@ -6087,6 +6101,15 @@ function bindRedlineUiHandlers(){
       closeRedlineEditor();
     }
   });
+  closeRedlineEditor();
+  state.redline.enabled = false;
+  state.redline.addMode = false;
+  state.redline.summaryOpen = false;
+  state.redline.draftPoint = null;
+  state.redline.draftAttachedNodeId = null;
+  state.redline.draftNodeName = null;
+  state.redline.editorMarkerId = null;
+  document.querySelectorAll(".redline-dot.is-tooltip-open").forEach((el) => el.classList.remove("is-tooltip-open"));
   ensureRedlineTypeOptions();
   renderRedlineUi();
 }
@@ -8780,6 +8803,10 @@ function ensureMap(){
       return;
     }
     if (state.redline.enabled && state.redline.addMode){
+      const backdrop = $("redlineEditorBackdrop");
+      if (backdrop && !backdrop.hidden){
+        return;
+      }
       const point = getRedlinePointFromLatLng(latlng);
       if (point){
         openRedlineEditor({ point });
