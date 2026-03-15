@@ -83,6 +83,7 @@ const DEFAULT_ROLE = ROLES.USER_LEVEL_1;
 
 const SHOWCASE_GROUPS = [
   { key: "office", title: "Office", summary: "Invoicing, billing review, reporting, approvals." },
+  { key: "dispatch", title: "Dispatch", summary: "Work order planning, assignments, queue control, and routing prep." },
   { key: "admin", title: "Admin", summary: "User roles, settings, project controls, permission overview." },
   { key: "splicer", title: "Splicer", summary: "Splice work, closures, node workflow, quantity controls." },
   { key: "tech", title: "Tech", summary: "Trouble tickets, service orders, timesheets, close-out flow." },
@@ -103,7 +104,7 @@ const SHOWCASE_MODULES = [
   { key: "tech_timesheet", title: "Timesheet", group: "tech", chips: ["Clock in/out", "Event log", "Daily summary"], summary: "Technician time tracking and activity.", action: { type: "view", target: "viewTechnician" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_1, ROLES.SUPPORT] },
   { key: "warehouse_catalog", title: "Material Search", group: "warehouse", chips: ["Catalog search", "Parts lookup", "Item metadata"], summary: "Search parts and material references.", action: { type: "view", target: "viewCatalog" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
   { key: "warehouse_inventory", title: "Inventory Controls", group: "warehouse", chips: ["Inventory table", "SMS alerts", "Assigned stock"], summary: "Warehouse and stock visibility.", action: { type: "view", target: "viewAdmin" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN] },
-  { key: "dispatch_planner", title: "Dispatch / Planner", group: "supervisor", chips: ["Create work order", "Assignments", "Queue filters"], summary: "Create, schedule, assign, and manage the work order queue.", action: { type: "view", target: "viewDispatch" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
+  { key: "dispatch_planner", title: "Dispatch Board", group: "dispatch", chips: ["Create work order", "Assignments", "Queue filters"], summary: "Create, schedule, assign, and manage the work order queue.", action: { type: "view", target: "viewDispatch" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
   { key: "supervisor_dashboard", title: "Supervisor Oversight", group: "supervisor", chips: ["KPI status", "Blocked jobs", "Daily summary"], summary: "Supervisor progress tracking, escalations, and exception oversight.", action: { type: "view", target: "viewSupervisor" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
   { key: "supervisor_photos", title: "Field Verification", group: "supervisor", chips: ["Field photos", "Proof checks", "Readiness"], summary: "Photo and proof validation workflows.", action: { type: "view", target: "viewPhotos" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
   { key: "network_map", title: "Map Workspace", group: "network", chips: ["KMZ map", "Site pins", "Route points"], summary: "KMZ map and geospatial field tools.", action: { type: "view", target: "viewMap" }, rolesAllowed: Object.values(ROLES) },
@@ -11814,20 +11815,24 @@ async function loadDispatchWorkOrders(){
 function renderDispatchTable(){
   const wrap = $("dispatchTable");
   if (!wrap){
+    renderDispatchWorkspaceSummary();
     renderSupervisorOverview();
     return;
   }
   if (!state.activeProject){
     wrap.innerHTML = `<div class="muted small">${t("laborNoProject")}</div>`;
+    renderDispatchWorkspaceSummary();
     renderSupervisorOverview();
     return;
   }
   if (!canViewDispatch()){
     wrap.innerHTML = `<div class="muted small">Dispatch is limited to privileged roles.</div>`;
+    renderDispatchWorkspaceSummary();
     renderSupervisorOverview();
     return;
   }
   const rows = state.workOrders.dispatch || [];
+  renderDispatchWorkspaceSummary();
   if (!rows.length){
     wrap.innerHTML = `<div class="muted small">${t("woNoOrders")}</div>`;
     renderSupervisorOverview();
@@ -11876,6 +11881,39 @@ function renderDispatchTable(){
         }).join("")}
       </tbody>
     </table>
+  `;
+}
+
+function renderDispatchWorkspaceSummary(){
+  const wrap = $("dispatchWorkspaceSummary");
+  if (!wrap) return;
+  const rows = state.workOrders.dispatch || [];
+  const active = rows.filter((row) => ["NEW", "ASSIGNED", "EN_ROUTE", "ON_SITE", "IN_PROGRESS"].includes(String(row.status || "").toUpperCase())).length;
+  const blocked = rows.filter((row) => String(row.status || "").toUpperCase() === "BLOCKED").length;
+  const unassigned = rows.filter((row) => !row.assigned_to_user_id).length;
+  const complete = rows.filter((row) => String(row.status || "").toUpperCase() === "COMPLETE").length;
+  wrap.innerHTML = `
+    <div class="note">
+      <div style="font-weight:900;">Active Queue</div>
+      <div class="muted small">Current work order load by status.</div>
+      <div class="row" style="margin-top:8px;">
+        <span class="chip"><span class="dot warn"></span><span>Active: ${active}</span></span>
+        <span class="chip"><span class="dot bad"></span><span>Blocked: ${blocked}</span></span>
+        <span class="chip"><span class="dot ok"></span><span>Complete: ${complete}</span></span>
+      </div>
+    </div>
+    <div class="note">
+      <div style="font-weight:900;">Assignment Tools</div>
+      <div class="muted small">Create, assign, reassign, and prioritize field jobs.</div>
+      <div class="row" style="margin-top:8px;">
+        <span class="chip"><span class="dot warn"></span><span>Unassigned: ${unassigned}</span></span>
+        <span class="chip"><span class="dot ok"></span><span>Dispatch Ready</span></span>
+      </div>
+    </div>
+    <div class="note" style="grid-column:1 / -1;">
+      <div style="font-weight:900;">Live Workforce Map (Coming Soon)</div>
+      <div class="muted small">Future dispatch map will show worker code, status, current job, and last updated time.</div>
+    </div>
   `;
 }
 
@@ -23239,6 +23277,12 @@ function renderDemoShowcaseHome(){
       summary: "Invoice processing, reports, and billing review operations.",
       chips: ["Invoices", "Reports", "Billing review"],
       action: { type: "view", target: "viewInvoices" },
+    },
+    {
+      title: "Dispatch Board",
+      summary: "Create work orders, assign crews, manage queue, and prepare for live routing visibility.",
+      chips: ["Create work order", "Assign / reassign", "Dispatch queue", "Live map"],
+      action: { type: "view", target: "viewDispatch", fallbackViews: ["viewDashboard"] },
     },
     {
       title: "Warehouse",

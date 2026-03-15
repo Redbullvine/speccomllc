@@ -403,6 +403,20 @@
                 <input id="dispatchCsvInput" type="file" accept=".csv,text/csv" style="display:none;" />
               </div>
             </div>
+            <div id="dispatchWorkspaceSummary" class="grid cols-2" style="margin-top:12px;">
+              <div class="note">
+                <div style="font-weight:900;">Active Queue</div>
+                <div class="muted small">Current work order load by status.</div>
+              </div>
+              <div class="note">
+                <div style="font-weight:900;">Assignment Tools</div>
+                <div class="muted small">Create, assign, reassign, and prioritize field jobs.</div>
+              </div>
+              <div class="note" style="grid-column:1 / -1;">
+                <div style="font-weight:900;">Live Workforce Map (Coming Soon)</div>
+                <div class="muted small">Future dispatch map will show worker code, status, current job, and last updated time.</div>
+              </div>
+            </div>
             <div class="row" style="flex-wrap:wrap; margin-top:12px;">
               <input id="dispatchDateFilter" class="input" type="date" />
               <select id="dispatchStatusFilter" class="input">
