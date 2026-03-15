@@ -7647,6 +7647,14 @@ function setMapBasemap(nextBasemap){
 function registerMapUiBindings(){
   if (state.map.uiBound) return;
   state.map.uiBound = true;
+  const applyPlacesSearch = ({ syncMap = true } = {}) => {
+    const treeSearchInput = $("kmzTreeSearch");
+    const rawValue = String(treeSearchInput?.value || "").trim();
+    state.map.kmzTreeSearch = rawValue;
+    renderMapLayerPanel();
+    state.mapFilters.search = rawValue;
+    scheduleLocationSearchRefresh({ syncMap });
+  };
   const mapViewButton = $("mapViewDropdownButton");
   if (mapViewButton){
     mapViewButton.addEventListener("click", (event) => {
@@ -7823,14 +7831,18 @@ function registerMapUiBindings(){
       if (state.map.kmzTreeSearchDebounceId){
         clearTimeout(state.map.kmzTreeSearchDebounceId);
       }
-      const nextValue = String(e.target?.value || "");
       state.map.kmzTreeSearchDebounceId = setTimeout(() => {
         state.map.kmzTreeSearchDebounceId = null;
-        state.map.kmzTreeSearch = nextValue;
-        renderMapLayerPanel();
+        applyPlacesSearch({ syncMap: false });
       }, 180);
     });
+    treeSearch.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      applyPlacesSearch({ syncMap: true });
+    });
   }
+  $("btnKmzTreeSearch")?.addEventListener("click", () => applyPlacesSearch({ syncMap: true }));
   const treeRoot = $("kmzFolderTree");
   if (treeRoot){
     treeRoot.addEventListener("click", (e) => {

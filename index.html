@@ -105,14 +105,17 @@
           <div class="sidebar-body gis-body">
             <section id="sidebarTabData" class="sidebar-tab active">
               <div class="map-layer-card gis-panel">
-                <label class="muted small" for="kmzTreeSearch">Search network points</label>
-                <input
-                  id="kmzTreeSearch"
-                  class="input compact"
-                  type="text"
-                  placeholder="Search network points..."
-                  aria-label="Search network points"
-                />
+                <label class="muted small" for="kmzTreeSearch">Search locations / network points</label>
+                <div class="map-search-row">
+                  <input
+                    id="kmzTreeSearch"
+                    class="input compact"
+                    type="text"
+                    placeholder="Search locations / network points..."
+                    aria-label="Search locations / network points"
+                  />
+                  <button id="btnKmzTreeSearch" class="btn secondary small" type="button">Search</button>
+                </div>
                 <div id="kmzFolderTree" class="kmz-tree" style="margin-top:10px;"></div>
               </div>
             </section>
