@@ -396,7 +396,7 @@
         <section id="viewDispatch" class="view">
           <div class="card">
             <div class="row" style="justify-content:space-between; align-items:center;">
-              <h2 data-i18n="dispatchTitle">Dispatch</h2>
+              <h2 data-i18n="dispatchTitle">Dispatch / Planner</h2>
               <div class="row" style="flex-wrap:wrap;">
                 <button id="btnDispatchCreate" class="btn" data-action="dispatchCreate" data-i18n="dispatchCreate">Create work order</button>
                 <button id="btnDispatchImportCsv" class="btn ghost" data-action="dispatchImportCsv" data-i18n="dispatchImportCsv">Import CSV</button>
@@ -416,6 +416,40 @@
             </div>
             <div id="dispatchImportWarnings" class="note warning" style="display:none; margin-top:12px;"></div>
             <div id="dispatchTable" style="margin-top:12px;"></div>
+          </div>
+        </section>
+
+        <section id="viewSupervisor" class="view">
+          <div class="grid cols-2">
+            <div class="card">
+              <div class="row" style="justify-content:space-between; align-items:center;">
+                <h2>Supervisor Oversight</h2>
+                <div class="row">
+                  <button id="btnSupervisorOpenDispatch" class="btn ghost small" type="button">Open Dispatch / Planner</button>
+                  <button id="btnSupervisorOpenDailyReport" class="btn ghost small" type="button">Daily Report</button>
+                </div>
+              </div>
+              <div class="muted small">Monitor active jobs, blocked work, escalations, and crew progress without acting as primary dispatcher.</div>
+              <div id="supervisorMetrics" style="margin-top:12px;"></div>
+            </div>
+            <div class="card">
+              <h2>Escalations / Complaints</h2>
+              <div id="supervisorEscalations" class="note" style="margin-top:10px;">
+                <div style="font-weight:900;">Placeholder</div>
+                <div class="muted small">Track customer complaints, blocked job escalations, and exception follow-ups here.</div>
+              </div>
+              <div class="hr"></div>
+              <h3>Blocked Jobs</h3>
+              <div id="supervisorBlocked" style="margin-top:8px;"></div>
+            </div>
+          </div>
+          <div class="card" style="margin-top:12px;">
+            <h2>Active Jobs</h2>
+            <div id="supervisorActiveJobs" style="margin-top:10px;"></div>
+          </div>
+          <div class="card" style="margin-top:12px;">
+            <h2>Crew Status</h2>
+            <div id="supervisorCrewStatus" style="margin-top:10px;"></div>
           </div>
         </section>
 
@@ -811,6 +845,8 @@
           <div class="muted small menu-title">Navigate</div>
           <button class="menu-link" type="button" data-view="viewDashboard">Home</button>
           <button class="menu-link" type="button" data-view="viewTechnician" data-i18n="timesheetNav">Timesheet</button>
+          <button class="menu-link" type="button" data-view="viewDispatch">Dispatch / Planner</button>
+          <button class="menu-link" type="button" data-view="viewSupervisor">Supervisor</button>
           <button class="menu-link" type="button" data-view="viewInvoices">Invoicing</button>
           <button class="menu-link" type="button" data-view="viewCatalog">Material Search</button>
           <button id="btnMenuMessages" class="menu-link" type="button">Messaging</button>

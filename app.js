@@ -99,11 +99,12 @@ const SHOWCASE_MODULES = [
   { key: "admin_project_controls", title: "Project Controls", group: "admin", chips: ["Create project", "Access grants", "Project governance"], summary: "Project and permission administration.", action: { type: "modal", target: "projects" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER] },
   { key: "splicer_work", title: "Splice Work", group: "splicer", chips: ["Site workspace", "Closures", "Fiber counts"], summary: "Track splice execution and documentation.", action: { type: "view", target: "viewNodes" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
   { key: "splicer_quantities", title: "Allowed vs Billed", group: "splicer", chips: ["Allowed quantities", "Usage events", "Proof readiness"], summary: "Allowed quantity tracking, usage, and billing readiness.", action: { type: "view", target: "viewBilling" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
-  { key: "tech_service", title: "Service + Trouble", group: "tech", chips: ["Trouble tickets", "Service orders", "Close-out"], summary: "Dispatch, service orders, and close-out workflow.", action: { type: "view", target: "viewDispatch" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_1, ROLES.SUPPORT] },
+  { key: "tech_service", title: "Service + Trouble", group: "tech", chips: ["Trouble tickets", "Service orders", "Close-out"], summary: "Service orders and close-out workflow.", action: { type: "view", target: "viewTechnician" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_1, ROLES.SUPPORT] },
   { key: "tech_timesheet", title: "Timesheet", group: "tech", chips: ["Clock in/out", "Event log", "Daily summary"], summary: "Technician time tracking and activity.", action: { type: "view", target: "viewTechnician" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_1, ROLES.SUPPORT] },
   { key: "warehouse_catalog", title: "Material Search", group: "warehouse", chips: ["Catalog search", "Parts lookup", "Item metadata"], summary: "Search parts and material references.", action: { type: "view", target: "viewCatalog" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
   { key: "warehouse_inventory", title: "Inventory Controls", group: "warehouse", chips: ["Inventory table", "SMS alerts", "Assigned stock"], summary: "Warehouse and stock visibility.", action: { type: "view", target: "viewAdmin" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN] },
-  { key: "supervisor_dashboard", title: "Job Progress", group: "supervisor", chips: ["KPI status", "Team activity", "Daily summary"], summary: "Supervisor progress tracking and dispatch oversight.", action: { type: "view", target: "viewDispatch" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
+  { key: "dispatch_planner", title: "Dispatch / Planner", group: "supervisor", chips: ["Create work order", "Assignments", "Queue filters"], summary: "Create, schedule, assign, and manage the work order queue.", action: { type: "view", target: "viewDispatch" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
+  { key: "supervisor_dashboard", title: "Supervisor Oversight", group: "supervisor", chips: ["KPI status", "Blocked jobs", "Daily summary"], summary: "Supervisor progress tracking, escalations, and exception oversight.", action: { type: "view", target: "viewSupervisor" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
   { key: "supervisor_photos", title: "Field Verification", group: "supervisor", chips: ["Field photos", "Proof checks", "Readiness"], summary: "Photo and proof validation workflows.", action: { type: "view", target: "viewPhotos" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
   { key: "network_map", title: "Map Workspace", group: "network", chips: ["KMZ map", "Site pins", "Route points"], summary: "KMZ map and geospatial field tools.", action: { type: "view", target: "viewMap" }, rolesAllowed: Object.values(ROLES) },
   { key: "platform_messages", title: "Messaging", group: "network", chips: ["Main board", "Direct messages", "Team coordination"], summary: "Communication and updates.", action: { type: "modal", target: "messages" }, rolesAllowed: Object.values(ROLES) },
@@ -531,7 +532,7 @@ const I18N = {
     globalLabel: "Global",
     navDashboard: "Dashboard",
     navTechnician: "Technician",
-    navDispatch: "Dispatch",
+    navDispatch: "Dispatch / Planner",
     navNodes: "Sites",
     navPhotos: "Photos",
     navBilling: "Billing",
@@ -576,7 +577,7 @@ const I18N = {
     woActionStart: "Start",
     woActionBlocked: "Blocked",
     woActionComplete: "Complete",
-    dispatchTitle: "Dispatch",
+    dispatchTitle: "Dispatch / Planner",
     dispatchCreate: "Create work order",
     dispatchImportCsv: "Import CSV",
     dispatchStatusAll: "All statuses",
@@ -862,7 +863,7 @@ const I18N = {
     globalLabel: "Global",
     navDashboard: "Panel",
     navTechnician: "Tecnico",
-    navDispatch: "Despacho",
+    navDispatch: "Despacho / Planificador",
     navNodes: "Sitios",
     navPhotos: "Fotos",
     navBilling: "Facturación",
@@ -907,7 +908,7 @@ const I18N = {
     woActionStart: "Iniciar",
     woActionBlocked: "Bloqueado",
     woActionComplete: "Completar",
-    dispatchTitle: "Despacho",
+    dispatchTitle: "Despacho / Planificador",
     dispatchCreate: "Crear orden",
     dispatchImportCsv: "Importar CSV",
     dispatchStatusAll: "Todos",
@@ -2600,6 +2601,13 @@ function setActiveView(viewId, { syncHash = true } = {}){
       loadDispatchTechnicians();
       loadDispatchWorkOrders();
     }
+  }
+  if (viewId === "viewSupervisor"){
+    if (state.features.dispatch){
+      loadDispatchTechnicians();
+      loadDispatchWorkOrders();
+    }
+    renderSupervisorOverview();
   }
   if (viewId === "viewLabor"){
     if (state.features.labor) loadLaborRows();
@@ -9391,7 +9399,7 @@ function canShowModule(moduleKey){
 }
 
 function getProductionAllowedViews(){
-  return new Set(["viewDashboard", "viewTechnician", "viewNodes", "viewPhotos", "viewBilling", "viewInvoices", "viewMap", "viewCatalog", "viewAlerts", "viewAdmin", "viewSettings", "viewLabor", "viewDispatch", "viewDailyReport"]);
+  return new Set(["viewDashboard", "viewTechnician", "viewNodes", "viewPhotos", "viewBilling", "viewInvoices", "viewMap", "viewCatalog", "viewAlerts", "viewAdmin", "viewSettings", "viewLabor", "viewDispatch", "viewSupervisor", "viewDailyReport"]);
 }
 
 function canViewLabor(){
@@ -9461,6 +9469,7 @@ function isViewAllowed(viewId){
   if (!allowed.has(viewId)) return false;
   if (viewId === "viewLabor") return canViewLabor();
   if (viewId === "viewDispatch") return canViewDispatch();
+  if (viewId === "viewSupervisor") return canViewDispatch();
   return true;
 }
 
@@ -11208,6 +11217,19 @@ function statusPillClass(status){
   return "warn";
 }
 
+function formatWorkOrderStatusLabel(status){
+  const value = String(status || "").toUpperCase();
+  if (value === "EN_ROUTE") return "En Route";
+  if (value === "ON_SITE") return "On Site";
+  if (value === "IN_PROGRESS") return "In Progress";
+  if (value === "NEW") return "New";
+  if (value === "ASSIGNED") return "Assigned";
+  if (value === "BLOCKED") return "Blocked";
+  if (value === "COMPLETE") return "Complete";
+  if (value === "CANCELED") return "Canceled";
+  return value || "-";
+}
+
 function renderWorkOrderCard(order, { showActions = false } = {}){
   const scheduled = order.scheduled_start ? new Date(order.scheduled_start) : null;
   const end = order.scheduled_end ? new Date(order.scheduled_end) : null;
@@ -11233,7 +11255,7 @@ function renderWorkOrderCard(order, { showActions = false } = {}){
           <div class="muted small">${escapeHtml(order.address || "")}</div>
           <div class="muted small">${timeLabel}</div>
         </div>
-        <div class="status-pill ${statusClass}">${escapeHtml(order.status || "")}</div>
+        <div class="status-pill ${statusClass}">${escapeHtml(formatWorkOrderStatusLabel(order.status))}</div>
       </div>
       ${order.notes ? `<div class="muted small" style="margin-top:6px;">${escapeHtml(order.notes)}</div>` : ""}
       ${buttons}
@@ -11723,7 +11745,7 @@ function syncDispatchStatusFilter(){
   if (!statusSelect) return;
   const current = statusSelect.value;
   statusSelect.innerHTML = `<option value="">${t("dispatchStatusAll")}</option>` + WORK_ORDER_STATUSES
-    .map(status => `<option value="${status}">${status}</option>`)
+    .map(status => `<option value="${status}">${escapeHtml(formatWorkOrderStatusLabel(status))}</option>`)
     .join("");
   if (current){
     statusSelect.value = current;
@@ -11791,18 +11813,24 @@ async function loadDispatchWorkOrders(){
 
 function renderDispatchTable(){
   const wrap = $("dispatchTable");
-  if (!wrap) return;
+  if (!wrap){
+    renderSupervisorOverview();
+    return;
+  }
   if (!state.activeProject){
     wrap.innerHTML = `<div class="muted small">${t("laborNoProject")}</div>`;
+    renderSupervisorOverview();
     return;
   }
   if (!canViewDispatch()){
     wrap.innerHTML = `<div class="muted small">Dispatch is limited to privileged roles.</div>`;
+    renderSupervisorOverview();
     return;
   }
   const rows = state.workOrders.dispatch || [];
   if (!rows.length){
     wrap.innerHTML = `<div class="muted small">${t("woNoOrders")}</div>`;
+    renderSupervisorOverview();
     return;
   }
   const techOptions = state.workOrders.technicians || [];
@@ -11829,7 +11857,7 @@ function renderDispatchTable(){
             <tr>
               <td>${escapeHtml(scheduled)}</td>
               <td>${escapeHtml(row.type || "")}</td>
-              <td><span class="status-pill ${statusClass}">${escapeHtml(row.status || "")}</span></td>
+              <td><span class="status-pill ${statusClass}">${escapeHtml(formatWorkOrderStatusLabel(row.status))}</span></td>
               <td>${escapeHtml(row.customer_label || "")}</td>
               <td>${escapeHtml(row.address || "")}</td>
               <td>${escapeHtml(String(row.priority ?? ""))}</td>
@@ -14933,6 +14961,116 @@ function showAuth(show){
   }
   $("viewAuth").style.display = show ? "" : "none";
   $("viewApp").style.display = show ? "none" : "";
+}
+
+function renderSupervisorOverview(){
+  const metricsEl = $("supervisorMetrics");
+  const activeJobsEl = $("supervisorActiveJobs");
+  const blockedEl = $("supervisorBlocked");
+  const crewEl = $("supervisorCrewStatus");
+  if (!metricsEl || !activeJobsEl || !blockedEl || !crewEl) return;
+  if (!state.activeProject){
+    const msg = `<div class="muted small">${t("laborNoProject")}</div>`;
+    metricsEl.innerHTML = msg;
+    activeJobsEl.innerHTML = msg;
+    blockedEl.innerHTML = msg;
+    crewEl.innerHTML = msg;
+    return;
+  }
+  if (!canViewDispatch()){
+    const msg = `<div class="muted small">Supervisor visibility is limited to privileged roles.</div>`;
+    metricsEl.innerHTML = msg;
+    activeJobsEl.innerHTML = msg;
+    blockedEl.innerHTML = msg;
+    crewEl.innerHTML = msg;
+    return;
+  }
+  const rows = state.workOrders.dispatch || [];
+  const activeStatuses = new Set(["NEW", "ASSIGNED", "EN_ROUTE", "ON_SITE", "IN_PROGRESS"]);
+  const activeRows = rows.filter((row) => activeStatuses.has(String(row.status || "").toUpperCase()));
+  const blockedRows = rows.filter((row) => String(row.status || "").toUpperCase() === "BLOCKED");
+  const completedRows = rows.filter((row) => String(row.status || "").toUpperCase() === "COMPLETE");
+  const unassignedRows = rows.filter((row) => !row.assigned_to_user_id);
+  metricsEl.innerHTML = `
+    <div class="kpi">
+      <div class="tile"><div class="label">Active Jobs</div><div class="value">${activeRows.length}</div></div>
+      <div class="tile"><div class="label">Blocked</div><div class="value">${blockedRows.length}</div></div>
+      <div class="tile"><div class="label">Unassigned</div><div class="value">${unassignedRows.length}</div></div>
+      <div class="tile"><div class="label">Completed</div><div class="value">${completedRows.length}</div></div>
+    </div>
+  `;
+  if (!activeRows.length){
+    activeJobsEl.innerHTML = `<div class="muted small">No active jobs in queue.</div>`;
+  } else {
+    activeJobsEl.innerHTML = `
+      <div style="overflow:auto;">
+        <table class="table">
+          <thead><tr><th>Scheduled</th><th>Status</th><th>Type</th><th>Customer</th><th>Assigned</th><th>Priority</th></tr></thead>
+          <tbody>
+            ${activeRows.map((row) => {
+              const scheduled = row.scheduled_start ? new Date(row.scheduled_start).toLocaleString() : "Unscheduled";
+              const assigned = (state.workOrders.technicians || []).find((tech) => tech.id === row.assigned_to_user_id)?.name || "Unassigned";
+              return `
+                <tr>
+                  <td>${escapeHtml(scheduled)}</td>
+                  <td><span class="status-pill ${statusPillClass(row.status)}">${escapeHtml(formatWorkOrderStatusLabel(row.status))}</span></td>
+                  <td>${escapeHtml(row.type || "-")}</td>
+                  <td>${escapeHtml(row.customer_label || "-")}</td>
+                  <td>${escapeHtml(assigned)}</td>
+                  <td>${escapeHtml(String(row.priority ?? "-"))}</td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+  if (!blockedRows.length){
+    blockedEl.innerHTML = `<div class="muted small">No blocked jobs right now.</div>`;
+  } else {
+    blockedEl.innerHTML = blockedRows.map((row) => `
+      <div class="note" style="margin-top:8px;">
+        <div style="font-weight:800;">${escapeHtml(row.customer_label || row.type || "Blocked job")}</div>
+        <div class="muted small">${escapeHtml(row.address || "No address")} | ${escapeHtml(formatWorkOrderStatusLabel(row.status))}</div>
+        <div class="muted small">${escapeHtml(row.notes || "No notes logged.")}</div>
+      </div>
+    `).join("");
+  }
+  const byCrew = new Map();
+  (rows || []).forEach((row) => {
+    const assigned = (state.workOrders.technicians || []).find((tech) => tech.id === row.assigned_to_user_id)?.name || "Unassigned";
+    if (!byCrew.has(assigned)){
+      byCrew.set(assigned, { active: 0, blocked: 0, complete: 0 });
+    }
+    const bucket = byCrew.get(assigned);
+    const status = String(row.status || "").toUpperCase();
+    if (status === "BLOCKED") bucket.blocked += 1;
+    else if (status === "COMPLETE") bucket.complete += 1;
+    else bucket.active += 1;
+  });
+  const crewRows = [...byCrew.entries()];
+  if (!crewRows.length){
+    crewEl.innerHTML = `<div class="muted small">No crew activity yet.</div>`;
+  } else {
+    crewEl.innerHTML = `
+      <div style="overflow:auto;">
+        <table class="table">
+          <thead><tr><th>Crew</th><th>Active</th><th>Blocked</th><th>Complete</th></tr></thead>
+          <tbody>
+            ${crewRows.map(([name, stats]) => `
+              <tr>
+                <td>${escapeHtml(name)}</td>
+                <td>${stats.active}</td>
+                <td>${stats.blocked}</td>
+                <td>${stats.complete}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
 }
 
 function syncDemoLoginButton(){
@@ -20088,6 +20226,10 @@ function setActiveProjectById(id){
     loadDispatchTechnicians();
     loadDispatchWorkOrders();
   }
+  if (activeViewId === "viewSupervisor" && state.features.dispatch){
+    loadDispatchTechnicians();
+    loadDispatchWorkOrders();
+  }
   refreshMaterialProjectData({ silent: true });
   if (activeViewId === "viewAdmin"){
     loadAdminMaterialSettings();
@@ -21709,6 +21851,7 @@ function renderOfficeInvoiceBuilder(draft){
       <datalist id="officeLocationRecentList">${(recents.location || []).map((value) => `<option value="${escapeHtml(value)}"></option>`).join("")}</datalist>
     </div>
   `;
+  renderSupervisorOverview();
 }
 
 function renderInvoicePanel(){
@@ -22977,6 +23120,7 @@ function renderCatalogResults(targetId, term){
 const SHOWCASE_VIEW_FALLBACKS = {
   viewBilling: ["viewInvoices", "viewDashboard"],
   viewDispatch: ["viewDashboard"],
+  viewSupervisor: ["viewDashboard"],
   viewNodes: ["viewDashboard"],
   viewPhotos: ["viewDashboard"],
   viewAdmin: ["viewDashboard"],
@@ -23106,7 +23250,7 @@ function renderDemoShowcaseHome(){
       title: "Supervisor",
       summary: "Progress oversight, field verification, and daily metrics.",
       chips: ["Progress", "Field verification", "Daily metrics"],
-      action: { type: "view", target: "viewDispatch", fallbackViews: ["viewDailyReport", "viewDashboard"] },
+      action: { type: "view", target: "viewSupervisor", fallbackViews: ["viewDailyReport", "viewDashboard"] },
     },
     {
       title: "Admin",
@@ -24745,6 +24889,22 @@ function wireUI(){
     timesheetBtn.addEventListener("click", () => {
       if (isViewAllowed("viewTechnician")){
         setActiveView("viewTechnician");
+      }
+    });
+  }
+  const supervisorOpenDispatchBtn = $("btnSupervisorOpenDispatch");
+  if (supervisorOpenDispatchBtn){
+    supervisorOpenDispatchBtn.addEventListener("click", () => {
+      if (isViewAllowed("viewDispatch")){
+        setActiveView("viewDispatch");
+      }
+    });
+  }
+  const supervisorOpenDailyReportBtn = $("btnSupervisorOpenDailyReport");
+  if (supervisorOpenDailyReportBtn){
+    supervisorOpenDailyReportBtn.addEventListener("click", () => {
+      if (isViewAllowed("viewDailyReport")){
+        setActiveView("viewDailyReport");
       }
     });
   }
