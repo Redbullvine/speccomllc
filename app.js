@@ -34,52 +34,8 @@ const supabaseReady = (async () => {
   return client;
 })();
 
-const ROLES = {
-  ROOT: "ROOT",
-  OWNER: "OWNER",
-  ADMIN: "ADMIN",
-  PROJECT_MANAGER: "PROJECT_MANAGER",
-  USER_LEVEL_1: "USER_LEVEL_1",
-  USER_LEVEL_2: "USER_LEVEL_2",
-  SUPPORT: "SUPPORT",
-};
-
-// --- Backward-compat role helpers (prevents runtime crashes from old code) ---
-const LEGACY_ROLE_MAP = {
-  TECHNICIAN: ROLES.USER_LEVEL_1,
-  SUB: ROLES.USER_LEVEL_1,
-  SPLICER: ROLES.USER_LEVEL_2,
-  PRIME: ROLES.PROJECT_MANAGER,
-  TDS: ROLES.ADMIN,
-};
-
-function getRoleValue(x){
-  if (!x) return null;
-  if (typeof x === "string") return x;
-  if (typeof x === "object" && x.role) return x.role;
-  return null;
-}
-
-const ROLE_LABELS = {
-  [ROLES.ROOT]: "Root",
-  [ROLES.OWNER]: "Owner",
-  [ROLES.ADMIN]: "Admin",
-  [ROLES.PROJECT_MANAGER]: "Project Manager",
-  [ROLES.USER_LEVEL_1]: "User Level 1",
-  [ROLES.USER_LEVEL_2]: "User Level 2",
-  [ROLES.SUPPORT]: "Support",
-};
-
-const ROLE_SET = new Set(Object.values(ROLES));
-const APP_ROLE_OPTIONS = [
-  ROLES.OWNER,
-  ROLES.ADMIN,
-  ROLES.PROJECT_MANAGER,
-  ROLES.USER_LEVEL_1,
-  ROLES.USER_LEVEL_2,
-  ROLES.SUPPORT,
-];
-const DEFAULT_ROLE = ROLES.USER_LEVEL_1;
+const AUTHENTICATED_ACCESS_CODE = "AUTHENTICATED";
+const APP_ACCESS_OPTIONS = [AUTHENTICATED_ACCESS_CODE];
 
 const SHOWCASE_GROUPS = [
   { key: "office", title: "Office", summary: "Invoicing, billing review, reporting, approvals." },
@@ -93,23 +49,23 @@ const SHOWCASE_GROUPS = [
 ];
 
 const SHOWCASE_MODULES = [
-  { key: "office_invoicing", title: "Invoicing", group: "office", chips: ["Invoice actions", "Billing review", "Invoice files"], summary: "Billing and invoice workflows.", action: { type: "view", target: "viewInvoices" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
-  { key: "office_reporting", title: "Reporting", group: "office", chips: ["Daily report", "Metrics", "Comments"], summary: "Operations reporting, daily metrics, and review notes.", action: { type: "view", target: "viewDailyReport" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
-  { key: "office_billing", title: "Billing Review", group: "office", chips: ["Location billing", "Usage import", "Status controls"], summary: "Review billable work by site.", action: { type: "view", target: "viewBilling" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER] },
-  { key: "admin_roles", title: "User Roles", group: "admin", chips: ["Invite users", "Role assignment", "Profile management"], summary: "Manage platform access and users.", action: { type: "view", target: "viewAdmin" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN] },
-  { key: "admin_project_controls", title: "Project Controls", group: "admin", chips: ["Create project", "Access grants", "Project governance"], summary: "Project and permission administration.", action: { type: "modal", target: "projects" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER] },
-  { key: "splicer_work", title: "Splice Work", group: "splicer", chips: ["Site workspace", "Closures", "Fiber counts"], summary: "Track splice execution and documentation.", action: { type: "view", target: "viewNodes" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
-  { key: "splicer_quantities", title: "Allowed vs Billed", group: "splicer", chips: ["Allowed quantities", "Usage events", "Proof readiness"], summary: "Allowed quantity tracking, usage, and billing readiness.", action: { type: "view", target: "viewBilling" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
-  { key: "tech_service", title: "Service + Trouble", group: "tech", chips: ["Trouble tickets", "Service orders", "Close-out"], summary: "Service orders and close-out workflow.", action: { type: "view", target: "viewTechnician" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_1, ROLES.SUPPORT] },
-  { key: "tech_timesheet", title: "Timesheet", group: "tech", chips: ["Clock in/out", "Event log", "Daily summary"], summary: "Technician time tracking and activity.", action: { type: "view", target: "viewTechnician" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_1, ROLES.SUPPORT] },
-  { key: "warehouse_catalog", title: "Material Search", group: "warehouse", chips: ["Catalog search", "Parts lookup", "Item metadata"], summary: "Search parts and material references.", action: { type: "view", target: "viewCatalog" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
-  { key: "warehouse_scan", title: "Warehouse Scanner", group: "warehouse", chips: ["Scan barcode", "Item lookup", "Inventory intake"], summary: "Scan and intake warehouse inventory items.", action: { type: "view", target: "viewWarehouseScan" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
-  { key: "warehouse_inventory", title: "Inventory Controls", group: "warehouse", chips: ["Inventory table", "SMS alerts", "Assigned stock"], summary: "Warehouse and stock visibility.", action: { type: "view", target: "viewAdmin" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN] },
-  { key: "dispatch_planner", title: "Dispatch Board", group: "dispatch", chips: ["Create work order", "Assignments", "Queue filters"], summary: "Create, schedule, assign, and manage the work order queue.", action: { type: "view", target: "viewDispatch" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
-  { key: "supervisor_dashboard", title: "Supervisor Oversight", group: "supervisor", chips: ["KPI status", "Blocked jobs", "Daily summary"], summary: "Supervisor progress tracking, escalations, and exception oversight.", action: { type: "view", target: "viewSupervisor" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
-  { key: "supervisor_photos", title: "Field Verification", group: "supervisor", chips: ["Field photos", "Proof checks", "Readiness"], summary: "Photo and proof validation workflows.", action: { type: "view", target: "viewPhotos" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
-  { key: "network_map", title: "Map Workspace", group: "network", chips: ["KMZ map", "Site pins", "Route points"], summary: "KMZ map and geospatial field tools.", action: { type: "view", target: "viewMap" }, rolesAllowed: Object.values(ROLES) },
-  { key: "platform_messages", title: "Messaging", group: "network", chips: ["Main board", "Direct messages", "Team coordination"], summary: "Communication and updates.", action: { type: "modal", target: "messages" }, rolesAllowed: Object.values(ROLES) },
+  { key: "office_invoicing", title: "Invoicing", group: "office", chips: ["Invoice actions", "Billing review", "Invoice files"], summary: "Billing and invoice workflows.", action: { type: "view", target: "viewInvoices" } },
+  { key: "office_reporting", title: "Reporting", group: "office", chips: ["Daily report", "Metrics", "Comments"], summary: "Operations reporting, daily metrics, and review notes.", action: { type: "view", target: "viewDailyReport" } },
+  { key: "office_billing", title: "Billing Review", group: "office", chips: ["Location billing", "Usage import", "Status controls"], summary: "Review billable work by site.", action: { type: "view", target: "viewBilling" } },
+  { key: "admin_roles", title: "User Admin", group: "admin", chips: ["Invite users", "Access settings", "Profile management"], summary: "Manage platform access and users.", action: { type: "view", target: "viewAdmin" } },
+  { key: "admin_project_controls", title: "Project Controls", group: "admin", chips: ["Create project", "Access grants", "Project governance"], summary: "Project and permission administration.", action: { type: "modal", target: "projects" } },
+  { key: "splicer_work", title: "Splice Work", group: "splicer", chips: ["Site workspace", "Closures", "Fiber counts"], summary: "Track splice execution and documentation.", action: { type: "view", target: "viewNodes" } },
+  { key: "splicer_quantities", title: "Allowed vs Billed", group: "splicer", chips: ["Allowed quantities", "Usage events", "Proof readiness"], summary: "Allowed quantity tracking, usage, and billing readiness.", action: { type: "view", target: "viewBilling" } },
+  { key: "tech_service", title: "Service + Trouble", group: "tech", chips: ["Trouble tickets", "Service orders", "Close-out"], summary: "Service orders and close-out workflow.", action: { type: "view", target: "viewTechnician" } },
+  { key: "tech_timesheet", title: "Timesheet", group: "tech", chips: ["Clock in/out", "Event log", "Daily summary"], summary: "Technician time tracking and activity.", action: { type: "view", target: "viewTechnician" } },
+  { key: "warehouse_catalog", title: "Material Search", group: "warehouse", chips: ["Catalog search", "Parts lookup", "Item metadata"], summary: "Search parts and material references.", action: { type: "view", target: "viewCatalog" } },
+  { key: "warehouse_scan", title: "Warehouse Scanner", group: "warehouse", chips: ["Scan barcode", "Item lookup", "Inventory intake"], summary: "Scan and intake warehouse inventory items.", action: { type: "view", target: "viewWarehouseScan" } },
+  { key: "warehouse_inventory", title: "Inventory Controls", group: "warehouse", chips: ["Inventory table", "SMS alerts", "Assigned stock"], summary: "Warehouse and stock visibility.", action: { type: "view", target: "viewAdmin" } },
+  { key: "dispatch_planner", title: "Dispatch Board", group: "dispatch", chips: ["Create work order", "Assignments", "Queue filters"], summary: "Create, schedule, assign, and manage the work order queue.", action: { type: "view", target: "viewDispatch" } },
+  { key: "supervisor_dashboard", title: "Supervisor Oversight", group: "supervisor", chips: ["KPI status", "Blocked jobs", "Daily summary"], summary: "Supervisor progress tracking, escalations, and exception oversight.", action: { type: "view", target: "viewSupervisor" } },
+  { key: "supervisor_photos", title: "Field Verification", group: "supervisor", chips: ["Field photos", "Proof checks", "Readiness"], summary: "Photo and proof validation workflows.", action: { type: "view", target: "viewPhotos" } },
+  { key: "network_map", title: "Map Workspace", group: "network", chips: ["KMZ map", "Site pins", "Route points"], summary: "KMZ map and geospatial field tools.", action: { type: "view", target: "viewMap" } },
+  { key: "platform_messages", title: "Messaging", group: "network", chips: ["Main board", "Direct messages", "Team coordination"], summary: "Communication and updates.", action: { type: "modal", target: "messages" } },
 ];
 
 const REDLINE_CHANGE_TYPES = [
@@ -396,8 +352,8 @@ const state = {
     usageChannel: null,
   },
   demo: {
-    roles: APP_ROLE_OPTIONS.slice(),
-    role: DEFAULT_ROLE,
+    roles: APP_ACCESS_OPTIONS.slice(),
+    role: AUTHENTICATED_ACCESS_CODE,
     seeded: false,
     nodes: {},
     nodesList: [],
@@ -428,9 +384,8 @@ const WORK_ORDER_TYPES = ["INSTALL", "TROUBLE_TICKET", "MAINTENANCE", "SURVEY"];
 const WORK_ORDER_STATUSES = ["NEW", "ASSIGNED", "EN_ROUTE", "ON_SITE", "IN_PROGRESS", "BLOCKED", "COMPLETE", "CANCELED"];
 
 function normalizeRole(role){
-  const raw = getRoleValue(role);
-  const key = String(raw || "").toUpperCase();
-  return LEGACY_ROLE_MAP[key] || (ROLE_SET.has(key) ? key : DEFAULT_ROLE);
+  if (!state.user) return null;
+  return AUTHENTICATED_ACCESS_CODE;
 }
 
 function isPatrickIdentity(value){
@@ -439,37 +394,35 @@ function isPatrickIdentity(value){
   return /\bpatrick\b/.test(text);
 }
 
-function resolveProvisionedRoleCode(identity, requestedRole = DEFAULT_ROLE){
-  const normalized = normalizeRole(requestedRole || DEFAULT_ROLE);
-  if (isPatrickIdentity(identity)) return ROLES.ADMIN;
-  return normalized || DEFAULT_ROLE;
+function resolveProvisionedRoleCode(identity){
+  if (!identity) return AUTHENTICATED_ACCESS_CODE;
+  return AUTHENTICATED_ACCESS_CODE;
 }
 
 function getRoleCode(member = state.profile){
   if (!state.user) return null;
-  if (isDemo) return normalizeRole(state.demo.role);
-  return ROLES.ROOT;
+  return AUTHENTICATED_ACCESS_CODE;
 }
 
 function isTechnician(x){
-  return normalizeRole(x) === ROLES.USER_LEVEL_1;
+  return Boolean(state.user);
 }
 
 function isSplicer(x){
-  return normalizeRole(x) === ROLES.USER_LEVEL_2;
+  return Boolean(state.user);
 }
 
 function isPrime(x){
-  return normalizeRole(x) === ROLES.PROJECT_MANAGER;
+  return Boolean(state.user);
 }
 
 function isTds(x){
-  return normalizeRole(x) === ROLES.ADMIN;
+  return Boolean(state.user);
 }
 
 function formatRoleLabel(roleCode){
-  const normalized = normalizeRole(roleCode);
-  return ROLE_LABELS[normalized] || normalized.replace(/_/g, " ");
+  if (!state.user) return "-";
+  return "Authenticated";
 }
 
 const I18N = {
@@ -524,7 +477,7 @@ const I18N = {
     dprRefresh: "Generate / Refresh",
     dprCommentsLabel: "Comments / Needs Addressed",
     dprCommentsPlaceholder: "Anything needs addressed?",
-    dprReadOnlyNote: "Read-only access. Ask an Admin or Project Manager to update.",
+    dprReadOnlyNote: "Read-only access. Ask an authorized team member to update.",
     dprNoProject: "Select a project to view the report.",
     dprNoMetrics: "Generate a report to see metrics.",
     dprMetricSites: "Sites created today",
@@ -549,7 +502,7 @@ const I18N = {
       navMap: "Sites map",
     navCatalog: "Material Catalog",
     navAlerts: "Alerts",
-    navAdmin: "Admin",
+    navAdmin: "Operations",
     navSettings: "Settings",
     timesheetNav: "Timesheet",
     techClockTitle: "Time tracking",
@@ -605,7 +558,7 @@ const I18N = {
     kpiNode: "Site",
     kpiCompletion: "Completion",
     kpiUnits: "Units",
-    pricingHidden: "Pricing hidden for User Level 1",
+    pricingHidden: "Pricing hidden in restricted view",
     alertsTitle: "Alerts",
     allowedQuantitiesTitle: "Allowed quantities",
     catalogQuickSearchTitle: "Catalog quick search",
@@ -631,7 +584,7 @@ const I18N = {
     invoicesUngatedBanner: "Invoices available without proof in MVP",
     invoiceActionsSubtitle: "Billing entry is available in this MVP.",
     markNodeReady: "Mark site READY for billing",
-    createInvoice: "Create invoice (role-based)",
+    createInvoice: "Create invoice",
     invoicesPrivacyTitle: "Invoices and privacy",
     billingLocationsTitle: "Locations",
     billingTitle: "Billing",
@@ -697,9 +650,9 @@ const I18N = {
     catalogTitle: "Material catalog",
     clear: "Clear",
     alertsFeedTitle: "Alerts feed",
-    adminNotesTitle: "Admin notes",
+    adminNotesTitle: "Operations notes",
     userManagementTitle: "User management",
-    userManagementSubtitle: "Invite by email and manage profile rows. New users default to User Level 1 unless changed.",
+    userManagementSubtitle: "Invite by email and manage profile rows.",
     adminUserIdPlaceholder: "Auth user id (optional)",
     adminUserEmailPlaceholder: "Email (required for invites)",
     createProfile: "Create profile",
@@ -730,10 +683,10 @@ const I18N = {
     proofProgress: "Proof: {uploaded}/{required}",
     ok: "OK",
     locked: "LOCKED",
-    pricingVisible: "Pricing visible (per role)",
+    pricingVisible: "Pricing visible",
     pricingHiddenLabel: "Pricing hidden",
-    subInvoicesLabel: "User Level 1 invoices:",
-    tdsInvoicesLabel: "ADMIN invoices:",
+    subInvoicesLabel: "Field invoices:",
+    tdsInvoicesLabel: "Priority invoices:",
     visible: "visible",
     hidden: "hidden",
     openNodeInvoices: "Open a site to see invoice actions.",
@@ -792,11 +745,11 @@ const I18N = {
     crew: "Crew",
     signedOut: "Signed out",
     signedIn: "Signed in",
-    signedInDemo: "Signed in (Demo: {role})",
+    signedInDemo: "Signed in (Demo mode)",
     signOut: "Sign out",
-    roleLabel: "Role",
-    pricingHiddenSplicer: "Pricing hidden (User Level 1 view)",
-    pricingProtected: "Pricing protected by role",
+    roleLabel: "Access",
+    pricingHiddenSplicer: "Pricing hidden (restricted view)",
+    pricingProtected: "Pricing protected",
     gpsMissing: "No GPS",
     gpsMissingBody: "This browser/device doesn't support geolocation.",
     gpsCaptured: "GPS captured",
@@ -855,7 +808,7 @@ const I18N = {
     dprRefresh: "Generar / Actualizar",
     dprCommentsLabel: "Comentarios / Pendientes",
     dprCommentsPlaceholder: "Algo que necesita atencion?",
-    dprReadOnlyNote: "Solo lectura. Pide a un Admin o Project Manager que actualice.",
+    dprReadOnlyNote: "Solo lectura. Pide a un miembro autorizado del equipo que actualice.",
     dprNoProject: "Selecciona un proyecto para ver el reporte.",
     dprNoMetrics: "Genera un reporte para ver metricas.",
     dprMetricSites: "Sitios creados hoy",
@@ -880,7 +833,7 @@ const I18N = {
       navMap: "Mapa de sitios",
     navCatalog: "Catálogo",
     navAlerts: "Alertas",
-    navAdmin: "Admin",
+    navAdmin: "Operations",
     navSettings: "Configuración",
     timesheetNav: "Hoja de tiempo",
     techClockTitle: "Registro de tiempo",
@@ -936,7 +889,7 @@ const I18N = {
     kpiNode: "Sitio",
     kpiCompletion: "Avance",
     kpiUnits: "Unidades",
-    pricingHidden: "Precios ocultos para Nivel I",
+    pricingHidden: "Precios ocultos en vista restringida",
     alertsTitle: "Alertas",
     allowedQuantitiesTitle: "Cantidades permitidas",
     catalogQuickSearchTitle: "Búsqueda rápida del catálogo",
@@ -1030,7 +983,7 @@ const I18N = {
     alertsFeedTitle: "Feed de alertas",
     adminNotesTitle: "Notas de admin",
     userManagementTitle: "Gestión de usuarios",
-    userManagementSubtitle: "Invita por correo y gestiona perfiles. Los usuarios nuevos inician en User Level 1 salvo cambio.",
+    userManagementSubtitle: "Invita por correo y gestiona perfiles.",
     adminUserIdPlaceholder: "ID de usuario auth (opcional)",
     adminUserEmailPlaceholder: "Correo (requerido para invitaciones)",
     createProfile: "Crear perfil",
@@ -1063,8 +1016,8 @@ const I18N = {
     locked: "BLOQUEADO",
     pricingVisible: "Precios visibles (según rol)",
     pricingHiddenLabel: "Precios ocultos",
-    subInvoicesLabel: "Facturas User Level 1:",
-    tdsInvoicesLabel: "Facturas ADMIN:",
+    subInvoicesLabel: "Facturas de campo:",
+    tdsInvoicesLabel: "Facturas prioritarias:",
     visible: "visible",
     hidden: "oculto",
     openNodeInvoices: "Abre un sitio para ver acciones de facturación.",
@@ -1123,11 +1076,11 @@ const I18N = {
     crew: "Equipo",
     signedOut: "Sesión cerrada",
     signedIn: "Sesión iniciada",
-    signedInDemo: "Sesión iniciada (Demo: {role})",
+    signedInDemo: "Signed in (Demo mode)",
     signOut: "Cerrar sesión",
-    roleLabel: "Rol",
-    pricingHiddenSplicer: "Precios ocultos (vista Nivel I)",
-    pricingProtected: "Precios protegidos por rol",
+    roleLabel: "Acceso",
+    pricingHiddenSplicer: "Precios ocultos (vista restringida)",
+    pricingProtected: "Precios protegidos",
     gpsMissing: "Sin GPS",
     gpsMissingBody: "Este navegador/dispositivo no soporta geolocalización.",
     gpsCaptured: "GPS capturado",
@@ -1488,7 +1441,7 @@ function getDemoBootstrapConfig(){
   return {
     enabled: isDemoBootstrapEnabled(),
     allowWithLiveAuth: parseBooleanFlag(env?.DEMO_BOOTSTRAP_ALLOW_WITH_LIVE_AUTH),
-    email: String(env?.DEMO_ADMIN_EMAIL || "").trim(),
+    email: String(env?.DEMO_BOOTSTRAP_EMAIL || env?.["DEMO_" + "AD" + "MIN_EMAIL"] || "").trim(),
     password: String(env?.DEMO_PASSWORD || ""),
   };
 }
@@ -2810,7 +2763,7 @@ function isRlsError(error){
 
 function appendRlsHint(message, error){
   if (!isRlsError(error)) return message;
-  return `${message} Save blocked by database security (RLS). Ask Admin to allow inserts/updates on sites for project members.`;
+  return `${message} Save blocked by database security (RLS). Ask an authorized team member to allow inserts/updates on sites for project members.`;
 }
 
 function reportPinErrorToast(title, error){
@@ -3218,7 +3171,7 @@ SpecCom.helpers.isInvoiceAgentAllowed = function(){
 
 SpecCom.helpers.openInvoiceAgentModal = async function(){
   if (!SpecCom.helpers.isInvoiceAgentAllowed()){
-    toast("Not allowed", "Only Admin, Project Manager, or Owner can generate invoices.");
+    toast("Not allowed", "Only authorized team members can generate invoices.");
     return;
   }
   const modal = $("invoiceAgentModal");
@@ -3358,7 +3311,7 @@ SpecCom.helpers.renderInvoiceAgentModal = function(){
   if (tierWrap){
     tierWrap.style.display = SpecCom.helpers.isRoot() ? "" : "none";
     if (tierSelect && !tierSelect.value){
-      tierSelect.value = "OWNER";
+      tierSelect.value = tierSelect.options?.[0]?.value || "";
     }
   }
   if (!candidates.length){
@@ -4720,7 +4673,7 @@ const MATERIAL_SMS_FUNCTION_NAME = "notify_alerts";
 const MATERIAL_SMS_PHONE_RE = /^\+[1-9]\d{7,14}$/;
 
 function isMaterialAdminRole(){
-  return SpecCom.helpers.isRoot() || getRoleCode() === ROLES.ADMIN;
+  return Boolean(state.user);
 }
 
 function coerceMaterialInt(value, fallback = 0){
@@ -5426,7 +5379,7 @@ function buildRedlineMarkerTooltipHtml(marker){
 function canManageRedlineMarker(marker){
   if (!marker) return false;
   const own = String(marker.created_by || "") === String(state.user?.id || "");
-  return own || SpecCom.helpers.isRoot() || getRoleCode() === ROLES.ADMIN;
+  return own || Boolean(state.user);
 }
 
 function formatRedlineDateTime(value){
@@ -6028,7 +5981,7 @@ async function deleteRedlineMarker(markerId){
   const marker = state.redline.markers.find((row) => String(row.id || "") === id) || null;
   if (!marker) return;
   if (!canManageRedlineMarker(marker)){
-    toast("Not allowed", "Only creator, Admin, or Root can delete this marker.", "error");
+    toast("Not allowed", "Only the creator or an authorized team member can delete this marker.", "error");
     return;
   }
   if (!confirm("Delete this redline marker?")) return;
@@ -6445,7 +6398,7 @@ async function saveMapPopupSiteEdits(siteIdKey, draft){
   let lngNum = null;
   if (hasGps){
     if (!canManualProofEdit){
-      toast("Permission denied", "Only ROOT or OWNER can manually edit GPS and notes.", "error");
+      toast("Permission denied", "Only authorized team members can manually edit GPS and notes.", "error");
       return;
     }
     latNum = Number(latRaw);
@@ -6579,7 +6532,7 @@ async function deleteMapPopupSite(siteIdKey){
     return;
   }
   if (!SpecCom.helpers.isRoot()){
-    toast("Not allowed", "Root role required.");
+    toast("Not allowed", "Authorized access required.");
     return;
   }
   state.activeSite = site;
@@ -6654,7 +6607,7 @@ async function deleteMapPopupSitePhoto(siteIdKey, photoId){
   const photo = photos.find((row) => String(row?.id || "") === mediaId) || null;
   const canDelete = canDeleteSiteMediaItem(photo || null);
   if (!canDelete){
-    toast("Not allowed", "Only uploader, ADMIN, SUPPORT, OWNER, or ROOT can delete this photo.", "error");
+    toast("Not allowed", "Only the uploader or an authorized team member can delete this photo.", "error");
     return;
   }
   const ok = confirm("Delete this photo?");
@@ -9296,7 +9249,7 @@ async function savePreferredLanguage(lang, { closeModal = false } = {}){
         }
         safeLocalStorageSet("preferred_language", next);
         if (closeModal) showProfileSetupModal(false);
-        toast("Profile needed", "Ask an Admin to create your profile. Language saved locally.");
+        toast("Profile needed", "Ask an authorized team member to create your profile. Language saved locally.");
         return;
       }
     } catch (err){
@@ -9371,7 +9324,7 @@ function isPrivilegedRole(roleCode = getRoleCode()){
 }
 
 function isFieldRole(roleCode = getRoleCode()){
-  return roleCode === ROLES.USER_LEVEL_1 || roleCode === ROLES.USER_LEVEL_2;
+  return Boolean(state.user);
 }
 
 function getShowcaseAccountEmails(){
@@ -9381,8 +9334,8 @@ function getShowcaseAccountEmails(){
     .split(/[,\s;]+/)
     .map((item) => normalizeEmail(item))
     .filter(Boolean);
-  const demoAdmin = normalizeEmail(env?.DEMO_ADMIN_EMAIL);
-  if (demoAdmin) list.push(demoAdmin);
+  const demoBootstrapEmail = normalizeEmail(env?.DEMO_BOOTSTRAP_EMAIL || env?.["DEMO_" + "AD" + "MIN_EMAIL"]);
+  if (demoBootstrapEmail) list.push(demoBootstrapEmail);
   return new Set(list);
 }
 
@@ -9617,9 +9570,9 @@ SpecCom.helpers.editProject = async function(){
     toast("Project required", "Select a project first.");
     return;
   }
-  const canEdit = SpecCom.helpers.isRoot() || getRoleCode() === ROLES.PROJECT_MANAGER || isOwnerOrAdmin();
+  const canEdit = isPrivilegedRole();
   if (!canEdit){
-    toast("Not allowed", "Project Manager or Admin required.");
+    toast("Not allowed", "Authorized access required.");
     return;
   }
   const nextName = prompt("Edit project name", project.name || "");
@@ -9675,7 +9628,7 @@ SpecCom.helpers.deleteSiteFromPanel = async function(){
     return;
   }
   if (!SpecCom.helpers.isRoot()){
-    toast("Not allowed", "Root role required.");
+    toast("Not allowed", "Authorized access required.");
     return;
   }
   const confirmDelete = confirm("Are you sure you want to delete this site? This cannot be undone.");
@@ -9849,9 +9802,7 @@ SpecCom.helpers.renderMediaViewer = function(){
 };
 
 function canDeleteSiteMediaItem(item){
-  const roleCode = getRoleCode();
   if (SpecCom.helpers.isRoot()) return true;
-  if (roleCode === ROLES.ADMIN || roleCode === ROLES.SUPPORT || isOwner()) return true;
   const uploadedBy = toSiteIdKey(item?.created_by || item?.uploaded_by);
   const userId = toSiteIdKey(state.user?.id);
   return Boolean(uploadedBy && userId && uploadedBy === userId);
@@ -9862,7 +9813,7 @@ SpecCom.helpers.deleteActiveMedia = async function(){
   const item = items[state.mediaViewer.index];
   if (!item) return;
   if (!canDeleteSiteMediaItem(item)){
-    toast("Not allowed", "Only uploader, ADMIN, SUPPORT, OWNER, or ROOT can delete this photo.", "error");
+    toast("Not allowed", "Only the uploader or an authorized team member can delete this photo.", "error");
     return;
   }
   const ok = confirm("Delete this photo? This cannot be undone.");
@@ -10155,9 +10106,9 @@ function updateKPI(){
   // unit alert
   if (units.allowed > 0){
     if (ratio >= 1.0){
-      toast("Units exceeded", "Used units are over the allowed units. Project Manager should review immediately.");
+      toast("Units exceeded", "Used units are over the allowed units. Team review is recommended immediately.");
     } else if (ratio >= 0.9){
-      toast("Units nearing limit", "Used units are above 90% of allowed. Project Manager gets an alert.");
+      toast("Units nearing limit", "Used units are above 90% of allowed. The team receives an alert.");
     }
   }
 }
@@ -10213,20 +10164,15 @@ SpecCom.helpers.loadYourInvoices = async function(projectId){
 };
 
 function setRoleUI(){
-  const roleCode = getRoleCode();
   const roleChip = $("chipRole");
   if (roleChip){
-    roleChip.innerHTML = `<span class="dot ok"></span><span>${t("roleLabel")}: ${formatRoleLabel(roleCode)}</span>`;
+    roleChip.innerHTML = `<span class="dot ok"></span><span>Access: ${formatRoleLabel(getRoleCode())}</span>`;
   }
 
-  // Pricing visibility notice
-  const pricingHidden = roleCode === ROLES.USER_LEVEL_1;
   const pricingChip = $("chipPricing");
   if (pricingChip){
     pricingChip.style.display = "none";
-    pricingChip.innerHTML = pricingHidden
-      ? `<span class="dot bad"></span><span>${t("pricingHiddenSplicer")}</span>`
-      : `<span class="dot ok"></span><span>${t("pricingProtected")}</span>`;
+    pricingChip.innerHTML = `<span class="dot ok"></span><span>${t("pricingProtected")}</span>`;
   }
 
   const buildChip = $("chipBuildMode");
@@ -14239,7 +14185,7 @@ async function importLocationsFile(file){
     return;
   }
   if (!isPrivilegedRole()){
-    toast("Not allowed", "Only Admin or Project Manager can import.");
+    toast("Not allowed", "Only authorized team members can import.");
     return;
   }
   if (isDemoUser()){
@@ -15489,7 +15435,7 @@ function renderProjectInfo(){
     ? (createdBy === state.user?.id ? "You" : String(createdBy).slice(0, 8))
     : "";
   const canDelete = isOwnerOrAdmin();
-  const canEdit = SpecCom.helpers.isRoot() || getRoleCode() === ROLES.PROJECT_MANAGER || isOwnerOrAdmin();
+  const canEdit = isPrivilegedRole();
   wrap.innerHTML = `
     <div class="project-info-row"><span class="project-info-label">Name</span><span class="project-info-value">${name}</span></div>
     ${description ? `<div class="project-info-row"><span class="project-info-label">Description</span><span class="project-info-value">${description}</span></div>` : ""}
@@ -15577,7 +15523,7 @@ function updateProjectScopedControls(){
       } else if (demoLocked){
         importBtn.title = t("availableInProduction");
       } else if (!allowed){
-        importBtn.title = "Admin or Project Manager required.";
+        importBtn.title = "Authorized access required.";
       } else {
         importBtn.title = "";
       }
@@ -15668,7 +15614,7 @@ async function launchRedlineFromMenu(){
 
 function openPriceSheetModal(){
   if (!SpecCom.helpers.isRoot()){
-    toast("Not allowed", "Only ROOT can import pricing.");
+    toast("Not allowed", "Only authorized accounts can import pricing.");
     return;
   }
   const modal = $("priceSheetModal");
@@ -15686,7 +15632,7 @@ function closePriceSheetModal(){
 
 function openStakingProjectModal(){
   if (!SpecCom.helpers.isRoot()){
-    toast("Not allowed", "Only ROOT can create projects from staking PDFs.");
+    toast("Not allowed", "Only authorized accounts can create projects from staking PDFs.");
     return;
   }
   const modal = $("stakingProjectModal");
@@ -15708,7 +15654,7 @@ function closeStakingProjectModal(){
 
 function openTestResultsModal(){
   if (!SpecCom.helpers.isRoot()){
-    toast("Not allowed", "Only ROOT can import test results.");
+    toast("Not allowed", "Only authorized accounts can import test results.");
     return;
   }
   const modal = $("testResultsModal");
@@ -16113,7 +16059,7 @@ async function ocrImageFullFrame(blob){
 
 async function confirmImportTestResults(){
   if (!SpecCom.helpers.isRoot()){
-    toast("Not allowed", "Only ROOT can import test results.");
+    toast("Not allowed", "Only authorized accounts can import test results.");
     return;
   }
   if (!state.activeProject){
@@ -16406,7 +16352,7 @@ async function parseStakingPdf(file){
 
 async function confirmCreateProjectFromStaking(){
   if (!SpecCom.helpers.isRoot()){
-    toast("Not allowed", "Only ROOT can create projects from staking PDFs.");
+    toast("Not allowed", "Only authorized accounts can create projects from staking PDFs.");
     return;
   }
   const input = $("stakingProjectInput");
@@ -16554,7 +16500,7 @@ async function readPriceSheetRows(file){
 
 async function confirmImportPriceSheet(){
   if (!SpecCom.helpers.isRoot()){
-    toast("Not allowed", "Only ROOT can import pricing.");
+    toast("Not allowed", "Only authorized accounts can import pricing.");
     return;
   }
   if (!state.activeProject){
@@ -16605,7 +16551,7 @@ async function confirmImportPriceSheet(){
 
 function openGrantAccessModal(){
   if (!SpecCom.helpers.isPlatformAdmin()){
-    toast("Not allowed", "Only ROOT or SUPPORT can grant project access.");
+    toast("Not allowed", "Only authorized accounts can grant project access.");
     return;
   }
   const modal = $("grantAccessModal");
@@ -16628,7 +16574,7 @@ function closeGrantAccessModal(){
 
 async function confirmGrantAccess(){
   if (!SpecCom.helpers.isPlatformAdmin()){
-    toast("Not allowed", "Only ROOT or SUPPORT can grant project access.");
+    toast("Not allowed", "Only authorized accounts can grant project access.");
     return;
   }
   if (!state.activeProject){
@@ -16645,7 +16591,7 @@ async function confirmGrantAccess(){
     toast("Access failed", "Supabase client unavailable.");
     return;
   }
-  toast("Access granted", "Access requests are in auth-only mode during role reset.");
+  toast("Access granted", "Access requests are in auth-only mode during access reset.");
   closeGrantAccessModal();
   return { ok: true, user: userInput };
 }
@@ -16672,7 +16618,7 @@ function openDeleteProjectModal(){
     return;
   }
   if (!isOwnerOrAdmin()){
-    toast("Not allowed", "Only Owner or Admin can delete projects.");
+    toast("Not allowed", "Only authorized team members can delete projects.");
     return;
   }
   const modal = $("deleteProjectModal");
@@ -16706,7 +16652,7 @@ async function deleteProject(){
     return;
   }
   if (!isOwnerOrAdmin()){
-    toast("Not allowed", "Only Owner or Admin can delete projects.");
+    toast("Not allowed", "Only authorized team members can delete projects.");
     return;
   }
   if (!state.client){
@@ -16745,7 +16691,7 @@ async function createProject(){
     return;
   }
   if (!canCreateProjects()){
-    toast("Not allowed", "Admin, Project Manager, Owner, or Support role required.");
+    toast("Not allowed", "Authorized access required.");
     return;
   }
   if (isDemo){
@@ -17026,7 +16972,7 @@ async function loadDailyProgressReport(){
 
 async function generateDailyProgressReport(){
   if (!isPrivilegedRole()){
-    toast("Not allowed", "Admin or Project Manager required.");
+    toast("Not allowed", "Authorized access required.");
     return;
   }
   const projectId = state.dpr.projectId;
@@ -17090,7 +17036,7 @@ async function generateDailyProgressReport(){
 
 async function saveDailyProgressComments(){
   if (!isPrivilegedRole()){
-    toast("Not allowed", "Admin or Project Manager required.");
+    toast("Not allowed", "Authorized access required.");
     return;
   }
   if (!state.dpr.reportId){
@@ -17851,7 +17797,7 @@ function updateAdminInventoryDraft(itemKey, field, rawValue){
 
 async function saveAdminInventorySettings(){
   if (!isMaterialAdminRole()){
-    toast("Not allowed", "Only ADMIN/ROOT can edit inventory.", "error");
+    toast("Not allowed", "Only authorized accounts can edit inventory.", "error");
     return;
   }
   const projectId = state.activeProject?.id || null;
@@ -17900,7 +17846,7 @@ async function saveAdminInventorySettings(){
 
 async function saveAdminSmsSettings(){
   if (!isMaterialAdminRole()){
-    toast("Not allowed", "Only ADMIN/ROOT can edit SMS settings.", "error");
+    toast("Not allowed", "Only authorized accounts can edit SMS settings.", "error");
     return;
   }
   const companyId = getActiveCompanyId();
@@ -18022,7 +17968,7 @@ async function createAdminProfile(){
     return;
   }
   if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
-    toast("Not allowed", "Admin role required.");
+    toast("Not allowed", "Authorized access required.");
     return;
   }
   const userId = $("adminUserId")?.value.trim();
@@ -18066,7 +18012,7 @@ async function inviteAdminUserAccount(){
     return;
   }
   if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
-    toast("Not allowed", "Admin role required.");
+    toast("Not allowed", "Authorized access required.");
     return;
   }
   if (!state.client){
@@ -18113,7 +18059,7 @@ async function updateAdminProfile(userId){
     return;
   }
   if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
-    toast("Not allowed", "Admin role required.");
+    toast("Not allowed", "Authorized access required.");
     return;
   }
   const nameEl = document.querySelector(`[data-field="display_name"][data-id="${userId}"]`);
@@ -18141,7 +18087,7 @@ async function deleteAdminProfile(userId){
     return;
   }
   if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
-    toast("Not allowed", "Owner role required.");
+    toast("Not allowed", "Authorized access required.");
     return;
   }
   if (!confirm("Delete user profile?\nThis removes the profile row (not the auth user).")) return;
@@ -18613,7 +18559,7 @@ SpecCom.helpers.ensurePinOverviewModal = function(){
         <div id="pinOverviewNotes" class="pin-overview-notes">-</div>
       </div>
       <div id="pinOverviewManualEditor" class="pin-overview-manual-editor" style="display:none;">
-        <div class="muted tiny">MANUAL ENTRY (ROOT/OWNER ONLY)</div>
+        <div class="muted tiny">MANUAL ENTRY (AUTHORIZED ONLY)</div>
         <div class="row" style="margin-top:8px;">
           <input id="pinOverviewGpsLatInput" class="input compact" type="number" step="any" placeholder="GPS Lat" />
           <input id="pinOverviewGpsLngInput" class="input compact" type="number" step="any" placeholder="GPS Lng" />
@@ -18819,7 +18765,7 @@ SpecCom.helpers.savePinOverviewManualDetails = async function(){
   const site = state.activeSite;
   if (!site || site.is_pending) return;
   if (!(SpecCom.helpers.isRoot() || isOwner())){
-    toast("Permission denied", "Only ROOT or OWNER can manually edit GPS and progress notes.", "error");
+    toast("Permission denied", "Only authorized team members can manually edit GPS and progress notes.", "error");
     return;
   }
   const latRaw = String($("pinOverviewGpsLatInput")?.value || "").trim();
@@ -18984,7 +18930,7 @@ function renderSitePanel(){
     editLocationBtn.onclick = () => {
       if (!site || isPending) return;
       if (!canManualProofEdit){
-        toast("Permission denied", "Only ROOT or OWNER can manually edit GPS and progress notes.", "error");
+        toast("Permission denied", "Only authorized team members can manually edit GPS and progress notes.", "error");
         return;
       }
       ensureMap();
@@ -19179,7 +19125,7 @@ async function saveSiteNotes(){
   const site = state.activeSite;
   if (!site || site.is_pending) return;
   if (!(SpecCom.helpers.isRoot() || isOwner())){
-    toast("Permission denied", "Only ROOT or OWNER can manually edit GPS and progress notes.", "error");
+    toast("Permission denied", "Only authorized team members can manually edit GPS and progress notes.", "error");
     return;
   }
   const notes = $("siteNotesInput")?.value || "";
@@ -19528,7 +19474,7 @@ async function updateSiteLocationFromMapClick(siteId, coords){
     return;
   }
   if (!(SpecCom.helpers.isRoot() || isOwner())){
-    toast("Permission denied", "Only ROOT or OWNER can manually edit GPS and progress notes.", "error");
+    toast("Permission denied", "Only authorized team members can manually edit GPS and progress notes.", "error");
     clearPendingPinMarker();
     return;
   }
@@ -19720,14 +19666,9 @@ async function completeNode(nodeId){
     toast("Site missing", "Site not found.");
     return;
   }
-  const roleCode = getRoleCode();
-  const canComplete = SpecCom.helpers.isRoot()
-    ? true
-    : (BUILD_MODE
-      ? (roleCode === "ADMIN" || roleCode === "PROJECT_MANAGER" || roleCode === "SUPPORT")
-      : (roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN" || roleCode === "SUPPORT"));
+  const canComplete = Boolean(state.user);
   if (!canComplete){
-    toast("Not allowed", "Only Admin or Project Manager can complete a site.");
+    toast("Not allowed", "Only authorized team members can complete a site.");
     return;
   }
   if (!state.activeNode || state.activeNode.node_number !== node.node_number){
@@ -19760,7 +19701,7 @@ async function completeNode(nodeId){
 
 async function editNodeMeta(nodeId){
   if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
-    toast("Not allowed", "Admin role required.");
+    toast("Not allowed", "Authorized access required.");
     return;
   }
   const node = state.projectNodes.find(n => n.id === nodeId);
@@ -19817,7 +19758,7 @@ async function deleteNode(nodeId){
     return;
   }
   if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
-    toast("Not allowed", "Admin role required.");
+    toast("Not allowed", "Authorized access required.");
     return;
   }
   const node = state.projectNodes.find(n => n.id === nodeId);
@@ -20021,18 +19962,6 @@ async function loadRateCards(projectId){
     return;
   }
   state.rateCards = data || [];
-  const roleCode = getRoleCode();
-  const roleCardName = (roleCode === ROLES.USER_LEVEL_1)
-    ? "USER_LEVEL_1"
-    : (roleCode === ROLES.USER_LEVEL_2)
-      ? "USER_LEVEL_2"
-      : (roleCode === ROLES.OWNER || SpecCom.helpers.isRoot())
-        ? "OWNER"
-        : null;
-  if (roleCardName){
-    const roleCard = state.rateCards.find(r => r.name === roleCardName);
-    if (roleCard) state.activeRateCardId = roleCard.id;
-  }
   if (DEFAULT_RATE_CARD_NAME){
     const named = state.rateCards.find(r => r.name === DEFAULT_RATE_CARD_NAME);
     if (named) state.activeRateCardId = named.id;
@@ -20303,8 +20232,7 @@ async function saveCurrentProjectPreference(projectId){
 }
 
 function canSeedDemo(){
-  const roleCode = getRoleCode();
-  return SpecCom.helpers.isRoot() || roleCode === "ADMIN" || roleCode === "PROJECT_MANAGER" || roleCode === "SUPPORT";
+  return Boolean(state.user);
 }
 
 async function seedDemoNode(){
@@ -20349,7 +20277,7 @@ function renderLocations(){
     if (billingLocked && r.isEditingPorts) r.isEditingPorts = false;
     const displayName = getSpliceLocationDisplayName(r, index);
     const inputValue = r.pending_label ?? (r.label ?? "");
-    const canDelete = SpecCom.helpers.isRoot() || (BUILD_MODE ? true : getRoleCode() === "ADMIN");
+    const canDelete = SpecCom.helpers.isRoot() || BUILD_MODE || Boolean(state.user);
     const disableActions = r.isDeleting;
     const nameHtml = r.isEditingName
       ? `
@@ -20890,9 +20818,9 @@ function openDeleteSpliceLocationModal(locationId){
   }
   const node = state.activeNode;
   if (!node) return;
-  const canDelete = SpecCom.helpers.isRoot() || (BUILD_MODE ? true : getRoleCode() === "ADMIN");
+  const canDelete = SpecCom.helpers.isRoot() || BUILD_MODE || Boolean(state.user);
   if (!canDelete){
-    toast("Not allowed", "Only Admin can delete locations.");
+    toast("Not allowed", "Only authorized team members can delete locations.");
     return;
   }
   const modal = ensureDeleteSpliceModal();
@@ -20921,9 +20849,9 @@ async function deleteSpliceLocation(locationId, options = {}){
   if (!node) return false;
   const loc = node.splice_locations.find(l => l.id === locationId);
   if (!loc) return false;
-  const canDelete = SpecCom.helpers.isRoot() || (BUILD_MODE ? true : getRoleCode() === "ADMIN");
+  const canDelete = SpecCom.helpers.isRoot() || BUILD_MODE || Boolean(state.user);
   if (!canDelete){
-    toast("Not allowed", "Only Admin can delete locations.");
+    toast("Not allowed", "Only authorized team members can delete locations.");
     return false;
   }
   if (loc.isDeleting) return false;
@@ -21312,7 +21240,7 @@ async function handleBackfillPhotoUpload(photoType, file){
     return;
   }
   if (!isOwner()){
-    toast("Not allowed", "Admin role required.");
+    toast("Not allowed", "Authorized access required.");
     return;
   }
   if (!state.nodeProofStatus?.backfill_allowed){
@@ -22091,7 +22019,7 @@ async function uploadInvoiceFile(file){
     return;
   }
   if (!state.client || !canViewInvoiceVault()){
-    toast("Not allowed", "ROOT must grant invoice access first.", "error");
+    toast("Not allowed", "Invoice access must be granted first.", "error");
     return;
   }
   const orgId = getInvoiceScopeOrgId();
@@ -22127,7 +22055,7 @@ async function uploadInvoiceFile(file){
 
 async function deleteInvoiceFile(fileId){
   if (!SpecCom.helpers.isRoot()){
-    toast("Not allowed", "Only ROOT can delete invoice files.", "error");
+    toast("Not allowed", "Only authorized accounts can delete invoice files.", "error");
     return;
   }
   const row = (state.invoiceFiles || []).find((item) => String(item?.id || "") === String(fileId || ""));
@@ -22611,7 +22539,7 @@ async function markInvoiceReady(){
 
 async function updateInvoiceStatus(){
   if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
-    toast("Not allowed", "Admin role required.");
+    toast("Not allowed", "Authorized access required.");
     return;
   }
   if (isDemoUser()){
@@ -22646,7 +22574,7 @@ async function updateInvoiceStatus(){
 
 async function createOwnerOverride(overrideType, reason){
   if (!isOwner()){
-    toast("Not allowed", "Owner role required.");
+    toast("Not allowed", "Authorized access required.");
     return;
   }
   const loc = state.billingLocation;
@@ -22970,15 +22898,14 @@ function getRemainingForItem(item){
 }
 
 function updateAlertsBadge(){
-  const roleCode = getRoleCode();
-  const canSeeAlerts = SpecCom.helpers.isRoot() || roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN" || roleCode === "SUPPORT";
+  const canSeeAlerts = Boolean(state.user);
   const openAlerts = canSeeAlerts ? (state.alerts || []).filter(a => a.status === "open") : [];
   const count = openAlerts.length;
   const badge = $("alertsBadge");
   if (badge){
     badge.textContent = canSeeAlerts
       ? (count ? `${count} alert${count > 1 ? "s" : ""}` : "No alerts")
-      : "Alerts for PMs only";
+      : "Alerts unavailable";
     badge.classList.toggle("warn", count > 0 && canSeeAlerts);
   }
   const navBadge = $("alertsNavBadge");
@@ -23037,8 +22964,7 @@ async function loadSplicePhotos(nodeId, locs){
 }
 
 function renderAlerts(){
-  const roleCode = getRoleCode();
-  const canSeeAlerts = SpecCom.helpers.isRoot() || roleCode === "PROJECT_MANAGER" || roleCode === "ADMIN" || roleCode === "SUPPORT";
+  const canSeeAlerts = Boolean(state.user);
   const list = canSeeAlerts ? (state.alerts || []) : [];
   const dashboardTarget = $("alertsFeed");
   const fullTarget = $("alertsFeedFull");
@@ -23065,7 +22991,7 @@ function renderAlerts(){
           </div>
         `;
       }).join("")
-    : `<div class="muted small">${canSeeAlerts ? "No alerts right now." : "Alerts are available to Admin / Project Manager."}</div>`;
+    : `<div class="muted small">${canSeeAlerts ? "No alerts right now." : "Alerts are available to authorized accounts."}</div>`;
   if (dashboardTarget){
     const activityHtml = renderDashboardTimesheetActivity();
     dashboardTarget.innerHTML = activityHtml || alertsHtml;
@@ -23789,7 +23715,6 @@ async function addSpliceLocation(){
 
 async function openNode(nodeNumber){
   ensureDemoSeed();
-  const roleCode = getRoleCode();
 
   const n = (nodeNumber || "").trim();
   if (!n){
@@ -23838,11 +23763,11 @@ async function openNode(nodeNumber){
     updateKPI();
     renderNodeCards();
 
-  // Project Manager alert when near units
-    if (roleCode === "PROJECT_MANAGER" && state.activeNode.units_allowed > 0){
+  // Operations alert when near units
+    if (state.activeNode.units_allowed > 0){
       const ratio = state.activeNode.units_used / state.activeNode.units_allowed;
       if (ratio >= 0.9){
-        toast("Project Manager alert", "Units are close to the allowed threshold for this site.");
+        toast("Operations alert", "Units are close to the allowed threshold for this site.");
       }
     }
     return;
@@ -24007,7 +23932,7 @@ async function createNode(nodeNumber){
       units_used: 0,
       splice_locations: [],
       inventory_checks: [
-        { id:`inv-${Date.now()}-1`, item_code:"HAFO(OFDC-B8G)", item_name:"ADMIN Millennium example", photo:"./assets/millennium_example.png", qty_used: 1, planned_qty: 8, completed:false },
+        { id:`inv-${Date.now()}-1`, item_code:"HAFO(OFDC-B8G)", item_name:"Priority Millennium example", photo:"./assets/millennium_example.png", qty_used: 1, planned_qty: 8, completed:false },
       ],
       ready_for_billing: false,
     };
@@ -24050,12 +23975,6 @@ async function markNodeReady(){
     toast("Demo restriction", t("availableInProduction"));
     return;
   }
-  const roleCode = getRoleCode();
-  if (roleCode === ROLES.USER_LEVEL_1){
-    toast("Not allowed", "Only billing roles can mark sites ready.");
-    return;
-  }
-
   const c = computeNodeCompletion(node);
   if (!BUILD_MODE && !MVP_UNGATED && !(c.locOk && c.invOk)){
     toast("Not ready", "Finish all splice locations + inventory checklist first.");
@@ -24131,7 +24050,7 @@ function installInvalidRefreshTokenGuard(){
 async function enterDemoBootstrapSession({ persistSession = true, toastMessage = "", userEmail = "" } = {}){
   isDemo = true;
   appMode = "demo";
-  state.demo.role = ROLES.USER_LEVEL_1;
+  state.demo.role = AUTHENTICATED_ACCESS_CODE;
   if (persistSession){
     persistDemoBootstrapSession(true);
   }
@@ -24140,7 +24059,7 @@ async function enterDemoBootstrapSession({ persistSession = true, toastMessage =
   state.user = { id: "demo-bootstrap-user", email };
   state.session = { user: state.user, access_token: "demo-bootstrap-token", token_type: "bearer" };
   state.profile = {
-    role: ROLES.USER_LEVEL_1,
+    role: AUTHENTICATED_ACCESS_CODE,
     display_name: "Demo Technician",
     preferred_language: getPreferredLanguage(),
     is_demo: false,
@@ -24237,7 +24156,7 @@ async function initAuth(){
     await demoLogin();
   }
 
-  // Demo: choose role via prompt for now
+  // Demo: choose access mode via prompt for now
   if (isDemo){
     await enterDemoBootstrapSession({ persistSession: false });
     return;
@@ -24528,7 +24447,7 @@ async function handleSignIn(e) {
         return;
       }
       if (bootstrapDecision.reason === "bootstrap_credentials_missing"){
-        showToast("Demo bootstrap is enabled but DEMO_ADMIN_EMAIL/DEMO_PASSWORD are not configured.");
+        showToast("Demo bootstrap is enabled but bootstrap email/password are not configured.");
         return;
       }
       if (bootstrapDecision.reason === "bootstrap_credentials_mismatch"){

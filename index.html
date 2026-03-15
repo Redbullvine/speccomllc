@@ -175,7 +175,7 @@
               </div>
               <div style="margin-top:14px;" class="row">
                 <span id="chipStatus" class="chip"><span class="dot warn"></span><span>Waiting</span></span>
-                <span id="chipRole" class="chip"><span class="dot ok"></span><span>Role: ?</span></span>
+                <span id="chipRole" class="chip"><span class="dot ok"></span><span>Access: Authenticated</span></span>
                 <span id="chipPricing" class="chip"><span class="dot bad"></span><span data-i18n="pricingHidden">Pricing hidden from splicers</span></span>
                 <span id="chipBuildMode" class="chip" style="display:none;"><span class="dot warn"></span><span>BUILD MODE (restrictions disabled)</span></span>
               </div>
@@ -352,7 +352,7 @@
             </div>
           </div>
           <div id="invoiceFilesGate" class="note warning" style="margin-top:12px; display:none;">
-            Invoice files are private. ROOT must grant you invoice access before you can view this vault.
+            Invoice files are private. Authorized access is required before you can view this vault.
           </div>
           <div id="invoiceFilesPanel" class="card" style="margin-top:12px; display:none;">
             <div class="row" style="justify-content:space-between; align-items:center;">
@@ -683,7 +683,7 @@
 
         <section id="viewAdmin" class="view">
           <div class="card">
-            <h2 data-i18n="adminNotesTitle">Admin notes</h2>
+            <h2 data-i18n="adminNotesTitle">Operations notes</h2>
             <div class="note">
               <div style="font-weight:900;">Next build steps</div>
               <ol class="muted small" style="margin-top:8px;">
@@ -902,7 +902,7 @@
           <button id="btnMenuMessages" class="menu-link" type="button">Messaging</button>
           <button class="menu-link" type="button" data-view="viewMap">Map Workspace</button>
           <button id="btnMenuOpenRedline" class="menu-link" type="button">Open Redline</button>
-          <button class="menu-link" type="button" data-view="viewAdmin">Admin Panel</button>
+          <button class="menu-link" type="button" data-view="viewAdmin">Operations Panel</button>
         </div>
         <div class="menu-section">
           <div class="muted small menu-title" data-i18n="languageLabel">Language</div>
@@ -913,7 +913,7 @@
           </select>
         </div>
         <div class="menu-section">
-          <div class="muted small menu-title">Admin Actions</div>
+          <div class="muted small menu-title">Operations Actions</div>
           <button id="btnGrantProjectAccess" class="menu-link menu-root-only" type="button">Grant Project Access</button>
           <button id="btnImportPriceSheet" class="menu-link menu-root-only" type="button">Import Price Sheet</button>
           <button id="btnCreateProjectFromStaking" class="menu-link menu-root-only" type="button">Create Project from Staking</button>
@@ -1002,7 +1002,7 @@
         <div class="field-stack" style="margin-top:10px;">
           <input id="priceSheetInput" type="file" accept=".csv,.xlsx,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf" />
           <div class="muted small">Expected headers: code, description, unit, rate</div>
-          <div class="muted small">USER2 = USER1 +25% • OWNER = USER2 +25%</div>
+          <div class="muted small">Tier 2 = Tier 1 +25% • Premium = Tier 2 +25%</div>
         </div>
         <div class="row" style="margin-top:12px; justify-content:flex-end;">
           <button id="btnPriceSheetCancel" class="btn ghost" type="button">Cancel</button>
