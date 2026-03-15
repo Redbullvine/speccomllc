@@ -103,6 +103,7 @@ const SHOWCASE_MODULES = [
   { key: "tech_service", title: "Service + Trouble", group: "tech", chips: ["Trouble tickets", "Service orders", "Close-out"], summary: "Service orders and close-out workflow.", action: { type: "view", target: "viewTechnician" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_1, ROLES.SUPPORT] },
   { key: "tech_timesheet", title: "Timesheet", group: "tech", chips: ["Clock in/out", "Event log", "Daily summary"], summary: "Technician time tracking and activity.", action: { type: "view", target: "viewTechnician" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_1, ROLES.SUPPORT] },
   { key: "warehouse_catalog", title: "Material Search", group: "warehouse", chips: ["Catalog search", "Parts lookup", "Item metadata"], summary: "Search parts and material references.", action: { type: "view", target: "viewCatalog" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
+  { key: "warehouse_scan", title: "Warehouse Scanner", group: "warehouse", chips: ["Scan barcode", "Item lookup", "Inventory intake"], summary: "Scan and intake warehouse inventory items.", action: { type: "view", target: "viewWarehouseScan" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.USER_LEVEL_2, ROLES.SUPPORT] },
   { key: "warehouse_inventory", title: "Inventory Controls", group: "warehouse", chips: ["Inventory table", "SMS alerts", "Assigned stock"], summary: "Warehouse and stock visibility.", action: { type: "view", target: "viewAdmin" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN] },
   { key: "dispatch_planner", title: "Dispatch Board", group: "dispatch", chips: ["Create work order", "Assignments", "Queue filters"], summary: "Create, schedule, assign, and manage the work order queue.", action: { type: "view", target: "viewDispatch" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
   { key: "supervisor_dashboard", title: "Supervisor Oversight", group: "supervisor", chips: ["KPI status", "Blocked jobs", "Daily summary"], summary: "Supervisor progress tracking, escalations, and exception oversight.", action: { type: "view", target: "viewSupervisor" }, rolesAllowed: [ROLES.ROOT, ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPPORT] },
@@ -210,6 +211,12 @@ const state = {
   allowedQuantities: [],
   alerts: [],
   materialCatalog: [],
+  warehouseScan: {
+    loaded: false,
+    items: [],
+    lastScannedValue: "",
+    match: null,
+  },
   projects: [],
   messages: [],
   messageRecipients: [],
@@ -1214,6 +1221,7 @@ const LEGACY_DRAWER_TAB_KEY = "speccom.ui.drawerTab";
 const LEGACY_DRAWER_WIDTH_KEY = "speccom.ui.drawerWidth";
 const OFFICE_INVOICE_RECORDS_KEY = "speccom.office.invoiceRecords.v1";
 const OFFICE_INVOICE_RECENTS_KEY = "speccom.office.invoiceRecents.v1";
+const WAREHOUSE_SCAN_ITEMS_KEY = "speccom.warehouse.scanItems.v1";
 const KMZ_PHOTO_OVERRIDES_KEY_PREFIX = "speccom.kmzPhotoOverrides.";
 const INVOICE_FILES_BUCKET = "invoice-files";
 const KMZ_SNAPSHOT_TABLE = "project_kmz_snapshots";
@@ -2612,6 +2620,10 @@ function setActiveView(viewId, { syncHash = true } = {}){
   }
   if (viewId === "viewLabor"){
     if (state.features.labor) loadLaborRows();
+  }
+  if (viewId === "viewWarehouseScan"){
+    renderWarehouseScanView();
+    queueMicrotask(() => focusWarehouseScanInput());
   }
   if (viewId === "viewMap"){
     forcePlainMapRedlineState();
@@ -9400,7 +9412,7 @@ function canShowModule(moduleKey){
 }
 
 function getProductionAllowedViews(){
-  return new Set(["viewDashboard", "viewTechnician", "viewNodes", "viewPhotos", "viewBilling", "viewInvoices", "viewMap", "viewCatalog", "viewAlerts", "viewAdmin", "viewSettings", "viewLabor", "viewDispatch", "viewSupervisor", "viewDailyReport"]);
+  return new Set(["viewDashboard", "viewTechnician", "viewNodes", "viewPhotos", "viewBilling", "viewInvoices", "viewMap", "viewCatalog", "viewWarehouseScan", "viewAlerts", "viewAdmin", "viewSettings", "viewLabor", "viewDispatch", "viewSupervisor", "viewDailyReport"]);
 }
 
 function canViewLabor(){
@@ -23123,6 +23135,186 @@ function maybeCreateDemoAlert(nodeId, unitTypeId){
   });
 }
 
+function loadWarehouseScanState(){
+  if (state.warehouseScan.loaded) return;
+  const raw = safeLocalStorageGet(WAREHOUSE_SCAN_ITEMS_KEY);
+  if (raw){
+    try{
+      const parsed = JSON.parse(raw);
+      state.warehouseScan.items = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      state.warehouseScan.items = [];
+    }
+  } else {
+    state.warehouseScan.items = [];
+  }
+  state.warehouseScan.loaded = true;
+}
+
+function persistWarehouseScanState(){
+  safeLocalStorageSet(WAREHOUSE_SCAN_ITEMS_KEY, JSON.stringify(state.warehouseScan.items || []));
+}
+
+function focusWarehouseScanInput(){
+  const input = $("warehouseScanInput");
+  if (!input) return;
+  input.focus();
+  input.select();
+}
+
+function findWarehouseScanMatch(scanValue){
+  const needle = String(scanValue || "").trim().toLowerCase();
+  if (!needle) return null;
+  loadWarehouseScanState();
+  const localMatch = (state.warehouseScan.items || []).find((item) => {
+    return [
+      item.barcode_value,
+      item.serial_number,
+      item.model,
+      item.material_name,
+    ].some((value) => String(value || "").trim().toLowerCase() === needle);
+  });
+  if (localMatch){
+    return { source: "warehouse", item: localMatch };
+  }
+  const catalogMatch = (state.materialCatalog || []).find((item) => {
+    return [
+      item.millennium_part,
+      item.mfg_sku,
+      item.description,
+    ].some((value) => String(value || "").trim().toLowerCase() === needle);
+  });
+  if (catalogMatch){
+    return {
+      source: "catalog",
+      item: {
+        id: `catalog-${catalogMatch.id || needle}`,
+        material_name: catalogMatch.description || catalogMatch.mfg_sku || catalogMatch.millennium_part || "Catalog Item",
+        category: "",
+        brand: "",
+        model: catalogMatch.mfg_sku || "",
+        serial_number: "",
+        barcode_value: catalogMatch.millennium_part || catalogMatch.mfg_sku || scanValue,
+        description: catalogMatch.description || "",
+        qty_on_hand: 0,
+      },
+    };
+  }
+  return null;
+}
+
+function openWarehouseCreateForm(scanValue = ""){
+  const wrap = $("warehouseCreateWrap");
+  if (!wrap) return;
+  wrap.style.display = "";
+  $("warehouseCreateMaterialName").value = "";
+  $("warehouseCreateCategory").value = "";
+  $("warehouseCreateBrand").value = "";
+  $("warehouseCreateModel").value = "";
+  $("warehouseCreateSerialNumber").value = "";
+  $("warehouseCreateBarcodeValue").value = String(scanValue || "");
+  $("warehouseCreateDescription").value = "";
+}
+
+function closeWarehouseCreateForm(){
+  const wrap = $("warehouseCreateWrap");
+  if (wrap) wrap.style.display = "none";
+}
+
+function renderWarehouseScanResult(){
+  const wrap = $("warehouseScanResult");
+  if (!wrap) return;
+  const match = state.warehouseScan.match;
+  if (!state.warehouseScan.lastScannedValue){
+    wrap.innerHTML = `<div class="muted small">Scan an item to begin inventory intake.</div>`;
+    return;
+  }
+  if (!match){
+    wrap.innerHTML = `
+      <div class="note warning">
+        <div style="font-weight:900;">Item not found</div>
+        <div class="muted small">No match for <b>${escapeHtml(state.warehouseScan.lastScannedValue)}</b>.</div>
+        <div class="row" style="margin-top:10px;">
+          <button class="btn" type="button" data-warehouse-action="createFromScan">Create New Item</button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+  const item = match.item;
+  const qty = Number(item.qty_on_hand || 0);
+  wrap.innerHTML = `
+    <div class="note">
+      <div class="row" style="justify-content:space-between;">
+        <div style="font-weight:900;">${escapeHtml(item.material_name || "Inventory item")}</div>
+        <span class="chip"><span class="dot ${match.source === "warehouse" ? "ok" : "warn"}"></span><span>${escapeHtml(match.source === "warehouse" ? "Warehouse item" : "Catalog match")}</span></span>
+      </div>
+      <div class="muted small" style="margin-top:6px;">
+        Barcode: ${escapeHtml(item.barcode_value || "-")} | Serial: ${escapeHtml(item.serial_number || "-")}
+      </div>
+      <div class="muted small">Category: ${escapeHtml(item.category || "-")} | Brand: ${escapeHtml(item.brand || "-")} | Model: ${escapeHtml(item.model || "-")}</div>
+      <div class="muted small">Qty on hand: <b>${qty}</b></div>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn" type="button" data-warehouse-action="receiveStock">Receive Into Stock</button>
+        <button class="btn ghost" type="button" data-warehouse-action="issueLater">Issue Later</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderWarehouseScanView(){
+  loadWarehouseScanState();
+  const status = $("warehouseScanStatus");
+  if (status){
+    status.textContent = state.warehouseScan.lastScannedValue
+      ? `Last scan: ${state.warehouseScan.lastScannedValue}`
+      : "Ready to scan.";
+  }
+  renderWarehouseScanResult();
+}
+
+function upsertWarehouseScannedItem(item){
+  loadWarehouseScanState();
+  const normalizedBarcode = String(item.barcode_value || "").trim().toLowerCase();
+  const normalizedSerial = String(item.serial_number || "").trim().toLowerCase();
+  const idx = (state.warehouseScan.items || []).findIndex((row) => {
+    const rowBarcode = String(row.barcode_value || "").trim().toLowerCase();
+    const rowSerial = String(row.serial_number || "").trim().toLowerCase();
+    return (normalizedBarcode && rowBarcode === normalizedBarcode)
+      || (normalizedSerial && rowSerial === normalizedSerial);
+  });
+  if (idx >= 0){
+    state.warehouseScan.items[idx] = { ...state.warehouseScan.items[idx], ...item, updated_at: nowISO() };
+    return state.warehouseScan.items[idx];
+  }
+  const next = { ...item, id: item.id || `warehouse-item-${Date.now()}`, qty_on_hand: Number(item.qty_on_hand || 0), created_at: nowISO(), updated_at: nowISO() };
+  state.warehouseScan.items.unshift(next);
+  return next;
+}
+
+function handleWarehouseScanSubmit(scanValue){
+  const value = String(scanValue || "").trim();
+  if (!value){
+    toast("Scan required", "Scan barcode / QR / serial first.");
+    focusWarehouseScanInput();
+    return;
+  }
+  state.warehouseScan.lastScannedValue = value;
+  state.warehouseScan.match = findWarehouseScanMatch(value);
+  closeWarehouseCreateForm();
+  renderWarehouseScanView();
+  if (state.warehouseScan.match){
+    toast("Item found", "Inventory item matched.");
+  } else {
+    toast("Item not found", "Create a new inventory item.");
+  }
+  const input = $("warehouseScanInput");
+  if (input){
+    input.value = "";
+    focusWarehouseScanInput();
+  }
+}
+
 function filterCatalog(term){
   const needle = (term || "").trim().toLowerCase();
   if (!needle) return state.materialCatalog || [];
@@ -23163,6 +23355,7 @@ const SHOWCASE_VIEW_FALLBACKS = {
   viewPhotos: ["viewDashboard"],
   viewAdmin: ["viewDashboard"],
   viewCatalog: ["viewDashboard"],
+  viewWarehouseScan: ["viewCatalog", "viewDashboard"],
   viewDailyReport: ["viewDashboard"],
   viewTechnician: ["viewDashboard"],
   viewInvoices: ["viewDashboard"],
@@ -23289,6 +23482,7 @@ function renderDemoShowcaseHome(){
       summary: "Inventory, material search, and assignment visibility.",
       chips: ["Inventory", "Material search", "Assignments"],
       action: { type: "view", target: "viewCatalog" },
+      secondaryAction: { type: "view", target: "viewWarehouseScan", label: "Scan Item" },
     },
     {
       title: "Supervisor",
@@ -23319,6 +23513,7 @@ function renderDemoShowcaseHome(){
             ${workspace.chips.map((chip) => `<span class="chip">${escapeHtml(chip)}</span>`).join("")}
           </div>
           <div class="row" style="margin-top:12px; justify-content:flex-end;">
+            ${workspace.secondaryAction ? `<button class="btn secondary" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(workspace.secondaryAction, { label: workspace.secondaryAction.label || "Open" })))}'>${escapeHtml(workspace.secondaryAction.label || "Open")}</button>` : ""}
             <button class="btn" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(workspace.action, { label: workspace.title, fallbackViews: workspace.action.fallbackViews || [] })))}'>Open Workspace</button>
           </div>
         </article>
@@ -24860,6 +25055,97 @@ function wireUI(){
     catalogClear.addEventListener("click", () => {
       if (catalogSearch) catalogSearch.value = "";
       renderCatalogResults("catalogResults", "");
+    });
+  }
+  const openWarehouseScanBtn = $("btnOpenWarehouseScan");
+  if (openWarehouseScanBtn){
+    openWarehouseScanBtn.addEventListener("click", () => {
+      if (isViewAllowed("viewWarehouseScan")){
+        setActiveView("viewWarehouseScan");
+      }
+    });
+  }
+  const warehouseScanToCatalogBtn = $("btnWarehouseScanToCatalog");
+  if (warehouseScanToCatalogBtn){
+    warehouseScanToCatalogBtn.addEventListener("click", () => {
+      if (isViewAllowed("viewCatalog")){
+        setActiveView("viewCatalog");
+      }
+    });
+  }
+  const warehouseScanForm = $("warehouseScanForm");
+  if (warehouseScanForm){
+    warehouseScanForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      handleWarehouseScanSubmit($("warehouseScanInput")?.value || "");
+    });
+  }
+  const warehouseScanResult = $("warehouseScanResult");
+  if (warehouseScanResult){
+    warehouseScanResult.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-warehouse-action]");
+      if (!btn) return;
+      const action = String(btn.dataset.warehouseAction || "");
+      if (action === "createFromScan"){
+        openWarehouseCreateForm(state.warehouseScan.lastScannedValue);
+        return;
+      }
+      if (action === "receiveStock"){
+        const match = state.warehouseScan.match?.item || null;
+        if (!match) return;
+        const next = upsertWarehouseScannedItem({
+          ...match,
+          barcode_value: match.barcode_value || state.warehouseScan.lastScannedValue,
+          qty_on_hand: Number(match.qty_on_hand || 0) + 1,
+        });
+        persistWarehouseScanState();
+        state.warehouseScan.match = { source: "warehouse", item: next };
+        renderWarehouseScanView();
+        toast("Inventory updated", `${next.material_name || "Item"} received into stock.`);
+        focusWarehouseScanInput();
+        return;
+      }
+      if (action === "issueLater"){
+        toast("Queued", "Item flagged for issue workflow.");
+        focusWarehouseScanInput();
+      }
+    });
+  }
+  const warehouseCreateForm = $("warehouseCreateForm");
+  if (warehouseCreateForm){
+    warehouseCreateForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const item = {
+        material_name: $("warehouseCreateMaterialName")?.value?.trim() || "",
+        category: $("warehouseCreateCategory")?.value?.trim() || "",
+        brand: $("warehouseCreateBrand")?.value?.trim() || "",
+        model: $("warehouseCreateModel")?.value?.trim() || "",
+        serial_number: $("warehouseCreateSerialNumber")?.value?.trim() || "",
+        barcode_value: $("warehouseCreateBarcodeValue")?.value?.trim() || "",
+        description: $("warehouseCreateDescription")?.value?.trim() || "",
+        qty_on_hand: 0,
+      };
+      if (!item.material_name){
+        toast("Name required", "Enter material name.");
+        return;
+      }
+      if (!item.barcode_value && state.warehouseScan.lastScannedValue){
+        item.barcode_value = state.warehouseScan.lastScannedValue;
+      }
+      const saved = upsertWarehouseScannedItem(item);
+      persistWarehouseScanState();
+      state.warehouseScan.match = { source: "warehouse", item: saved };
+      closeWarehouseCreateForm();
+      renderWarehouseScanView();
+      toast("Item saved", "New inventory item created.");
+      focusWarehouseScanInput();
+    });
+  }
+  const warehouseCreateCancelBtn = $("btnWarehouseCreateCancel");
+  if (warehouseCreateCancelBtn){
+    warehouseCreateCancelBtn.addEventListener("click", () => {
+      closeWarehouseCreateForm();
+      focusWarehouseScanInput();
     });
   }
 

@@ -830,6 +830,7 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
   #viewInvoices .grid.cols-2{grid-template-columns:1fr}
   #viewInvoices .btn{min-height:44px}
   #viewInvoices table{min-width:760px}
+  #viewWarehouseScan .btn{min-height:44px}
   #viewSupervisor .grid.cols-2{grid-template-columns:1fr}
   #viewSupervisor .btn{min-height:44px}
   #viewSupervisor table{min-width:720px}

@@ -627,12 +627,47 @@
           <div class="card">
             <div class="row" style="justify-content:space-between;">
               <h2 data-i18n="catalogTitle">Material catalog</h2>
-              <button id="btnCatalogClear" class="btn ghost" data-action="catalogClear" data-i18n="clear">Clear</button>
+              <div class="row">
+                <button id="btnOpenWarehouseScan" class="btn secondary" type="button">Scan Item</button>
+                <button id="btnCatalogClear" class="btn ghost" data-action="catalogClear" data-i18n="clear">Clear</button>
+              </div>
             </div>
             <div class="row" style="margin-top:12px;">
               <input id="catalogSearch" class="input" placeholder="Search Millennium part, MFG SKU, description" data-i18n-placeholder="catalogSearchPlaceholder" />
             </div>
             <div id="catalogResults" class="catalog-list" style="margin-top:16px;"></div>
+          </div>
+        </section>
+
+        <section id="viewWarehouseScan" class="view">
+          <div class="card">
+            <div class="row" style="justify-content:space-between; align-items:center;">
+              <h2>Warehouse Scanner</h2>
+              <button id="btnWarehouseScanToCatalog" class="btn ghost small" type="button">Material Catalog</button>
+            </div>
+            <div class="muted small">Scan barcode, QR, or serial to intake inventory quickly.</div>
+            <form id="warehouseScanForm" class="row" style="margin-top:12px;" autocomplete="off">
+              <input id="warehouseScanInput" class="input" placeholder="Scan barcode / QR / serial" />
+              <button id="btnWarehouseScanSubmit" class="btn" type="submit">Scan</button>
+            </form>
+            <div id="warehouseScanStatus" class="muted small" style="margin-top:10px;"></div>
+            <div id="warehouseScanResult" style="margin-top:12px;"></div>
+            <div id="warehouseCreateWrap" class="card" style="margin-top:12px; display:none;">
+              <h3>Create New Item</h3>
+              <form id="warehouseCreateForm" class="field-stack" style="margin-top:8px;" autocomplete="off">
+                <input id="warehouseCreateMaterialName" class="input" placeholder="material_name" required />
+                <input id="warehouseCreateCategory" class="input" placeholder="category" />
+                <input id="warehouseCreateBrand" class="input" placeholder="brand" />
+                <input id="warehouseCreateModel" class="input" placeholder="model" />
+                <input id="warehouseCreateSerialNumber" class="input" placeholder="serial_number" />
+                <input id="warehouseCreateBarcodeValue" class="input" placeholder="barcode_value" />
+                <textarea id="warehouseCreateDescription" class="input" rows="3" placeholder="description"></textarea>
+                <div class="row">
+                  <button id="btnWarehouseCreateSave" class="btn" type="submit">Save Item</button>
+                  <button id="btnWarehouseCreateCancel" class="btn ghost" type="button">Cancel</button>
+                </div>
+              </form>
+            </div>
           </div>
         </section>
 
@@ -863,6 +898,7 @@
           <button class="menu-link" type="button" data-view="viewSupervisor">Supervisor</button>
           <button class="menu-link" type="button" data-view="viewInvoices">Invoicing</button>
           <button class="menu-link" type="button" data-view="viewCatalog">Material Search</button>
+          <button class="menu-link" type="button" data-view="viewWarehouseScan">Warehouse Scanner</button>
           <button id="btnMenuMessages" class="menu-link" type="button">Messaging</button>
           <button class="menu-link" type="button" data-view="viewMap">Map Workspace</button>
           <button id="btnMenuOpenRedline" class="menu-link" type="button">Open Redline</button>
