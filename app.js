@@ -2097,6 +2097,7 @@ const SINGLE_PROOF_PHOTO_MODE = String(
   || ""
 ).toLowerCase() === "true";
 const MVP_UNGATED = true;
+const CONTROL_CENTER_DEV_MODE = true;
 
 function getSiteDisplayName(site){
   const raw = String(site?.name || "").trim();
@@ -9373,18 +9374,22 @@ function getProductionAllowedViews(){
 }
 
 function canViewLabor(){
+  if (CONTROL_CENTER_DEV_MODE) return true;
   return isPrivilegedRole();
 }
 
 function canViewDispatch(){
+  if (CONTROL_CENTER_DEV_MODE) return true;
   return isPrivilegedRole();
 }
 
 function canViewInvoiceVault(){
+  if (CONTROL_CENTER_DEV_MODE) return true;
   return Boolean(state.user);
 }
 
 function canCreateProjects(){
+  if (CONTROL_CENTER_DEV_MODE) return true;
   return isPrivilegedRole();
 }
 
@@ -9414,6 +9419,7 @@ function syncHashForView(viewId){
 }
 
 function getDefaultView({ allowHash = false } = {}){
+  if (CONTROL_CENTER_DEV_MODE) return "viewDashboard";
   if (allowHash){
     const hashView = parseViewFromHash();
     if (hashView && isViewAllowed(hashView)) return hashView;
@@ -9424,6 +9430,9 @@ function getDefaultView({ allowHash = false } = {}){
 }
 
 function isViewAllowed(viewId){
+  if (CONTROL_CENTER_DEV_MODE){
+    return true;
+  }
   if (isDemoShowcaseMode()){
     return true;
   }
@@ -14152,6 +14161,11 @@ function exportLaborCsv(){
 }
 
 function showAuth(show){
+  if (CONTROL_CENTER_DEV_MODE){
+    $("viewAuth").style.display = "none";
+    $("viewApp").style.display = "";
+    return;
+  }
   $("viewAuth").style.display = show ? "" : "none";
   $("viewApp").style.display = show ? "none" : "";
 }
@@ -14166,18 +14180,19 @@ function syncDemoLoginButton(){
 
 function setWhoami(){
   const authed = isDemo || Boolean(state.user);
+  const shellVisible = authed || CONTROL_CENTER_DEV_MODE;
   const signOutBtn = $("btnSignOut");
   if (signOutBtn) signOutBtn.style.display = authed ? "" : "none";
   ["btnHome", "btnProjects", "btnMenu", "btnOpenProjects", "btnMapToggle"].forEach((id) => {
     const el = $(id);
-    if (el) el.style.display = authed ? "" : "none";
+    if (el) el.style.display = shellVisible ? "" : "none";
   });
   const timesheetBtn = $("btnTimesheet");
-  if (timesheetBtn) timesheetBtn.style.display = authed && isViewAllowed("viewTechnician") ? "" : "none";
+  if (timesheetBtn) timesheetBtn.style.display = shellVisible && isViewAllowed("viewTechnician") ? "" : "none";
   const messagesBtn = $("btnMessages");
-  if (messagesBtn) messagesBtn.style.display = authed && state.messagesEnabled && state.features.messages ? "" : "none";
+  if (messagesBtn) messagesBtn.style.display = shellVisible && state.messagesEnabled && state.features.messages ? "" : "none";
   const menuMessagesBtn = $("btnMenuMessages");
-  if (menuMessagesBtn) menuMessagesBtn.style.display = authed && state.messagesEnabled && state.features.messages ? "" : "none";
+  if (menuMessagesBtn) menuMessagesBtn.style.display = shellVisible && state.messagesEnabled && state.features.messages ? "" : "none";
   syncDemoLoginButton();
   syncDemoFeatureHubVisibility();
   renderDemoShowcaseHome();
@@ -16631,7 +16646,7 @@ async function sendMessage(){
 async function loadProjects(){
   if (isDemo){
     state.projects = state.demo.project ? [state.demo.project] : [];
-    state.activeProject = state.projects[0] || null;
+    state.activeProject = null;
     renderProjects();
     loadMessages();
     return;
@@ -16658,9 +16673,6 @@ async function loadProjects(){
     if (state.activeProject){
       const match = state.projects.find(p => p.id === state.activeProject.id);
       state.activeProject = match || null;
-    }
-    if (!state.activeProject && state.projects.length){
-      setActiveProjectById(state.projects[0].id);
     }
     renderProjects();
     return;
@@ -16714,15 +16726,6 @@ async function loadProjects(){
   if (state.activeProject){
     const match = state.projects.find(p => p.id === state.activeProject.id);
     state.activeProject = match || null;
-  }
-  if (!state.activeProject){
-    const preferred = state.profile?.current_project_id || getSavedProjectPreference();
-    const match = preferred ? state.projects.find(p => p.id === preferred) : null;
-    if (match){
-      setActiveProjectById(match.id);
-    } else if (state.projects.length === 1){
-      setActiveProjectById(state.projects[0].id);
-    }
   }
   debugLog("Loaded projects", state.projects);
   debugLog("Current project id", state.activeProject?.id || null);
@@ -21936,30 +21939,29 @@ function runShowcaseAction(action){
       if (!hasViewTarget(normalized)) continue;
       if (!isViewAllowed(normalized)) continue;
       setActiveView(normalized);
-      toast("Showcase", `Opening ${getShowcaseActionLabel(action, normalized)}.`);
+      toast("Control Center", `Opening ${getShowcaseActionLabel(action, normalized)}.`);
       return;
     }
-    toast("Showcase", "That module is unavailable for this account.", "error");
+    toast("Control Center", "That module is unavailable for this account.", "error");
     return;
   }
   if (action.type === "modal" && action.target === "messages"){
     openMessagesModal();
-    toast("Showcase", `Opening ${getShowcaseActionLabel(action, "messages")}.`);
+    toast("Control Center", `Opening ${getShowcaseActionLabel(action, "messages")}.`);
     return;
   }
   if (action.type === "modal" && action.target === "projects"){
     openProjectsModal();
-    toast("Showcase", `Opening ${getShowcaseActionLabel(action, "projects")}.`);
+    toast("Control Center", `Opening ${getShowcaseActionLabel(action, "projects")}.`);
     return;
   }
   openProjectsModal();
-  toast("Showcase", "Opening Projects.");
+  toast("Control Center", "Opening Projects.");
 }
 
 function renderDemoShowcaseHome(){
   const wrap = $("demoShowcaseHome");
   if (!wrap) return;
-  const showcase = isDemoShowcaseMode();
   const legacyIds = [
     "dashboardJobCard",
     "dashboardActiveSiteCard",
@@ -21972,71 +21974,73 @@ function renderDemoShowcaseHome(){
   if (profileCard) profileCard.style.display = "";
   legacyIds.forEach((id) => {
     const el = $(id);
-    if (el) el.style.display = showcase ? "none" : "";
+    if (el) el.style.display = "none";
   });
-  if (!showcase){
-    wrap.style.display = "none";
-    wrap.innerHTML = "";
-    return;
-  }
-  const quickActions = [
-    { label: "Timesheet", action: { type: "view", target: "viewTechnician" } },
-    { label: "Projects", action: { type: "modal", target: "projects" } },
-    { label: "Map", action: { type: "view", target: "viewMap" } },
-    { label: "Messages", action: { type: "modal", target: "messages" } },
-    { label: "Invoicing", action: { type: "view", target: "viewInvoices" } },
-    { label: "Materials", action: { type: "view", target: "viewCatalog" } },
+  const workspaces = [
+    {
+      title: "Technician",
+      summary: "Clock in, field tasks, and photo capture.",
+      chips: ["Clock in", "Field tasks", "Photos"],
+      action: { type: "view", target: "viewTechnician" },
+    },
+    {
+      title: "Splicer",
+      summary: "Projects, closures, billing codes, and redline map workflows.",
+      chips: ["Projects", "Closures", "Billing codes", "Redline map"],
+      action: { type: "view", target: "viewMap", fallbackViews: ["viewNodes", "viewDashboard"] },
+    },
+    {
+      title: "Office",
+      summary: "Invoice processing, reports, and billing review operations.",
+      chips: ["Invoices", "Reports", "Billing review"],
+      action: { type: "view", target: "viewInvoices" },
+    },
+    {
+      title: "Warehouse",
+      summary: "Inventory, material search, and assignment visibility.",
+      chips: ["Inventory", "Material search", "Assignments"],
+      action: { type: "view", target: "viewCatalog" },
+    },
+    {
+      title: "Supervisor",
+      summary: "Progress oversight, field verification, and daily metrics.",
+      chips: ["Progress", "Field verification", "Daily metrics"],
+      action: { type: "view", target: "viewDispatch", fallbackViews: ["viewDailyReport", "viewDashboard"] },
+    },
+    {
+      title: "Admin",
+      summary: "User, project, and system control surfaces.",
+      chips: ["Users", "Projects", "System controls"],
+      action: { type: "view", target: "viewAdmin" },
+    },
   ];
-  const highlights = [
-    { label: "Work Orders", action: { type: "view", target: "viewDispatch" } },
-    { label: "Allowed Quantities", action: { type: "view", target: "viewDashboard" } },
-    { label: "Messaging", action: { type: "modal", target: "messages" } },
-    { label: "Material Search", action: { type: "view", target: "viewCatalog" } },
-    { label: "Invoicing", action: { type: "view", target: "viewInvoices" } },
-    { label: "Daily Summary", action: { type: "view", target: "viewDailyReport" } },
-  ];
-  const grouped = SHOWCASE_GROUPS.map((group) => {
-    const modules = SHOWCASE_MODULES.filter((item) => item.group === group.key && canShowModule(item.key));
-    return { ...group, modules };
-  }).filter((group) => group.modules.length > 0);
 
   wrap.style.display = "";
   wrap.innerHTML = `
     <div class="card" style="margin-top:12px;">
-      <h3>Quick Actions</h3>
-      <div class="showcase-quick-grid" style="margin-top:10px;">
-        ${quickActions.map((item) => `
-          <button class="btn showcase-quick-btn" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(item.action, { label: item.label })))}'>${escapeHtml(item.label)}</button>
-        `).join("")}
-      </div>
+      <h2>SpecCom Control Center</h2>
+      <div class="muted small">Field verification, documentation, and billing control</div>
     </div>
     <div class="showcase-role-grid" style="margin-top:12px;">
-      ${grouped.map((group) => `
+      ${workspaces.map((workspace) => `
         <article class="card showcase-role-card">
-          <div class="showcase-role-title">${escapeHtml(group.title)}</div>
-          <div class="muted small">${escapeHtml(group.summary)}</div>
-          <div class="showcase-module-list">
-            ${group.modules.slice(0, 5).map((item) => `
-              <div class="showcase-module-item showcase-module-launcher" tabindex="0" role="button" aria-label="Open ${escapeHtml(item.title)}" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(item.action, { label: item.title })))}'>
-                <div class="showcase-module-head">
-                  <div style="font-weight:800;">${escapeHtml(item.title)}</div>
-                  <button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(item.action, { label: item.title })))}'>Open</button>
-                </div>
-                <div class="muted small">${escapeHtml(item.summary)}</div>
-                <div class="showcase-chip-row">
-                  ${item.chips.slice(0, 3).map((chip) => `<span class="chip">${escapeHtml(chip)}</span>`).join("")}
-                </div>
-              </div>
-            `).join("")}
+          <div class="showcase-role-title">${escapeHtml(workspace.title)}</div>
+          <div class="muted small">${escapeHtml(workspace.summary)}</div>
+          <div class="showcase-chip-row" style="margin-top:8px;">
+            ${workspace.chips.map((chip) => `<span class="chip">${escapeHtml(chip)}</span>`).join("")}
+          </div>
+          <div class="row" style="margin-top:12px; justify-content:flex-end;">
+            <button class="btn" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(workspace.action, { label: workspace.title, fallbackViews: workspace.action.fallbackViews || [] })))}'>Open Workspace</button>
           </div>
         </article>
       `).join("")}
     </div>
     <div class="card" style="margin-top:12px;">
-      <h3>Platform Highlights</h3>
+      <h3>Operational Areas</h3>
+      <div class="muted small">Use the workspaces above to jump directly into active modules for stabilization and testing.</div>
       <div class="showcase-chip-row" style="margin-top:10px;">
-        ${highlights.map((item) => (
-          `<button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(item.action, { label: item.label })))}'>${escapeHtml(item.label)}</button>`
+        ${workspaces.map((workspace) => (
+          `<button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(workspace.action, { label: workspace.title, fallbackViews: workspace.action.fallbackViews || [] })))}'>${escapeHtml(workspace.title)}</button>`
         )).join("")}
       </div>
     </div>
@@ -22793,7 +22797,9 @@ async function initAuth(){
       await enterDemoBootstrapSession({ persistSession: false });
       return;
     }
-    showAuth(true);
+    showAuth(false);
+    setWhoami();
+    setActiveView(getDefaultView());
     setAuthButtonsDisabled(false);
     return;
   }
@@ -22876,7 +22882,7 @@ async function initAuth(){
         startLocationPolling();
         syncPendingSites();
     } else {
-        showAuth(true);
+        showAuth(false);
         resetRedlineState({ clearMarkers: true, clearSource: true });
         state.activeNode = null;
         state.usageEvents = [];
@@ -22915,7 +22921,8 @@ async function initAuth(){
       syncPendingSites();
     }
   setWhoami();
-  showAuth(!state.user);
+  showAuth(false);
+  setActiveView(getDefaultView());
   setProofStatus();
 }
 
@@ -22928,18 +22935,26 @@ async function loadProfile(client, userId){
   }
 
   // Expect a public.profiles row keyed by auth.uid()
+  let profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id, avatar_url";
   let { data, error } = await client
     .from("profiles")
-    .select("display_name, preferred_language, is_demo, current_project_id, org_id, avatar_url")
+    .select(profileSelect)
     .eq("id", userId)
     .maybeSingle();
 
   if (error){
     const message = String(error.message || "").toLowerCase();
-    if (message.includes("does not exist")){
+    if (message.includes("avatar_url") && message.includes("does not exist")){
+      profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id";
       ({ data, error } = await client
         .from("profiles")
-        .select("display_name, org_id, avatar_url")
+        .select(profileSelect)
+        .eq("id", userId)
+        .maybeSingle());
+    } else if (message.includes("does not exist")){
+      ({ data, error } = await client
+        .from("profiles")
+        .select("display_name, org_id")
         .eq("id", userId)
         .maybeSingle());
     }
@@ -22961,7 +22976,7 @@ async function loadProfile(client, userId){
       }, { onConflict: "id" });
     ({ data } = await client
       .from("profiles")
-      .select("display_name, preferred_language, is_demo, current_project_id, org_id, avatar_url")
+      .select(profileSelect)
       .eq("id", userId)
       .maybeSingle());
   }
@@ -22970,12 +22985,15 @@ async function loadProfile(client, userId){
     if (!claimError){
       ({ data } = await client
         .from("profiles")
-        .select("display_name, preferred_language, is_demo, current_project_id, org_id, avatar_url")
+        .select(profileSelect)
         .eq("id", userId)
         .maybeSingle());
     }
   }
   state.profile = data || null;
+  if (state.profile && !Object.prototype.hasOwnProperty.call(state.profile, "avatar_url")){
+    state.profile.avatar_url = null;
+  }
   window.currentUserProfile = state.profile;
   if (state.profile?.preferred_language){
     setPreferredLanguage(state.profile.preferred_language);
