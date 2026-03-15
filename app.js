@@ -328,6 +328,15 @@ const state = {
     activeEvent: null,
     summary: null,
     locationTrail: [],
+    simulation: {
+      clockedInAt: null,
+      clockedOutAt: null,
+      items: [],
+      activeItemId: null,
+      closeoutDraft: null,
+      closeoutOpen: false,
+      tickAt: Date.now(),
+    },
   },
   workOrders: {
     assigned: [],
@@ -10279,6 +10288,588 @@ function computeTechnicianSummary(events){
   };
 }
 
+function useTechnicianDaySimulation(){
+  return true;
+}
+
+const TECH_SHIFT_TEMPLATE = [
+  { id: "vehicle_start", kind: "inspection", title: "Vehicle Inspection — Start of Day", subtitle: "Start of Day", plannedMinutes: 15 },
+  {
+    id: "service_job_1",
+    kind: "service",
+    title: "Service Order — Job 1",
+    subtitle: "Install Fiber Service",
+    plannedMinutes: 120,
+    customer: "Danny Camp",
+    address: "624 Country Cir, Daleville, AL 36322",
+    jobType: "Service Install",
+    priority: "Normal",
+    description: "Install Fiber Service",
+  },
+  { id: "break_1", kind: "break", title: "Break 1", subtitle: "15-minute break", plannedMinutes: 15 },
+  { id: "lunch", kind: "lunch", title: "Lunch", subtitle: "30-minute lunch", plannedMinutes: 30 },
+  {
+    id: "trouble_job_2",
+    kind: "trouble",
+    title: "Trouble Ticket — Job 2",
+    subtitle: "Called-in Low Speeds",
+    plannedMinutes: 120,
+    customer: "Danny Camp",
+    address: "624 Country Cir, Daleville, AL 36322",
+    jobType: "Trouble Ticket",
+    issue: "Called-in Low Speeds",
+    priority: "Urgent",
+  },
+  { id: "break_2", kind: "break", title: "Break 2", subtitle: "15-minute break", plannedMinutes: 15 },
+  { id: "vehicle_end", kind: "inspection", title: "Vehicle Inspection — End of Day", subtitle: "End of Day", plannedMinutes: 15 },
+  { id: "eos", kind: "eos", title: "EOS — End of Shift / Clock Out", subtitle: "End of shift", plannedMinutes: 5 },
+];
+
+function getShiftStatusLabel(item){
+  const status = String(item?.status || "NOT_STARTED");
+  if (status === "ACTIVE") return "Active";
+  if (status === "PAUSED") return "Paused";
+  if (status === "COMPLETED") return "Completed";
+  return "Not Started";
+}
+
+function getShiftStatusClass(item){
+  const status = String(item?.status || "NOT_STARTED");
+  if (status === "ACTIVE") return "warn";
+  if (status === "PAUSED") return "bad";
+  if (status === "COMPLETED") return "ok";
+  return "warn";
+}
+
+function calcShiftElapsedMinutes(item){
+  if (!item) return 0;
+  const startedMs = item.started_at ? new Date(item.started_at).getTime() : 0;
+  if (!startedMs) return 0;
+  const endedMs = item.completed_at ? new Date(item.completed_at).getTime() : Date.now();
+  const pausedTotal = Number(item.paused_total_ms || 0);
+  const pauseOpen = item.paused_at ? Math.max(0, Date.now() - new Date(item.paused_at).getTime()) : 0;
+  const activeMs = Math.max(0, endedMs - startedMs - pausedTotal - pauseOpen);
+  return Math.max(0, Math.round(activeMs / 60000));
+}
+
+function createTechnicianShiftItems(){
+  return TECH_SHIFT_TEMPLATE.map((template, index) => ({
+    ...template,
+    order: index + 1,
+    status: "NOT_STARTED",
+    started_at: null,
+    paused_at: null,
+    paused_total_ms: 0,
+    completed_at: null,
+    notes: [],
+    photos: [],
+    checklist: template.kind === "inspection"
+      ? {
+          tires: false,
+          lights: false,
+          safety: false,
+          tools: false,
+        }
+      : null,
+    closeout: null,
+  }));
+}
+
+function ensureTechnicianSimulationState(){
+  const sim = state.technician.simulation;
+  if (!Array.isArray(sim.items) || !sim.items.length){
+    sim.items = createTechnicianShiftItems();
+  }
+  if (!sim.activeItemId){
+    const active = sim.items.find((item) => item.status === "ACTIVE") || null;
+    sim.activeItemId = active?.id || null;
+  }
+  return sim;
+}
+
+function getTechItemById(itemId){
+  const sim = ensureTechnicianSimulationState();
+  return sim.items.find((item) => item.id === itemId) || null;
+}
+
+function getCurrentShiftItem(){
+  const sim = ensureTechnicianSimulationState();
+  const active = sim.items.find((item) => item.status === "ACTIVE") || null;
+  if (active) return active;
+  if (sim.activeItemId){
+    return sim.items.find((item) => item.id === sim.activeItemId) || sim.items.find((item) => item.status !== "COMPLETED") || sim.items[0] || null;
+  }
+  return sim.items.find((item) => item.status !== "COMPLETED") || sim.items[0] || null;
+}
+
+function getNextNotStartedItem(){
+  const sim = ensureTechnicianSimulationState();
+  return sim.items.find((item) => item.status === "NOT_STARTED") || null;
+}
+
+function isTechnicianClockedIn(){
+  const sim = ensureTechnicianSimulationState();
+  return Boolean(sim.clockedInAt && !sim.clockedOutAt);
+}
+
+function openTechCloseoutModal(item){
+  const modal = $("techCloseoutModal");
+  const title = $("techCloseoutTitle");
+  const body = $("techCloseoutBody");
+  if (!modal || !title || !body) return;
+  const itemId = String(item?.id || "");
+  if (!itemId) return;
+  const existing = item?.closeout || {};
+  state.technician.simulation.closeoutDraft = {
+    item_id: itemId,
+    ...existing,
+  };
+  const isService = item.kind === "service";
+  title.textContent = isService ? "Service Order Close-out" : "Trouble Ticket Close-out";
+  body.innerHTML = isService
+    ? `
+      <label class="small">Installed Service Code</label>
+      <select id="techCloseoutInstalledCode" class="input">
+        <option value="">Select</option>
+        <option>New Install</option>
+        <option>Drop Replacement</option>
+        <option>ONT Install</option>
+        <option>Router Setup</option>
+      </select>
+      <label class="small">Completion Status</label>
+      <select id="techCloseoutCompletionStatus" class="input">
+        <option value="">Select</option>
+        <option>Complete</option>
+        <option>Not Done</option>
+      </select>
+      <label class="small">If Not Done</label>
+      <select id="techCloseoutNotDoneReason" class="input">
+        <option value="">Select</option>
+        <option>No Access</option>
+        <option>Customer Not Home</option>
+        <option>Weather Delay</option>
+        <option>Need Additional Work</option>
+      </select>
+      <label class="small">Light Reading</label>
+      <input id="techCloseoutLightReading" class="input" type="text" />
+      <label class="small">Download Speed</label>
+      <input id="techCloseoutDownloadSpeed" class="input" type="text" />
+      <label class="small">Upload Speed</label>
+      <input id="techCloseoutUploadSpeed" class="input" type="text" />
+      <label class="small">Pass / Fail</label>
+      <select id="techCloseoutPassFail" class="input">
+        <option value="">Select</option>
+        <option>Pass</option>
+        <option>Fail</option>
+      </select>
+      <label class="small">Notes</label>
+      <textarea id="techCloseoutNotes" class="input" rows="3"></textarea>
+      <label class="small">Photo Upload</label>
+      <input id="techCloseoutPhoto" class="input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" />
+    `
+    : `
+      <label class="small">Trouble Found Code</label>
+      <select id="techCloseoutTroubleFoundCode" class="input">
+        <option value="">Select</option>
+        <option>Low Speeds</option>
+        <option>No Signal</option>
+        <option>Intermittent Service</option>
+        <option>WiFi Issue</option>
+      </select>
+      <label class="small">Fault Code</label>
+      <select id="techCloseoutFaultCode" class="input">
+        <option value="">Select</option>
+        <option>Bad Connector</option>
+        <option>Dirty Fiber End</option>
+        <option>Damaged Drop</option>
+        <option>ONT Failure</option>
+        <option>Router Issue</option>
+      </select>
+      <label class="small">Resolving Code</label>
+      <select id="techCloseoutResolvingCode" class="input">
+        <option value="">Select</option>
+        <option>Cleaned Connector</option>
+        <option>Replaced Connector</option>
+        <option>Replaced Drop</option>
+        <option>Replaced ONT</option>
+        <option>Replaced Router</option>
+        <option>Escalated</option>
+        <option>No Trouble Found</option>
+      </select>
+      <label class="small">Close Status</label>
+      <select id="techCloseoutCloseStatus" class="input">
+        <option value="">Select</option>
+        <option>Complete</option>
+        <option>Escalated</option>
+        <option>Not Resolved</option>
+      </select>
+      <label class="small">Light Reading</label>
+      <input id="techCloseoutLightReading" class="input" type="text" />
+      <label class="small">Download Speed</label>
+      <input id="techCloseoutDownloadSpeed" class="input" type="text" />
+      <label class="small">Upload Speed</label>
+      <input id="techCloseoutUploadSpeed" class="input" type="text" />
+      <label class="small">Pass / Fail</label>
+      <select id="techCloseoutPassFail" class="input">
+        <option value="">Select</option>
+        <option>Pass</option>
+        <option>Fail</option>
+      </select>
+      <label class="small">Notes</label>
+      <textarea id="techCloseoutNotes" class="input" rows="3"></textarea>
+      <label class="small">Photo Upload</label>
+      <input id="techCloseoutPhoto" class="input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" />
+    `;
+  const valueMap = {
+    techCloseoutInstalledCode: existing.installed_code || "",
+    techCloseoutCompletionStatus: existing.completion_status || "",
+    techCloseoutNotDoneReason: existing.not_done_reason || "",
+    techCloseoutTroubleFoundCode: existing.trouble_found_code || "",
+    techCloseoutFaultCode: existing.fault_code || "",
+    techCloseoutResolvingCode: existing.resolving_code || "",
+    techCloseoutCloseStatus: existing.close_status || "",
+    techCloseoutLightReading: existing.light_reading || "",
+    techCloseoutDownloadSpeed: existing.download_speed || "",
+    techCloseoutUploadSpeed: existing.upload_speed || "",
+    techCloseoutPassFail: existing.pass_fail || "",
+    techCloseoutNotes: existing.notes || "",
+  };
+  Object.entries(valueMap).forEach(([id, value]) => {
+    const el = $(id);
+    if (el) el.value = value;
+  });
+  state.technician.simulation.closeoutOpen = true;
+  modal.style.display = "";
+}
+
+function closeTechCloseoutModal(){
+  const modal = $("techCloseoutModal");
+  if (modal) modal.style.display = "none";
+  state.technician.simulation.closeoutOpen = false;
+}
+
+function saveTechCloseoutDraft(){
+  const draft = state.technician.simulation.closeoutDraft;
+  if (!draft?.item_id) return null;
+  const payload = {
+    installed_code: $("techCloseoutInstalledCode")?.value || null,
+    completion_status: $("techCloseoutCompletionStatus")?.value || null,
+    not_done_reason: $("techCloseoutNotDoneReason")?.value || null,
+    trouble_found_code: $("techCloseoutTroubleFoundCode")?.value || null,
+    fault_code: $("techCloseoutFaultCode")?.value || null,
+    resolving_code: $("techCloseoutResolvingCode")?.value || null,
+    close_status: $("techCloseoutCloseStatus")?.value || null,
+    light_reading: $("techCloseoutLightReading")?.value || null,
+    download_speed: $("techCloseoutDownloadSpeed")?.value || null,
+    upload_speed: $("techCloseoutUploadSpeed")?.value || null,
+    pass_fail: $("techCloseoutPassFail")?.value || null,
+    notes: $("techCloseoutNotes")?.value || null,
+    photo_name: $("techCloseoutPhoto")?.files?.[0]?.name || null,
+  };
+  const item = getTechItemById(draft.item_id);
+  if (item){
+    item.closeout = payload;
+  }
+  return payload;
+}
+
+function renderTechnicianShiftSummary(){
+  const sim = ensureTechnicianSimulationState();
+  const summaryEl = $("techSummary");
+  if (!summaryEl) return;
+  const completed = sim.items.filter((item) => item.status === "COMPLETED").length;
+  const active = sim.items.find((item) => item.status === "ACTIVE") || null;
+  const elapsedMinutes = sim.items.reduce((sum, item) => sum + calcShiftElapsedMinutes(item), 0);
+  const shiftStart = sim.clockedInAt ? formatTimeShort(sim.clockedInAt) : "08:00 AM";
+  const shiftEnd = sim.clockedOutAt ? formatTimeShort(sim.clockedOutAt) : "-";
+  summaryEl.innerHTML = `
+    <div class="kpi">
+      <div class="tile"><div class="label">Shift start</div><div class="value">${escapeHtml(shiftStart)}</div></div>
+      <div class="tile"><div class="label">Completed</div><div class="value">${completed}/${sim.items.length}</div></div>
+      <div class="tile"><div class="label">Elapsed</div><div class="value">${formatDurationMinutes(elapsedMinutes)}</div></div>
+      <div class="tile"><div class="label">Active</div><div class="value">${escapeHtml(active ? active.title : "None")}</div></div>
+    </div>
+    <div class="muted small" style="margin-top:8px;">Clock out: ${escapeHtml(shiftEnd)}</div>
+  `;
+}
+
+function renderCurrentShiftActivity(){
+  const sim = ensureTechnicianSimulationState();
+  const statusEl = $("techClockStatus");
+  const stateEl = $("techJobState");
+  const currentWrap = $("techCurrentActivity");
+  if (!currentWrap) return;
+  const item = getCurrentShiftItem();
+  const clockLabel = sim.clockedInAt
+    ? `Clocked in at ${formatTimeShort(sim.clockedInAt)}${sim.clockedOutAt ? ` • Clocked out at ${formatTimeShort(sim.clockedOutAt)}` : ""}`
+    : "Shift start preloaded for 8:00 AM. Clock in to begin.";
+  if (statusEl) statusEl.textContent = clockLabel;
+  if (stateEl){
+    if (!sim.clockedInAt){
+      stateEl.innerHTML = `<span class="dot warn"></span><span>Not Started</span>`;
+    } else if (item){
+      stateEl.innerHTML = `<span class="dot ${getShiftStatusClass(item)}"></span><span>${escapeHtml(getShiftStatusLabel(item))}</span>`;
+    } else {
+      stateEl.innerHTML = `<span class="dot ok"></span><span>Completed</span>`;
+    }
+  }
+  if (!item){
+    currentWrap.innerHTML = `<div class="tech-current-card"><div class="tech-shift-title">Shift complete</div><div class="muted small">All planned activities are complete.</div></div>`;
+    return;
+  }
+  const elapsed = calcShiftElapsedMinutes(item);
+  const notes = Array.isArray(item.notes) ? item.notes : [];
+  const photos = Array.isArray(item.photos) ? item.photos : [];
+  currentWrap.innerHTML = `
+    <div class="tech-current-card">
+      <div class="tech-shift-head">
+        <div>
+          <div class="tech-shift-title">${escapeHtml(item.title)}</div>
+          <div class="tech-shift-sub">${escapeHtml(item.subtitle || "")}</div>
+        </div>
+        <div class="status-pill ${getShiftStatusClass(item)}">${escapeHtml(getShiftStatusLabel(item))}</div>
+      </div>
+      <div class="muted small">Elapsed ${formatDurationMinutes(elapsed)} of planned ${formatDurationMinutes(item.plannedMinutes || 0)}</div>
+      ${(item.kind === "service" || item.kind === "trouble") ? `
+        <div class="muted small">${escapeHtml(item.customer || "")} • ${escapeHtml(item.address || "")}</div>
+      ` : ""}
+      ${item.kind === "inspection" ? `
+        <div class="field-stack" style="gap:6px;">
+          <label><input type="checkbox" data-tech-checklist="tires" data-tech-item-id="${item.id}" ${item.checklist?.tires ? "checked" : ""} /> Tires</label>
+          <label><input type="checkbox" data-tech-checklist="lights" data-tech-item-id="${item.id}" ${item.checklist?.lights ? "checked" : ""} /> Lights</label>
+          <label><input type="checkbox" data-tech-checklist="safety" data-tech-item-id="${item.id}" ${item.checklist?.safety ? "checked" : ""} /> Safety Equipment</label>
+          <label><input type="checkbox" data-tech-checklist="tools" data-tech-item-id="${item.id}" ${item.checklist?.tools ? "checked" : ""} /> Tools Loaded</label>
+        </div>
+      ` : ""}
+      <div class="tech-shift-actions">
+        <button class="btn small" type="button" data-tech-shift-action="start" data-tech-item-id="${item.id}" ${!sim.clockedInAt || item.status === "COMPLETED" || item.status === "ACTIVE" ? "disabled" : ""}>Start Activity</button>
+        <button class="btn secondary small" type="button" data-tech-shift-action="pause" data-tech-item-id="${item.id}" ${item.status !== "ACTIVE" ? "disabled" : ""}>Pause</button>
+        <button class="btn secondary small" type="button" data-tech-shift-action="resume" data-tech-item-id="${item.id}" ${item.status !== "PAUSED" ? "disabled" : ""}>Resume</button>
+        <button class="btn danger small" type="button" data-tech-shift-action="complete" data-tech-item-id="${item.id}" ${!sim.clockedInAt || item.status === "COMPLETED" ? "disabled" : ""}>Complete Activity</button>
+        <button class="btn ghost small" type="button" data-tech-shift-action="addNote" data-tech-item-id="${item.id}">Add Note</button>
+        <button class="btn ghost small" type="button" data-tech-shift-action="addPhoto" data-tech-item-id="${item.id}">Add Photo</button>
+      </div>
+      <input id="techQuickPhotoInput" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" style="display:none;" />
+      ${notes.length ? `<div class="tech-note-list">${notes.map((n) => `<div class="tech-note-item">• ${escapeHtml(n)}</div>`).join("")}</div>` : ""}
+      ${photos.length ? `<div class="muted small">Photos: ${escapeHtml(photos.join(", "))}</div>` : ""}
+    </div>
+  `;
+}
+
+function renderTodayShiftTimeline(){
+  const sim = ensureTechnicianSimulationState();
+  const wrap = $("techEventLog");
+  if (!wrap) return;
+  wrap.innerHTML = sim.items.map((item) => {
+    const elapsed = calcShiftElapsedMinutes(item);
+    return `
+      <article class="tech-shift-item">
+        <div class="tech-shift-head">
+          <div>
+            <div class="tech-shift-title">${item.order}. ${escapeHtml(item.title)}</div>
+            <div class="tech-shift-sub">${escapeHtml(item.subtitle || "")}</div>
+          </div>
+          <div class="status-pill ${getShiftStatusClass(item)}">${escapeHtml(getShiftStatusLabel(item))}</div>
+        </div>
+        <div class="muted small">Planned ${formatDurationMinutes(item.plannedMinutes || 0)} • Elapsed ${formatDurationMinutes(elapsed)}</div>
+        ${(item.kind === "service" || item.kind === "trouble") ? `<div class="muted small">${escapeHtml(item.customer || "")} • ${escapeHtml(item.address || "")}</div>` : ""}
+        <div class="tech-shift-actions">
+          <button class="btn ghost small" type="button" data-tech-shift-action="focus" data-tech-item-id="${item.id}">Open</button>
+          <button class="btn small" type="button" data-tech-shift-action="start" data-tech-item-id="${item.id}" ${!isTechnicianClockedIn() || item.status === "COMPLETED" || item.status === "ACTIVE" ? "disabled" : ""}>Start</button>
+          <button class="btn secondary small" type="button" data-tech-shift-action="pause" data-tech-item-id="${item.id}" ${item.status !== "ACTIVE" ? "disabled" : ""}>Pause</button>
+          <button class="btn secondary small" type="button" data-tech-shift-action="resume" data-tech-item-id="${item.id}" ${item.status !== "PAUSED" ? "disabled" : ""}>Resume</button>
+          <button class="btn danger small" type="button" data-tech-shift-action="complete" data-tech-item-id="${item.id}" ${!isTechnicianClockedIn() || item.status === "COMPLETED" ? "disabled" : ""}>Complete</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+function renderTechnicianSimulation(){
+  ensureTechnicianSimulationState();
+  renderCurrentShiftActivity();
+  renderTodayShiftTimeline();
+  renderTechnicianShiftSummary();
+}
+
+function setTechnicianShiftTicking(){
+  if (window.__techShiftTicker) return;
+  window.__techShiftTicker = window.setInterval(() => {
+    const sim = state.technician.simulation;
+    const active = sim.items.find((item) => item.status === "ACTIVE") || null;
+    if (!active) return;
+    sim.tickAt = Date.now();
+    renderTechnicianSimulation();
+  }, 1000);
+}
+
+function startShiftActivity(itemId){
+  const sim = ensureTechnicianSimulationState();
+  const item = getTechItemById(itemId);
+  if (!item || !isTechnicianClockedIn()) return;
+  if (item.status === "COMPLETED") return;
+  sim.items.forEach((row) => {
+    if (row.id !== item.id && row.status === "ACTIVE"){
+      row.status = "PAUSED";
+      row.paused_at = nowISO();
+    }
+  });
+  if (!item.started_at){
+    item.started_at = nowISO();
+  }
+  item.paused_at = null;
+  item.status = "ACTIVE";
+  sim.activeItemId = item.id;
+  renderTechnicianSimulation();
+}
+
+function focusShiftActivity(itemId){
+  const item = getTechItemById(itemId);
+  if (!item) return;
+  state.technician.simulation.activeItemId = item.id;
+  renderTechnicianSimulation();
+}
+
+function pauseShiftActivity(itemId){
+  const item = getTechItemById(itemId);
+  if (!item || item.status !== "ACTIVE") return;
+  item.status = "PAUSED";
+  item.paused_at = nowISO();
+  renderTechnicianSimulation();
+}
+
+function resumeShiftActivity(itemId){
+  const item = getTechItemById(itemId);
+  if (!item || item.status !== "PAUSED") return;
+  if (item.paused_at){
+    item.paused_total_ms = Number(item.paused_total_ms || 0) + Math.max(0, Date.now() - new Date(item.paused_at).getTime());
+  }
+  item.paused_at = null;
+  item.status = "ACTIVE";
+  state.technician.simulation.activeItemId = item.id;
+  renderTechnicianSimulation();
+}
+
+function completeShiftActivity(itemId, { skipForm = false } = {}){
+  const item = getTechItemById(itemId);
+  if (!item) return;
+  if ((item.kind === "service" || item.kind === "trouble") && !skipForm){
+    openTechCloseoutModal(item);
+    return;
+  }
+  if (item.paused_at){
+    item.paused_total_ms = Number(item.paused_total_ms || 0) + Math.max(0, Date.now() - new Date(item.paused_at).getTime());
+    item.paused_at = null;
+  }
+  if (!item.started_at){
+    item.started_at = nowISO();
+  }
+  item.completed_at = nowISO();
+  item.status = "COMPLETED";
+  const sim = state.technician.simulation;
+  if (sim.activeItemId === item.id){
+    sim.activeItemId = null;
+  }
+  const next = getNextNotStartedItem();
+  if (next){
+    sim.activeItemId = next.id;
+  }
+  renderTechnicianSimulation();
+}
+
+function addShiftItemNote(itemId, note){
+  const item = getTechItemById(itemId);
+  const text = String(note || "").trim();
+  if (!item || !text) return;
+  item.notes = Array.isArray(item.notes) ? item.notes : [];
+  item.notes.push(text);
+  renderTechnicianSimulation();
+}
+
+function addShiftItemPhoto(itemId, fileName){
+  const item = getTechItemById(itemId);
+  const name = String(fileName || "").trim();
+  if (!item || !name) return;
+  item.photos = Array.isArray(item.photos) ? item.photos : [];
+  item.photos.push(name);
+  renderTechnicianSimulation();
+}
+
+function handleTechnicianShiftAction(action, itemId){
+  const sim = ensureTechnicianSimulationState();
+  const resolvedId = itemId || sim.activeItemId || getCurrentShiftItem()?.id || "";
+  const activeItem = sim.items.find((item) => item.status === "ACTIVE") || null;
+  if (action === "focus"){
+    focusShiftActivity(resolvedId);
+    return;
+  }
+  if (action === "start"){
+    startShiftActivity(resolvedId);
+    return;
+  }
+  if (action === "pause"){
+    pauseShiftActivity(resolvedId);
+    return;
+  }
+  if (action === "resume"){
+    resumeShiftActivity(resolvedId);
+    return;
+  }
+  if (action === "complete"){
+    completeShiftActivity(resolvedId);
+    return;
+  }
+  if (action === "addNote"){
+    const note = window.prompt("Add note", "");
+    if (note) addShiftItemNote(resolvedId, note);
+    return;
+  }
+  if (action === "addPhoto"){
+    const input = $("techQuickPhotoInput");
+    if (input){
+      input.dataset.techItemId = resolvedId;
+      input.click();
+    }
+    return;
+  }
+  if (action === "quickStart"){
+    const next = getCurrentShiftItem();
+    if (next) startShiftActivity(next.id);
+    return;
+  }
+  if (action === "quickPause" && activeItem){
+    pauseShiftActivity(activeItem.id);
+    return;
+  }
+  if (action === "quickResume"){
+    const paused = sim.items.find((item) => item.status === "PAUSED") || null;
+    if (paused) resumeShiftActivity(paused.id);
+    return;
+  }
+  if (action === "quickLunch"){
+    const lunch = sim.items.find((item) => item.kind === "lunch" && item.status !== "COMPLETED") || null;
+    if (lunch) startShiftActivity(lunch.id);
+    return;
+  }
+  if (action === "quickBreak"){
+    const brk = sim.items.find((item) => item.kind === "break" && item.status !== "COMPLETED") || null;
+    if (brk) startShiftActivity(brk.id);
+    return;
+  }
+  if (action === "quickInspect"){
+    const inspection = sim.items.find((item) => item.kind === "inspection" && item.status !== "COMPLETED") || null;
+    if (inspection){
+      startShiftActivity(inspection.id);
+      completeShiftActivity(inspection.id, { skipForm: true });
+    }
+    return;
+  }
+  if (action === "quickComplete"){
+    const current = activeItem || getCurrentShiftItem();
+    if (current) completeShiftActivity(current.id);
+  }
+}
+
 function getProjectLabelById(projectId){
   const match = (state.projects || []).find((project) => project.id === projectId);
   if (!match) return "Project";
@@ -10293,6 +10884,44 @@ function renderDashboardTimesheetActivity(){
   const projectLabel = state.activeProject?.job_number || state.activeProject?.name || "No project selected";
 
   if (isTechnician()){
+    if (useTechnicianDaySimulation()){
+      const sim = ensureTechnicianSimulationState();
+      const hasOpenShift = Boolean(sim.clockedInAt && !sim.clockedOutAt);
+      const current = getCurrentShiftItem();
+      const completed = sim.items.filter((item) => item.status === "COMPLETED").length;
+      const elapsedMinutes = sim.items.reduce((sum, item) => sum + calcShiftElapsedMinutes(item), 0);
+      const stateLabel = current ? `${current.title} (${getShiftStatusLabel(current)})` : "Shift complete";
+      return `
+        <div class="field-stack" style="gap:10px;">
+          <div class="muted small">Today's Shift</div>
+          <div class="chip"><span class="dot ${hasOpenShift ? "ok" : "warn"}"></span><span>${escapeHtml(stateLabel)}</span></div>
+          <div class="kpi">
+            <div class="tile">
+              <div class="label">Completed</div>
+              <div class="value">${completed}/${sim.items.length}</div>
+            </div>
+            <div class="tile">
+              <div class="label">Elapsed</div>
+              <div class="value">${formatDurationMinutes(elapsedMinutes)}</div>
+            </div>
+            <div class="tile">
+              <div class="label">Clock In</div>
+              <div class="value">${sim.clockedInAt ? formatTimeShort(sim.clockedInAt) : "-"}</div>
+            </div>
+          </div>
+          <div class="row" style="gap:8px;">
+            <button class="btn small" type="button" data-timesheet-action="clockIn" ${hasOpenShift ? "disabled" : ""}>Clock In</button>
+            <button class="btn secondary small" type="button" data-timesheet-action="clockOut" ${!hasOpenShift ? "disabled" : ""}>Clock Out</button>
+            <button class="btn ghost small" type="button" data-timesheet-action="start" ${!hasOpenShift ? "disabled" : ""}>Start Activity</button>
+            <button class="btn ghost small" type="button" data-timesheet-action="pause" ${!hasOpenShift ? "disabled" : ""}>Pause</button>
+            <button class="btn ghost small" type="button" data-timesheet-action="lunch" ${!hasOpenShift ? "disabled" : ""}>Lunch</button>
+            <button class="btn ghost small" type="button" data-timesheet-action="break" ${!hasOpenShift ? "disabled" : ""}>Break</button>
+            <button class="btn ghost small" type="button" data-timesheet-action="inspect" ${!hasOpenShift ? "disabled" : ""}>Inspection</button>
+            <button class="btn danger small" type="button" data-timesheet-action="end" ${!hasOpenShift ? "disabled" : ""}>Complete</button>
+          </div>
+        </div>
+      `;
+    }
     const timesheet = state.technician.timesheet;
     const summary = state.technician.summary || computeTechnicianSummary(state.technician.events || []);
     const activeEvent = state.technician.activeEvent;
@@ -10385,6 +11014,45 @@ function renderDashboardTimesheetActivity(){
 }
 
 function renderTechnicianDashboard(){
+  if (useTechnicianDaySimulation()){
+    const sim = ensureTechnicianSimulationState();
+    setTechnicianShiftTicking();
+    renderTechnicianSimulation();
+    const trailEl = $("techLocationTrail");
+    if (trailEl){
+      const trail = state.technician.locationTrail || [];
+      if (!trail.length){
+        trailEl.textContent = t("techNoTrail");
+      } else {
+        trailEl.innerHTML = trail.slice(-10).map((point) => {
+          const time = formatTimeShort(point.at);
+          return `<div>${time} - ${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}</div>`;
+        }).join("");
+      }
+    }
+    const hasOpenShift = Boolean(sim.clockedInAt && !sim.clockedOutAt);
+    const current = getCurrentShiftItem();
+    const active = sim.items.find((item) => item.status === "ACTIVE") || null;
+    const clockInBtn = $("btnTechClockIn");
+    const clockOutBtn = $("btnTechClockOut");
+    const techStartBtn = $("btnTechStartJob");
+    const techPauseBtn = $("btnTechPauseJob");
+    const techLunchBtn = $("btnTechLunch");
+    const techBreakBtn = $("btnTechBreak");
+    const techInspectBtn = $("btnTechTruckInspection");
+    const techEndBtn = $("btnTechEndJob");
+    if (clockInBtn) clockInBtn.disabled = hasOpenShift;
+    if (clockOutBtn) clockOutBtn.disabled = !hasOpenShift;
+    if (techStartBtn) techStartBtn.disabled = !hasOpenShift || !current || current.status === "ACTIVE" || current.status === "COMPLETED";
+    if (techPauseBtn) techPauseBtn.disabled = !hasOpenShift || !active;
+    if (techLunchBtn) techLunchBtn.disabled = !hasOpenShift;
+    if (techBreakBtn) techBreakBtn.disabled = !hasOpenShift;
+    if (techInspectBtn) techInspectBtn.disabled = !hasOpenShift;
+    if (techEndBtn) techEndBtn.disabled = !hasOpenShift || !current;
+    renderAlerts();
+    return;
+  }
+
   const logWrap = $("techEventLog");
   if (!logWrap) return;
   const timesheet = state.technician.timesheet;
@@ -13726,6 +14394,12 @@ async function importLocationsSpreadsheetForProject(file, projectId){
 
 async function loadTechnicianTimesheet(){
   if (!state.features.labor) return;
+  if (useTechnicianDaySimulation()){
+    ensureTechnicianSimulationState();
+    renderTechnicianDashboard();
+    await loadAssignedWorkOrders();
+    return;
+  }
   if (!isTechnician()){
     state.technician.timesheet = null;
     state.technician.events = [];
@@ -13778,6 +14452,10 @@ async function loadTechnicianTimesheet(){
 }
 
 async function loadTechnicianEvents(){
+  if (useTechnicianDaySimulation()){
+    renderTechnicianDashboard();
+    return;
+  }
   if (isDemo){
     if (!state.technician.timesheet){
       state.technician.events = [];
@@ -13814,6 +14492,27 @@ async function loadTechnicianEvents(){
 }
 
 async function startTechnicianTimesheet(){
+  if (useTechnicianDaySimulation()){
+    const sim = ensureTechnicianSimulationState();
+    if (sim.clockedInAt && !sim.clockedOutAt){
+      toast("Clock in", "Shift already active.");
+      renderTechnicianDashboard();
+      return;
+    }
+    const allCompleted = sim.items.length && sim.items.every((item) => item.status === "COMPLETED");
+    if (sim.clockedOutAt || allCompleted){
+      sim.items = createTechnicianShiftItems();
+      sim.activeItemId = null;
+    }
+    sim.clockedInAt = nowISO();
+    sim.clockedOutAt = null;
+    const next = getCurrentShiftItem();
+    sim.activeItemId = next?.id || null;
+    setTechnicianShiftTicking();
+    renderTechnicianDashboard();
+    toast("Clock in", "Technician shift started.");
+    return;
+  }
   if (!state.activeProject){
     toast("Project required", "Select a project before clocking in.");
     return;
@@ -13865,6 +14564,38 @@ async function startTechnicianTimesheet(){
 }
 
 async function logTechnicianEvent(eventType){
+  if (useTechnicianDaySimulation()){
+    const sim = ensureTechnicianSimulationState();
+    if (!sim.clockedInAt || sim.clockedOutAt){
+      toast("Clock in required", "Clock in to manage shift activities.");
+      return;
+    }
+    if (eventType === "START_JOB"){
+      handleTechnicianShiftAction("quickStart");
+      return;
+    }
+    if (eventType === "PAUSE_JOB"){
+      handleTechnicianShiftAction("quickPause");
+      return;
+    }
+    if (eventType === "LUNCH"){
+      handleTechnicianShiftAction("quickLunch");
+      return;
+    }
+    if (eventType === "BREAK_15"){
+      handleTechnicianShiftAction("quickBreak");
+      return;
+    }
+    if (eventType === "TRUCK_INSPECTION"){
+      handleTechnicianShiftAction("quickInspect");
+      return;
+    }
+    if (eventType === "END_JOB"){
+      handleTechnicianShiftAction("quickComplete");
+      return;
+    }
+    return;
+  }
   if (!state.technician.timesheet){
     toast("Clock in required", t("techNoTimesheet"));
     return;
@@ -13904,6 +14635,28 @@ async function logTechnicianEvent(eventType){
 }
 
 async function endTechnicianTimesheet(){
+  if (useTechnicianDaySimulation()){
+    const sim = ensureTechnicianSimulationState();
+    if (!sim.clockedInAt || sim.clockedOutAt){
+      toast("Clock out", "No active shift.");
+      return;
+    }
+    const active = sim.items.find((item) => item.status === "ACTIVE") || null;
+    if (active){
+      completeShiftActivity(active.id, { skipForm: active.kind !== "service" && active.kind !== "trouble" });
+      if (active.kind === "service" || active.kind === "trouble"){
+        return;
+      }
+    }
+    const eos = sim.items.find((item) => item.kind === "eos") || null;
+    if (eos && eos.status !== "COMPLETED"){
+      completeShiftActivity(eos.id, { skipForm: true });
+    }
+    sim.clockedOutAt = nowISO();
+    renderTechnicianDashboard();
+    toast("Clock out", "Technician shift ended.");
+    return;
+  }
   if (!state.technician.timesheet) return;
   if (isDemo){
     const now = nowISO();
@@ -23297,27 +24050,115 @@ function wireUI(){
   }
   const techStartBtn = $("btnTechStartJob");
   if (techStartBtn){
-    techStartBtn.addEventListener("click", () => logTechnicianEvent("START_JOB"));
+    techStartBtn.addEventListener("click", () => {
+      if (useTechnicianDaySimulation()){
+        handleTechnicianShiftAction("quickStart");
+        return;
+      }
+      logTechnicianEvent("START_JOB");
+    });
   }
   const techPauseBtn = $("btnTechPauseJob");
   if (techPauseBtn){
-    techPauseBtn.addEventListener("click", () => logTechnicianEvent("PAUSE_JOB"));
+    techPauseBtn.addEventListener("click", () => {
+      if (useTechnicianDaySimulation()){
+        handleTechnicianShiftAction("quickPause");
+        return;
+      }
+      logTechnicianEvent("PAUSE_JOB");
+    });
   }
   const techLunchBtn = $("btnTechLunch");
   if (techLunchBtn){
-    techLunchBtn.addEventListener("click", () => logTechnicianEvent("LUNCH"));
+    techLunchBtn.addEventListener("click", () => {
+      if (useTechnicianDaySimulation()){
+        handleTechnicianShiftAction("quickLunch");
+        return;
+      }
+      logTechnicianEvent("LUNCH");
+    });
   }
   const techBreakBtn = $("btnTechBreak");
   if (techBreakBtn){
-    techBreakBtn.addEventListener("click", () => logTechnicianEvent("BREAK_15"));
+    techBreakBtn.addEventListener("click", () => {
+      if (useTechnicianDaySimulation()){
+        handleTechnicianShiftAction("quickBreak");
+        return;
+      }
+      logTechnicianEvent("BREAK_15");
+    });
   }
   const techInspectBtn = $("btnTechTruckInspection");
   if (techInspectBtn){
-    techInspectBtn.addEventListener("click", () => logTechnicianEvent("TRUCK_INSPECTION"));
+    techInspectBtn.addEventListener("click", () => {
+      if (useTechnicianDaySimulation()){
+        handleTechnicianShiftAction("quickInspect");
+        return;
+      }
+      logTechnicianEvent("TRUCK_INSPECTION");
+    });
   }
   const techEndBtn = $("btnTechEndJob");
   if (techEndBtn){
-    techEndBtn.addEventListener("click", () => logTechnicianEvent("END_JOB"));
+    techEndBtn.addEventListener("click", () => {
+      if (useTechnicianDaySimulation()){
+        handleTechnicianShiftAction("quickComplete");
+        return;
+      }
+      logTechnicianEvent("END_JOB");
+    });
+  }
+  const techCurrentActivity = $("techCurrentActivity");
+  if (techCurrentActivity){
+    techCurrentActivity.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-tech-shift-action]");
+      if (!btn) return;
+      handleTechnicianShiftAction(btn.dataset.techShiftAction, btn.dataset.techItemId);
+    });
+    techCurrentActivity.addEventListener("change", (e) => {
+      const checkbox = e.target.closest("input[data-tech-checklist]");
+      if (checkbox){
+        const item = getTechItemById(checkbox.dataset.techItemId);
+        const key = checkbox.dataset.techChecklist;
+        if (item?.checklist && key){
+          item.checklist[key] = Boolean(checkbox.checked);
+          renderTechnicianSimulation();
+        }
+        return;
+      }
+      const photo = e.target.closest("#techQuickPhotoInput");
+      if (photo?.files?.length){
+        addShiftItemPhoto(photo.dataset.techItemId, photo.files[0].name);
+        photo.value = "";
+      }
+    });
+  }
+  const techShiftTimeline = $("techEventLog");
+  if (techShiftTimeline){
+    techShiftTimeline.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-tech-shift-action]");
+      if (!btn) return;
+      handleTechnicianShiftAction(btn.dataset.techShiftAction, btn.dataset.techItemId);
+    });
+  }
+  const techCloseoutCancelBtn = $("btnTechCloseoutCancel");
+  if (techCloseoutCancelBtn){
+    techCloseoutCancelBtn.addEventListener("click", () => {
+      closeTechCloseoutModal();
+      renderTechnicianSimulation();
+    });
+  }
+  const techCloseoutSaveBtn = $("btnTechCloseoutSave");
+  if (techCloseoutSaveBtn){
+    techCloseoutSaveBtn.addEventListener("click", () => {
+      const payload = saveTechCloseoutDraft();
+      const itemId = state.technician.simulation.closeoutDraft?.item_id || "";
+      closeTechCloseoutModal();
+      if (payload && itemId){
+        completeShiftActivity(itemId, { skipForm: true });
+      }
+      renderTechnicianSimulation();
+    });
   }
   const activityTimesheet = $("alertsFeed");
   if (activityTimesheet){

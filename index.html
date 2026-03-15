@@ -213,16 +213,17 @@
         <section id="viewTechnician" class="view">
           <div class="grid cols-2">
             <div class="card">
-              <h2 data-i18n="techClockTitle">Time tracking</h2>
+              <h2>Current Activity</h2>
               <div id="techClockStatus" class="muted small" style="margin-top:6px;"></div>
               <div class="row" style="margin-top:12px;">
                 <button id="btnTechClockIn" class="btn" data-action="techClockIn" data-i18n="techClockIn">Clock In</button>
                 <button id="btnTechClockOut" class="btn secondary" data-action="techClockOut" data-i18n="techClockOut">Clock Out</button>
               </div>
               <div class="hr"></div>
-              <div class="muted small" data-i18n="techJobStateLabel">Current state</div>
+              <div class="muted small">Current state</div>
               <div id="techJobState" class="chip" style="margin-top:8px;"></div>
-              <div class="row" style="flex-wrap:wrap; margin-top:12px;">
+              <div id="techCurrentActivity" style="margin-top:12px;"></div>
+              <div class="row" style="flex-wrap:wrap; margin-top:12px;" id="techQuickActions">
                 <button id="btnTechStartJob" class="btn" data-action="techStartJob" data-i18n="techStartJob">Start Job</button>
                 <button id="btnTechPauseJob" class="btn secondary" data-action="techPauseJob" data-i18n="techPauseJob">Pause Job</button>
                 <button id="btnTechLunch" class="btn ghost" data-action="techLunch" data-i18n="techLunch">Lunch</button>
@@ -231,13 +232,14 @@
                 <button id="btnTechEndJob" class="btn danger" data-action="techEndJob" data-i18n="techEndJob">End Job</button>
               </div>
               <div class="hr"></div>
+              <h3>Today's Shift</h3>
               <div id="techEventLog" class="tech-log"></div>
             </div>
             <div class="card">
-              <h2 data-i18n="techSummaryTitle">Daily summary</h2>
+              <h2>Shift Summary</h2>
               <div id="techSummary" style="margin-top:12px;"></div>
               <div class="hr"></div>
-              <h3 data-i18n="techLocationTrailTitle">Location trail</h3>
+              <h3>Location trail</h3>
               <div id="techLocationTrail" class="muted small" style="margin-top:8px;"></div>
             </div>
           </div>
@@ -564,6 +566,19 @@
             </div>
           </div>
         </section>
+
+        <div id="techCloseoutModal" class="modal" style="display:none;">
+          <div class="card modal-card">
+            <div class="modal-header">
+              <h2 id="techCloseoutTitle">Close-out</h2>
+              <button id="btnTechCloseoutCancel" class="btn ghost small" type="button">Close</button>
+            </div>
+            <div id="techCloseoutBody" class="field-stack" style="margin-top:10px;"></div>
+            <div class="row" style="margin-top:12px; justify-content:flex-end;">
+              <button id="btnTechCloseoutSave" class="btn" type="button">Save and Complete</button>
+            </div>
+          </div>
+        </div>
 
         <section id="viewCatalog" class="view">
           <div class="card">

@@ -754,6 +754,48 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
   color: var(--muted);
   font-size:12px;
 }
+.tech-shift-item{
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:12px;
+  background: rgba(255,255,255,.04);
+  display:grid;
+  gap:8px;
+}
+.tech-shift-head{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  align-items:flex-start;
+}
+.tech-shift-title{
+  font-weight:800;
+}
+.tech-shift-sub{
+  color:var(--muted);
+  font-size:12px;
+}
+.tech-shift-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.tech-current-card{
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:12px;
+  background: rgba(255,255,255,.04);
+  display:grid;
+  gap:8px;
+}
+.tech-note-list{
+  display:grid;
+  gap:6px;
+}
+.tech-note-item{
+  color:var(--muted);
+  font-size:12px;
+}
 .wo-card{
   border:1px solid var(--line);
   border-radius:14px;
@@ -782,6 +824,9 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
   .container{padding:20px 16px 28px}
   .topbar{flex-direction:column; align-items:flex-start}
   .badge{width:100%; justify-content:center}
+  #viewTechnician .grid.cols-2{grid-template-columns:1fr}
+  #viewTechnician .btn{min-height:44px}
+  #viewTechnician .row{gap:8px}
 }
 @media (max-width: 980px){
   .app-shell{grid-template-columns:1fr}
