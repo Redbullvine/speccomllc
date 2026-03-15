@@ -1236,6 +1236,10 @@ a{color:inherit; text-decoration:none;}
   background:rgba(7,20,38,.92);
   box-shadow:0 12px 28px rgba(0,0,0,.28);
 }
+.redline-toolbar[hidden]{
+  display:none !important;
+  pointer-events:none !important;
+}
 .redline-filter-select{
   width:170px;
 }
@@ -1244,6 +1248,10 @@ a{color:inherit; text-decoration:none;}
   inset:0;
   z-index:970;
   pointer-events:none;
+}
+.redline-overlay[hidden]{
+  display:none !important;
+  pointer-events:none !important;
 }
 .redline-overlay.is-add-mode{
   cursor:crosshair;
@@ -1338,6 +1346,10 @@ a{color:inherit; text-decoration:none;}
   box-shadow:0 12px 28px rgba(0,0,0,.28);
   color:#e2e8f0;
 }
+.redline-legend[hidden]{
+  display:none !important;
+  pointer-events:none !important;
+}
 .redline-legend-row{
   display:flex;
   align-items:center;
@@ -1367,6 +1379,10 @@ a{color:inherit; text-decoration:none;}
   background:rgba(7,20,38,.96);
   box-shadow:0 14px 32px rgba(0,0,0,.3);
   padding:10px;
+}
+.redline-panel[hidden]{
+  display:none !important;
+  pointer-events:none !important;
 }
 .redline-panel-head{
   display:flex;

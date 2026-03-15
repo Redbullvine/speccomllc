@@ -2583,12 +2583,7 @@ function setActiveView(viewId, { syncHash = true } = {}){
     if (state.features.labor) loadLaborRows();
   }
   if (viewId === "viewMap"){
-    if (state.redline.enabled || state.redline.panelOpen){
-      exitRedlineMode();
-    } else {
-      closeRedlinePanel({ render: false });
-      renderRedlineUi();
-    }
+    forcePlainMapRedlineState();
     state.map.drawerTab = "data";
     ensureMap();
     initMapWorkspaceUi();
@@ -5637,6 +5632,14 @@ function renderRedlineSummary(){
   textEl.textContent = getRedlineSummaryText();
 }
 
+function normalizeRedlineState(){
+  if (!state.redline.enabled){
+    state.redline.panelOpen = false;
+    state.redline.addMode = false;
+    state.redline.summaryOpen = false;
+  }
+}
+
 function syncRedlineMenuActionLabel(){
   const menuAction = $("btnMenuOpenRedline");
   if (!menuAction) return;
@@ -5644,6 +5647,7 @@ function syncRedlineMenuActionLabel(){
 }
 
 function renderRedlineUi(){
+  normalizeRedlineState();
   const source = state.redline.source || resolveRedlineSource();
   state.redline.source = source;
   const toolbar = $("redlineToolbar");
@@ -5829,6 +5833,7 @@ async function setRedlineMode(nextEnabled, { openPanel = true } = {}){
   state.redline.addMode = false;
   state.redline.summaryOpen = false;
   if (!enabled){
+    state.redline.panelOpen = false;
     closeRedlinePanel({ render: false });
     renderRedlineUi();
     return;
@@ -5842,6 +5847,15 @@ async function setRedlineMode(nextEnabled, { openPanel = true } = {}){
 
 function exitRedlineMode(){
   void setRedlineMode(false);
+}
+
+function forcePlainMapRedlineState(){
+  state.redline.enabled = false;
+  state.redline.panelOpen = false;
+  state.redline.addMode = false;
+  state.redline.summaryOpen = false;
+  closeRedlineEditor();
+  renderRedlineUi();
 }
 
 async function uploadRedlinePhoto(file, source){
@@ -19312,11 +19326,7 @@ function setActiveProjectById(id){
   if (activeViewId === "viewAdmin"){
     loadAdminMaterialSettings();
   }
-  if (state.redline.enabled || state.redline.panelOpen){
-    exitRedlineMode();
-  } else {
-    renderRedlineUi();
-  }
+  forcePlainMapRedlineState();
 }
 
 async function saveCurrentProjectPreference(projectId){
