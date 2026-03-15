@@ -1192,7 +1192,6 @@ const LEGACY_DRAWER_OPEN_KEY = "speccom.ui.drawerOpen";
 const LEGACY_DRAWER_TAB_KEY = "speccom.ui.drawerTab";
 const LEGACY_DRAWER_WIDTH_KEY = "speccom.ui.drawerWidth";
 const KMZ_PHOTO_OVERRIDES_KEY_PREFIX = "speccom.kmzPhotoOverrides.";
-const PROFILE_PHOTO_KEY_PREFIX = "speccom.profilePhoto.";
 const INVOICE_FILES_BUCKET = "invoice-files";
 const KMZ_SNAPSHOT_TABLE = "project_kmz_snapshots";
 const KMZ_SNAPSHOT_SAVE_DEBOUNCE_MS = 900;
@@ -14180,15 +14179,29 @@ function setWhoami(){
   }
 }
 
-function getProfilePhotoStorageKey(userId = state.user?.id){
-  const uid = String(userId || "").trim();
-  return uid ? `${PROFILE_PHOTO_KEY_PREFIX}${uid}` : null;
+function getProfilePhotoUrl(){
+  const raw = String(state.profile?.avatar_url || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (!state.client?.storage?.from) return raw;
+  try{
+    const { data } = state.client.storage.from("profile-images").getPublicUrl(raw);
+    return String(data?.publicUrl || raw).trim();
+  } catch {
+    return raw;
+  }
 }
 
-function getProfilePhotoDataUrl(userId = state.user?.id){
-  const key = getProfilePhotoStorageKey(userId);
-  if (!key) return "";
-  return String(safeLocalStorageGet(key) || "").trim();
+function getAvatarFileExtension(file){
+  const mime = String(file?.type || "").toLowerCase();
+  if (mime === "image/jpeg" || mime === "image/jpg") return "jpg";
+  if (mime === "image/png") return "png";
+  if (mime === "image/webp") return "webp";
+  const name = String(file?.name || "").toLowerCase();
+  if (name.endsWith(".jpeg") || name.endsWith(".jpg")) return "jpg";
+  if (name.endsWith(".png")) return "png";
+  if (name.endsWith(".webp")) return "webp";
+  return "";
 }
 
 function getProfileDisplayName(){
@@ -14215,11 +14228,15 @@ function renderProfileHomeCard(){
   if (!cardName || !cardRole || !initialsEl || !imageEl) return;
 
   const name = getProfileDisplayName();
-  const roleCode = getRoleCode();
-  const photoUrl = getProfilePhotoDataUrl();
-  cardName.textContent = name;
-  cardRole.textContent = `Role: ${formatRoleLabel(roleCode)}`;
+  const photoUrl = getProfilePhotoUrl();
+  cardName.textContent = `Welcome back, ${name}`;
+  cardRole.textContent = "Field verification, documentation, and billing control";
   initialsEl.textContent = getInitials(name);
+  imageEl.onerror = () => {
+    imageEl.removeAttribute("src");
+    imageEl.style.display = "none";
+    initialsEl.style.display = "";
+  };
   if (photoUrl){
     imageEl.src = photoUrl;
     imageEl.style.display = "";
@@ -14233,29 +14250,72 @@ function renderProfileHomeCard(){
 
 async function saveProfilePhotoFromFile(file){
   if (!file) return;
-  if (!file.type || !file.type.startsWith("image/")){
-    toast("Invalid file", "Choose an image file.", "error");
-    return;
-  }
-  const userId = state.user?.id;
-  const key = getProfilePhotoStorageKey(userId);
-  if (!key){
+  const userId = String(state.user?.id || "").trim();
+  if (!userId){
     toast("Not signed in", "Sign in first to save profile photo.", "error");
     return;
   }
-  const dataUrl = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("Failed to read image"));
-    reader.readAsDataURL(file);
-  });
-  const ok = safeLocalStorageSet(key, dataUrl);
-  if (!ok){
-    toast("Save failed", "Could not save profile photo in this browser.", "error");
+  const ext = getAvatarFileExtension(file);
+  if (!ext){
+    toast("Invalid file", "Choose JPG, PNG, or WEBP.", "error");
     return;
   }
+  if (!state.client){
+    toast("Upload failed", "Client not ready.", "error");
+    return;
+  }
+  const objectPath = `${userId}/avatar.${ext}`;
+  const storage = state.client.storage.from("profile-images");
+  const { error: uploadError } = await storage.upload(objectPath, file, {
+    upsert: true,
+    contentType: file.type || undefined,
+    cacheControl: "3600",
+  });
+  if (uploadError){
+    toast("Upload failed", uploadError.message || "Could not upload profile photo.", "error");
+    return;
+  }
+  const { data: publicUrlData } = storage.getPublicUrl(objectPath);
+  const avatarUrl = String(publicUrlData?.publicUrl || objectPath).trim();
+  const { error: updateError } = await state.client
+    .from("profiles")
+    .update({ avatar_url: avatarUrl })
+    .eq("id", userId);
+  if (updateError){
+    toast("Save failed", updateError.message || "Could not save profile avatar URL.", "error");
+    return;
+  }
+  state.profile = state.profile || {};
+  state.profile.avatar_url = avatarUrl;
+  window.currentUserProfile = state.profile;
   renderProfileHomeCard();
-  toast("Profile photo saved", "Your photo was updated.");
+  toast("Profile photo saved", "Your profile photo was updated.");
+}
+
+async function clearProfilePhoto(){
+  const userId = String(state.user?.id || "").trim();
+  if (!userId || !state.client) return;
+  const objectPrefix = `${userId}/`;
+  try{
+    const storage = state.client.storage.from("profile-images");
+    const { data: listData } = await storage.list(objectPrefix, { limit: 20 });
+    const paths = (listData || [])
+      .map((row) => `${objectPrefix}${row.name}`)
+      .filter((path) => /\/avatar\.(jpg|jpeg|png|webp)$/i.test(path));
+    if (paths.length){
+      await storage.remove(paths);
+    }
+  } catch {}
+  await state.client
+    .from("profiles")
+    .update({ avatar_url: null })
+    .eq("id", userId);
+  if (state.profile){
+    state.profile.avatar_url = null;
+    window.currentUserProfile = state.profile;
+  }
+  renderProfileHomeCard();
+  toast("Profile photo removed", "Photo removed.");
 }
 
 function setDemoBadge(){
@@ -21889,7 +21949,6 @@ function runShowcaseAction(action){
 function renderDemoShowcaseHome(){
   const wrap = $("demoShowcaseHome");
   if (!wrap) return;
-  const showcase = isDemoShowcaseMode();
   const legacyIds = [
     "dashboardProfileCard",
     "dashboardJobCard",
@@ -21901,83 +21960,10 @@ function renderDemoShowcaseHome(){
   ];
   legacyIds.forEach((id) => {
     const el = $(id);
-    if (el) el.style.display = showcase ? "none" : "";
+    if (el) el.style.display = "";
   });
-  if (!showcase){
-    wrap.style.display = "none";
-    wrap.innerHTML = "";
-    return;
-  }
-  const quickActions = [
-    { label: "Timesheet", action: { type: "view", target: "viewTechnician" } },
-    { label: "Projects", action: { type: "modal", target: "projects" } },
-    { label: "Map", action: { type: "view", target: "viewMap" } },
-    { label: "Messages", action: { type: "modal", target: "messages" } },
-    { label: "Invoicing", action: { type: "view", target: "viewInvoices" } },
-    { label: "Materials", action: { type: "view", target: "viewCatalog" } },
-  ];
-  const highlights = [
-    { label: "Work Orders", action: { type: "view", target: "viewDispatch" } },
-    { label: "Allowed Quantities", action: { type: "view", target: "viewDashboard" } },
-    { label: "Messaging", action: { type: "modal", target: "messages" } },
-    { label: "Material Search", action: { type: "view", target: "viewCatalog" } },
-    { label: "Invoicing", action: { type: "view", target: "viewInvoices" } },
-    { label: "Daily Summary", action: { type: "view", target: "viewDailyReport" } },
-  ];
-  const grouped = SHOWCASE_GROUPS.map((group) => {
-    const modules = SHOWCASE_MODULES.filter((item) => item.group === group.key && canShowModule(item.key));
-    return { ...group, modules };
-  }).filter((group) => group.modules.length > 0);
-
-  wrap.style.display = "";
-  wrap.innerHTML = `
-    <div class="showcase-header card">
-      <div class="showcase-badge">Demo Showcase Mode - All platform modules visible</div>
-      <h2 style="margin-top:10px;">Browse platform capabilities by team role</h2>
-      <div class="muted small">Production access rules remain strict outside demo showcase mode.</div>
-      <div class="row" style="margin-top:10px;">
-        <button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload({ type: "view", target: "viewSettings" }, { label: "Language Settings" })))}'>Language Settings</button>
-      </div>
-    </div>
-    <div class="card" style="margin-top:12px;">
-      <h3>Quick Actions</h3>
-      <div class="showcase-quick-grid" style="margin-top:10px;">
-        ${quickActions.map((item) => `
-          <button class="btn showcase-quick-btn" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(item.action, { label: item.label })))}'>${escapeHtml(item.label)}</button>
-        `).join("")}
-      </div>
-    </div>
-    <div class="showcase-role-grid" style="margin-top:12px;">
-      ${grouped.map((group) => `
-        <article class="card showcase-role-card">
-          <div class="showcase-role-title">${escapeHtml(group.title)}</div>
-          <div class="muted small">${escapeHtml(group.summary)}</div>
-          <div class="showcase-module-list">
-            ${group.modules.slice(0, 5).map((item) => `
-              <div class="showcase-module-item showcase-module-launcher" tabindex="0" role="button" aria-label="Open ${escapeHtml(item.title)}" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(item.action, { label: item.title })))}'>
-                <div class="showcase-module-head">
-                  <div style="font-weight:800;">${escapeHtml(item.title)}</div>
-                  <button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(item.action, { label: item.title })))}'>Open</button>
-                </div>
-                <div class="muted small">${escapeHtml(item.summary)}</div>
-                <div class="showcase-chip-row">
-                  ${item.chips.slice(0, 3).map((chip) => `<span class="chip">${escapeHtml(chip)}</span>`).join("")}
-                </div>
-              </div>
-            `).join("")}
-          </div>
-        </article>
-      `).join("")}
-    </div>
-    <div class="card" style="margin-top:12px;">
-      <h3>Platform Highlights</h3>
-      <div class="showcase-chip-row" style="margin-top:10px;">
-        ${highlights.map((item) => (
-          `<button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(item.action, { label: item.label })))}'>${escapeHtml(item.label)}</button>`
-        )).join("")}
-      </div>
-    </div>
-  `;
+  wrap.style.display = "none";
+  wrap.innerHTML = "";
 }
 
 function renderProofChecklist(){
@@ -22867,7 +22853,7 @@ async function loadProfile(client, userId){
   // Expect a public.profiles row keyed by auth.uid()
   let { data, error } = await client
     .from("profiles")
-    .select("display_name, preferred_language, is_demo, current_project_id, org_id")
+    .select("display_name, preferred_language, is_demo, current_project_id, org_id, avatar_url")
     .eq("id", userId)
     .maybeSingle();
 
@@ -22876,7 +22862,7 @@ async function loadProfile(client, userId){
     if (message.includes("does not exist")){
       ({ data, error } = await client
         .from("profiles")
-        .select("display_name, org_id")
+        .select("display_name, org_id, avatar_url")
         .eq("id", userId)
         .maybeSingle());
     }
@@ -22898,7 +22884,7 @@ async function loadProfile(client, userId){
       }, { onConflict: "id" });
     ({ data } = await client
       .from("profiles")
-      .select("display_name, preferred_language, is_demo, current_project_id, org_id")
+      .select("display_name, preferred_language, is_demo, current_project_id, org_id, avatar_url")
       .eq("id", userId)
       .maybeSingle());
   }
@@ -22907,7 +22893,7 @@ async function loadProfile(client, userId){
     if (!claimError){
       ({ data } = await client
         .from("profiles")
-        .select("display_name, preferred_language, is_demo, current_project_id, org_id")
+        .select("display_name, preferred_language, is_demo, current_project_id, org_id, avatar_url")
         .eq("id", userId)
         .maybeSingle());
     }
@@ -23367,11 +23353,8 @@ function wireUI(){
     });
   }
   if (profilePhotoClearBtn){
-    profilePhotoClearBtn.addEventListener("click", () => {
-      const key = getProfilePhotoStorageKey(state.user?.id);
-      if (key) safeLocalStorageRemove(key);
-      renderProfileHomeCard();
-      toast("Profile photo removed", "Photo removed from this browser.");
+    profilePhotoClearBtn.addEventListener("click", async () => {
+      await clearProfilePhoto();
     });
   }
 
