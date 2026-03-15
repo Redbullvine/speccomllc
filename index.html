@@ -604,7 +604,7 @@
           </div>
           <div class="card" style="margin-top:12px;">
             <h2 data-i18n="userManagementTitle">User management</h2>
-            <div class="muted small" data-i18n="userManagementSubtitle">Invite by email and manage profile rows. New users default to User Level 1 until explicitly changed.</div>
+            <div class="muted small" data-i18n="userManagementSubtitle">Invite by email and manage profile rows.</div>
             <div id="adminBuildGate" class="note warning" style="display:none; margin-top:10px;">
               <div style="font-weight:900;">Build mode disabled</div>
               <div class="muted small">Enable BUILD_MODE to manage user profiles.</div>
@@ -613,14 +613,6 @@
               <div class="row" style="flex-wrap:wrap;">
                 <input id="adminUserId" class="input" placeholder="Auth user id (UUID)" data-i18n-placeholder="adminUserIdPlaceholder" />
                 <input id="adminUserEmail" class="input" placeholder="Email or display name" data-i18n-placeholder="adminUserEmailPlaceholder" />
-                <select id="adminUserRole" class="input" style="min-width:180px;">
-                  <option value="USER_LEVEL_1" selected>User Level 1</option>
-                  <option value="USER_LEVEL_2">User Level 2</option>
-                  <option value="PROJECT_MANAGER">Project Manager</option>
-                  <option value="ADMIN">Admin</option>
-                  <option value="OWNER">Owner</option>
-                  <option value="SUPPORT">Support</option>
-                </select>
                 <button id="btnAdminInviteUser" class="btn ghost" type="button">Invite account</button>
                 <button id="btnAdminCreateUser" class="btn secondary" data-action="adminCreateUser" data-i18n="createProfile">Create profile</button>
               </div>
@@ -630,10 +622,10 @@
           </div>
           <div class="card" style="margin-top:12px;">
             <h2>Inventory + SMS Alerts</h2>
-            <div class="muted small">ADMIN/ROOT only. Keep on-hand and reorder points current, and configure SMS alert delivery.</div>
+            <div class="muted small">Keep on-hand and reorder points current, and configure SMS alert delivery.</div>
             <div id="adminMaterialGate" class="note warning" style="display:none; margin-top:10px;">
-              <div style="font-weight:900;">Admin access required</div>
-              <div class="muted small">Only ADMIN/ROOT can edit inventory stock and SMS subscriptions.</div>
+              <div style="font-weight:900;">Sign-in required</div>
+              <div class="muted small">Sign in to edit inventory stock and SMS subscriptions.</div>
             </div>
             <div id="adminMaterialPanel" style="margin-top:12px;">
               <div class="row" style="flex-wrap:wrap; align-items:flex-end;">
@@ -971,15 +963,6 @@
         <div class="field-stack" style="margin-top:10px;">
           <label class="muted small">User email or ID</label>
           <input id="grantAccessUser" class="input" placeholder="user@example.com or UUID" autocomplete="off" />
-          <label class="muted small">Role</label>
-          <select id="grantAccessRole" class="input">
-            <option value="USER_LEVEL_1">User Level 1</option>
-            <option value="USER_LEVEL_2">User Level 2</option>
-            <option value="PROJECT_MANAGER">Project Manager</option>
-            <option value="ADMIN">Admin</option>
-            <option value="OWNER">Owner</option>
-            <option value="SUPPORT">Support</option>
-          </select>
         </div>
         <div id="grantAccessNote" class="muted small" style="margin-top:10px;"></div>
         <div class="row" style="margin-top:12px; justify-content:flex-end;">
@@ -1014,9 +997,7 @@
           <div id="invoiceAgentTierWrap" style="display:none;">
             <div class="muted small">Pricing tier</div>
             <select id="invoiceAgentTier" class="input">
-              <option value="USER_LEVEL_1">User Level 1</option>
-              <option value="USER_LEVEL_2">User Level 2</option>
-              <option value="OWNER">Owner</option>
+              <option value="STANDARD">Standard</option>
             </select>
           </div>
         </div>

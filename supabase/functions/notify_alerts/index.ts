@@ -34,11 +34,6 @@ function jsonResponse(status: number, body: Record<string, unknown>) {
   });
 }
 
-function getRoleCode(profile: { role_code?: string | null; role?: string | null } | null) {
-  const roleCode = String(profile?.role_code || profile?.role || "").trim().toUpperCase();
-  return roleCode;
-}
-
 async function sendTwilioSms(params: {
   accountSid: string;
   authToken: string;
@@ -135,14 +130,13 @@ Deno.serve(async (req) => {
 
   const { data: profile, error: profileError } = await adminClient
     .from("profiles")
-    .select("role_code, role, org_id")
+    .select("org_id")
     .eq("id", userId)
     .maybeSingle();
   if (profileError || !profile) {
     return jsonResponse(403, { error: "Profile not found for caller." });
   }
-  const roleCode = getRoleCode(profile);
-  if (roleCode !== "ROOT" && String(profile.org_id || "") !== companyId) {
+  if (String(profile.org_id || "") !== companyId) {
     return jsonResponse(403, { error: "Not authorized for company." });
   }
 

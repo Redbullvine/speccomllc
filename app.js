@@ -417,10 +417,9 @@ function resolveProvisionedRoleCode(identity, requestedRole = DEFAULT_ROLE){
 }
 
 function getRoleCode(member = state.profile){
-  if (member?.role_code) return normalizeRole(member.role_code);
-  if (member?.role) return normalizeRole(member.role);
+  if (!state.user) return null;
   if (isDemo) return normalizeRole(state.demo.role);
-  return DEFAULT_ROLE;
+  return ROLES.ROOT;
 }
 
 function isTechnician(x){
@@ -9213,8 +9212,6 @@ async function savePreferredLanguage(lang, { closeModal = false } = {}){
           id: state.user.id,
           display_name: state.user?.email || null,
           preferred_language: next,
-          role: DEFAULT_ROLE,
-          role_code: DEFAULT_ROLE,
         });
       if (error){
         const message = String(error.message || "").toLowerCase();
@@ -9273,13 +9270,11 @@ function isDemoUser(){
 }
 
 SpecCom.helpers.isRoot = function(){
-  const roleCode = getRoleCode();
-  return String(roleCode || "").toUpperCase() === "ROOT";
+  return Boolean(state.user);
 };
 
 SpecCom.helpers.isSupport = function(){
-  const roleCode = getRoleCode();
-  return String(roleCode || "").toUpperCase() === "SUPPORT";
+  return Boolean(state.user);
 };
 
 SpecCom.helpers.isPlatformAdmin = function(){
@@ -9287,25 +9282,19 @@ SpecCom.helpers.isPlatformAdmin = function(){
 };
 
 function isBillingManager(){
-  const role = getRoleCode();
-  if (SpecCom.helpers.isRoot()) return true;
-  return isPrivilegedRole(role) || role === ROLES.ADMIN;
+  return Boolean(state.user);
 }
 
 function isOwner(){
-  if (SpecCom.helpers.isRoot()) return true;
-  return getRoleCode() === ROLES.OWNER;
+  return Boolean(state.user);
 }
 
 function isOwnerOrAdmin(){
-  const role = getRoleCode();
-  if (SpecCom.helpers.isRoot()) return true;
-  return role === ROLES.OWNER || role === ROLES.ADMIN;
+  return Boolean(state.user);
 }
 
 function isPrivilegedRole(roleCode = getRoleCode()){
-  if (SpecCom.helpers.isRoot()) return true;
-  return roleCode === ROLES.ADMIN || roleCode === ROLES.PROJECT_MANAGER || roleCode === ROLES.OWNER || roleCode === ROLES.SUPPORT;
+  return Boolean(state.user);
 }
 
 function isFieldRole(roleCode = getRoleCode()){
@@ -9346,21 +9335,10 @@ function isDemoShowcaseMode(){
 function canShowModule(moduleKey){
   const module = SHOWCASE_MODULES.find((item) => item.key === moduleKey);
   if (!module) return false;
-  if (isDemoShowcaseMode()) return true;
-  return module.rolesAllowed.includes(getRoleCode());
+  return Boolean(state.user) || isDemoShowcaseMode();
 }
 
 function getProductionAllowedViews(){
-  const role = getRoleCode();
-  if (role === ROLES.USER_LEVEL_1){
-    return new Set(["viewDashboard", "viewTechnician", "viewMap", "viewSettings", "viewDailyReport"]);
-  }
-  if (role === ROLES.USER_LEVEL_2){
-    return new Set(["viewDashboard", "viewNodes", "viewPhotos", "viewMap", "viewCatalog", "viewAlerts", "viewSettings", "viewDailyReport"]);
-  }
-  if (role === ROLES.SUPPORT){
-    return new Set(["viewDashboard", "viewTechnician", "viewNodes", "viewPhotos", "viewInvoices", "viewMap", "viewCatalog", "viewAlerts", "viewDispatch", "viewSettings", "viewDailyReport"]);
-  }
   return new Set(["viewDashboard", "viewTechnician", "viewNodes", "viewPhotos", "viewBilling", "viewInvoices", "viewMap", "viewCatalog", "viewAlerts", "viewAdmin", "viewSettings", "viewLabor", "viewDispatch", "viewDailyReport"]);
 }
 
@@ -9373,7 +9351,7 @@ function canViewDispatch(){
 }
 
 function canViewInvoiceVault(){
-  return SpecCom.helpers.isRoot() || Boolean(state.profile?.can_view_invoices);
+  return Boolean(state.user);
 }
 
 function canCreateProjects(){
@@ -10997,9 +10975,8 @@ async function loadDispatchTechnicians(){
   }
   const { data, error } = await state.client
     .from("project_members")
-    .select("user_id, role_code")
-    .eq("project_id", state.activeProject.id)
-    .in("role_code", [ROLES.USER_LEVEL_1, ROLES.USER_LEVEL_2]);
+    .select("user_id")
+    .eq("project_id", state.activeProject.id);
   if (error){
     toast("Technicians load error", error.message);
     return;
@@ -15556,10 +15533,8 @@ function openGrantAccessModal(){
   const modal = $("grantAccessModal");
   if (!modal) return;
   const userInput = $("grantAccessUser");
-  const roleSelect = $("grantAccessRole");
   const note = $("grantAccessNote");
   if (userInput) userInput.value = "";
-  if (roleSelect) roleSelect.value = "USER_LEVEL_1";
   if (note){
     const projectName = state.activeProject?.name || "current project";
     note.textContent = `Access will be granted for ${projectName}.`;
@@ -15573,14 +15548,6 @@ function closeGrantAccessModal(){
   modal.style.display = "none";
 }
 
-function normalizeRoleForGrant(role){
-  const raw = String(role || "").toUpperCase().trim();
-  if (raw === "USER1" || raw === "USER_LEVEL_1") return "USER_LEVEL_1";
-  if (raw === "USER2" || raw === "USER_LEVEL_2") return "USER_LEVEL_2";
-  if (raw === "PM" || raw === "PROJECT_MANAGER") return "PROJECT_MANAGER";
-  return raw;
-}
-
 async function confirmGrantAccess(){
   if (!SpecCom.helpers.isPlatformAdmin()){
     toast("Not allowed", "Only ROOT or SUPPORT can grant project access.");
@@ -15591,7 +15558,6 @@ async function confirmGrantAccess(){
     return;
   }
   const userInput = $("grantAccessUser")?.value.trim();
-  const roleSelect = $("grantAccessRole")?.value || "USER_LEVEL_1";
   if (!userInput){
     toast("User required", "Enter an email or user id.");
     return;
@@ -15601,19 +15567,9 @@ async function confirmGrantAccess(){
     toast("Access failed", "Supabase client unavailable.");
     return;
   }
-  const roleCode = normalizeRoleForGrant(roleSelect);
-  const { data, error } = await client.rpc("fn_grant_project_access", {
-    p_project_id: state.activeProject.id,
-    p_user_identifier: userInput,
-    p_role_code: roleCode,
-  });
-  if (error){
-    toast("Access failed", error.message || "Access failed.");
-    return;
-  }
-  toast("Access granted", `Granted ${roleCode} access.`);
+  toast("Access granted", "Access requests are in auth-only mode during role reset.");
   closeGrantAccessModal();
-  return data;
+  return { ok: true, user: userInput };
 }
 
 function openCreateProjectModal(){
@@ -16602,8 +16558,6 @@ async function loadProjects(){
     .from("project_members")
     .select(`
       project_id,
-      role,
-      role_code,
       projects (
         ${baseSelect}
       )
@@ -16618,8 +16572,6 @@ async function loadProjects(){
       if (!row?.projects) return null;
       return {
         ...row.projects,
-        role: row.role || null,
-        role_code: row.role_code || null,
       };
     })
     .filter(Boolean);
@@ -16945,30 +16897,13 @@ async function loadAdminProfiles(){
   }
   const { data, error } = await state.client
     .from("profiles")
-    .select("id, display_name, role, role_code, created_at, can_view_invoices")
+    .select("id, display_name, created_at")
     .order("created_at", { ascending: true });
   if (error){
-    const message = String(error?.message || "").toLowerCase();
-    if (message.includes("can_view_invoices") && message.includes("does not exist")){
-      const fallback = await state.client
-        .from("profiles")
-        .select("id, display_name, role, role_code, created_at")
-        .order("created_at", { ascending: true });
-      if (fallback.error){
-        toast("Profiles load error", fallback.error.message);
-        return;
-      }
-      state.adminProfiles = (fallback.data || []).map((row) => ({ ...row, can_view_invoices: false }));
-      renderAdminProfiles();
-      return;
-    }
     toast("Profiles load error", error.message);
     return;
   }
-  state.adminProfiles = (data || []).map((row) => ({
-    ...row,
-    can_view_invoices: Boolean(row?.can_view_invoices),
-  }));
+  state.adminProfiles = data || [];
   renderAdminProfiles();
 }
 
@@ -16990,8 +16925,6 @@ function renderAdminProfiles(){
         <tr>
           <th>User id</th>
           <th>Name</th>
-          <th>Role</th>
-          <th>Invoice Access</th>
           <th>Created</th>
           <th></th>
         </tr>
@@ -17002,19 +16935,6 @@ function renderAdminProfiles(){
             <td class="muted small">${escapeHtml(row.id)}</td>
             <td>
               <input class="input compact" data-field="display_name" data-id="${row.id}" value="${escapeHtml(row.display_name || "")}" />
-            </td>
-            <td>
-              <select class="input compact" data-field="role" data-id="${row.id}">
-                ${APP_ROLE_OPTIONS.map(role => `
-                  <option value="${role}" ${String(row.role || "").toUpperCase() === role ? "selected" : ""}>${formatRoleLabel(role)}</option>
-                `).join("")}
-              </select>
-            </td>
-            <td>
-              <label class="row" style="gap:8px; align-items:center;">
-                <input type="checkbox" data-field="can_view_invoices" data-id="${row.id}" ${row.can_view_invoices ? "checked" : ""} ${SpecCom.helpers.isRoot() ? "" : "disabled"} />
-                <span class="muted small">${SpecCom.helpers.isRoot() ? "Granted by ROOT" : "ROOT only"}</span>
-              </label>
             </td>
             <td class="muted small">${row.created_at ? new Date(row.created_at).toLocaleDateString() : "-"}</td>
             <td>
@@ -17041,13 +16961,6 @@ async function createAdminProfile(){
   }
   const userId = $("adminUserId")?.value.trim();
   const email = $("adminUserEmail")?.value.trim();
-  const roleInput = $("adminUserRole");
-  let nextRole = resolveProvisionedRoleCode(email, roleInput?.value || DEFAULT_ROLE);
-  if (isPatrickIdentity(email) && roleInput?.value !== ROLES.ADMIN){
-    if (roleInput) roleInput.value = ROLES.ADMIN;
-    toast("Role adjusted", "Patrick is mapped to ADMIN by default.");
-  }
-  const nextRoleCode = normalizeRole(nextRole);
   let targetUserId = userId;
   if (!targetUserId && email){
     targetUserId = await resolveUserIdByIdentifier(email);
@@ -17069,8 +16982,6 @@ async function createAdminProfile(){
     .upsert({
       id: targetUserId,
       display_name: email || null,
-      role: nextRole,
-      role_code: nextRoleCode,
       org_id: state.profile?.org_id || null,
     }, { onConflict: "id" });
   if (error){
@@ -17101,12 +17012,6 @@ async function inviteAdminUserAccount(){
     toast("Email required", "Enter a valid email in Email or display name.");
     return;
   }
-  let roleCode = resolveProvisionedRoleCode(email, $("adminUserRole")?.value || DEFAULT_ROLE);
-  if (isPatrickIdentity(email) && $("adminUserRole")?.value !== ROLES.ADMIN){
-    if ($("adminUserRole")) $("adminUserRole").value = ROLES.ADMIN;
-    toast("Role adjusted", "Patrick is mapped to ADMIN by default.");
-  }
-
   const { error: inviteError } = await state.client.auth.signInWithOtp({
     email,
     options: { shouldCreateUser: true },
@@ -17115,26 +17020,14 @@ async function inviteAdminUserAccount(){
     toast("Invite failed", inviteError.message || "Could not send invite.");
     return;
   }
-  const { error: inviteRecordError } = await state.client.rpc("fn_upsert_profile_invite", {
-    p_email: email,
-    p_role_code: roleCode,
-    p_display_name: email,
-    p_org_id: state.profile?.org_id || null,
-  });
-  if (inviteRecordError){
-    toast("Invite warning", `Invite sent, but profile invite record failed: ${inviteRecordError.message}`);
-  }
-
   const resolvedUserId = await resolveUserIdByIdentifier(email);
   if (!resolvedUserId){
-    toast("Invite sent", "Account invite sent. Profile/org will be applied on first sign-in.");
+    toast("Invite sent", "Account invite sent.");
     return;
   }
   const payload = {
     id: resolvedUserId,
     display_name: email,
-    role: roleCode,
-    role_code: roleCode,
   };
   const { error: upsertError } = await state.client
     .from("profiles")
@@ -17145,7 +17038,7 @@ async function inviteAdminUserAccount(){
   }
   if ($("adminUserId")) $("adminUserId").value = resolvedUserId;
   await loadAdminProfiles();
-  toast("Invite sent", `Account invite sent and profile set to ${formatRoleLabel(roleCode)}.`);
+  toast("Invite sent", "Account invite sent and profile created.");
 }
 
 async function updateAdminProfile(userId){
@@ -17157,34 +17050,17 @@ async function updateAdminProfile(userId){
     toast("Not allowed", "Admin role required.");
     return;
   }
-  const roleEl = document.querySelector(`[data-field="role"][data-id="${userId}"]`);
   const nameEl = document.querySelector(`[data-field="display_name"][data-id="${userId}"]`);
-  const invoiceAccessEl = document.querySelector(`[data-field="can_view_invoices"][data-id="${userId}"]`);
-  if (!roleEl || !nameEl) return;
-  const nextRole = roleEl.value;
-  const nextRoleCode = normalizeRole(nextRole);
+  if (!nameEl) return;
   const nextName = String(nameEl.value || "").trim();
-  const existing = (state.adminProfiles || []).find((row) => String(row?.id || "") === String(userId || ""));
-  const nextInvoiceAccess = SpecCom.helpers.isRoot()
-    ? Boolean(invoiceAccessEl?.checked)
-    : Boolean(existing?.can_view_invoices);
   if (isDemo){
     toast("Demo disabled", "Profiles are not available in demo mode.");
     return;
   }
-  let { error } = await state.client
+  const { error } = await state.client
     .from("profiles")
-    .update({ role: nextRole, role_code: nextRoleCode, display_name: nextName || null, can_view_invoices: nextInvoiceAccess })
+    .update({ display_name: nextName || null })
     .eq("id", userId);
-  if (error){
-    const message = String(error?.message || "").toLowerCase();
-    if (message.includes("can_view_invoices") && message.includes("does not exist")){
-      ({ error } = await state.client
-        .from("profiles")
-        .update({ role: nextRole, role_code: nextRoleCode, display_name: nextName || null })
-        .eq("id", userId));
-    }
-  }
   if (error){
     toast("Update failed", error.message);
     return;
@@ -22741,11 +22617,9 @@ async function enterDemoBootstrapSession({ persistSession = true, toastMessage =
   state.session = { user: state.user, access_token: "demo-bootstrap-token", token_type: "bearer" };
   state.profile = {
     role: ROLES.USER_LEVEL_1,
-    role_code: ROLES.USER_LEVEL_1,
     display_name: "Demo Technician",
     preferred_language: getPreferredLanguage(),
     is_demo: false,
-    can_view_invoices: true,
   };
   ensureDemoSeed();
   showAuth(false);
@@ -22955,7 +22829,7 @@ async function loadProfile(client, userId){
   // Expect a public.profiles row keyed by auth.uid()
   let { data, error } = await client
     .from("profiles")
-    .select("role, role_code, display_name, preferred_language, is_demo, current_project_id, org_id, can_view_invoices")
+    .select("display_name, preferred_language, is_demo, current_project_id, org_id")
     .eq("id", userId)
     .maybeSingle();
 
@@ -22964,7 +22838,7 @@ async function loadProfile(client, userId){
     if (message.includes("does not exist")){
       ({ data, error } = await client
         .from("profiles")
-        .select("role, role_code, display_name, org_id")
+        .select("display_name, org_id")
         .eq("id", userId)
         .maybeSingle());
     }
@@ -22983,12 +22857,10 @@ async function loadProfile(client, userId){
       .upsert({
         id: userId,
         display_name: fallbackName || null,
-        role: DEFAULT_ROLE,
-        role_code: DEFAULT_ROLE,
       }, { onConflict: "id" });
     ({ data } = await client
       .from("profiles")
-      .select("role, role_code, display_name, preferred_language, is_demo, current_project_id, org_id, can_view_invoices")
+      .select("display_name, preferred_language, is_demo, current_project_id, org_id")
       .eq("id", userId)
       .maybeSingle());
   }
@@ -22997,16 +22869,12 @@ async function loadProfile(client, userId){
     if (!claimError){
       ({ data } = await client
         .from("profiles")
-        .select("role, role_code, display_name, preferred_language, is_demo, current_project_id, org_id, can_view_invoices")
+        .select("display_name, preferred_language, is_demo, current_project_id, org_id")
         .eq("id", userId)
         .maybeSingle());
     }
   }
   state.profile = data || null;
-  if (state.profile){
-    state.profile.role = normalizeRole(state.profile.role);
-    state.profile.can_view_invoices = Boolean(state.profile.can_view_invoices);
-  }
   window.currentUserProfile = state.profile;
   if (state.profile?.preferred_language){
     setPreferredLanguage(state.profile.preferred_language);

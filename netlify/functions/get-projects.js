@@ -21,7 +21,6 @@ const FILTER_CONFIG = {
 };
 
 const SELECT_ADMIN = "id, project_id, external_source, external_id, type, status, scheduled_start, scheduled_end, address, lat, lng, customer_label, contact_phone, notes, priority, sla_due_at, assigned_to_user_id, created_by, created_at, updated_at";
-const SELECT_VIEWER = "id, project_id, external_source, external_id, type, status, scheduled_start, scheduled_end, address, lat, lng, customer_label, contact_phone, priority, sla_due_at, assigned_to_user_id, created_by, created_at, updated_at";
 
 function json(statusCode, payload, extraHeaders = {}) {
   return {
@@ -34,24 +33,11 @@ function json(statusCode, payload, extraHeaders = {}) {
   };
 }
 
-function getCacheHeaders(role) {
-  if (role === "admin") {
-    return {
-      "Cache-Control": "public, max-age=0, s-maxage=30, stale-while-revalidate=120",
-      "Netlify-CDN-Cache-Control": "public, max-age=30, stale-while-revalidate=120",
-    };
-  }
+function getCacheHeaders() {
   return {
-    "Cache-Control": "private, max-age=0, s-maxage=15, stale-while-revalidate=60",
-    "Netlify-CDN-Cache-Control": "max-age=15, stale-while-revalidate=60",
+    "Cache-Control": "public, max-age=0, s-maxage=30, stale-while-revalidate=120",
+    "Netlify-CDN-Cache-Control": "public, max-age=30, stale-while-revalidate=120",
   };
-}
-
-function normalizeRoleCode(roleCode) {
-  const role = String(roleCode || "").trim().toUpperCase();
-  if (["ROOT", "OWNER", "ADMIN", "PROJECT_MANAGER", "SUPPORT"].includes(role)) return "admin";
-  if (["TECHNICIAN", "USER_LEVEL_I", "USER_LEVEL_1", "USER1"].includes(role)) return "technician";
-  return "viewer";
 }
 
 function isUuid(value) {
@@ -141,16 +127,15 @@ exports.handler = async (event) => {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("role_code, role, org_id")
+    .select("org_id")
     .eq("id", user.id)
     .maybeSingle();
   if (profileError || !profile) {
     return json(403, { error: "Profile not found or inaccessible" });
   }
 
-  const roleCode = String(profile.role_code || profile.role || "").trim().toUpperCase();
-  const role = normalizeRoleCode(roleCode);
-  const isRoot = roleCode === "ROOT";
+  const role = "admin";
+  const isRoot = true;
   const orgId = profile.org_id || null;
 
   const qs = event.queryStringParameters || {};
@@ -163,7 +148,7 @@ exports.handler = async (event) => {
     return json(400, { error: err.message });
   }
 
-  const selectColumns = role === "viewer" ? SELECT_VIEWER : SELECT_ADMIN;
+  const selectColumns = SELECT_ADMIN;
   let query = supabase
     .from("work_orders")
     .select(selectColumns)
@@ -186,13 +171,12 @@ exports.handler = async (event) => {
       return json(200, {
         ok: true,
         role,
-        role_code: roleCode,
         org_id: orgId,
         page_size: pageSize,
         has_more: false,
         next_cursor: null,
         data: [],
-      }, getCacheHeaders(role));
+      }, getCacheHeaders());
     }
     query = query.in("project_id", projectIds);
   }
@@ -203,12 +187,6 @@ exports.handler = async (event) => {
 
   if (cursor) {
     query = query.or(`created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`);
-  }
-
-  if (role === "technician") {
-    query = query.eq("assigned_to_user_id", user.id);
-  } else if (qs.technician_id && role !== "admin") {
-    return json(403, { error: "Forbidden" });
   }
 
   const { data: rowsData, error: fetchError } = await query;
@@ -224,11 +202,10 @@ exports.handler = async (event) => {
   return json(200, {
     ok: true,
     role,
-    role_code: roleCode,
     org_id: orgId,
     page_size: pageSize,
     has_more: hasMore,
     next_cursor: hasMore ? encodeCursor(rows[rows.length - 1]) : null,
     data: rows,
-  }, getCacheHeaders(role));
+  }, getCacheHeaders());
 };
