@@ -15129,7 +15129,6 @@ function applyDemoLock(el){
 function applyDemoRestrictions(root = document){
   if (!isDemoUser()) return;
   [
-    "#btnCreateInvoice",
     "#btnMarkNodeReady",
     "#btnBillingExportCsv",
     "#btnBillingPrint",
@@ -15160,7 +15159,6 @@ function applyDemoRestrictions(root = document){
 function applyShowcaseReadOnlyRestrictions(root = document){
   if (!isDemoShowcaseMode() || isDemo) return;
   [
-    "#btnCreateInvoice",
     "#btnMarkNodeReady",
     "#btnAddLocation",
     "#btnDispatchCreate",
