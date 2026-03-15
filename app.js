@@ -21959,8 +21959,8 @@ function runShowcaseAction(action){
 function renderDemoShowcaseHome(){
   const wrap = $("demoShowcaseHome");
   if (!wrap) return;
+  const showcase = isDemoShowcaseMode();
   const legacyIds = [
-    "dashboardProfileCard",
     "dashboardJobCard",
     "dashboardActiveSiteCard",
     "dashboardActivityCard",
@@ -21968,12 +21968,79 @@ function renderDemoShowcaseHome(){
     "dashboardAllowedQtyCard",
     "dashboardCatalogQuickCard",
   ];
+  const profileCard = $("dashboardProfileCard");
+  if (profileCard) profileCard.style.display = "";
   legacyIds.forEach((id) => {
     const el = $(id);
-    if (el) el.style.display = "";
+    if (el) el.style.display = showcase ? "none" : "";
   });
-  wrap.style.display = "none";
-  wrap.innerHTML = "";
+  if (!showcase){
+    wrap.style.display = "none";
+    wrap.innerHTML = "";
+    return;
+  }
+  const quickActions = [
+    { label: "Timesheet", action: { type: "view", target: "viewTechnician" } },
+    { label: "Projects", action: { type: "modal", target: "projects" } },
+    { label: "Map", action: { type: "view", target: "viewMap" } },
+    { label: "Messages", action: { type: "modal", target: "messages" } },
+    { label: "Invoicing", action: { type: "view", target: "viewInvoices" } },
+    { label: "Materials", action: { type: "view", target: "viewCatalog" } },
+  ];
+  const highlights = [
+    { label: "Work Orders", action: { type: "view", target: "viewDispatch" } },
+    { label: "Allowed Quantities", action: { type: "view", target: "viewDashboard" } },
+    { label: "Messaging", action: { type: "modal", target: "messages" } },
+    { label: "Material Search", action: { type: "view", target: "viewCatalog" } },
+    { label: "Invoicing", action: { type: "view", target: "viewInvoices" } },
+    { label: "Daily Summary", action: { type: "view", target: "viewDailyReport" } },
+  ];
+  const grouped = SHOWCASE_GROUPS.map((group) => {
+    const modules = SHOWCASE_MODULES.filter((item) => item.group === group.key && canShowModule(item.key));
+    return { ...group, modules };
+  }).filter((group) => group.modules.length > 0);
+
+  wrap.style.display = "";
+  wrap.innerHTML = `
+    <div class="card" style="margin-top:12px;">
+      <h3>Quick Actions</h3>
+      <div class="showcase-quick-grid" style="margin-top:10px;">
+        ${quickActions.map((item) => `
+          <button class="btn showcase-quick-btn" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(item.action, { label: item.label })))}'>${escapeHtml(item.label)}</button>
+        `).join("")}
+      </div>
+    </div>
+    <div class="showcase-role-grid" style="margin-top:12px;">
+      ${grouped.map((group) => `
+        <article class="card showcase-role-card">
+          <div class="showcase-role-title">${escapeHtml(group.title)}</div>
+          <div class="muted small">${escapeHtml(group.summary)}</div>
+          <div class="showcase-module-list">
+            ${group.modules.slice(0, 5).map((item) => `
+              <div class="showcase-module-item showcase-module-launcher" tabindex="0" role="button" aria-label="Open ${escapeHtml(item.title)}" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(item.action, { label: item.title })))}'>
+                <div class="showcase-module-head">
+                  <div style="font-weight:800;">${escapeHtml(item.title)}</div>
+                  <button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(item.action, { label: item.title })))}'>Open</button>
+                </div>
+                <div class="muted small">${escapeHtml(item.summary)}</div>
+                <div class="showcase-chip-row">
+                  ${item.chips.slice(0, 3).map((chip) => `<span class="chip">${escapeHtml(chip)}</span>`).join("")}
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        </article>
+      `).join("")}
+    </div>
+    <div class="card" style="margin-top:12px;">
+      <h3>Platform Highlights</h3>
+      <div class="showcase-chip-row" style="margin-top:10px;">
+        ${highlights.map((item) => (
+          `<button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(item.action, { label: item.label })))}'>${escapeHtml(item.label)}</button>`
+        )).join("")}
+      </div>
+    </div>
+  `;
 }
 
 function renderProofChecklist(){
