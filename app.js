@@ -159,6 +159,16 @@ const state = {
   },
   orgs: [],
   invoices: [],
+  officeInvoices: {
+    records: [],
+    recents: {
+      company: [],
+      billTo: [],
+      jobNumber: [],
+      location: [],
+    },
+    draft: null,
+  },
   invoiceFiles: [],
   pendingSites: [],
   billingLocations: [],
@@ -1200,6 +1210,8 @@ const LAYERS_PANEL_OPEN_KEY = "speccom.ui.layersPanelOpen";
 const LEGACY_DRAWER_OPEN_KEY = "speccom.ui.drawerOpen";
 const LEGACY_DRAWER_TAB_KEY = "speccom.ui.drawerTab";
 const LEGACY_DRAWER_WIDTH_KEY = "speccom.ui.drawerWidth";
+const OFFICE_INVOICE_RECORDS_KEY = "speccom.office.invoiceRecords.v1";
+const OFFICE_INVOICE_RECENTS_KEY = "speccom.office.invoiceRecents.v1";
 const KMZ_PHOTO_OVERRIDES_KEY_PREFIX = "speccom.kmzPhotoOverrides.";
 const INVOICE_FILES_BUCKET = "invoice-files";
 const KMZ_SNAPSHOT_TABLE = "project_kmz_snapshots";
@@ -21410,40 +21422,378 @@ function subscribeUsageEvents(nodeId){
     .subscribe();
 }
 
+function toLocalDateISO(value = new Date()){
+  const d = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getWeekEndingSaturdayISO(reference = new Date()){
+  const d = reference instanceof Date ? new Date(reference.getTime()) : new Date(reference);
+  const day = d.getDay();
+  d.setDate(d.getDate() + (6 - day));
+  return toLocalDateISO(d);
+}
+
+function parseInvoiceNumberPart(value){
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseInvoiceCurrency(value){
+  if (value === null || value === undefined || value === "") return 0;
+  const n = Number.parseFloat(String(value).replace(/[^0-9.\-]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function roundInvoiceCurrency(value){
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function getOfficeInvoiceLineTotal(item){
+  const qty = parseInvoiceCurrency(item?.qty);
+  const unitRate = parseInvoiceCurrency(item?.unit_rate);
+  return roundInvoiceCurrency(qty * unitRate);
+}
+
+function getNextOfficeInvoiceNumber(){
+  const dateKey = toLocalDateISO(new Date()).replace(/-/g, "");
+  const prefix = `INV-${dateKey}-`;
+  const source = [...(state.officeInvoices.records || [])];
+  if (state.officeInvoices.draft?.invoice_number){
+    source.push({ invoice_number: state.officeInvoices.draft.invoice_number });
+  }
+  const used = source
+    .map((row) => String(row?.invoice_number || ""))
+    .filter((value) => value.startsWith(prefix))
+    .map((value) => parseInvoiceNumberPart(value.split("-")[2]))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  const next = (used.length ? Math.max(...used) : 0) + 1;
+  return `${prefix}${String(next).padStart(3, "0")}`;
+}
+
+function normalizeOfficeRecentValues(raw){
+  const values = Array.isArray(raw) ? raw : [];
+  const seen = new Set();
+  const out = [];
+  values.forEach((value) => {
+    const clean = String(value || "").trim();
+    if (!clean || seen.has(clean.toLowerCase())) return;
+    seen.add(clean.toLowerCase());
+    out.push(clean);
+  });
+  return out.slice(0, 10);
+}
+
+function ensureOfficeInvoiceStateLoaded(){
+  if (state.officeInvoices.loaded) return;
+  const recordsRaw = safeLocalStorageGet(OFFICE_INVOICE_RECORDS_KEY);
+  const recentsRaw = safeLocalStorageGet(OFFICE_INVOICE_RECENTS_KEY);
+  if (recordsRaw){
+    try{
+      const parsed = JSON.parse(recordsRaw);
+      state.officeInvoices.records = Array.isArray(parsed) ? parsed : [];
+    } catch {}
+  }
+  if (recentsRaw){
+    try{
+      const parsed = JSON.parse(recentsRaw) || {};
+      state.officeInvoices.recents = {
+        company: normalizeOfficeRecentValues(parsed.company),
+        billTo: normalizeOfficeRecentValues(parsed.billTo),
+        jobNumber: normalizeOfficeRecentValues(parsed.jobNumber),
+        location: normalizeOfficeRecentValues(parsed.location),
+      };
+    } catch {}
+  }
+  state.officeInvoices.loaded = true;
+}
+
+function persistOfficeInvoiceState(){
+  safeLocalStorageSet(OFFICE_INVOICE_RECORDS_KEY, JSON.stringify(state.officeInvoices.records || []));
+  safeLocalStorageSet(OFFICE_INVOICE_RECENTS_KEY, JSON.stringify(state.officeInvoices.recents || {}));
+}
+
+function createOfficeInvoiceLineItem(){
+  return {
+    id: `office-line-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    code: "",
+    description: "",
+    qty: "",
+    unit_rate: "",
+  };
+}
+
+function computeOfficeInvoiceTotals(draft){
+  const items = Array.isArray(draft?.line_items) ? draft.line_items : [];
+  const subtotal = roundInvoiceCurrency(items.reduce((sum, item) => sum + getOfficeInvoiceLineTotal(item), 0));
+  return {
+    subtotal,
+    total: subtotal,
+  };
+}
+
+function refreshOfficeInvoiceComputedFields(){
+  const draft = state.officeInvoices.draft;
+  if (!draft) return;
+  const items = Array.isArray(draft.line_items) ? draft.line_items : [];
+  items.forEach((item) => {
+    const totalEl = document.querySelector(`[data-office-line-total-id="${item.id}"]`);
+    if (totalEl) totalEl.textContent = formatMoney(getOfficeInvoiceLineTotal(item));
+  });
+  const totals = computeOfficeInvoiceTotals(draft);
+  const subtotalEl = $("officeInvoiceSubtotal");
+  const totalEl = $("officeInvoiceTotal");
+  if (subtotalEl) subtotalEl.textContent = formatMoney(totals.subtotal);
+  if (totalEl) totalEl.textContent = formatMoney(totals.total);
+}
+
+function pushOfficeRecentValue(key, value){
+  const clean = String(value || "").trim();
+  if (!clean) return;
+  const list = Array.isArray(state.officeInvoices.recents[key]) ? state.officeInvoices.recents[key] : [];
+  const next = [clean, ...list.filter((item) => String(item || "").toLowerCase() !== clean.toLowerCase())].slice(0, 10);
+  state.officeInvoices.recents[key] = next;
+}
+
+function createOfficeInvoiceDraft(){
+  ensureOfficeInvoiceStateLoaded();
+  const recents = state.officeInvoices.recents || {};
+  state.officeInvoices.draft = {
+    id: `office-invoice-${Date.now()}`,
+    company_creating_invoice: recents.company?.[0] || "",
+    bill_to: recents.billTo?.[0] || "",
+    invoice_number: getNextOfficeInvoiceNumber(),
+    invoice_date: toLocalDateISO(new Date()),
+    week_ending: getWeekEndingSaturdayISO(new Date()),
+    job_number: recents.jobNumber?.[0] || "",
+    location: recents.location?.[0] || "",
+    notes: "",
+    status: "Draft",
+    line_items: [createOfficeInvoiceLineItem()],
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+  renderInvoicePanel();
+}
+
+function openOfficeInvoiceDraft(invoiceId){
+  ensureOfficeInvoiceStateLoaded();
+  const match = (state.officeInvoices.records || []).find((row) => String(row.id) === String(invoiceId));
+  if (!match) return;
+  state.officeInvoices.draft = JSON.parse(JSON.stringify(match));
+  if (!Array.isArray(state.officeInvoices.draft.line_items) || !state.officeInvoices.draft.line_items.length){
+    state.officeInvoices.draft.line_items = [createOfficeInvoiceLineItem()];
+  }
+  renderInvoicePanel();
+}
+
+function saveOfficeInvoiceWithStatus(status){
+  ensureOfficeInvoiceStateLoaded();
+  const draft = state.officeInvoices.draft;
+  if (!draft){
+    toast("No invoice", "Create an invoice first.");
+    return;
+  }
+  const totals = computeOfficeInvoiceTotals(draft);
+  const now = nowISO();
+  const saved = {
+    ...draft,
+    company_creating_invoice: String(draft.company_creating_invoice || "").trim(),
+    bill_to: String(draft.bill_to || "").trim(),
+    job_number: String(draft.job_number || "").trim(),
+    location: String(draft.location || "").trim(),
+    notes: String(draft.notes || ""),
+    status: status === "Ready for Billing" ? "Ready for Billing" : "Draft",
+    subtotal: totals.subtotal,
+    total: totals.total,
+    updated_at: now,
+  };
+  const existingIdx = (state.officeInvoices.records || []).findIndex((row) => String(row.id) === String(saved.id));
+  if (existingIdx >= 0){
+    state.officeInvoices.records[existingIdx] = saved;
+  } else {
+    state.officeInvoices.records.unshift(saved);
+  }
+  pushOfficeRecentValue("company", saved.company_creating_invoice);
+  pushOfficeRecentValue("billTo", saved.bill_to);
+  pushOfficeRecentValue("jobNumber", saved.job_number);
+  pushOfficeRecentValue("location", saved.location);
+  state.officeInvoices.draft = JSON.parse(JSON.stringify(saved));
+  persistOfficeInvoiceState();
+  renderInvoicePanel();
+  toast("Invoice saved", saved.status === "Ready for Billing" ? "Invoice marked Ready for Billing." : "Draft saved.");
+}
+
+function renderOfficeInvoiceBuilder(draft){
+  const recents = state.officeInvoices.recents || {};
+  const items = Array.isArray(draft.line_items) && draft.line_items.length ? draft.line_items : [createOfficeInvoiceLineItem()];
+  draft.line_items = items;
+  const totals = computeOfficeInvoiceTotals(draft);
+  return `
+    <div class="card" style="margin-top:12px;">
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <h3>Create Invoice</h3>
+        <span class="status-pill">${escapeHtml(draft.status || "Draft")}</span>
+      </div>
+      <div class="grid cols-2" style="margin-top:10px;">
+        <div>
+          <label class="small">Company Creating Invoice</label>
+          <input class="input" data-office-field="company_creating_invoice" value="${escapeHtml(draft.company_creating_invoice || "")}" list="officeCompanyRecentList" />
+        </div>
+        <div>
+          <label class="small">Bill To</label>
+          <input class="input" data-office-field="bill_to" value="${escapeHtml(draft.bill_to || "")}" list="officeBillToRecentList" />
+        </div>
+        <div>
+          <label class="small">Invoice Number</label>
+          <input class="input" data-office-field="invoice_number" value="${escapeHtml(draft.invoice_number || "")}" readonly />
+        </div>
+        <div>
+          <label class="small">Invoice Date</label>
+          <input class="input" type="date" data-office-field="invoice_date" value="${escapeHtml(draft.invoice_date || "")}" />
+        </div>
+        <div>
+          <label class="small">Week Ending</label>
+          <input class="input" type="date" data-office-field="week_ending" value="${escapeHtml(draft.week_ending || "")}" />
+        </div>
+        <div>
+          <label class="small">Job Number</label>
+          <input class="input" data-office-field="job_number" value="${escapeHtml(draft.job_number || "")}" list="officeJobNumberRecentList" />
+        </div>
+        <div>
+          <label class="small">Location</label>
+          <input class="input" data-office-field="location" value="${escapeHtml(draft.location || "")}" list="officeLocationRecentList" />
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <label class="small">Notes</label>
+        <textarea class="input" rows="3" data-office-field="notes">${escapeHtml(draft.notes || "")}</textarea>
+      </div>
+      <div class="hr"></div>
+      <h3>Line Items</h3>
+      <div style="overflow:auto;">
+        <table class="table billing-table" style="margin-top:8px;">
+          <thead>
+            <tr><th>Code</th><th>Description</th><th>Qty</th><th>Unit Rate</th><th>Total</th><th></th></tr>
+          </thead>
+          <tbody>
+            ${items.map((item) => `
+              <tr>
+                <td><input class="input" data-office-line-id="${item.id}" data-office-line-field="code" value="${escapeHtml(item.code || "")}" /></td>
+                <td><input class="input" data-office-line-id="${item.id}" data-office-line-field="description" value="${escapeHtml(item.description || "")}" /></td>
+                <td><input class="input" type="number" step="0.01" min="0" data-office-line-id="${item.id}" data-office-line-field="qty" value="${escapeHtml(String(item.qty ?? ""))}" /></td>
+                <td><input class="input" type="number" step="0.01" min="0" data-office-line-id="${item.id}" data-office-line-field="unit_rate" value="${escapeHtml(String(item.unit_rate ?? ""))}" /></td>
+                <td data-office-line-total-id="${item.id}">${formatMoney(getOfficeInvoiceLineTotal(item))}</td>
+                <td><button class="btn danger small" type="button" data-office-action="removeLineItem" data-office-line-id="${item.id}">Remove Line</button></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn secondary small" type="button" data-office-action="addLineItem">+ Add Line Item</button>
+      </div>
+      <div class="billing-summary" style="margin-top:12px;">
+        <div><span>Subtotal</span><strong id="officeInvoiceSubtotal">${formatMoney(totals.subtotal)}</strong></div>
+        <div><span>Total</span><strong id="officeInvoiceTotal">${formatMoney(totals.total)}</strong></div>
+      </div>
+      <div class="billing-actions" style="margin-top:12px;">
+        <button class="btn" type="button" data-office-action="saveDraft">Save Draft</button>
+        <button class="btn secondary" type="button" data-office-action="readyForBilling">Mark Ready For Billing</button>
+        <button class="btn ghost" type="button" data-office-action="cancelDraft">Close Builder</button>
+      </div>
+      <datalist id="officeCompanyRecentList">${(recents.company || []).map((value) => `<option value="${escapeHtml(value)}"></option>`).join("")}</datalist>
+      <datalist id="officeBillToRecentList">${(recents.billTo || []).map((value) => `<option value="${escapeHtml(value)}"></option>`).join("")}</datalist>
+      <datalist id="officeJobNumberRecentList">${(recents.jobNumber || []).map((value) => `<option value="${escapeHtml(value)}"></option>`).join("")}</datalist>
+      <datalist id="officeLocationRecentList">${(recents.location || []).map((value) => `<option value="${escapeHtml(value)}"></option>`).join("")}</datalist>
+    </div>
+  `;
+}
+
 function renderInvoicePanel(){
   const wrap = $("invoicePanel");
   if (!wrap) return;
-  const invoices = state.invoices || [];
-  if (!state.activeProject){
-    wrap.innerHTML = `<div class="muted small">${t("selectProjectLocations")}</div>`;
-    return;
-  }
-  if (!invoices.length){
-    wrap.innerHTML = `<div class="muted small">${t("yourInvoicesEmpty")}</div>`;
-    return;
-  }
-  const orgId = state.profile?.org_id || null;
-  const rows = invoices.map((inv) => {
-    const site = (state.projectSites || []).find(s => s.id === inv.site_id) || null;
-    const siteName = site ? getSiteDisplayName(site) : inv.site_id || "-";
-    const roleLabel = orgId && inv.billed_by_org_id === orgId ? t("issuerLabel") : t("recipientLabel");
-    return `
-      <tr>
-        <td>${escapeHtml(inv.invoice_number || "-")}</td>
-        <td>${escapeHtml(siteName)}</td>
-        <td>${escapeHtml(inv.status || "draft")}</td>
-        <td>${roleLabel}</td>
-        <td>${formatMoney(inv.total)}</td>
-      </tr>
-    `;
-  }).join("");
+  ensureOfficeInvoiceStateLoaded();
+  const invoices = state.officeInvoices.records || [];
+  const draft = state.officeInvoices.draft;
   wrap.innerHTML = `
-    <div class="muted small" style="margin-bottom:8px;">${t("yourInvoicesTitle")}</div>
-    <table class="table">
-      <thead><tr><th>${t("invoiceNumberLabel")}</th><th>${t("locationLabel")}</th><th>${t("statusLabel")}</th><th>${t("roleLabel")}</th><th>${t("amountLabel")}</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
+    <div class="field-stack" style="gap:10px;">
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <div class="muted small">Telecom weekly invoice desk</div>
+        <button class="btn" type="button" data-office-action="createInvoice">Create Invoice</button>
+      </div>
+      ${draft ? renderOfficeInvoiceBuilder(draft) : ""}
+      <div class="card" style="margin-top:12px;">
+        <h3>Saved Invoices</h3>
+        ${!invoices.length
+          ? `<div class="muted small" style="margin-top:8px;">No invoices saved yet.</div>`
+          : `<div style="overflow:auto; margin-top:8px;">
+              <table class="table">
+                <thead><tr><th>Invoice #</th><th>Invoice Date</th><th>Week Ending</th><th>Company</th><th>Bill To</th><th>Job #</th><th>Location</th><th>Status</th><th>Total</th><th></th></tr></thead>
+                <tbody>
+                  ${invoices.map((row) => `
+                    <tr>
+                      <td>${escapeHtml(row.invoice_number || "-")}</td>
+                      <td>${escapeHtml(row.invoice_date || "-")}</td>
+                      <td>${escapeHtml(row.week_ending || "-")}</td>
+                      <td>${escapeHtml(row.company_creating_invoice || "-")}</td>
+                      <td>${escapeHtml(row.bill_to || "-")}</td>
+                      <td>${escapeHtml(row.job_number || "-")}</td>
+                      <td>${escapeHtml(row.location || "-")}</td>
+                      <td>${escapeHtml(row.status || "Draft")}</td>
+                      <td>${formatMoney(row.total || 0)}</td>
+                      <td><button class="btn ghost small" type="button" data-office-action="openInvoice" data-office-invoice-id="${escapeHtml(row.id)}">Open</button></td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>`
+        }
+      </div>
+    </div>
   `;
+  refreshOfficeInvoiceComputedFields();
+}
+
+function updateOfficeInvoiceDraftField(field, value){
+  const draft = state.officeInvoices.draft;
+  if (!draft) return;
+  if (!(field in draft)) return;
+  draft[field] = value;
+  draft.updated_at = nowISO();
+}
+
+function updateOfficeInvoiceLineField(lineId, field, value){
+  const draft = state.officeInvoices.draft;
+  if (!draft) return;
+  const line = (draft.line_items || []).find((item) => String(item.id) === String(lineId));
+  if (!line) return;
+  if (!["code", "description", "qty", "unit_rate"].includes(field)) return;
+  line[field] = value;
+  draft.updated_at = nowISO();
+}
+
+function addOfficeInvoiceLineItem(){
+  const draft = state.officeInvoices.draft;
+  if (!draft) return;
+  draft.line_items = Array.isArray(draft.line_items) ? draft.line_items : [];
+  draft.line_items.push(createOfficeInvoiceLineItem());
+  draft.updated_at = nowISO();
+  renderInvoicePanel();
+}
+
+function removeOfficeInvoiceLineItem(lineId){
+  const draft = state.officeInvoices.draft;
+  if (!draft) return;
+  draft.line_items = (draft.line_items || []).filter((item) => String(item.id) !== String(lineId));
+  if (!draft.line_items.length){
+    draft.line_items = [createOfficeInvoiceLineItem()];
+  }
+  draft.updated_at = nowISO();
+  renderInvoicePanel();
 }
 
 function getInvoiceScopeOrgId(){
@@ -23358,72 +23708,7 @@ async function markNodeReady(){
 }
 
 async function createInvoice(){
-  const node = state.activeNode;
-  if (!node) return;
-  if (isDemoUser()){
-    toast("Demo restriction", t("availableInProduction"));
-    return;
-  }
-
-  const roleCode = getRoleCode();
-  if (roleCode === ROLES.USER_LEVEL_1){
-    toast("Nope", "User Level 1 can't create invoices.");
-    return;
-  }
-
-  const completion = computeNodeCompletion(node);
-  if (!BUILD_MODE && !MVP_UNGATED && !(completion.pct === 100 && node.ready_for_billing)){
-    toast("Blocked", "Invoices are blocked until documentation is complete and site is marked READY.");
-    return;
-  }
-  const photos = computeProofStatus(node);
-  if (!BUILD_MODE && !MVP_UNGATED && !photos.photosOk){
-    toast("Blocked", "Photos are required before invoice submission.");
-    return;
-  }
-
-  // Minimal demo invoice routing
-  let to = null;
-  if (roleCode === ROLES.USER_LEVEL_1 || roleCode === ROLES.USER_LEVEL_2) to = ROLES.PROJECT_MANAGER;
-  else if (roleCode === ROLES.SUPPORT) to = ROLES.OWNER;
-  else if (roleCode === ROLES.PROJECT_MANAGER) to = ROLES.ADMIN;
-  else if (roleCode === ROLES.ADMIN) to = ROLES.OWNER;
-  else if (roleCode === ROLES.OWNER || roleCode === ROLES.ROOT) to = ROLES.PROJECT_MANAGER;
-  else to = ROLES.PROJECT_MANAGER;
-
-  if (isDemo){
-    state.demo.invoices.push({
-      id: `inv-${Date.now()}`,
-      node_number: node.node_number,
-      from: roleCode,
-      to,
-      status: "Draft",
-      amount_hidden: false,
-    });
-    toast("Invoice created", `${formatRoleLabel(roleCode)} -> ${formatRoleLabel(to)} (demo). Visibility depends on role.`);
-    renderInvoicePanel();
-    return;
-  }
-
-  if (roleCode === ROLES.USER_LEVEL_1 || roleCode === ROLES.USER_LEVEL_2){
-    const { error } = await state.client
-      .from("sub_invoices")
-      .insert({ node_id: node.id, status: "Draft" });
-    if (error){
-      toast("Invoice error", error.message);
-      return;
-    }
-  } else if (roleCode === ROLES.PROJECT_MANAGER || roleCode === ROLES.OWNER || roleCode === ROLES.ADMIN || roleCode === ROLES.SUPPORT || roleCode === ROLES.ROOT){
-    const { error } = await state.client
-      .from("prime_invoices")
-      .insert({ node_id: node.id, status: "Draft" });
-    if (error){
-      toast("Invoice error", error.message);
-      return;
-    }
-  }
-  await loadInvoices(node.id);
-  toast("Invoice created", `${formatRoleLabel(roleCode)} -> ${formatRoleLabel(to)}. Visibility depends on role.`);
+  createOfficeInvoiceDraft();
   renderInvoicePanel();
 }
 
@@ -25054,6 +25339,67 @@ function wireUI(){
   const btnCreateInvoice = $("btnCreateInvoice");
   if (btnCreateInvoice){
     btnCreateInvoice.addEventListener("click", () => createInvoice());
+  }
+  const invoicePanel = $("invoicePanel");
+  if (invoicePanel){
+    invoicePanel.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-office-action]");
+      if (!btn) return;
+      const action = String(btn.dataset.officeAction || "");
+      const invoiceId = String(btn.dataset.officeInvoiceId || "");
+      const lineId = String(btn.dataset.officeLineId || "");
+      if (action === "createInvoice"){
+        createOfficeInvoiceDraft();
+        return;
+      }
+      if (action === "openInvoice"){
+        openOfficeInvoiceDraft(invoiceId);
+        return;
+      }
+      if (action === "addLineItem"){
+        addOfficeInvoiceLineItem();
+        return;
+      }
+      if (action === "removeLineItem"){
+        removeOfficeInvoiceLineItem(lineId);
+        return;
+      }
+      if (action === "saveDraft"){
+        saveOfficeInvoiceWithStatus("Draft");
+        return;
+      }
+      if (action === "readyForBilling"){
+        saveOfficeInvoiceWithStatus("Ready for Billing");
+        return;
+      }
+      if (action === "cancelDraft"){
+        state.officeInvoices.draft = null;
+        renderInvoicePanel();
+      }
+    });
+    invoicePanel.addEventListener("input", (e) => {
+      const fieldEl = e.target.closest("[data-office-field]");
+      if (fieldEl){
+        updateOfficeInvoiceDraftField(fieldEl.dataset.officeField, fieldEl.value);
+        refreshOfficeInvoiceComputedFields();
+        return;
+      }
+      const lineEl = e.target.closest("[data-office-line-id][data-office-line-field]");
+      if (lineEl){
+        updateOfficeInvoiceLineField(lineEl.dataset.officeLineId, lineEl.dataset.officeLineField, lineEl.value);
+        refreshOfficeInvoiceComputedFields();
+      }
+    });
+    invoicePanel.addEventListener("change", (e) => {
+      const fieldEl = e.target.closest("[data-office-field]");
+      if (fieldEl){
+        updateOfficeInvoiceDraftField(fieldEl.dataset.officeField, fieldEl.value);
+      }
+      const lineEl = e.target.closest("[data-office-line-id][data-office-line-field]");
+      if (lineEl){
+        updateOfficeInvoiceLineField(lineEl.dataset.officeLineId, lineEl.dataset.officeLineField, lineEl.value);
+      }
+    });
   }
   const btnInvoiceFilesRefresh = $("btnInvoiceFilesRefresh");
   if (btnInvoiceFilesRefresh){

@@ -337,20 +337,15 @@
           <div class="grid cols-2">
             <div class="card">
               <h2 data-i18n="invoiceActionsTitle">Invoice actions</h2>
-              <div class="no-pay-banner" data-i18n="invoicesUngatedBanner">Invoices available without proof in MVP</div>
-              <div class="muted small" data-i18n="invoiceActionsSubtitle">Billing entry is available in this MVP.</div>
+              <div class="muted small">Build telecom-ready invoices with weekly line items and billing notes.</div>
               <div class="row" style="margin-top:12px;">
-                <button id="btnMarkNodeReady" class="btn" data-action="markNodeReady" data-i18n="markNodeReady">Mark site READY for billing</button>
-                <button id="btnCreateInvoice" class="btn secondary" data-action="createInvoice" data-i18n="createInvoice">Create invoice (role-based)</button>
+                <button id="btnCreateInvoice" class="btn" data-action="createInvoice">Create Invoice</button>
               </div>
               <div id="readyNote" class="note" style="margin-top:12px; display:none;"></div>
             </div>
             <div class="card">
-              <h2 data-i18n="invoicesPrivacyTitle">Invoices and privacy</h2>
-              <div class="muted small">
-                This panel shows what <b>you</b> can see based on your role.
-                In Supabase, RLS policies enforce this server-side.
-              </div>
+              <h2>Invoice Builder</h2>
+              <div class="muted small">Create drafts, mark ready for billing, and reuse recent header values.</div>
 
               <div class="hr"></div>
               <div id="invoicePanel"></div>
