@@ -306,6 +306,7 @@ const state = {
   },
   redline: {
     enabled: false,
+    panelOpen: false,
     addMode: false,
     loading: false,
     markers: [],
@@ -2583,6 +2584,12 @@ function setActiveView(viewId, { syncHash = true } = {}){
     if (state.features.labor) loadLaborRows();
   }
   if (viewId === "viewMap"){
+    if (state.redline.enabled || state.redline.panelOpen){
+      exitRedlineMode();
+    } else {
+      closeRedlinePanel({ render: false });
+      renderRedlineUi();
+    }
     state.map.drawerTab = "data";
     ensureMap();
     initMapWorkspaceUi();
@@ -5631,10 +5638,15 @@ function renderRedlineSummary(){
   textEl.textContent = getRedlineSummaryText();
 }
 
+function syncRedlineMenuActionLabel(){
+  const menuAction = $("btnMenuOpenRedline");
+  if (!menuAction) return;
+  menuAction.textContent = state.redline.enabled ? "Redline Tools" : "Open Redline";
+}
+
 function renderRedlineUi(){
   const source = state.redline.source || resolveRedlineSource();
   state.redline.source = source;
-  const btn = $("btnRedlineMode");
   const toolbar = $("redlineToolbar");
   const panel = $("redlinePanel");
   const addBtn = $("btnRedlineAddMarker");
@@ -5645,12 +5657,9 @@ function renderRedlineUi(){
   const lastUpdated = $("redlineLastUpdated");
   const listEl = $("redlineList");
   const legendEl = $("redlineLegend");
-  if (btn){
-    btn.textContent = state.redline.enabled ? "Redline Active" : "Redline Mode";
-    btn.classList.toggle("secondary", state.redline.enabled);
-  }
+  syncRedlineMenuActionLabel();
   if (toolbar) toolbar.hidden = !state.redline.enabled;
-  if (panel) panel.hidden = !state.redline.enabled;
+  if (panel) panel.hidden = !(state.redline.enabled && state.redline.panelOpen);
   if (legendEl) legendEl.hidden = !state.redline.enabled;
   if (listEl) listEl.hidden = Boolean(state.redline.summaryOpen);
   if (addBtn){
@@ -5779,6 +5788,7 @@ function closeRedlineEditor(){
 function resetRedlineState({ clearMarkers = false, clearSource = false } = {}){
   closeRedlineEditor();
   state.redline.enabled = false;
+  state.redline.panelOpen = false;
   state.redline.addMode = false;
   state.redline.summaryOpen = false;
   state.redline.draftPoint = null;
@@ -5799,19 +5809,40 @@ function resetRedlineState({ clearMarkers = false, clearSource = false } = {}){
   document.querySelectorAll(".redline-dot.is-tooltip-open").forEach((el) => el.classList.remove("is-tooltip-open"));
 }
 
-function forceHideRedlineUi(){
-  $("redlineToolbar") && ($("redlineToolbar").hidden = true);
-  $("redlinePanel") && ($("redlinePanel").hidden = true);
-  $("redlineLegend") && ($("redlineLegend").hidden = true);
-  $("redlineSummaryPanel") && ($("redlineSummaryPanel").hidden = true);
-  $("redlineOverlay") && ($("redlineOverlay").hidden = true);
+function openRedlinePanel({ render = true } = {}){
+  if (!state.redline.enabled) return;
+  state.redline.panelOpen = true;
+  if (render) renderRedlineUi();
+}
+
+function closeRedlinePanel({ render = true } = {}){
+  state.redline.panelOpen = false;
+  state.redline.summaryOpen = false;
+  state.redline.addMode = false;
   closeRedlineEditor();
+  if (render) renderRedlineUi();
+}
+
+async function setRedlineMode(nextEnabled, { openPanel = true } = {}){
+  const enabled = Boolean(nextEnabled);
+  if (isDebug) dlog("[redline] set mode", { enabled });
+  state.redline.enabled = enabled;
+  state.redline.addMode = false;
+  state.redline.summaryOpen = false;
+  if (!enabled){
+    closeRedlinePanel({ render: false });
+    renderRedlineUi();
+    return;
+  }
+  if (openPanel){
+    state.redline.panelOpen = true;
+  }
+  ensureRedlineTypeOptions();
+  await loadRedlineMarkers({ silent: true });
 }
 
 function exitRedlineMode(){
-  resetRedlineState();
-  forceHideRedlineUi();
-  renderRedlineUi();
+  void setRedlineMode(false);
 }
 
 async function uploadRedlinePhoto(file, source){
@@ -5985,20 +6016,6 @@ async function copyRedlineSummaryText(){
   toast("Copied", "Redline summary copied.");
 }
 
-async function setRedlineMode(nextEnabled){
-  const enabled = Boolean(nextEnabled);
-  if (isDebug) dlog("[redline] set mode", { enabled });
-  state.redline.enabled = enabled;
-  state.redline.addMode = false;
-  state.redline.summaryOpen = false;
-  if (!enabled){
-    exitRedlineMode();
-    return;
-  }
-  ensureRedlineTypeOptions();
-  await loadRedlineMarkers({ silent: true });
-}
-
 function handleRedlineContextChange(){
   if (!state.redline.enabled) return;
   const source = resolveRedlineSource();
@@ -6078,11 +6095,9 @@ function bindRedlineUiHandlers(){
       document.querySelectorAll(".redline-dot.is-tooltip-open").forEach((el) => el.classList.remove("is-tooltip-open"));
     });
   }
-  $("btnRedlineMode")?.addEventListener("click", () => {
-    if (isDebug) dlog("[redline] mode button click");
-    void setRedlineMode(!state.redline.enabled);
-  });
-  $("btnRedlineExit")?.addEventListener("click", () => {
+  $("btnRedlineExit")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
     if (isDebug) dlog("[redline] exit click");
     exitRedlineMode();
   });
@@ -6105,8 +6120,10 @@ function bindRedlineUiHandlers(){
     state.redline.summaryOpen = !state.redline.summaryOpen;
     renderRedlineUi();
   });
-  $("btnRedlinePanelClose")?.addEventListener("click", () => {
-    exitRedlineMode();
+  $("btnRedlinePanelClose")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeRedlinePanel();
   });
   $("btnRedlineCopySummary")?.addEventListener("click", () => {
     void copyRedlineSummaryText();
@@ -14579,6 +14596,7 @@ function openMenuModal(){
   document.querySelectorAll("#menuModal .menu-admin-only").forEach((el) => {
     if (el instanceof HTMLElement) el.style.display = canAdmin ? "" : "none";
   });
+  syncRedlineMenuActionLabel();
   modal.style.display = "";
 }
 
@@ -14586,6 +14604,26 @@ function closeMenuModal(){
   const modal = $("menuModal");
   if (!modal) return;
   modal.style.display = "none";
+}
+
+async function launchRedlineFromMenu(){
+  if (!state.user){
+    toast("Sign in required", "Sign in to use redline.");
+    return;
+  }
+  if (!isViewAllowed("viewMap")){
+    toast("Not allowed", "Map access is unavailable.");
+    return;
+  }
+  if (!isMapViewActive()){
+    setActiveView("viewMap");
+  }
+  if (state.redline.enabled){
+    openRedlinePanel();
+  } else {
+    await setRedlineMode(true, { openPanel: true });
+  }
+  closeMenuModal();
 }
 
 function openPriceSheetModal(){
@@ -19214,8 +19252,8 @@ function setActiveProjectById(id){
   if (activeViewId === "viewAdmin"){
     loadAdminMaterialSettings();
   }
-  if (state.redline.enabled){
-    void loadRedlineMarkers({ silent: true });
+  if (state.redline.enabled || state.redline.panelOpen){
+    exitRedlineMode();
   } else {
     renderRedlineUi();
   }
@@ -23662,6 +23700,12 @@ function wireUI(){
     menuMessagesBtn.addEventListener("click", () => {
       closeMenuModal();
       openDemoFeature("messages");
+    });
+  }
+  const menuOpenRedlineBtn = $("btnMenuOpenRedline");
+  if (menuOpenRedlineBtn){
+    menuOpenRedlineBtn.addEventListener("click", () => {
+      void launchRedlineFromMenu();
     });
   }
   const grantAccessBtn = $("btnGrantProjectAccess");
