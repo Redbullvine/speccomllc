@@ -876,6 +876,25 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
   flex-direction:column;
   gap:10px;
 }
+.dispatch-assignment-board{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.dispatch-assignment-head{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+.dispatch-assignment-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(250px, 1fr));
+  gap:10px;
+}
+.dispatch-assignment-detail{
+  display:grid;
+  gap:4px;
+}
 .workforce-board-chips{
   display:flex;
   flex-wrap:wrap;
@@ -906,6 +925,9 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
   justify-content:flex-end;
 }
 @media (max-width: 900px){
+  .dispatch-assignment-grid{
+    grid-template-columns:1fr;
+  }
   .workforce-row{
     grid-template-columns:1fr;
   }

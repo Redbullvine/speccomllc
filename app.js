@@ -11829,6 +11829,7 @@ function renderDispatchTable(){
   const wrap = $("dispatchTable");
   if (!wrap){
     renderDispatchWorkspaceSummary();
+    renderDispatchAssignmentBoard();
     renderWorkforceStatusBoard("dispatchWorkforceBoard");
     renderSupervisorOverview();
     return;
@@ -11836,6 +11837,7 @@ function renderDispatchTable(){
   if (!state.activeProject){
     wrap.innerHTML = `<div class="muted small">${t("laborNoProject")}</div>`;
     renderDispatchWorkspaceSummary();
+    renderDispatchAssignmentBoard();
     renderWorkforceStatusBoard("dispatchWorkforceBoard");
     renderSupervisorOverview();
     return;
@@ -11843,12 +11845,14 @@ function renderDispatchTable(){
   if (!canViewDispatch()){
     wrap.innerHTML = `<div class="muted small">Dispatch is limited to privileged roles.</div>`;
     renderDispatchWorkspaceSummary();
+    renderDispatchAssignmentBoard();
     renderWorkforceStatusBoard("dispatchWorkforceBoard");
     renderSupervisorOverview();
     return;
   }
   const rows = state.workOrders.dispatch || [];
   renderDispatchWorkspaceSummary();
+  renderDispatchAssignmentBoard();
   renderWorkforceStatusBoard("dispatchWorkforceBoard");
   if (!rows.length){
     wrap.innerHTML = `<div class="muted small">${t("woNoOrders")}</div>`;
@@ -11932,6 +11936,177 @@ function renderDispatchWorkspaceSummary(){
       <div class="muted small">Future dispatch map will show worker code, status, current job, and last updated time.</div>
     </div>
   `;
+}
+
+function getDispatchOpenJobs(){
+  return (state.workOrders.dispatch || []).filter((row) => {
+    const status = String(row?.status || "").toUpperCase();
+    return status !== "COMPLETE" && status !== "CANCELED";
+  });
+}
+
+function isWorkerAvailableForAssignment(worker){
+  const status = String(worker?.status || "").toUpperCase();
+  return status === "AVAILABLE" || status === "COMPLETE";
+}
+
+function formatDispatchJobLabel(job){
+  if (!job) return "";
+  const core = job.customer_label || job.type || `WO-${String(job.id || "").slice(0, 8)}`;
+  const status = formatWorkOrderStatusLabel(job.status || "NEW");
+  return `${core} (${status})`;
+}
+
+function getDispatchWorkerOptions(){
+  const rows = (state.workOrders.workforce || []).slice();
+  rows.sort((a, b) => {
+    const aAvailable = isWorkerAvailableForAssignment(a) ? 0 : 1;
+    const bAvailable = isWorkerAvailableForAssignment(b) ? 0 : 1;
+    if (aAvailable !== bAvailable) return aAvailable - bAvailable;
+    return String(a.display_name || "").localeCompare(String(b.display_name || ""));
+  });
+  return rows;
+}
+
+function renderDispatchAssignmentBoard(){
+  const wrap = $("dispatchAssignmentBoard");
+  if (!wrap) return;
+  if (!state.activeProject){
+    wrap.innerHTML = `<div class="muted small">${t("laborNoProject")}</div>`;
+    return;
+  }
+  if (!canViewDispatch()){
+    wrap.innerHTML = `<div class="muted small">Dispatch assignment tools are limited to dispatch visibility.</div>`;
+    return;
+  }
+  const openJobs = getDispatchOpenJobs();
+  const workforce = getDispatchWorkerOptions();
+  const availableCount = workforce.filter((worker) => isWorkerAvailableForAssignment(worker)).length;
+  const selectedJobId = $("dispatchAssignBoardJob")?.value || (openJobs[0]?.id || "");
+  const selectedWorkerId = $("dispatchAssignBoardWorker")?.value || (workforce[0]?.user_id || "");
+  const selectedJob = openJobs.find((job) => job.id === selectedJobId) || null;
+  const selectedWorker = workforce.find((worker) => worker.user_id === selectedWorkerId) || null;
+  wrap.innerHTML = `
+    <div class="dispatch-assignment-board">
+      <div class="dispatch-assignment-head">
+        <span class="chip"><span class="dot warn"></span><span>Open Jobs: ${openJobs.length}</span></span>
+        <span class="chip"><span class="dot ok"></span><span>Available Workers: ${availableCount}</span></span>
+      </div>
+      <div class="dispatch-assignment-grid">
+        <div class="note">
+          <div style="font-weight:900;">Open Jobs</div>
+          <select id="dispatchAssignBoardJob" class="input" style="margin-top:8px;">
+            ${openJobs.length
+              ? openJobs.map((job) => `<option value="${job.id}" ${job.id === selectedJobId ? "selected" : ""}>${escapeHtml(formatDispatchJobLabel(job))}</option>`).join("")
+              : `<option value="">No open jobs</option>`}
+          </select>
+          ${selectedJob ? `
+            <div class="dispatch-assignment-detail" style="margin-top:8px;">
+              <div class="muted small">${escapeHtml(selectedJob.type || "Work Order")} • ${escapeHtml(formatWorkOrderStatusLabel(selectedJob.status))}</div>
+              <div class="muted small">${escapeHtml(selectedJob.address || "No address")}</div>
+            </div>
+          ` : `<div class="muted small" style="margin-top:8px;">No job selected.</div>`}
+        </div>
+        <div class="note">
+          <div style="font-weight:900;">Available / Eligible Workers</div>
+          <select id="dispatchAssignBoardWorker" class="input" style="margin-top:8px;">
+            ${workforce.length
+              ? workforce.map((worker) => `
+                <option value="${worker.user_id}" ${worker.user_id === selectedWorkerId ? "selected" : ""}>
+                  ${escapeHtml(`${worker.worker_id} - ${worker.display_name}`)}
+                </option>
+              `).join("")
+              : `<option value="">No workers</option>`}
+          </select>
+          ${selectedWorker ? `
+            <div class="dispatch-assignment-detail" style="margin-top:8px;">
+              <div class="muted small">${escapeHtml(selectedWorker.worker_role || "Worker")}</div>
+              <div class="status-pill ${workforceStatusPillClass(selectedWorker.status)}" style="margin-top:4px;">${escapeHtml(formatWorkforceStatusLabel(selectedWorker.status))}</div>
+              <div class="muted small" style="margin-top:4px;">${escapeHtml(selectedWorker.current_job || "No active assignment")}</div>
+            </div>
+          ` : `<div class="muted small" style="margin-top:8px;">No worker selected.</div>`}
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+        <button
+          class="btn"
+          type="button"
+          data-action="dispatchAssignBoard"
+          ${!selectedJob || !selectedWorker ? "disabled" : ""}
+        >
+          Assign Job
+        </button>
+        <button
+          class="btn ghost"
+          type="button"
+          data-action="dispatchAssignmentMapHook"
+          ${!selectedJob && !selectedWorker ? "disabled" : ""}
+        >
+          View on Map
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+async function assignDispatchBoardSelection(){
+  if (!state.client || !state.activeProject) return;
+  const jobId = $("dispatchAssignBoardJob")?.value || "";
+  const workerUserId = $("dispatchAssignBoardWorker")?.value || "";
+  if (!jobId || !workerUserId){
+    toast("Assignment required", "Select an open job and a worker.");
+    return;
+  }
+  const job = (state.workOrders.dispatch || []).find((row) => row.id === jobId) || null;
+  if (!job){
+    toast("Assignment failed", "Selected job is no longer available.");
+    return;
+  }
+  if (isDemoUser()){
+    const row = (state.demo.workOrders || []).find((wo) => wo.id === jobId);
+    if (row){
+      row.assigned_to_user_id = workerUserId;
+      if (String(row.status || "").toUpperCase() === "NEW") row.status = "ASSIGNED";
+    }
+    await loadDispatchWorkOrders();
+    await loadDispatchTechnicians();
+    toast("Assignment saved", "Demo assignment updated.");
+    return;
+  }
+  const { error: rpcError } = await state.client.rpc("fn_assign_work_order", {
+    work_order_id: jobId,
+    technician_user_id: workerUserId,
+  });
+  if (rpcError){
+    const { error: updateError } = await state.client
+      .from("work_orders")
+      .update({ assigned_to_user_id: workerUserId })
+      .eq("id", jobId);
+    if (updateError){
+      toast("Assignment failed", updateError.message);
+      return;
+    }
+  }
+  const currentStatus = String(job.status || "").toUpperCase();
+  if (currentStatus === "NEW"){
+    await state.client
+      .from("work_orders")
+      .update({ status: "ASSIGNED" })
+      .eq("id", jobId);
+  }
+  await loadDispatchWorkOrders();
+  await loadDispatchTechnicians();
+  toast("Assignment saved", "Job assigned to worker.");
+}
+
+function handleDispatchAssignmentMapHook(){
+  const jobId = $("dispatchAssignBoardJob")?.value || "";
+  const workerUserId = $("dispatchAssignBoardWorker")?.value || "";
+  const job = (state.workOrders.dispatch || []).find((row) => row.id === jobId) || null;
+  const worker = (state.workOrders.workforce || []).find((row) => row.user_id === workerUserId) || null;
+  const jobLabel = job ? formatDispatchJobLabel(job) : "No job selected";
+  const workerLabel = worker ? `${worker.worker_id} ${worker.display_name}` : "No worker selected";
+  toast("Dispatch map hook", `${workerLabel} • ${jobLabel}. Live map routing hook coming next.`);
 }
 
 function normalizeWorkforceStatus(status){
@@ -25018,6 +25193,26 @@ function wireUI(){
       const id = btn.dataset.id;
       const row = (state.workOrders.dispatch || []).find(r => r.id === id);
       if (row) openDispatchModal(row);
+    });
+  }
+  const dispatchAssignmentBoard = $("dispatchAssignmentBoard");
+  if (dispatchAssignmentBoard){
+    dispatchAssignmentBoard.addEventListener("change", (e) => {
+      const target = e.target;
+      if (!(target instanceof HTMLSelectElement)) return;
+      if (target.id === "dispatchAssignBoardJob" || target.id === "dispatchAssignBoardWorker"){
+        renderDispatchAssignmentBoard();
+      }
+    });
+    dispatchAssignmentBoard.addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-action]");
+      if (!btn) return;
+      const action = btn.dataset.action;
+      if (action === "dispatchAssignBoard"){
+        await assignDispatchBoardSelection();
+      } else if (action === "dispatchAssignmentMapHook"){
+        handleDispatchAssignmentMapHook();
+      }
     });
   }
   const bindWorkforceBoardClick = (containerId) => {
