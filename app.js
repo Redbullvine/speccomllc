@@ -10566,6 +10566,8 @@ function renderTechnicianShiftSummary(){
   const summaryEl = $("techSummary");
   if (!summaryEl) return;
   const completed = sim.items.filter((item) => item.status === "COMPLETED").length;
+  const total = sim.items.length || 1;
+  const completionPct = Math.max(0, Math.min(100, Math.round((completed / total) * 100)));
   const active = sim.items.find((item) => item.status === "ACTIVE") || null;
   const elapsedMinutes = sim.items.reduce((sum, item) => sum + calcShiftElapsedMinutes(item), 0);
   const shiftStart = sim.clockedInAt ? formatTimeShort(sim.clockedInAt) : "08:00 AM";
@@ -10575,6 +10577,9 @@ function renderTechnicianShiftSummary(){
       <div class="tile"><div class="label">Elapsed</div><div class="value">${formatDurationMinutes(elapsedMinutes)}</div></div>
       <div class="tile"><div class="label">Tasks Completed</div><div class="value">${completed}/${sim.items.length}</div></div>
       <div class="tile"><div class="label">Active Task</div><div class="value">${escapeHtml(active ? active.title : "None")}</div></div>
+    </div>
+    <div class="tech-summary-progress" aria-label="Shift progress">
+      <div class="tech-summary-progress-fill" style="width:${completionPct}%"></div>
     </div>
   `;
 }
@@ -10636,7 +10641,7 @@ function renderCurrentShiftActivity(){
   const notes = Array.isArray(item.notes) ? item.notes : [];
   const photos = Array.isArray(item.photos) ? item.photos : [];
   currentWrap.innerHTML = `
-    <div class="tech-current-card">
+    <div class="tech-current-card ${item.status === "ACTIVE" ? "is-active" : ""}">
       <div class="tech-shift-head">
         <div>
           <div class="tech-shift-title">${escapeHtml(item.title)}</div>

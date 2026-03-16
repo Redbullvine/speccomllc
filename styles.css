@@ -215,11 +215,11 @@ h2::after{
 .dot.warn{background:var(--warn)}
 .dot.bad{background:var(--bad)}
 .dot.status-not-started{background:#94a3b8}
-.dot.status-en-route{background:#60a5fa}
+.dot.status-en-route{background:#f59e0b}
 .dot.status-on-site{background:#a78bfa}
-.dot.status-in-progress{background:#34d399}
+.dot.status-in-progress{background:#60a5fa}
 .dot.status-blocked{background:#f87171}
-.dot.status-complete{background:#166534}
+.dot.status-complete{background:#22c55e}
 .table{width:100%; border-collapse: collapse; font-size:14px}
 .table th, .table td{padding:10px 8px; border-bottom:1px solid rgba(27,59,90,.7); vertical-align: top}
 .table th{color:var(--muted); font-weight:900; text-align:left}
@@ -764,7 +764,7 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
   border:1px solid var(--line);
   border-radius:12px;
   padding:12px;
-  background: rgba(255,255,255,.04);
+  background: rgba(255,255,255,.08);
   display:grid;
   gap:8px;
 }
@@ -790,9 +790,13 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
   border:1px solid var(--line);
   border-radius:12px;
   padding:12px;
-  background: rgba(255,255,255,.04);
+  background: rgba(255,255,255,.09);
   display:grid;
   gap:8px;
+}
+.tech-current-card.is-active{
+  border-left:4px solid #60a5fa;
+  padding-left:10px;
 }
 .tech-note-list{
   display:grid;
@@ -827,11 +831,45 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
 .status-pill.warn{color:#fbbf24; border-color:rgba(251,191,36,.45);}
 .status-pill.bad{color:#f87171; border-color:rgba(248,113,113,.45);}
 .status-pill.status-not-started{color:#94a3b8; border-color:rgba(148,163,184,.45);}
-.status-pill.status-en-route{color:#60a5fa; border-color:rgba(96,165,250,.45);}
+.status-pill.status-en-route{color:#f59e0b; border-color:rgba(245,158,11,.55);}
 .status-pill.status-on-site{color:#a78bfa; border-color:rgba(167,139,250,.5);}
-.status-pill.status-in-progress{color:#34d399; border-color:rgba(52,211,153,.45);}
+.status-pill.status-in-progress{color:#60a5fa; border-color:rgba(96,165,250,.5);}
 .status-pill.status-blocked{color:#f87171; border-color:rgba(248,113,113,.45);}
-.status-pill.status-complete{color:#166534; border-color:rgba(22,101,52,.55);}
+.status-pill.status-complete{color:#22c55e; border-color:rgba(34,197,94,.55);}
+
+#techCurrentActivity .tech-shift-actions button[data-tech-shift-action="start"]{
+  background:#2563eb;
+  border-color:#2563eb;
+  color:#fff;
+}
+#techCurrentActivity .tech-shift-actions button[data-tech-shift-action="pause"]{
+  background:#f59e0b;
+  border-color:#f59e0b;
+  color:#111827;
+}
+#techCurrentActivity .tech-shift-actions button[data-tech-shift-action="complete"]{
+  background:#22c55e;
+  border-color:#22c55e;
+  color:#052e16;
+}
+#techCurrentActivity .tech-shift-actions button[data-tech-shift-action="start"]:disabled,
+#techCurrentActivity .tech-shift-actions button[data-tech-shift-action="pause"]:disabled,
+#techCurrentActivity .tech-shift-actions button[data-tech-shift-action="complete"]:disabled{
+  opacity:.6;
+}
+
+.tech-summary-progress{
+  margin-top:10px;
+  height:8px;
+  border-radius:999px;
+  border:1px solid rgba(148,163,184,.35);
+  background:rgba(255,255,255,.08);
+  overflow:hidden;
+}
+.tech-summary-progress-fill{
+  height:100%;
+  background:linear-gradient(90deg, #60a5fa 0%, #22c55e 100%);
+}
 
 .tech-progress{
   margin-top:8px;
