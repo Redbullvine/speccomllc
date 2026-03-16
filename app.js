@@ -10314,12 +10314,19 @@ function getShiftStatusLabel(item){
   return "Not Started";
 }
 
+function getStatusBadgeClass(status){
+  const value = String(status || "").toUpperCase();
+  if (value === "NOT_STARTED" || value === "NEW" || value === "ASSIGNED") return "status-not-started";
+  if (value === "EN_ROUTE") return "status-en-route";
+  if (value === "ON_SITE") return "status-on-site";
+  if (value === "IN_PROGRESS" || value === "ACTIVE") return "status-in-progress";
+  if (value === "BLOCKED" || value === "PAUSED" || value === "CANCELED") return "status-blocked";
+  if (value === "COMPLETE" || value === "COMPLETED") return "status-complete";
+  return "status-not-started";
+}
+
 function getShiftStatusClass(item){
-  const status = String(item?.status || "NOT_STARTED");
-  if (status === "ACTIVE") return "warn";
-  if (status === "PAUSED") return "bad";
-  if (status === "COMPLETED") return "ok";
-  return "warn";
+  return getStatusBadgeClass(item?.status || "NOT_STARTED");
 }
 
 function calcShiftElapsedMinutes(item){
@@ -10562,15 +10569,42 @@ function renderTechnicianShiftSummary(){
   const active = sim.items.find((item) => item.status === "ACTIVE") || null;
   const elapsedMinutes = sim.items.reduce((sum, item) => sum + calcShiftElapsedMinutes(item), 0);
   const shiftStart = sim.clockedInAt ? formatTimeShort(sim.clockedInAt) : "08:00 AM";
-  const shiftEnd = sim.clockedOutAt ? formatTimeShort(sim.clockedOutAt) : "-";
   summaryEl.innerHTML = `
     <div class="kpi">
-      <div class="tile"><div class="label">Shift start</div><div class="value">${escapeHtml(shiftStart)}</div></div>
-      <div class="tile"><div class="label">Completed</div><div class="value">${completed}/${sim.items.length}</div></div>
+      <div class="tile"><div class="label">Start</div><div class="value">${escapeHtml(shiftStart)}</div></div>
       <div class="tile"><div class="label">Elapsed</div><div class="value">${formatDurationMinutes(elapsedMinutes)}</div></div>
-      <div class="tile"><div class="label">Active</div><div class="value">${escapeHtml(active ? active.title : "None")}</div></div>
+      <div class="tile"><div class="label">Tasks Completed</div><div class="value">${completed}/${sim.items.length}</div></div>
+      <div class="tile"><div class="label">Active Task</div><div class="value">${escapeHtml(active ? active.title : "None")}</div></div>
     </div>
-    <div class="muted small" style="margin-top:8px;">Clock out: ${escapeHtml(shiftEnd)}</div>
+  `;
+}
+
+function resolveTechWorkflowStep(item){
+  const explicit = String(item?.workflow_status || "").toUpperCase();
+  if (explicit === "ASSIGNED" || explicit === "NOT_STARTED") return 0;
+  if (explicit === "EN_ROUTE") return 1;
+  if (explicit === "ON_SITE") return 2;
+  if (explicit === "IN_PROGRESS" || explicit === "ACTIVE") return 3;
+  if (explicit === "COMPLETE" || explicit === "COMPLETED") return 4;
+  const fallback = String(item?.status || "").toUpperCase();
+  if (fallback === "COMPLETED") return 4;
+  if (fallback === "ACTIVE" || fallback === "PAUSED") return 3;
+  return 0;
+}
+
+function renderTechWorkflowProgress(item){
+  if (!item || (item.kind !== "service" && item.kind !== "trouble")) return "";
+  const currentStep = resolveTechWorkflowStep(item);
+  const steps = ["Assigned", "En Route", "On Site", "Working", "Complete"];
+  return `
+    <div class="tech-progress">
+      ${steps.map((step, index) => `
+        <div class="tech-progress-step ${index < currentStep ? "is-done" : ""} ${index === currentStep ? "is-current" : ""}">
+          <span class="tech-progress-dot"></span>
+          <span>${escapeHtml(step)}</span>
+        </div>
+      `).join("")}
+    </div>
   `;
 }
 
@@ -10587,11 +10621,11 @@ function renderCurrentShiftActivity(){
   if (statusEl) statusEl.textContent = clockLabel;
   if (stateEl){
     if (!sim.clockedInAt){
-      stateEl.innerHTML = `<span class="dot warn"></span><span>Not Started</span>`;
+      stateEl.innerHTML = `<span class="dot status-not-started"></span><span>Not Started</span>`;
     } else if (item){
       stateEl.innerHTML = `<span class="dot ${getShiftStatusClass(item)}"></span><span>${escapeHtml(getShiftStatusLabel(item))}</span>`;
     } else {
-      stateEl.innerHTML = `<span class="dot ok"></span><span>Completed</span>`;
+      stateEl.innerHTML = `<span class="dot status-complete"></span><span>Completed</span>`;
     }
   }
   if (!item){
@@ -10607,6 +10641,7 @@ function renderCurrentShiftActivity(){
         <div>
           <div class="tech-shift-title">${escapeHtml(item.title)}</div>
           <div class="tech-shift-sub">${escapeHtml(item.subtitle || "")}</div>
+          ${renderTechWorkflowProgress(item)}
         </div>
         <div class="status-pill ${getShiftStatusClass(item)}">${escapeHtml(getShiftStatusLabel(item))}</div>
       </div>
@@ -10623,12 +10658,12 @@ function renderCurrentShiftActivity(){
         </div>
       ` : ""}
       <div class="tech-shift-actions">
-        <button class="btn small" type="button" data-tech-shift-action="start" data-tech-item-id="${item.id}" ${!sim.clockedInAt || item.status === "COMPLETED" || item.status === "ACTIVE" ? "disabled" : ""}>Start Activity</button>
+        <button class="btn small" type="button" data-tech-shift-action="start" data-tech-item-id="${item.id}" ${!sim.clockedInAt || item.status === "COMPLETED" || item.status === "ACTIVE" ? "disabled" : ""}>Start</button>
         <button class="btn secondary small" type="button" data-tech-shift-action="pause" data-tech-item-id="${item.id}" ${item.status !== "ACTIVE" ? "disabled" : ""}>Pause</button>
         <button class="btn secondary small" type="button" data-tech-shift-action="resume" data-tech-item-id="${item.id}" ${item.status !== "PAUSED" ? "disabled" : ""}>Resume</button>
-        <button class="btn danger small" type="button" data-tech-shift-action="complete" data-tech-item-id="${item.id}" ${!sim.clockedInAt || item.status === "COMPLETED" ? "disabled" : ""}>Complete Activity</button>
-        <button class="btn ghost small" type="button" data-tech-shift-action="addNote" data-tech-item-id="${item.id}">Add Note</button>
-        <button class="btn ghost small" type="button" data-tech-shift-action="addPhoto" data-tech-item-id="${item.id}">Add Photo</button>
+        <button class="btn danger small" type="button" data-tech-shift-action="complete" data-tech-item-id="${item.id}" ${!sim.clockedInAt || item.status === "COMPLETED" ? "disabled" : ""}>Complete</button>
+        <button class="btn ghost small" type="button" data-tech-shift-action="addNote" data-tech-item-id="${item.id}">Notes</button>
+        <button class="btn ghost small" type="button" data-tech-shift-action="addPhoto" data-tech-item-id="${item.id}">Photo</button>
       </div>
       <input id="techQuickPhotoInput" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" style="display:none;" />
       ${notes.length ? `<div class="tech-note-list">${notes.map((n) => `<div class="tech-note-item">• ${escapeHtml(n)}</div>`).join("")}</div>` : ""}
@@ -10656,10 +10691,6 @@ function renderTodayShiftTimeline(){
         ${(item.kind === "service" || item.kind === "trouble") ? `<div class="muted small">${escapeHtml(item.customer || "")} • ${escapeHtml(item.address || "")}</div>` : ""}
         <div class="tech-shift-actions">
           <button class="btn ghost small" type="button" data-tech-shift-action="focus" data-tech-item-id="${item.id}">Open</button>
-          <button class="btn small" type="button" data-tech-shift-action="start" data-tech-item-id="${item.id}" ${!isTechnicianClockedIn() || item.status === "COMPLETED" || item.status === "ACTIVE" ? "disabled" : ""}>Start</button>
-          <button class="btn secondary small" type="button" data-tech-shift-action="pause" data-tech-item-id="${item.id}" ${item.status !== "ACTIVE" ? "disabled" : ""}>Pause</button>
-          <button class="btn secondary small" type="button" data-tech-shift-action="resume" data-tech-item-id="${item.id}" ${item.status !== "PAUSED" ? "disabled" : ""}>Resume</button>
-          <button class="btn danger small" type="button" data-tech-shift-action="complete" data-tech-item-id="${item.id}" ${!isTechnicianClockedIn() || item.status === "COMPLETED" ? "disabled" : ""}>Complete</button>
         </div>
       </article>
     `;
@@ -11172,9 +11203,7 @@ function isSameDay(a, b){
 }
 
 function statusPillClass(status){
-  if (status === "COMPLETE") return "ok";
-  if (status === "BLOCKED" || status === "CANCELED") return "bad";
-  return "warn";
+  return getStatusBadgeClass(status);
 }
 
 function formatWorkOrderStatusLabel(status){
