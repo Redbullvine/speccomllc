@@ -277,6 +277,14 @@ const state = {
     pinTargetSiteId: null,
     pendingMarker: null,
     pendingLatLng: null,
+    myLocation: null,
+    myLocationMarker: null,
+    nearbyRadiusM: 30,
+    nearestSiteId: "",
+    nearestSiteDistanceM: null,
+    fieldSelectedSiteId: "",
+    siteWorkflowById: new Map(),
+    lastFieldGpsCheckAt: 0,
     importPreviewMarkers: [],
   },
   redline: {
@@ -2103,6 +2111,55 @@ function getSiteCoords(site){
   return { lat: latNum, lng: lngNum };
 }
 
+function normalizeMapFieldStatus(value){
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === MAP_FIELD_STATUS.IN_PROGRESS || normalized === MAP_FIELD_STATUS.COMPLETE){
+    return normalized;
+  }
+  return MAP_FIELD_STATUS.NOT_STARTED;
+}
+
+function getSiteWorkflowStatus(site){
+  const siteId = toSiteIdKey(site?.id);
+  const overridden = siteId ? state.map.siteWorkflowById.get(siteId) : null;
+  if (overridden) return normalizeMapFieldStatus(overridden);
+  const status = String(site?.status || "").trim().toUpperCase();
+  if (["COMPLETE", "COMPLETED", MAP_FIELD_STATUS.COMPLETE].includes(status)){
+    return MAP_FIELD_STATUS.COMPLETE;
+  }
+  if (["IN_PROGRESS", "ON_SITE", "EN_ROUTE", "ASSIGNED", "ACTIVE", MAP_FIELD_STATUS.IN_PROGRESS].includes(status) || site?.is_pending){
+    return MAP_FIELD_STATUS.IN_PROGRESS;
+  }
+  if (site && Object.prototype.hasOwnProperty.call(site, "completed") && site.completed){
+    return MAP_FIELD_STATUS.COMPLETE;
+  }
+  return MAP_FIELD_STATUS.NOT_STARTED;
+}
+
+function getSiteStatusColor(site){
+  const status = getSiteWorkflowStatus(site);
+  return MAP_FIELD_STATUS_COLORS[status] || MAP_FIELD_STATUS_COLORS[MAP_FIELD_STATUS.NOT_STARTED];
+}
+
+function getMapFieldStatusLabel(status){
+  if (status === MAP_FIELD_STATUS.COMPLETE) return "Complete";
+  if (status === MAP_FIELD_STATUS.IN_PROGRESS) return "In Progress";
+  return "Not Started";
+}
+
+function getMapFieldStatusClass(status){
+  if (status === MAP_FIELD_STATUS.COMPLETE) return "complete";
+  if (status === MAP_FIELD_STATUS.IN_PROGRESS) return "in-progress";
+  return "not-started";
+}
+
+function formatDistanceFeetMeters(distanceM){
+  if (!Number.isFinite(distanceM)) return "";
+  const meters = Math.max(0, Math.round(distanceM));
+  const feet = Math.max(0, Math.round(distanceM * 3.28084));
+  return `${feet} ft (${meters} m)`;
+}
+
 function setLayersPanelOpen(openBool, { persist = true } = {}){
   const open = Boolean(openBool);
   state.map.layersPanelOpen = open;
@@ -2588,6 +2645,12 @@ function setActiveView(viewId, { syncHash = true } = {}){
     queueMapInvalidate(90);
     refreshMaterialProjectData({ silent: true });
     refreshLocations();
+    const now = Date.now();
+    if (!state.map.lastFieldGpsCheckAt || (now - state.map.lastFieldGpsCheckAt) > 30000){
+      void requestMapCurrentLocation({ center: false, silent: true });
+    } else {
+      renderMapFieldPanel();
+    }
   }
   if (viewId === "viewDailyReport"){
     syncDprProjectSelection();
@@ -4646,6 +4709,17 @@ const MAP_VIEW_OVERLAY_CONFIG = [
 const MAP_VIEW_KMZ_OVERLAY_KEYS = MAP_VIEW_OVERLAY_CONFIG
   .filter((entry) => entry.source === "kmz")
   .map((entry) => entry.key);
+const MAP_FIELD_STATUS = {
+  NOT_STARTED: "NOT_STARTED",
+  IN_PROGRESS: "IN_PROGRESS",
+  COMPLETE: "COMPLETE",
+};
+const MAP_FIELD_STATUS_COLORS = {
+  [MAP_FIELD_STATUS.NOT_STARTED]: "#ef4444",
+  [MAP_FIELD_STATUS.IN_PROGRESS]: "#f59e0b",
+  [MAP_FIELD_STATUS.COMPLETE]: "#16a34a",
+};
+const MAP_MY_LOCATION_COLOR = "#3b82f6";
 const MAP_PANES = {
   boundary: "speccom-boundary-pane",
   spans: "speccom-spans-pane",
@@ -8910,6 +8984,7 @@ function ensureMap(){
       await updateSiteLocationFromMapClick(targetSiteId, { lat: latlng.lat, lng: latlng.lng });
     }
   });
+  renderMapFieldPanel();
 }
 
 async function loadLocationNames(userIds){
@@ -8953,7 +9028,7 @@ function updateMapMarkers(rows){
     if (!id) return;
     const markerCoords = [coords.lat, coords.lng];
     let marker = markers.get(id);
-    const color = row.is_pending ? "#f59e0b" : "#2f6feb";
+    const color = getSiteStatusColor(row);
     if (!marker){
       marker = window.L.circleMarker(markerCoords, {
         radius: 8,
@@ -9137,17 +9212,27 @@ async function refreshLocations(){
   if (!state.client && !isDemo) return;
   if (!state.user){
     if (status) status.textContent = t("mapStatusSignin");
+    renderMapFieldPanel();
     return;
   }
   ensureMap();
   await loadProjectSites(state.activeProject?.id || null);
   const searchResult = getSiteSearchResultSet();
   const rows = searchResult.rows;
+  if (state.map.myLocation){
+    const nearest = findNearestVisibleSite(state.map.myLocation);
+    state.map.nearestSiteId = nearest?.site?.id ? toSiteIdKey(nearest.site.id) : "";
+    state.map.nearestSiteDistanceM = nearest?.distanceM ?? null;
+  } else {
+    state.map.nearestSiteId = "";
+    state.map.nearestSiteDistanceM = null;
+  }
   updateMapMarkers(rows);
   renderDerivedMapLayers(rows);
   renderMapLayerPanel();
   renderFeatureDrawer();
   updateSiteSearchUiSummary(searchResult);
+  renderMapFieldPanel();
   if (status){
     if (!state.activeProject){
       status.textContent = t("mapStatusNoProject");
@@ -18706,6 +18791,217 @@ function getNearestSitesToCoordinate(rows, coord, limit = 5){
   return scored.slice(0, Math.max(1, limit));
 }
 
+function findNearestVisibleSite(coord, radiusM = state.map.nearbyRadiusM || 30){
+  if (!coord) return null;
+  const nearest = getNearestSitesToCoordinate(getVisibleSites(), coord, 1)[0] || null;
+  if (!nearest) return null;
+  if (!Number.isFinite(nearest.distanceM) || nearest.distanceM > radiusM) return null;
+  return nearest;
+}
+
+function ensureMyLocationMarker(coord){
+  if (!state.map.instance || !window.L || !coord) return;
+  const latLng = [coord.lat, coord.lng];
+  if (!state.map.myLocationMarker){
+    state.map.myLocationMarker = window.L.circleMarker(latLng, {
+      radius: 9,
+      color: "#ffffff",
+      fillColor: MAP_MY_LOCATION_COLOR,
+      fillOpacity: 0.95,
+      weight: 3,
+      pane: MAP_PANES.pending,
+      bubblingMouseEvents: false,
+    });
+    state.map.myLocationMarker.addTo(state.map.instance);
+    state.map.myLocationMarker.bindTooltip("My location", { direction: "top", opacity: 0.95 });
+  } else {
+    state.map.myLocationMarker.setLatLng(latLng);
+  }
+}
+
+function setMapFieldSelectedSite(siteId){
+  const key = toSiteIdKey(siteId);
+  state.map.fieldSelectedSiteId = key;
+  renderMapFieldPanel();
+}
+
+function getMapFieldSelectedSite(){
+  const key = toSiteIdKey(state.map.fieldSelectedSiteId);
+  if (!key) return null;
+  return getVisibleSites().find((site) => toSiteIdKey(site?.id) === key) || null;
+}
+
+function renderMapFieldPanel(){
+  const gpsState = $("mapFieldGpsState");
+  const actionsWrap = $("mapFieldNearbyActions");
+  const createWrap = $("mapFieldCreateWrap");
+  const card = $("mapFieldLocationCard");
+  if (!gpsState || !actionsWrap || !createWrap || !card) return;
+
+  const gps = state.map.myLocation;
+  const nearestId = toSiteIdKey(state.map.nearestSiteId);
+  const nearest = nearestId
+    ? getVisibleSites().find((site) => toSiteIdKey(site?.id) === nearestId) || null
+    : null;
+
+  if (!gps){
+    gpsState.textContent = "GPS not captured yet.";
+  } else {
+    const lat = Number(gps.lat).toFixed(6);
+    const lng = Number(gps.lng).toFixed(6);
+    const accuracyText = Number.isFinite(gps.accuracy_m) ? ` (+/-${Math.round(gps.accuracy_m)}m)` : "";
+    gpsState.textContent = `${lat}, ${lng}${accuracyText}`;
+  }
+
+  if (!gps){
+    actionsWrap.innerHTML = `<button id="btnMapCaptureLocation" class="btn secondary small" type="button">Capture Location</button>`;
+  } else if (nearest){
+    const distance = formatDistanceFeetMeters(state.map.nearestSiteDistanceM);
+    const nearestLabel = getSiteDisplayName(nearest);
+    actionsWrap.innerHTML = `
+      <div class="muted small" style="width:100%;">Nearby saved location: ${escapeHtml(nearestLabel)}${distance ? ` (${escapeHtml(distance)})` : ""}</div>
+      <button id="btnMapOpenNearbyLocation" class="btn secondary small" type="button">Open Location</button>
+      <button id="btnMapAddToNearbyLocation" class="btn ghost small" type="button">Add to This Location</button>
+    `;
+  } else {
+    const disabled = !state.activeProject ? "disabled" : "";
+    actionsWrap.innerHTML = `
+      <div class="muted small" style="width:100%;">No saved location within ${Math.round(state.map.nearbyRadiusM || 30)}m.</div>
+      <button id="btnMapShowCreateLocation" class="btn secondary small" type="button" ${disabled}>Create New Location Here</button>
+    `;
+  }
+
+  const selected = getMapFieldSelectedSite() || nearest || null;
+  if (!selected){
+    card.hidden = true;
+    card.innerHTML = "";
+    return;
+  }
+  card.hidden = false;
+  const status = getSiteWorkflowStatus(selected);
+  const statusClass = getMapFieldStatusClass(status);
+  const statusLabel = getMapFieldStatusLabel(status);
+  const coords = getSiteCoords(selected);
+  const coordText = coords ? `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : "No GPS";
+  card.innerHTML = `
+    <div class="row" style="justify-content:space-between; align-items:center; gap:8px;">
+      <div style="font-weight:800;">${escapeHtml(getSiteDisplayName(selected))}</div>
+      <span class="map-field-status-chip ${statusClass}">${escapeHtml(statusLabel)}</span>
+    </div>
+    <div class="map-field-location-meta">${escapeHtml(coordText)}</div>
+    <div class="row" style="gap:8px; flex-wrap:wrap;">
+      <button class="btn secondary small" type="button" data-map-field-action="photo" data-site-id="${selected.id}">Add Photo</button>
+      <button class="btn ghost small" type="button" data-map-field-action="note" data-site-id="${selected.id}">Add Note</button>
+      <button class="btn ghost small" type="button" data-map-field-action="open" data-site-id="${selected.id}">Open Location</button>
+      <button class="btn ghost small" type="button" data-map-field-action="complete" data-site-id="${selected.id}">Mark Complete</button>
+    </div>
+    <div class="row" style="gap:8px; align-items:center;">
+      <label class="small" for="mapFieldStatusSelect" style="min-width:66px;">Status</label>
+      <select id="mapFieldStatusSelect" class="input compact" data-site-id="${selected.id}">
+        <option value="${MAP_FIELD_STATUS.NOT_STARTED}" ${status === MAP_FIELD_STATUS.NOT_STARTED ? "selected" : ""}>Not Started</option>
+        <option value="${MAP_FIELD_STATUS.IN_PROGRESS}" ${status === MAP_FIELD_STATUS.IN_PROGRESS ? "selected" : ""}>In Progress</option>
+        <option value="${MAP_FIELD_STATUS.COMPLETE}" ${status === MAP_FIELD_STATUS.COMPLETE ? "selected" : ""}>Complete</option>
+      </select>
+    </div>
+  `;
+}
+
+function setMapFieldCreateOpen(open){
+  const wrap = $("mapFieldCreateWrap");
+  if (!wrap) return;
+  wrap.hidden = !open;
+  if (open){
+    $("mapFieldLocationName")?.focus();
+  }
+}
+
+async function openLocationForField(siteId, { center = true, forAdd = false } = {}){
+  if (!siteId) return;
+  await setActiveSite(siteId, { openOverview: false });
+  setMapFieldSelectedSite(siteId);
+  if (center){
+    focusSiteOnMap(siteId);
+  }
+  if (forAdd){
+    setDrawerTab("data", { open: true });
+  }
+}
+
+async function requestMapCurrentLocation({ center = false, silent = false } = {}){
+  ensureMap();
+  const gps = await getCurrentGps({ enableHighAccuracy: true, timeout: 12000, maximumAge: 12000 });
+  if (!gps){
+    if (!silent){
+      toast("GPS unavailable", "Unable to capture your current location.");
+    }
+    return null;
+  }
+  const enriched = {
+    lat: gps.lat,
+    lng: gps.lng,
+    accuracy_m: Number.isFinite(gps.accuracy) ? gps.accuracy : null,
+    captured_at: nowISO(),
+  };
+  state.lastGPS = { lat: enriched.lat, lng: enriched.lng, accuracy_m: enriched.accuracy_m };
+  state.map.myLocation = enriched;
+  state.map.lastFieldGpsCheckAt = Date.now();
+  ensureMyLocationMarker(enriched);
+  const nearest = findNearestVisibleSite(enriched);
+  state.map.nearestSiteId = nearest?.site?.id ? toSiteIdKey(nearest.site.id) : "";
+  state.map.nearestSiteDistanceM = nearest?.distanceM ?? null;
+  if (center && state.map.instance){
+    state.map.instance.setView([enriched.lat, enriched.lng], Math.max(state.map.instance.getZoom() || 0, 18));
+  }
+  renderMapFieldPanel();
+  return enriched;
+}
+
+function setSiteWorkflowStatus(siteId, status){
+  const key = toSiteIdKey(siteId);
+  if (!key) return;
+  const normalized = normalizeMapFieldStatus(status);
+  state.map.siteWorkflowById.set(key, normalized);
+  const resultSet = getSiteSearchResultSet();
+  if (state.map.instance){
+    updateMapMarkers(resultSet.rows);
+  }
+  renderMapFieldPanel();
+}
+
+async function createFieldLocationFromCurrentGps(){
+  if (!state.activeProject){
+    toast("Project required", "Select a project before creating a new location.");
+    return;
+  }
+  const gps = state.map.myLocation || await requestMapCurrentLocation({ center: false, silent: false });
+  if (!gps){
+    return;
+  }
+  const name = String($("mapFieldLocationName")?.value || "").trim() || "";
+  const locationType = String($("mapFieldLocationType")?.value || "Other").trim();
+  const notes = String($("mapFieldLocationNotes")?.value || "").trim();
+  await createSiteFromMapClick(
+    { lat: gps.lat, lng: gps.lng },
+    name,
+    {
+      locationType,
+      notes,
+      openedFromFieldCapture: true,
+      createdAt: gps.captured_at || nowISO(),
+    }
+  );
+  const createdSiteId = toSiteIdKey(state.activeSite?.id);
+  if (createdSiteId){
+    setSiteWorkflowStatus(createdSiteId, MAP_FIELD_STATUS.NOT_STARTED);
+    setMapFieldSelectedSite(createdSiteId);
+  }
+  setMapFieldCreateOpen(false);
+  if ($("mapFieldLocationName")) $("mapFieldLocationName").value = "";
+  if ($("mapFieldLocationType")) $("mapFieldLocationType").value = "Node";
+  if ($("mapFieldLocationNotes")) $("mapFieldLocationNotes").value = "";
+  renderMapFieldPanel();
+}
+
 function getSiteSearchResultSet(){
   const all = getVisibleSites();
   const rawQuery = String(state.mapFilters.search || "").trim();
@@ -18944,6 +19240,7 @@ async function setActiveSite(siteId, { openOverview = false, autoDrawerTab = tru
   const siteKey = toSiteIdKey(siteId);
   const site = getVisibleSites().find((row) => toSiteIdKey(row?.id) === siteKey) || null;
   state.activeSite = site;
+  state.map.fieldSelectedSiteId = site ? siteKey : "";
   if (site){
     if (autoDrawerTab){
       switchSidebarTab("site");
@@ -18972,6 +19269,7 @@ async function setActiveSite(siteId, { openOverview = false, autoDrawerTab = tru
   renderSiteList();
   renderSitePanel();
   renderFeatureDrawer();
+  renderMapFieldPanel();
   if (openOverview){
     SpecCom.helpers.openPinOverview();
     SpecCom.helpers.renderPinOverview();
@@ -18995,6 +19293,7 @@ async function setActiveSite(siteId, { openOverview = false, autoDrawerTab = tru
 
 function closeSitePanel(){
   state.activeSite = null;
+  state.map.fieldSelectedSiteId = "";
   state.siteMedia = [];
   state.siteCodes = [];
   state.siteEntries = [];
@@ -19002,6 +19301,7 @@ function closeSitePanel(){
   renderSiteList();
   renderSitePanel();
   renderFeatureDrawer();
+  renderMapFieldPanel();
 }
 
 SpecCom.helpers.ensurePinOverviewModal = function(){
@@ -19826,7 +20126,7 @@ async function dropPin(){
   if (nameInput) nameInput.value = "";
 }
 
-async function createSiteFromMapClick(coords, siteName){
+async function createSiteFromMapClick(coords, siteName, options = {}){
   ensureMap();
   const latNum = Number(coords.lat);
   const lngNum = Number(coords.lng);
@@ -19838,14 +20138,25 @@ async function createSiteFromMapClick(coords, siteName){
   if (state.map.instance){
     state.map.instance.setView([latNum, lngNum], 17);
   }
+  const locationType = String(options.locationType || "").trim();
+  const userNotes = String(options.notes || "").trim();
+  const actor = String(state.profile?.display_name || state.user?.email || state.user?.id || "Unknown").trim();
+  const timestamp = String(options.createdAt || nowISO());
+  const metadataLines = [
+    locationType ? `Type: ${locationType}` : "",
+    `Captured: ${timestamp}`,
+    `Captured by: ${actor}`,
+  ].filter(Boolean);
+  const combinedNotes = [userNotes, metadataLines.join(" | ")].filter(Boolean).join("\n");
   const finalName = String(siteName || "").trim() || "Pinned site";
   const payload = {
     project_id: state.activeProject?.id || null,
     name: finalName,
+    notes: combinedNotes || null,
     gps_lat: latNum,
     gps_lng: lngNum,
     gps_accuracy_m: null,
-    created_at: new Date().toISOString(),
+    created_at: timestamp,
   };
   try{
     if (isDemo){
@@ -19920,10 +20231,13 @@ async function createSiteFromMapClick(coords, siteName){
     }
 
     if (siteId){
-      if (finalName){
+      if (finalName || combinedNotes){
+        const updatePayload = {};
+        if (finalName) updatePayload.name = finalName;
+        if (combinedNotes) updatePayload.notes = combinedNotes;
         const nameUpdate = await state.client
           .from("sites")
-          .update({ name: finalName })
+          .update(updatePayload)
           .eq("id", siteId);
         if (nameUpdate.error){
           reportPinErrorToast("Pin save error", nameUpdate.error);
@@ -25990,6 +26304,90 @@ function wireUI(){
   const dropPinBtn = $("btnDropPin");
   if (dropPinBtn){
     dropPinBtn.addEventListener("click", () => dropPin());
+  }
+  const useMyLocationBtn = $("btnMapUseMyLocation");
+  if (useMyLocationBtn){
+    useMyLocationBtn.addEventListener("click", async () => {
+      const gps = await requestMapCurrentLocation({ center: true, silent: false });
+      if (gps){
+        toast("Location captured", "Nearby saved locations checked.");
+      }
+    });
+  }
+  const mapFieldPanel = $("mapFieldPanel");
+  if (mapFieldPanel){
+    mapFieldPanel.addEventListener("click", async (e) => {
+      const actionBtn = e.target.closest("[data-map-field-action]");
+      if (actionBtn){
+        const action = String(actionBtn.dataset.mapFieldAction || "");
+        const siteId = actionBtn.dataset.siteId;
+        if (!siteId) return;
+        if (action === "open"){
+          await openLocationForField(siteId, { center: true, forAdd: false });
+          return;
+        }
+        if (action === "note"){
+          await openLocationForField(siteId, { center: false, forAdd: true });
+          const noteInput = $("siteNotesInput");
+          if (noteInput){
+            noteInput.focus();
+          } else {
+            toast("Location opened", "Add note in location details.");
+          }
+          return;
+        }
+        if (action === "photo"){
+          await openLocationForField(siteId, { center: false, forAdd: true });
+          const mediaInput = $("siteMediaInput");
+          if (mediaInput){
+            mediaInput.click();
+          } else {
+            toast("Location opened", "Add photo in location details.");
+          }
+          return;
+        }
+        if (action === "complete"){
+          setSiteWorkflowStatus(siteId, MAP_FIELD_STATUS.COMPLETE);
+          toast("Status updated", "Location marked complete.");
+        }
+        return;
+      }
+      const id = e.target?.id;
+      if (id === "btnMapCaptureLocation"){
+        await requestMapCurrentLocation({ center: true, silent: false });
+        return;
+      }
+      if (id === "btnMapOpenNearbyLocation"){
+        if (state.map.nearestSiteId){
+          await openLocationForField(state.map.nearestSiteId, { center: true, forAdd: false });
+        }
+        return;
+      }
+      if (id === "btnMapAddToNearbyLocation"){
+        if (state.map.nearestSiteId){
+          await openLocationForField(state.map.nearestSiteId, { center: true, forAdd: true });
+        }
+        return;
+      }
+      if (id === "btnMapShowCreateLocation"){
+        setMapFieldCreateOpen(true);
+        return;
+      }
+      if (id === "btnMapFieldCancelCreate"){
+        setMapFieldCreateOpen(false);
+        return;
+      }
+      if (id === "btnMapFieldCreateLocation"){
+        await createFieldLocationFromCurrentGps();
+      }
+    });
+    mapFieldPanel.addEventListener("change", (e) => {
+      const select = e.target.closest("#mapFieldStatusSelect");
+      if (!select) return;
+      const siteId = select.dataset.siteId;
+      if (!siteId) return;
+      setSiteWorkflowStatus(siteId, select.value);
+    });
   }
   const importLocationsBtn = $("btnImportLocations");
   const importLocationsInput = $("importLocationsInput");
