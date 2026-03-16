@@ -10363,6 +10363,44 @@ function createTechnicianShiftItems(){
   }));
 }
 
+function hydrateTechnicianShiftAppointments(sim){
+  if (!sim?.items?.length) return;
+  const assigned = (state.workOrders.assigned || []).slice();
+  const sorted = assigned.slice().sort((a, b) => {
+    const aMs = Date.parse(a?.scheduled_start || a?.appointment_start || "") || Number.MAX_SAFE_INTEGER;
+    const bMs = Date.parse(b?.scheduled_start || b?.appointment_start || "") || Number.MAX_SAFE_INTEGER;
+    return aMs - bMs;
+  });
+  const troublePool = sorted.filter((row) => String(row?.type || "").toUpperCase().includes("TROUBLE"));
+  const servicePool = sorted.filter((row) => !String(row?.type || "").toUpperCase().includes("TROUBLE"));
+  sim.items.forEach((item) => {
+    if (item.kind !== "service" && item.kind !== "trouble") return;
+    const order = item.kind === "trouble"
+      ? (troublePool.shift() || null)
+      : (servicePool.shift() || null);
+    if (!order){
+      item.work_order_id = null;
+      item.work_order_status = null;
+      item.appointment_start = null;
+      item.scheduled_start = null;
+      item.scheduled_end = null;
+      item.on_site_at = null;
+      item.updated_at = null;
+      return;
+    }
+    item.work_order_id = order.id || null;
+    item.work_order_status = order.status || null;
+    item.appointment_start = order.appointment_start || order.scheduled_start || null;
+    item.scheduled_start = order.scheduled_start || order.appointment_start || null;
+    item.scheduled_end = order.scheduled_end || null;
+    item.on_site_at = order.on_site_at || null;
+    item.updated_at = order.updated_at || null;
+    item.customer = order.customer_label || item.customer;
+    item.address = order.address || item.address;
+    item.jobType = order.type || item.jobType;
+  });
+}
+
 function ensureTechnicianSimulationState(){
   const sim = state.technician.simulation;
   if (!Array.isArray(sim.items) || !sim.items.length){
@@ -10372,6 +10410,7 @@ function ensureTechnicianSimulationState(){
     const active = sim.items.find((item) => item.status === "ACTIVE") || null;
     sim.activeItemId = active?.id || null;
   }
+  hydrateTechnicianShiftAppointments(sim);
   return sim;
 }
 
@@ -10385,9 +10424,9 @@ function getCurrentShiftItem(){
   const active = sim.items.find((item) => item.status === "ACTIVE") || null;
   if (active) return active;
   if (sim.activeItemId){
-    return sim.items.find((item) => item.id === sim.activeItemId) || sim.items.find((item) => item.status !== "COMPLETED") || sim.items[0] || null;
+    return sim.items.find((item) => item.id === sim.activeItemId) || null;
   }
-  return sim.items.find((item) => item.status !== "COMPLETED") || sim.items[0] || null;
+  return null;
 }
 
 function getNextNotStartedItem(){
@@ -10613,6 +10652,34 @@ function renderTechWorkflowProgress(item){
   `;
 }
 
+function getTechItemComplianceSource(item){
+  if (!item || (item.kind !== "service" && item.kind !== "trouble")) return null;
+  const appointmentStart = item.appointment_start || item.scheduled_start || null;
+  if (!appointmentStart) return null;
+  return {
+    appointment_start: appointmentStart,
+    scheduled_start: item.scheduled_start || appointmentStart,
+    scheduled_end: item.scheduled_end || null,
+    status: item.work_order_status || item.status || null,
+    on_site_at: item.on_site_at || null,
+    updated_at: item.updated_at || null,
+  };
+}
+
+function formatTechAppointmentWindow(item){
+  const startRaw = item?.appointment_start || item?.scheduled_start || null;
+  if (!startRaw) return "";
+  const start = new Date(startRaw);
+  if (Number.isNaN(start.getTime())) return "";
+  const startLabel = start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const endRaw = item?.scheduled_end || null;
+  if (!endRaw) return `Appointment window: ${startLabel}`;
+  const end = new Date(endRaw);
+  if (Number.isNaN(end.getTime())) return `Appointment window: ${startLabel}`;
+  const endLabel = end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return `Appointment window: ${startLabel} - ${endLabel}`;
+}
+
 function renderCurrentShiftActivity(){
   const sim = ensureTechnicianSimulationState();
   const statusEl = $("techClockStatus");
@@ -10634,12 +10701,18 @@ function renderCurrentShiftActivity(){
     }
   }
   if (!item){
-    currentWrap.innerHTML = `<div class="tech-current-card"><div class="tech-shift-title">Shift complete</div><div class="muted small">All planned activities are complete.</div></div>`;
+    const allComplete = sim.items.length > 0 && sim.items.every((entry) => entry.status === "COMPLETED");
+    currentWrap.innerHTML = allComplete
+      ? `<div class="tech-current-card"><div class="tech-shift-title">Shift complete</div><div class="muted small">All planned activities are complete.</div></div>`
+      : `<div class="tech-current-card"><div class="tech-shift-title">No activity selected</div><div class="muted small">Open a task from Today's Shift to load it here.</div></div>`;
     return;
   }
   const elapsed = calcShiftElapsedMinutes(item);
   const notes = Array.isArray(item.notes) ? item.notes : [];
   const photos = Array.isArray(item.photos) ? item.photos : [];
+  const complianceSource = getTechItemComplianceSource(item);
+  const compliancePill = complianceSource ? renderAppointmentCompliancePill(complianceSource) : "";
+  const appointmentWindow = formatTechAppointmentWindow(item);
   currentWrap.innerHTML = `
     <div class="tech-current-card ${item.status === "ACTIVE" ? "is-active" : ""}">
       <div class="tech-shift-head">
@@ -10654,6 +10727,8 @@ function renderCurrentShiftActivity(){
       ${(item.kind === "service" || item.kind === "trouble") ? `
         <div class="muted small">${escapeHtml(item.customer || "")} • ${escapeHtml(item.address || "")}</div>
       ` : ""}
+      ${appointmentWindow ? `<div class="muted small">${escapeHtml(appointmentWindow)}</div>` : ""}
+      ${compliancePill ? `<div>${compliancePill}</div>` : ""}
       ${item.kind === "inspection" ? `
         <div class="field-stack" style="gap:6px;">
           <label><input type="checkbox" data-tech-checklist="tires" data-tech-item-id="${item.id}" ${item.checklist?.tires ? "checked" : ""} /> Tires</label>
@@ -10683,6 +10758,9 @@ function renderTodayShiftTimeline(){
   if (!wrap) return;
   wrap.innerHTML = sim.items.map((item) => {
     const elapsed = calcShiftElapsedMinutes(item);
+    const complianceSource = getTechItemComplianceSource(item);
+    const compliancePill = complianceSource ? renderAppointmentCompliancePill(complianceSource) : "";
+    const appointmentWindow = formatTechAppointmentWindow(item);
     return `
       <article class="tech-shift-item">
         <div class="tech-shift-head">
@@ -10694,6 +10772,8 @@ function renderTodayShiftTimeline(){
         </div>
         <div class="muted small">Planned ${formatDurationMinutes(item.plannedMinutes || 0)} • Elapsed ${formatDurationMinutes(elapsed)}</div>
         ${(item.kind === "service" || item.kind === "trouble") ? `<div class="muted small">${escapeHtml(item.customer || "")} • ${escapeHtml(item.address || "")}</div>` : ""}
+        ${appointmentWindow ? `<div class="muted small">${escapeHtml(appointmentWindow)}</div>` : ""}
+        ${compliancePill ? `<div>${compliancePill}</div>` : ""}
         <div class="tech-shift-actions">
           <button class="btn ghost small" type="button" data-tech-shift-action="focus" data-tech-item-id="${item.id}">Open</button>
         </div>
@@ -11361,7 +11441,7 @@ async function loadAssignedWorkOrders(){
   const tomorrowEnd = endOfDay(new Date(Date.now() + 24 * 60 * 60 * 1000));
   const { data, error } = await state.client
     .from("work_orders")
-    .select("id, project_id, type, status, scheduled_start, scheduled_end, address, customer_label, notes, priority, sla_due_at, assigned_to_user_id")
+    .select("id, project_id, type, status, scheduled_start, scheduled_end, address, customer_label, notes, priority, sla_due_at, assigned_to_user_id, updated_at")
     .eq("assigned_to_user_id", state.user.id)
     .or(`scheduled_start.is.null,and(scheduled_start.gte.${todayStart.toISOString()},scheduled_start.lte.${tomorrowEnd.toISOString()})`)
     .order("scheduled_start", { ascending: true, nullsFirst: true })
