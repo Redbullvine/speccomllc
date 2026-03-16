@@ -2602,6 +2602,9 @@ function setAuthButtonsDisabled(disabled){
 }
 
 function setActiveView(viewId, { syncHash = true } = {}){
+  if (viewId !== "viewMap"){
+    setMapFieldCreateOpen(false);
+  }
   document.body.classList.toggle("map-mode", viewId === "viewMap");
   document.querySelectorAll(".view").forEach((view) => {
     view.classList.toggle("active", view.id === viewId);
@@ -18836,11 +18839,18 @@ function getMapFieldSelectedSite(){
 }
 
 function renderMapFieldPanel(){
+  const panel = $("mapFieldPanel");
   const gpsState = $("mapFieldGpsState");
   const actionsWrap = $("mapFieldNearbyActions");
   const createWrap = $("mapFieldCreateWrap");
   const card = $("mapFieldLocationCard");
   if (!gpsState || !actionsWrap || !createWrap || !card) return;
+  const createOpen = !createWrap.hidden;
+  if (panel){
+    panel.classList.toggle("is-create-open", createOpen);
+  }
+  document.body.classList.toggle("map-create-open", createOpen);
+  actionsWrap.hidden = createOpen;
 
   const gps = state.map.myLocation;
   const nearestId = toSiteIdKey(state.map.nearestSiteId);
@@ -18875,7 +18885,7 @@ function renderMapFieldPanel(){
     `;
   }
 
-  const selected = getMapFieldSelectedSite() || nearest || null;
+  const selected = createOpen ? null : (getMapFieldSelectedSite() || nearest || null);
   if (!selected){
     card.hidden = true;
     card.innerHTML = "";
@@ -18912,6 +18922,11 @@ function renderMapFieldPanel(){
 
 function setMapFieldCreateOpen(open){
   const wrap = $("mapFieldCreateWrap");
+  const panel = $("mapFieldPanel");
+  document.body.classList.toggle("map-create-open", Boolean(open));
+  if (panel){
+    panel.classList.toggle("is-create-open", Boolean(open));
+  }
   if (!wrap) return;
   wrap.hidden = !open;
   if (open){
@@ -18922,6 +18937,7 @@ function setMapFieldCreateOpen(open){
   if (open){
     $("mapFieldLocationName")?.focus();
   }
+  renderMapFieldPanel();
 }
 
 async function openLocationForField(siteId, { center = true, forAdd = false } = {}){
