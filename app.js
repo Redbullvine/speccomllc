@@ -317,6 +317,7 @@ const state = {
     assigned: [],
     dispatch: [],
     technicians: [],
+    workforce: [],
     editing: null,
     importWarnings: [],
   },
@@ -11670,7 +11671,10 @@ async function loadDispatchTechnicians(){
   if (!state.features.dispatch) return;
   if (!canViewDispatch() || !state.activeProject || !state.client || isDemo){
     state.workOrders.technicians = [];
+    state.workOrders.workforce = [];
     if (select) select.innerHTML = `<option value="">Unassigned</option>`;
+    renderWorkforceStatusBoard("dispatchWorkforceBoard");
+    renderWorkforceStatusBoard("supervisorCrewStatus");
     return;
   }
   const { data, error } = await state.client
@@ -11684,19 +11688,41 @@ async function loadDispatchTechnicians(){
   const ids = (data || []).map(r => r.user_id);
   let profiles = [];
   if (ids.length){
-    const { data: profileRows } = await state.client
+    let profileRows = [];
+    const { data: workerRows, error: workerErr } = await state.client
       .from("profiles")
-      .select("id, display_name")
+      .select("id, display_name, worker_id, worker_role")
       .in("id", ids);
-    profiles = profileRows || [];
+    if (workerErr){
+      const { data: fallbackRows, error: fallbackErr } = await state.client
+        .from("profiles")
+        .select("id, display_name")
+        .in("id", ids);
+      if (fallbackErr){
+        toast("Technicians load error", fallbackErr.message);
+        return;
+      }
+      profileRows = fallbackRows || [];
+    } else {
+      profileRows = workerRows || [];
+    }
+    profiles = profileRows;
   }
-  const nameById = new Map(profiles.map(p => [p.id, p.display_name || p.id]));
-  state.workOrders.technicians = ids.map(id => ({ id, name: nameById.get(id) || id }));
+  const profileById = new Map(profiles.map(p => [p.id, p || {}]));
+  state.workOrders.technicians = ids.map((id) => {
+    const profile = profileById.get(id) || {};
+    const displayName = String(profile.display_name || "").trim() || id;
+    const workerId = String(profile.worker_id || "").trim() || `WK-${String(id).slice(0, 8).toUpperCase()}`;
+    const workerRole = String(profile.worker_role || "").trim() || "Technician";
+    return { id, name: displayName, worker_id: workerId, worker_role: workerRole };
+  });
   if (select){
     select.innerHTML = `<option value="">Unassigned</option>` + state.workOrders.technicians
       .map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`)
       .join("");
   }
+  renderWorkforceStatusBoard("dispatchWorkforceBoard");
+  renderWorkforceStatusBoard("supervisorCrewStatus");
 }
 
 function syncDispatchStatusFilter(){
@@ -11774,23 +11800,27 @@ function renderDispatchTable(){
   const wrap = $("dispatchTable");
   if (!wrap){
     renderDispatchWorkspaceSummary();
+    renderWorkforceStatusBoard("dispatchWorkforceBoard");
     renderSupervisorOverview();
     return;
   }
   if (!state.activeProject){
     wrap.innerHTML = `<div class="muted small">${t("laborNoProject")}</div>`;
     renderDispatchWorkspaceSummary();
+    renderWorkforceStatusBoard("dispatchWorkforceBoard");
     renderSupervisorOverview();
     return;
   }
   if (!canViewDispatch()){
     wrap.innerHTML = `<div class="muted small">Dispatch is limited to privileged roles.</div>`;
     renderDispatchWorkspaceSummary();
+    renderWorkforceStatusBoard("dispatchWorkforceBoard");
     renderSupervisorOverview();
     return;
   }
   const rows = state.workOrders.dispatch || [];
   renderDispatchWorkspaceSummary();
+  renderWorkforceStatusBoard("dispatchWorkforceBoard");
   if (!rows.length){
     wrap.innerHTML = `<div class="muted small">${t("woNoOrders")}</div>`;
     renderSupervisorOverview();
@@ -11873,6 +11903,148 @@ function renderDispatchWorkspaceSummary(){
       <div class="muted small">Future dispatch map will show worker code, status, current job, and last updated time.</div>
     </div>
   `;
+}
+
+function normalizeWorkforceStatus(status){
+  const value = String(status || "").toUpperCase();
+  if (value === "NEW") return "ASSIGNED";
+  if (value === "CANCELED") return "AVAILABLE";
+  if (["ASSIGNED", "EN_ROUTE", "ON_SITE", "IN_PROGRESS", "BLOCKED", "COMPLETE", "AVAILABLE"].includes(value)) return value;
+  return "AVAILABLE";
+}
+
+function workforceStatusPriority(status){
+  const value = normalizeWorkforceStatus(status);
+  if (value === "BLOCKED") return 1;
+  if (value === "IN_PROGRESS") return 2;
+  if (value === "ON_SITE") return 3;
+  if (value === "EN_ROUTE") return 4;
+  if (value === "ASSIGNED") return 5;
+  if (value === "COMPLETE") return 6;
+  return 7;
+}
+
+function workforceStatusPillClass(status){
+  const value = normalizeWorkforceStatus(status);
+  if (value === "BLOCKED") return "bad";
+  if (value === "AVAILABLE" || value === "COMPLETE") return "ok";
+  return "warn";
+}
+
+function formatWorkforceStatusLabel(status){
+  const value = normalizeWorkforceStatus(status);
+  if (value === "AVAILABLE") return "Available";
+  return formatWorkOrderStatusLabel(value);
+}
+
+function buildWorkforceStatusRows(){
+  const technicians = state.workOrders.technicians || [];
+  const workOrders = state.workOrders.dispatch || [];
+  const rows = technicians.map((tech) => {
+    const assignedOrders = workOrders
+      .filter((order) => order.assigned_to_user_id === tech.id)
+      .slice()
+      .sort((a, b) => {
+        const rankDiff = workforceStatusPriority(a.status) - workforceStatusPriority(b.status);
+        if (rankDiff !== 0) return rankDiff;
+        const aTime = Date.parse(a.updated_at || a.scheduled_start || a.created_at || 0) || 0;
+        const bTime = Date.parse(b.updated_at || b.scheduled_start || b.created_at || 0) || 0;
+        return bTime - aTime;
+      });
+    const current = assignedOrders[0] || null;
+    const status = current ? normalizeWorkforceStatus(current.status) : "AVAILABLE";
+    const currentJob = current
+      ? (current.customer_label || current.type || `WO-${String(current.id || "").slice(0, 8)}`)
+      : "No active assignment";
+    return {
+      user_id: tech.id,
+      worker_id: tech.worker_id || `WK-${String(tech.id || "").slice(0, 8).toUpperCase()}`,
+      display_name: tech.name || "Worker",
+      worker_role: tech.worker_role || "Technician",
+      status,
+      current_job: currentJob,
+      project_name: state.activeProject?.name || "",
+      work_order_id: current?.id || "",
+      updated_at: current?.updated_at || current?.created_at || "",
+    };
+  });
+  state.workOrders.workforce = rows;
+  return rows;
+}
+
+function renderWorkforceStatusBoard(targetId){
+  const el = $(targetId);
+  if (!el) return;
+  if (!state.activeProject){
+    el.innerHTML = `<div class="muted small">${t("laborNoProject")}</div>`;
+    return;
+  }
+  if (!canViewDispatch()){
+    el.innerHTML = `<div class="muted small">Workforce status is limited to dispatch visibility.</div>`;
+    return;
+  }
+  const rows = buildWorkforceStatusRows();
+  if (!rows.length){
+    el.innerHTML = `<div class="muted small">No workers assigned to this project yet.</div>`;
+    return;
+  }
+  const counts = {
+    ASSIGNED: 0,
+    EN_ROUTE: 0,
+    ON_SITE: 0,
+    IN_PROGRESS: 0,
+    BLOCKED: 0,
+    COMPLETE: 0,
+    AVAILABLE: 0,
+  };
+  rows.forEach((row) => {
+    const key = normalizeWorkforceStatus(row.status);
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  el.innerHTML = `
+    <div class="workforce-board">
+      <div class="workforce-board-chips">
+        <span class="chip"><span class="dot warn"></span><span>Assigned: ${counts.ASSIGNED}</span></span>
+        <span class="chip"><span class="dot warn"></span><span>En Route: ${counts.EN_ROUTE}</span></span>
+        <span class="chip"><span class="dot warn"></span><span>On Site: ${counts.ON_SITE}</span></span>
+        <span class="chip"><span class="dot warn"></span><span>In Progress: ${counts.IN_PROGRESS}</span></span>
+        <span class="chip"><span class="dot bad"></span><span>Blocked: ${counts.BLOCKED}</span></span>
+        <span class="chip"><span class="dot ok"></span><span>Complete: ${counts.COMPLETE}</span></span>
+        <span class="chip"><span class="dot ok"></span><span>Available: ${counts.AVAILABLE}</span></span>
+      </div>
+      <div class="workforce-board-list">
+        ${rows.map((row) => `
+          <article class="workforce-row">
+            <div>
+              <div class="workforce-row-id">${escapeHtml(row.worker_id)}</div>
+              <div style="font-weight:800;">${escapeHtml(row.display_name)}</div>
+              <div class="muted small">${escapeHtml(row.worker_role || "Worker")}</div>
+            </div>
+            <div>
+              <div class="status-pill ${workforceStatusPillClass(row.status)}">${escapeHtml(formatWorkforceStatusLabel(row.status))}</div>
+              <div class="muted small" style="margin-top:6px;">${escapeHtml(row.current_job || "No active assignment")}</div>
+            </div>
+            <div class="workforce-row-actions">
+              <button
+                class="btn ghost small"
+                type="button"
+                data-action="openWorkerMapHook"
+                data-worker-id="${escapeHtml(row.worker_id)}"
+                data-worker-name="${escapeHtml(row.display_name)}"
+              >
+                Map Hook
+              </button>
+            </div>
+          </article>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function handleWorkforceMapHook(workerId, workerName){
+  const name = String(workerName || "").trim() || String(workerId || "").trim() || "Worker";
+  toast("Workforce map hook", `${name} selected. Live map zoom/highlight will be connected next.`);
 }
 
 function renderDispatchWarnings(){
@@ -15033,40 +15205,7 @@ function renderSupervisorOverview(){
       </div>
     `).join("");
   }
-  const byCrew = new Map();
-  (rows || []).forEach((row) => {
-    const assigned = (state.workOrders.technicians || []).find((tech) => tech.id === row.assigned_to_user_id)?.name || "Unassigned";
-    if (!byCrew.has(assigned)){
-      byCrew.set(assigned, { active: 0, blocked: 0, complete: 0 });
-    }
-    const bucket = byCrew.get(assigned);
-    const status = String(row.status || "").toUpperCase();
-    if (status === "BLOCKED") bucket.blocked += 1;
-    else if (status === "COMPLETE") bucket.complete += 1;
-    else bucket.active += 1;
-  });
-  const crewRows = [...byCrew.entries()];
-  if (!crewRows.length){
-    crewEl.innerHTML = `<div class="muted small">No crew activity yet.</div>`;
-  } else {
-    crewEl.innerHTML = `
-      <div style="overflow:auto;">
-        <table class="table">
-          <thead><tr><th>Crew</th><th>Active</th><th>Blocked</th><th>Complete</th></tr></thead>
-          <tbody>
-            ${crewRows.map(([name, stats]) => `
-              <tr>
-                <td>${escapeHtml(name)}</td>
-                <td>${stats.active}</td>
-                <td>${stats.blocked}</td>
-                <td>${stats.complete}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      </div>
-    `;
-  }
+  renderWorkforceStatusBoard("supervisorCrewStatus");
 }
 
 function syncDemoLoginButton(){
@@ -24852,6 +24991,17 @@ function wireUI(){
       if (row) openDispatchModal(row);
     });
   }
+  const bindWorkforceBoardClick = (containerId) => {
+    const container = $(containerId);
+    if (!container) return;
+    container.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-action='openWorkerMapHook']");
+      if (!btn) return;
+      handleWorkforceMapHook(btn.dataset.workerId, btn.dataset.workerName);
+    });
+  };
+  bindWorkforceBoardClick("dispatchWorkforceBoard");
+  bindWorkforceBoardClick("supervisorCrewStatus");
 
   const signOutBtn = $("btnSignOut");
   if (signOutBtn){
