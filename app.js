@@ -11224,6 +11224,49 @@ function formatWorkOrderStatusLabel(status){
   return value || "-";
 }
 
+function getAppointmentStartMs(order){
+  const raw = order?.appointment_start || order?.scheduled_start || null;
+  if (!raw) return 0;
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function isOnSiteComplianceStatus(status){
+  const value = String(status || "").toUpperCase();
+  return value === "ON_SITE" || value === "IN_PROGRESS" || value === "COMPLETE";
+}
+
+function getAppointmentCompliance(order){
+  const appointmentMs = getAppointmentStartMs(order);
+  if (!appointmentMs) return null;
+  const nowMs = Date.now();
+  const status = String(order?.status || "").toUpperCase();
+  const onSite = isOnSiteComplianceStatus(status);
+  if (nowMs < appointmentMs - (30 * 60 * 1000)){
+    return { tone: "compliance-green", label: "On Schedule" };
+  }
+  if (nowMs < appointmentMs - (15 * 60 * 1000)){
+    return { tone: "compliance-yellow", label: "Appointment Approaching" };
+  }
+  if (nowMs < appointmentMs){
+    return { tone: "compliance-pink", label: "Leave Now" };
+  }
+  if (!onSite){
+    return { tone: "compliance-red", label: "Missed Commitment" };
+  }
+  const onSiteMs = Date.parse(order?.on_site_at || order?.updated_at || "") || 0;
+  if (!onSiteMs || onSiteMs > appointmentMs){
+    return { tone: "compliance-red", label: "Missed Commitment" };
+  }
+  return { tone: "compliance-green", label: "On Schedule" };
+}
+
+function renderAppointmentCompliancePill(order){
+  const compliance = getAppointmentCompliance(order);
+  if (!compliance) return "";
+  return `<span class="appointment-pill ${compliance.tone}">${escapeHtml(compliance.label)}</span>`;
+}
+
 function renderWorkOrderCard(order, { showActions = false } = {}){
   const scheduled = order.scheduled_start ? new Date(order.scheduled_start) : null;
   const end = order.scheduled_end ? new Date(order.scheduled_end) : null;
@@ -11231,6 +11274,7 @@ function renderWorkOrderCard(order, { showActions = false } = {}){
     ? `${scheduled.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${end ? ` - ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}`
     : "Unscheduled";
   const statusClass = statusPillClass(order.status);
+  const compliancePill = renderAppointmentCompliancePill(order);
   const isClosed = order.status === "COMPLETE" || order.status === "CANCELED";
   const buttons = showActions ? `
     <div class="row" style="margin-top:10px; flex-wrap:wrap;">
@@ -11249,7 +11293,10 @@ function renderWorkOrderCard(order, { showActions = false } = {}){
           <div class="muted small">${escapeHtml(order.address || "")}</div>
           <div class="muted small">${timeLabel}</div>
         </div>
-        <div class="status-pill ${statusClass}">${escapeHtml(formatWorkOrderStatusLabel(order.status))}</div>
+        <div class="field-stack" style="align-items:flex-end; gap:6px;">
+          <div class="status-pill ${statusClass}">${escapeHtml(formatWorkOrderStatusLabel(order.status))}</div>
+          ${compliancePill}
+        </div>
       </div>
       ${order.notes ? `<div class="muted small" style="margin-top:6px;">${escapeHtml(order.notes)}</div>` : ""}
       ${buttons}
@@ -11883,12 +11930,16 @@ function renderDispatchTable(){
         ${rows.map((row) => {
           const scheduled = row.scheduled_start ? new Date(row.scheduled_start).toLocaleString() : "Unscheduled";
           const statusClass = statusPillClass(row.status);
+          const compliancePill = renderAppointmentCompliancePill(row);
           const assignedName = techOptions.find(t => t.id === row.assigned_to_user_id)?.name || "";
           return `
             <tr>
               <td>${escapeHtml(scheduled)}</td>
               <td>${escapeHtml(row.type || "")}</td>
-              <td><span class="status-pill ${statusClass}">${escapeHtml(formatWorkOrderStatusLabel(row.status))}</span></td>
+              <td>
+                <span class="status-pill ${statusClass}">${escapeHtml(formatWorkOrderStatusLabel(row.status))}</span>
+                ${compliancePill ? `<div style="margin-top:6px;">${compliancePill}</div>` : ""}
+              </td>
               <td>${escapeHtml(row.customer_label || "")}</td>
               <td>${escapeHtml(row.address || "")}</td>
               <td>${escapeHtml(String(row.priority ?? ""))}</td>
@@ -12009,6 +12060,7 @@ function renderDispatchAssignmentBoard(){
             <div class="dispatch-assignment-detail" style="margin-top:8px;">
               <div class="muted small">${escapeHtml(selectedJob.type || "Work Order")} • ${escapeHtml(formatWorkOrderStatusLabel(selectedJob.status))}</div>
               <div class="muted small">${escapeHtml(selectedJob.address || "No address")}</div>
+              ${renderAppointmentCompliancePill(selectedJob)}
             </div>
           ` : `<div class="muted small" style="margin-top:8px;">No job selected.</div>`}
         </div>
@@ -12165,6 +12217,7 @@ function buildWorkforceStatusRows(){
     const currentJob = current
       ? (current.customer_label || current.type || `WO-${String(current.id || "").slice(0, 8)}`)
       : "No active assignment";
+    const compliance = current ? getAppointmentCompliance(current) : null;
     return {
       user_id: tech.id,
       worker_id: tech.worker_id || `WK-${String(tech.id || "").slice(0, 8).toUpperCase()}`,
@@ -12172,6 +12225,7 @@ function buildWorkforceStatusRows(){
       worker_role: tech.worker_role || "Technician",
       status,
       current_job: currentJob,
+      compliance,
       project_name: state.activeProject?.name || "",
       work_order_id: current?.id || "",
       updated_at: current?.updated_at || current?.created_at || "",
@@ -12232,6 +12286,7 @@ function renderWorkforceStatusBoard(targetId){
             <div>
               <div class="status-pill ${workforceStatusPillClass(row.status)}">${escapeHtml(formatWorkforceStatusLabel(row.status))}</div>
               <div class="muted small" style="margin-top:6px;">${escapeHtml(row.current_job || "No active assignment")}</div>
+              ${row.compliance ? `<div style="margin-top:6px;"><span class="appointment-pill ${row.compliance.tone}">${escapeHtml(row.compliance.label)}</span></div>` : ""}
             </div>
             <div class="workforce-row-actions">
               <button
@@ -15387,10 +15442,14 @@ function renderSupervisorOverview(){
             ${activeRows.map((row) => {
               const scheduled = row.scheduled_start ? new Date(row.scheduled_start).toLocaleString() : "Unscheduled";
               const assigned = (state.workOrders.technicians || []).find((tech) => tech.id === row.assigned_to_user_id)?.name || "Unassigned";
+              const compliancePill = renderAppointmentCompliancePill(row);
               return `
                 <tr>
                   <td>${escapeHtml(scheduled)}</td>
-                  <td><span class="status-pill ${statusPillClass(row.status)}">${escapeHtml(formatWorkOrderStatusLabel(row.status))}</span></td>
+                  <td>
+                    <span class="status-pill ${statusPillClass(row.status)}">${escapeHtml(formatWorkOrderStatusLabel(row.status))}</span>
+                    ${compliancePill ? `<div style="margin-top:6px;">${compliancePill}</div>` : ""}
+                  </td>
                   <td>${escapeHtml(row.type || "-")}</td>
                   <td>${escapeHtml(row.customer_label || "-")}</td>
                   <td>${escapeHtml(assigned)}</td>
