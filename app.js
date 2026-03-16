@@ -8973,6 +8973,10 @@ function ensureMap(){
       renderRedlineUi();
       return;
     }
+    const isPinPlacementMode = Boolean(state.map.dropPinMode || state.map.pinTargetSiteId);
+    if (!isPinPlacementMode){
+      return;
+    }
     state.map.pendingLatLng = { lat: latlng.lat, lng: latlng.lng };
     dlog("[map click]", latlng.lat, latlng.lng);
     showPendingPinMarker(latlng);
@@ -18911,6 +18915,11 @@ function setMapFieldCreateOpen(open){
   if (!wrap) return;
   wrap.hidden = !open;
   if (open){
+    state.map.dropPinMode = false;
+    state.map.pendingLatLng = null;
+    clearPendingPinMarker();
+  }
+  if (open){
     $("mapFieldLocationName")?.focus();
   }
 }
@@ -26374,6 +26383,10 @@ function wireUI(){
         return;
       }
       if (id === "btnMapFieldCancelCreate"){
+        setMapFieldCreateOpen(false);
+        return;
+      }
+      if (id === "btnMapFieldCreateClose"){
         setMapFieldCreateOpen(false);
         return;
       }
