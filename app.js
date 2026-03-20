@@ -26449,6 +26449,15 @@ function wireUI(){
       setSiteWorkflowStatus(siteId, select.value);
     });
   }
+  const mapCanvas = $("mapCanvas");
+  if (mapCanvas){
+    mapCanvas.addEventListener("click", (e) => {
+      const createWrap = $("mapFieldCreateWrap");
+      if (!createWrap || createWrap.hidden) return;
+      if (e.target.closest("#mapFieldCreateWrap")) return;
+      setMapFieldCreateOpen(false);
+    });
+  }
   const importLocationsBtn = $("btnImportLocations");
   const importLocationsInput = $("importLocationsInput");
   if (importLocationsBtn && importLocationsInput){
