@@ -25329,6 +25329,30 @@ async function handleSignIn(e) {
 function wireUI(){
   if (uiWired) return;
   uiWired = true;
+  const keepModalFieldVisible = (field) => {
+    if (!(field instanceof HTMLElement)) return;
+    const modal = field.closest(".modal");
+    if (!(modal instanceof HTMLElement) || modal.style.display === "none") return;
+    const scrollBox = field.closest(".modal-card");
+    const scroller = scrollBox instanceof HTMLElement ? scrollBox : modal;
+    window.setTimeout(() => {
+      try{
+        field.scrollIntoView({ block: "center", inline: "nearest" });
+      } catch {}
+      const box = scroller.getBoundingClientRect();
+      const rect = field.getBoundingClientRect();
+      if (rect.bottom > box.bottom - 16){
+        scroller.scrollTop += rect.bottom - (box.bottom - 16);
+      } else if (rect.top < box.top + 16){
+        scroller.scrollTop -= (box.top + 16) - rect.top;
+      }
+    }, 180);
+  };
+  document.addEventListener("focusin", (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return;
+    keepModalFieldVisible(target);
+  });
   applyDrawerStateFromStorage();
   initMapWorkspaceUi();
   window.addEventListener("resize", () => {
