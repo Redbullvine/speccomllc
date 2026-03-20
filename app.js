@@ -26176,6 +26176,13 @@ function wireUI(){
       void launchRedlineFromMenu();
     });
   }
+  const menuSignOutBtn = $("btnMenuSignOut");
+  if (menuSignOutBtn){
+    menuSignOutBtn.addEventListener("click", async () => {
+      closeMenuModal();
+      await SpecCom.helpers.handleSignOut();
+    });
+  }
   const grantAccessBtn = $("btnGrantProjectAccess");
   if (grantAccessBtn){
     grantAccessBtn.addEventListener("click", () => {

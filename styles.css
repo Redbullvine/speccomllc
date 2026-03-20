@@ -2968,9 +2968,35 @@ body.map-create-open #mapFieldPanel.is-create-open > :not(#mapFieldCreateWrap){
   color:var(--muted);
 }
 @media (max-width: 700px){
+  .topbar-inner{
+    flex-direction:row;
+    align-items:center;
+  }
+  .topbar .brand{
+    min-width:0;
+    flex:1 1 auto;
+  }
+  .topbar .brand .muted.small{
+    display:none;
+  }
   .topbar-actions{
-    width:100%;
-    justify-content:space-between;
+    width:auto;
+    margin-left:auto;
+    flex-wrap:nowrap;
+    justify-content:flex-end;
+  }
+  .topbar-actions .topbar-btn,
+  .topbar-actions .topbar-language-select{
+    display:none;
+  }
+  .topbar-actions .topbar-btn{
+    flex:0 0 auto;
+  }
+  .topbar-actions #btnSignOut{
+    display:inline-flex;
+  }
+  .topbar-actions #btnMenu{
+    display:inline-flex;
   }
   .topbar-btn{
     flex:1 1 auto;
@@ -3821,6 +3847,24 @@ body.map-mode .map-canvas .leaflet-control-zoom a{
 @media (max-width: 900px){
   body.map-mode .topbar-inner{
     padding:7px 10px;
+    flex-direction:row;
+    align-items:center;
+  }
+  body.map-mode .topbar .brand{
+    min-width:0;
+    flex:1 1 auto;
+  }
+  body.map-mode .topbar-actions{
+    margin-left:auto;
+    flex-wrap:nowrap;
+    justify-content:flex-end;
+  }
+  body.map-mode .topbar-actions .topbar-btn,
+  body.map-mode .topbar-actions .topbar-language-select{
+    display:none !important;
+  }
+  body.map-mode .topbar-actions #btnMenu{
+    display:inline-flex !important;
   }
   body.map-mode .map-workspace{
     height:calc(100vh - 45px);
