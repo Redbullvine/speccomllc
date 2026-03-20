@@ -26433,6 +26433,10 @@ function wireUI(){
         setMapFieldCreateOpen(false);
         return;
       }
+      if (id === "btnMapFieldDismissCreate"){
+        setMapFieldCreateOpen(false);
+        return;
+      }
       if (id === "btnMapFieldCreateClose"){
         setMapFieldCreateOpen(false);
         return;
