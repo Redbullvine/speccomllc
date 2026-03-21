@@ -19020,6 +19020,31 @@ async function requestMapCurrentLocation({ center = false, silent = false } = {}
   return enriched;
 }
 
+async function openOrCreateSpliceAtCurrentLocation({ center = true, hidePanel = true } = {}){
+  const gps = await requestMapCurrentLocation({ center, silent: false });
+  if (!gps) return null;
+  const nearest = findNearestVisibleSite(gps, state.map.nearbyRadiusM || 30);
+  let siteId = nearest?.site?.id || null;
+  if (!siteId){
+    siteId = await createSiteFromMapClick(
+      { lat: gps.lat, lng: gps.lng },
+      "",
+      {
+        locationType: "Splice Point",
+        openedFromFieldCapture: true,
+        createdAt: gps.captured_at || nowISO(),
+      }
+    );
+  }
+  if (!siteId) return null;
+  await openLocationForField(siteId, { center: true, forAdd: true });
+  focusSiteOnMap(siteId);
+  if (hidePanel){
+    setMapFieldPanelVisible(false);
+  }
+  return siteId;
+}
+
 function setSiteWorkflowStatus(siteId, status){
   const key = toSiteIdKey(siteId);
   if (!key) return;
@@ -20197,7 +20222,7 @@ async function createSiteFromMapClick(coords, siteName, options = {}){
   if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)){
     toast("Pin error", "Invalid map coordinates.");
     clearPendingPinMarker();
-    return;
+    return null;
   }
   if (state.map.instance){
     state.map.instance.setView([latNum, lngNum], 17);
@@ -20232,7 +20257,7 @@ async function createSiteFromMapClick(coords, siteName, options = {}){
       updateMapMarkers(getVisibleSites());
       await setActiveSite(demoSite.id);
       toast(t("pinDroppedTitle"), t("pinDroppedBody"));
-      return;
+      return demoSite.id;
     }
 
     if (!navigator.onLine || !state.client){
@@ -20247,7 +20272,7 @@ async function createSiteFromMapClick(coords, siteName, options = {}){
       updateMapMarkers(getVisibleSites());
       await setActiveSite(pending.id);
       toast(t("pinQueuedTitle"), t("pinQueuedBody"));
-      return;
+      return pending.id;
     }
 
     let createdSite = null;
@@ -20305,13 +20330,13 @@ async function createSiteFromMapClick(coords, siteName, options = {}){
           .eq("id", siteId);
         if (nameUpdate.error){
           reportPinErrorToast("Pin save error", nameUpdate.error);
-          return;
+          return null;
         }
       }
       const siteRes = await fetchSiteById(siteId);
       if (siteRes.error){
         reportPinErrorToast("Pin save error", siteRes.error);
-        return;
+        return null;
       }
       createdSite = siteRes.data || null;
     }
@@ -20328,6 +20353,7 @@ async function createSiteFromMapClick(coords, siteName, options = {}){
       }
     }
     toast(t("pinDroppedTitle"), t("pinDroppedBody"));
+    return siteId || createdSite?.id || null;
   } finally {
     clearPendingPinMarker();
   }
@@ -26239,6 +26265,19 @@ function wireUI(){
       void launchRedlineFromMenu();
     });
   }
+  const menuAddSpliceDetailsBtn = $("btnMenuAddSpliceDetails");
+  if (menuAddSpliceDetailsBtn){
+    menuAddSpliceDetailsBtn.addEventListener("click", async () => {
+      closeMenuModal();
+      if (!isMapViewActive()){
+        setActiveView("viewMap");
+      }
+      const siteId = await openOrCreateSpliceAtCurrentLocation({ center: true, hidePanel: true });
+      if (siteId){
+        toast("Splice ready", "Location pin opened. Add photos, codes, material, and notes.");
+      }
+    });
+  }
   const menuSignOutBtn = $("btnMenuSignOut");
   if (menuSignOutBtn){
     menuSignOutBtn.addEventListener("click", async () => {
@@ -26403,10 +26442,9 @@ function wireUI(){
   const useMyLocationBtn = $("btnMapUseMyLocation");
   if (useMyLocationBtn){
     useMyLocationBtn.addEventListener("click", async () => {
-      const gps = await requestMapCurrentLocation({ center: true, silent: false });
-      if (gps){
-        toast("Location captured", "Nearby saved locations checked.");
-        setMapFieldPanelVisible(false);
+      const siteId = await openOrCreateSpliceAtCurrentLocation({ center: true, hidePanel: true });
+      if (siteId){
+        toast("Splice ready", "Location pin opened. Add photos, codes, material, and notes.");
       }
     });
   }
