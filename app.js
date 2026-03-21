@@ -26373,10 +26373,12 @@ function wireUI(){
   ["btnMapFieldCreateClose", "btnMapFieldDismissCreate", "btnMapFieldCancelCreate"].forEach((id) => {
     const btn = $(id);
     if (!btn) return;
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setMapFieldCreateOpen(false);
+    ["pointerdown", "click"].forEach((evt) => {
+      btn.addEventListener(evt, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setMapFieldCreateOpen(false);
+      });
     });
   });
   const mapFieldPanel = $("mapFieldPanel");
