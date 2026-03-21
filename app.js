@@ -9640,11 +9640,21 @@ SpecCom.helpers.applyAuthModeFromHash = function(){
 
 SpecCom.helpers.handleSignOut = async function(){
   persistDemoBootstrapSession(false);
+  closeMenuModal();
+  clearSupabaseAuthStorage();
   if (isDemo){
     state.activeNode = null;
     state.session = null;
     state.user = null;
     state.profile = null;
+    isDemo = false;
+    appMode = "real";
+    state.activeProject = null;
+    state.activeSite = null;
+    document.body.classList.remove("map-mode", "sidebar-open", "map-create-open");
+    if (window.location.hash){
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
     showAuth(true);
     setWhoami();
     clearProof();
@@ -9662,8 +9672,17 @@ SpecCom.helpers.handleSignOut = async function(){
     state.session = null;
     state.user = null;
     state.profile = null;
+    isDemo = false;
+    appMode = "real";
+    state.activeProject = null;
+    state.activeSite = null;
+    document.body.classList.remove("map-mode", "sidebar-open", "map-create-open");
+    if (window.location.hash){
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
     showAuth(true);
     setWhoami();
+    clearProof();
   }
 };
 
@@ -19045,7 +19064,7 @@ async function openOrCreateSpliceAtCurrentLocation({ center = true, hidePanel = 
     );
   }
   if (!siteId){
-    toast("Location captured", "No nearby assigned splice location, and this account cannot create new pins for this project.", "error");
+    toast("Location captured", "No nearby assigned splice location, and this account cannot create new pins for this project.");
     return null;
   }
   await openLocationForField(siteId, { center: true, forAdd: true });
