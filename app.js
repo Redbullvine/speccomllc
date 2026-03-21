@@ -2842,6 +2842,13 @@ function reportPinErrorToast(title, error){
   console.error(error);
 }
 
+function isProjectAccessDeniedError(error){
+  const message = String(error?.message || "").toLowerCase();
+  return message.includes("no access to project")
+    || message.includes("permission denied")
+    || message.includes("not authorized");
+}
+
 function stripGpsFields(payload){
   const { gps_lat, gps_lng, gps_accuracy_m, ...rest } = payload || {};
   return rest;
@@ -19033,10 +19040,14 @@ async function openOrCreateSpliceAtCurrentLocation({ center = true, hidePanel = 
         locationType: "Splice Point",
         openedFromFieldCapture: true,
         createdAt: gps.captured_at || nowISO(),
+        suppressAccessDeniedToast: true,
       }
     );
   }
-  if (!siteId) return null;
+  if (!siteId){
+    toast("Location captured", "No nearby assigned splice location, and this account cannot create new pins for this project.", "error");
+    return null;
+  }
   await openLocationForField(siteId, { center: true, forAdd: true });
   focusSiteOnMap(siteId);
   if (hidePanel){
@@ -20286,6 +20297,9 @@ async function createSiteFromMapClick(coords, siteName, options = {}){
     if (rpcRes.error){
       debugLog("[dropPin] rpc error", rpcRes.error);
       const errorMessage = String(rpcRes.error.message || "").toLowerCase();
+      if (options.suppressAccessDeniedToast && isProjectAccessDeniedError(rpcRes.error)){
+        return null;
+      }
       if (errorMessage.includes("schema cache")){
         console.error(rpcRes.error);
         toast("Pin save error", "Schema cache is out of date. Refresh and try again.", "error");
@@ -20307,6 +20321,9 @@ async function createSiteFromMapClick(coords, siteName, options = {}){
         }
         if (fallback.error){
           debugLog("[dropPin] fallback error", fallback.error);
+          if (options.suppressAccessDeniedToast && isProjectAccessDeniedError(fallback.error)){
+            return null;
+          }
           reportPinErrorToast("Pin save error", fallback.error);
           return;
         }
