@@ -283,6 +283,8 @@ const state = {
     nearestSiteId: "",
     nearestSiteDistanceM: null,
     fieldSelectedSiteId: "",
+    fieldCreateOpen: false,
+    fieldCreateRecentlyClosedUntil: 0,
     siteWorkflowById: new Map(),
     lastFieldGpsCheckAt: 0,
     importPreviewMarkers: [],
@@ -18845,7 +18847,9 @@ function renderMapFieldPanel(){
   const createWrap = $("mapFieldCreateWrap");
   const card = $("mapFieldLocationCard");
   if (!gpsState || !actionsWrap || !createWrap || !card) return;
-  const createOpen = !createWrap.hidden;
+  const createOpen = Boolean(state.map.fieldCreateOpen);
+  createWrap.hidden = !createOpen;
+  createWrap.style.display = createOpen ? "grid" : "none";
   if (panel){
     panel.classList.toggle("is-create-open", createOpen);
   }
@@ -18927,6 +18931,10 @@ function setMapFieldCreateOpen(open){
   const gpsState = $("mapFieldGpsState");
   const actionsWrap = $("mapFieldNearbyActions");
   const locationCard = $("mapFieldLocationCard");
+  state.map.fieldCreateOpen = Boolean(open);
+  if (!open){
+    state.map.fieldCreateRecentlyClosedUntil = Date.now() + 450;
+  }
   document.body.classList.toggle("map-create-open", Boolean(open));
   if (panel){
     panel.classList.toggle("is-create-open", Boolean(open));
@@ -18937,6 +18945,7 @@ function setMapFieldCreateOpen(open){
   });
   if (!wrap) return;
   wrap.hidden = !open;
+  wrap.style.display = open ? "grid" : "none";
   if (open){
     state.map.dropPinMode = false;
     state.map.pendingLatLng = null;
@@ -26389,6 +26398,13 @@ function wireUI(){
       });
     });
   });
+  document.addEventListener("pointerdown", (e) => {
+    const closeBtn = e.target?.closest?.("#btnMapFieldCreateClose, #btnMapFieldDismissCreate, #btnMapFieldCancelCreate");
+    if (!closeBtn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setMapFieldCreateOpen(false);
+  }, true);
   const mapFieldPanel = $("mapFieldPanel");
   if (mapFieldPanel){
     mapFieldPanel.addEventListener("click", async (e) => {
@@ -26445,6 +26461,7 @@ function wireUI(){
         return;
       }
       if (id === "btnMapShowCreateLocation"){
+        if (Date.now() < Number(state.map.fieldCreateRecentlyClosedUntil || 0)) return;
         setMapFieldCreateOpen(true);
         return;
       }
