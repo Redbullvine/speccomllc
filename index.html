@@ -553,7 +553,10 @@
               <div id="mapFieldPanel" class="map-field-panel">
                 <div id="mapFieldPanelHeader" class="row" style="justify-content:space-between; align-items:center; gap:8px;">
                   <div class="site-panel-title">Field Location</div>
-                  <button id="btnMapUseMyLocation" class="btn secondary small" type="button">Use My Current Location</button>
+                  <div class="row" style="gap:8px;">
+                    <button id="btnMapFieldHide" class="btn ghost small" type="button">Hide</button>
+                    <button id="btnMapUseMyLocation" class="btn secondary small" type="button">Use My Current Location</button>
+                  </div>
                 </div>
                 <div id="mapFieldGpsState" class="muted small" style="margin-top:6px;">GPS not captured yet.</div>
                 <div id="mapFieldNearbyActions" class="map-field-actions" style="margin-top:8px;"></div>
@@ -579,6 +582,7 @@
                 </div>
                 <div id="mapFieldLocationCard" class="map-field-location-card" hidden></div>
               </div>
+              <button id="btnMapFieldShow" class="btn secondary small map-field-show-btn" type="button" style="display:none;">Field</button>
               <button id="btnLayersShow" class="map-menu-btn" type="button" aria-label="Show Layers" style="display:none; right:14px; left:auto; top:16px;">
                 Layers
               </button>

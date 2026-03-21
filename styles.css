@@ -1476,6 +1476,12 @@ a{color:inherit; text-decoration:none;}
   display:grid;
   gap:4px;
 }
+.map-field-show-btn{
+  position:absolute;
+  left:14px;
+  top:14px;
+  z-index:986;
+}
 .map-field-actions{
   display:flex;
   flex-wrap:wrap;
@@ -2430,6 +2436,9 @@ body.map-create-open #mapSidebarToggle{
   .map-field-panel{
     top:62px;
     width:calc(100% - 28px);
+  }
+  .map-field-show-btn{
+    top:62px;
   }
   .map-field-create{
     position:fixed;

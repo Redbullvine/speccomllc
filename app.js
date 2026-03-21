@@ -282,6 +282,7 @@ const state = {
     nearbyRadiusM: 30,
     nearestSiteId: "",
     nearestSiteDistanceM: null,
+    fieldPanelVisible: true,
     fieldSelectedSiteId: "",
     fieldCreateOpen: false,
     fieldCreateRecentlyClosedUntil: 0,
@@ -18842,11 +18843,19 @@ function getMapFieldSelectedSite(){
 
 function renderMapFieldPanel(){
   const panel = $("mapFieldPanel");
+  const showBtn = $("btnMapFieldShow");
   const gpsState = $("mapFieldGpsState");
   const actionsWrap = $("mapFieldNearbyActions");
   const createWrap = $("mapFieldCreateWrap");
   const card = $("mapFieldLocationCard");
-  if (!gpsState || !actionsWrap || !createWrap || !card) return;
+  if (!panel || !gpsState || !actionsWrap || !createWrap || !card) return;
+  const panelVisible = state.map.fieldPanelVisible !== false;
+  panel.hidden = !panelVisible;
+  panel.style.display = panelVisible ? "grid" : "none";
+  if (showBtn){
+    showBtn.style.display = panelVisible ? "none" : "";
+  }
+  if (!panelVisible) return;
   const createOpen = Boolean(state.map.fieldCreateOpen);
   createWrap.hidden = !createOpen;
   createWrap.style.display = createOpen ? "grid" : "none";
@@ -18924,6 +18933,16 @@ function renderMapFieldPanel(){
   `;
 }
 
+function setMapFieldPanelVisible(visible){
+  const next = Boolean(visible);
+  state.map.fieldPanelVisible = next;
+  if (!next && state.map.fieldCreateOpen){
+    state.map.fieldCreateOpen = false;
+    document.body.classList.remove("map-create-open");
+  }
+  renderMapFieldPanel();
+}
+
 function setMapFieldCreateOpen(open){
   const wrap = $("mapFieldCreateWrap");
   const panel = $("mapFieldPanel");
@@ -18932,6 +18951,9 @@ function setMapFieldCreateOpen(open){
   const actionsWrap = $("mapFieldNearbyActions");
   const locationCard = $("mapFieldLocationCard");
   state.map.fieldCreateOpen = Boolean(open);
+  if (open){
+    state.map.fieldPanelVisible = true;
+  }
   if (!open){
     state.map.fieldCreateRecentlyClosedUntil = Date.now() + 450;
   }
@@ -26384,8 +26406,17 @@ function wireUI(){
       const gps = await requestMapCurrentLocation({ center: true, silent: false });
       if (gps){
         toast("Location captured", "Nearby saved locations checked.");
+        setMapFieldPanelVisible(false);
       }
     });
+  }
+  const mapFieldHideBtn = $("btnMapFieldHide");
+  if (mapFieldHideBtn){
+    mapFieldHideBtn.addEventListener("click", () => setMapFieldPanelVisible(false));
+  }
+  const mapFieldShowBtn = $("btnMapFieldShow");
+  if (mapFieldShowBtn){
+    mapFieldShowBtn.addEventListener("click", () => setMapFieldPanelVisible(true));
   }
   ["btnMapFieldCreateClose", "btnMapFieldDismissCreate", "btnMapFieldCancelCreate"].forEach((id) => {
     const btn = $(id);
