@@ -18923,10 +18923,18 @@ function renderMapFieldPanel(){
 function setMapFieldCreateOpen(open){
   const wrap = $("mapFieldCreateWrap");
   const panel = $("mapFieldPanel");
+  const panelHeader = $("mapFieldPanelHeader");
+  const gpsState = $("mapFieldGpsState");
+  const actionsWrap = $("mapFieldNearbyActions");
+  const locationCard = $("mapFieldLocationCard");
   document.body.classList.toggle("map-create-open", Boolean(open));
   if (panel){
     panel.classList.toggle("is-create-open", Boolean(open));
   }
+  [panelHeader, gpsState, actionsWrap, locationCard].forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+    el.style.display = open ? "none" : "";
+  });
   if (!wrap) return;
   wrap.hidden = !open;
   if (open){

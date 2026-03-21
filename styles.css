@@ -1545,7 +1545,6 @@ body.map-create-open #mapFieldPanel.is-create-open{
   border-color:transparent;
   box-shadow:none;
   padding:0;
-  pointer-events:none;
 }
 body.map-create-open #mapFieldCreateWrap{
   pointer-events:auto;
@@ -1555,6 +1554,10 @@ body.map-create-open #mapFieldGpsState,
 body.map-create-open #mapFieldNearbyActions,
 body.map-create-open #mapFieldLocationCard{
   display:none !important;
+}
+body.map-create-open #mapSidebarToggle{
+  opacity:0 !important;
+  pointer-events:none !important;
 }
 .redline-entry-btn{
   position:absolute;
