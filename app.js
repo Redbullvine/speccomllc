@@ -127,6 +127,7 @@ const state = {
       location: [],
     },
     draft: null,
+    routeInvoiceNumber: "",
   },
   invoiceFiles: [],
   pendingSites: [],
@@ -9516,8 +9517,78 @@ function syncHashForView(viewId){
   window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${nextHash}`);
 }
 
+function decodeInvoiceUrlToken(value){
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    return decodeURIComponent(raw).trim();
+  } catch {
+    return raw.trim();
+  }
+}
+
+function getInvoiceIdFromUrl(locationLike = window.location){
+  const hash = String(locationLike?.hash || "").trim();
+  if (hash){
+    const normalizedHash = hash.startsWith("#") ? hash.slice(1) : hash;
+    const hashMatch = normalizedHash.match(/(?:^|[?&])invoice=([^&]+)/i);
+    if (hashMatch?.[1]){
+      const invoiceFromHash = decodeInvoiceUrlToken(hashMatch[1]);
+      if (invoiceFromHash) return invoiceFromHash;
+    }
+  }
+  const pathname = String(locationLike?.pathname || "").trim();
+  const pathMatch = pathname.match(/\/invoice\/([^/?#]+)/i);
+  if (!pathMatch?.[1]) return "";
+  return decodeInvoiceUrlToken(pathMatch[1]);
+}
+
+function syncInvoiceDeepLinkFromUrl({ activateView = false } = {}){
+  const invoiceId = getInvoiceIdFromUrl();
+  const nextInvoiceId = String(invoiceId || "").trim();
+  const currentInvoiceId = String(state.officeInvoices.routeInvoiceNumber || "").trim();
+  if (nextInvoiceId){
+    state.officeInvoices.routeInvoiceNumber = nextInvoiceId;
+    if (activateView && state.user && isViewAllowed("viewInvoices")){
+      setActiveView("viewInvoices");
+    } else if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
+      renderInvoicePanel();
+    }
+    return true;
+  }
+  if (!currentInvoiceId) return false;
+  state.officeInvoices.routeInvoiceNumber = "";
+  if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
+    renderInvoicePanel();
+  }
+  return false;
+}
+
+function setInvoiceDeepLinkHash(invoiceId){
+  const clean = String(invoiceId || "").trim();
+  if (!clean || !window.history?.replaceState) return;
+  const nextHash = `#invoice=${encodeURIComponent(clean)}`;
+  if (window.location.hash === nextHash) return;
+  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${nextHash}`);
+}
+
+function clearInvoiceDeepLinkUrl(){
+  if (!window.history?.replaceState) return;
+  const pathname = String(window.location.pathname || "");
+  const hasInvoicePath = /\/invoice\/[^/?#]+/i.test(pathname);
+  const hasInvoiceHash = /(?:^|[?&])invoice=/i.test(String(window.location.hash || "").replace(/^#/, ""));
+  if (!hasInvoicePath && !hasInvoiceHash) return;
+  let nextPath = pathname;
+  if (hasInvoicePath){
+    nextPath = pathname.replace(/\/invoice\/[^/?#]+/i, "/");
+    if (!nextPath) nextPath = "/";
+  }
+  window.history.replaceState(null, "", `${nextPath}${window.location.search}`);
+}
+
 function getDefaultView({ allowHash = false } = {}){
   if (CONTROL_CENTER_DEV_MODE) return "viewDashboard";
+  if (getInvoiceIdFromUrl() && isViewAllowed("viewInvoices")) return "viewInvoices";
   if (allowHash){
     const hashView = parseViewFromHash();
     if (hashView && isViewAllowed(hashView)) return hashView;
@@ -22605,6 +22676,8 @@ function pushOfficeRecentValue(key, value){
 
 function createOfficeInvoiceDraft(){
   ensureOfficeInvoiceStateLoaded();
+  state.officeInvoices.routeInvoiceNumber = "";
+  clearInvoiceDeepLinkUrl();
   const recents = state.officeInvoices.recents || {};
   state.officeInvoices.draft = {
     id: `office-invoice-${Date.now()}`,
@@ -22628,11 +22701,113 @@ function openOfficeInvoiceDraft(invoiceId){
   ensureOfficeInvoiceStateLoaded();
   const match = (state.officeInvoices.records || []).find((row) => String(row.id) === String(invoiceId));
   if (!match) return;
+  state.officeInvoices.routeInvoiceNumber = "";
+  clearInvoiceDeepLinkUrl();
   state.officeInvoices.draft = JSON.parse(JSON.stringify(match));
   if (!Array.isArray(state.officeInvoices.draft.line_items) || !state.officeInvoices.draft.line_items.length){
     state.officeInvoices.draft.line_items = [createOfficeInvoiceLineItem()];
   }
   renderInvoicePanel();
+}
+
+function normalizeOfficeInvoiceLookupValue(value){
+  return String(value || "").trim().toLowerCase();
+}
+
+function findOfficeInvoiceByNumber(invoiceNumber){
+  const normalizedNeedle = normalizeOfficeInvoiceLookupValue(invoiceNumber);
+  if (!normalizedNeedle) return null;
+  return (state.officeInvoices.records || []).find((row) => {
+    return normalizeOfficeInvoiceLookupValue(row?.invoice_number) === normalizedNeedle;
+  }) || null;
+}
+
+function openOfficeInvoiceByNumber(invoiceNumber, { syncUrl = true } = {}){
+  ensureOfficeInvoiceStateLoaded();
+  const clean = String(invoiceNumber || "").trim();
+  if (!clean) return false;
+  state.officeInvoices.routeInvoiceNumber = clean;
+  state.officeInvoices.draft = null;
+  if (state.user && (document.querySelector(".view.active")?.id || "") !== "viewInvoices" && isViewAllowed("viewInvoices")){
+    setActiveView("viewInvoices");
+  }
+  if (syncUrl){
+    setInvoiceDeepLinkHash(clean);
+  }
+  renderInvoicePanel();
+  return true;
+}
+
+function closeOfficeInvoiceDeepLink({ syncUrl = true } = {}){
+  state.officeInvoices.routeInvoiceNumber = "";
+  if (syncUrl){
+    clearInvoiceDeepLinkUrl();
+  }
+  renderInvoicePanel();
+}
+
+function renderOfficeInvoiceDetailView(invoice){
+  const items = Array.isArray(invoice?.line_items) ? invoice.line_items : [];
+  const totals = computeOfficeInvoiceTotals({ line_items: items });
+  const totalValue = Number.isFinite(Number(invoice?.total)) ? Number(invoice.total) : totals.total;
+  return `
+    <div class="card" style="margin-top:12px;">
+      <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+        <div>
+          <h3 style="margin:0;">Invoice ${escapeHtml(invoice?.invoice_number || "-")}</h3>
+          <div class="muted small">Shared deep-link view</div>
+        </div>
+        <div class="row" style="gap:8px; flex-wrap:wrap;">
+          <button class="btn ghost small" type="button" data-office-action="backToInvoiceList">Back to Invoice List</button>
+          <button class="btn small" type="button" data-office-action="openInvoice" data-office-invoice-id="${escapeHtml(invoice?.id || "")}">Open in Editor</button>
+        </div>
+      </div>
+      <div class="grid cols-2" style="margin-top:10px;">
+        <div><div class="small muted">Invoice Number</div><div>${escapeHtml(invoice?.invoice_number || "-")}</div></div>
+        <div><div class="small muted">Company / Bill To</div><div>${escapeHtml(invoice?.company_creating_invoice || "-")} / ${escapeHtml(invoice?.bill_to || "-")}</div></div>
+        <div><div class="small muted">Date / Week Ending</div><div>${escapeHtml(invoice?.invoice_date || "-")} / ${escapeHtml(invoice?.week_ending || "-")}</div></div>
+        <div><div class="small muted">Total</div><div>${formatMoney(totalValue || 0)}</div></div>
+      </div>
+      <div style="margin-top:10px;">
+        <div class="small muted">Line items</div>
+        ${items.length
+          ? `<div style="overflow:auto; margin-top:6px;">
+              <table class="table billing-table">
+                <thead><tr><th>Code</th><th>Description</th><th>Qty</th><th>Unit Rate</th><th>Total</th></tr></thead>
+                <tbody>
+                  ${items.map((item) => `
+                    <tr>
+                      <td>${escapeHtml(item?.code || "-")}</td>
+                      <td>${escapeHtml(item?.description || "-")}</td>
+                      <td>${escapeHtml(String(item?.qty ?? "-"))}</td>
+                      <td>${formatMoney(item?.unit_rate || 0)}</td>
+                      <td>${formatMoney(getOfficeInvoiceLineTotal(item))}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>`
+          : `<div class="muted small" style="margin-top:6px;">No line items.</div>`
+        }
+      </div>
+      <div style="margin-top:10px;">
+        <div class="small muted">Notes</div>
+        <div>${escapeHtml(invoice?.notes || "-")}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderOfficeInvoiceNotFound(invoiceNumber){
+  return `
+    <div class="card" style="margin-top:12px;">
+      <h3 style="margin:0;">Invoice not found</h3>
+      <div class="muted" style="margin-top:8px;">Invoice number "${escapeHtml(invoiceNumber || "")}" was not found.</div>
+      <div style="margin-top:12px;">
+        <button class="btn" type="button" data-office-action="backToInvoiceList">Back to Invoice List</button>
+      </div>
+    </div>
+  `;
 }
 
 function saveOfficeInvoiceWithStatus(status){
@@ -22764,6 +22939,24 @@ function renderInvoicePanel(){
   if (!wrap) return;
   ensureOfficeInvoiceStateLoaded();
   const invoices = state.officeInvoices.records || [];
+  const urlInvoiceNumber = String(getInvoiceIdFromUrl() || "").trim();
+  if (urlInvoiceNumber){
+    state.officeInvoices.routeInvoiceNumber = urlInvoiceNumber;
+  }
+  const routeInvoiceNumber = String(state.officeInvoices.routeInvoiceNumber || "").trim();
+  if (routeInvoiceNumber){
+    const matchedInvoice = findOfficeInvoiceByNumber(routeInvoiceNumber);
+    wrap.innerHTML = `
+      <div class="field-stack" style="gap:10px;">
+        <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+          <div class="muted small">Telecom weekly invoice desk</div>
+          <button class="btn" type="button" data-office-action="createInvoice">Create Invoice</button>
+        </div>
+        ${matchedInvoice ? renderOfficeInvoiceDetailView(matchedInvoice) : renderOfficeInvoiceNotFound(routeInvoiceNumber)}
+      </div>
+    `;
+    return;
+  }
   const draft = state.officeInvoices.draft;
   wrap.innerHTML = `
     <div class="field-stack" style="gap:10px;">
@@ -22782,7 +22975,7 @@ function renderInvoicePanel(){
                 <tbody>
                   ${invoices.map((row) => `
                     <tr>
-                      <td>${escapeHtml(row.invoice_number || "-")}</td>
+                      <td><button class="btn ghost small" type="button" data-office-action="openInvoiceDeepLink" data-office-invoice-number="${escapeHtml(row.invoice_number || "")}">${escapeHtml(row.invoice_number || "-")}</button></td>
                       <td>${escapeHtml(row.invoice_date || "-")}</td>
                       <td>${escapeHtml(row.week_ending || "-")}</td>
                       <td>${escapeHtml(row.company_creating_invoice || "-")}</td>
@@ -25074,9 +25267,13 @@ async function initAuth(){
   SpecCom.helpers.applyAuthModeFromHash();
   window.addEventListener("hashchange", () => {
     SpecCom.helpers.applyAuthModeFromHash();
+    if (syncInvoiceDeepLinkFromUrl({ activateView: true })) return;
     const hashView = parseViewFromHash();
     if (!hashView || !state.user || !isViewAllowed(hashView)) return;
     setActiveView(hashView, { syncHash: false });
+  });
+  window.addEventListener("popstate", () => {
+    syncInvoiceDeepLinkFromUrl({ activateView: true });
   });
 
   if (window.location.pathname.endsWith("/demo-login")){
@@ -26884,13 +27081,22 @@ function wireUI(){
       if (!btn) return;
       const action = String(btn.dataset.officeAction || "");
       const invoiceId = String(btn.dataset.officeInvoiceId || "");
+      const invoiceNumber = String(btn.dataset.officeInvoiceNumber || "");
       const lineId = String(btn.dataset.officeLineId || "");
       if (action === "createInvoice"){
         createOfficeInvoiceDraft();
         return;
       }
+      if (action === "openInvoiceDeepLink"){
+        openOfficeInvoiceByNumber(invoiceNumber, { syncUrl: true });
+        return;
+      }
       if (action === "openInvoice"){
         openOfficeInvoiceDraft(invoiceId);
+        return;
+      }
+      if (action === "backToInvoiceList"){
+        closeOfficeInvoiceDeepLink({ syncUrl: true });
         return;
       }
       if (action === "addLineItem"){
