@@ -60,7 +60,7 @@ using (
     from public.profiles p
     where p.id = auth.uid()
       and (
-        public.effective_role_code(p.role_code, p.role) = 'ROOT'
+        upper(coalesce(p.role, '')) = 'ROOT'
         or (p.org_id = ks_invoice_import_batches.org_id and coalesce(p.can_view_invoices, false))
       )
   )
@@ -77,7 +77,7 @@ with check (
     from public.profiles p
     where p.id = auth.uid()
       and (
-        public.effective_role_code(p.role_code, p.role) = 'ROOT'
+        upper(coalesce(p.role, '')) = 'ROOT'
         or (p.org_id = ks_invoice_import_batches.org_id and coalesce(p.can_view_invoices, false))
       )
   )
@@ -94,7 +94,7 @@ using (
     from public.profiles p
     where p.id = auth.uid()
       and (
-        public.effective_role_code(p.role_code, p.role) = 'ROOT'
+        upper(coalesce(p.role, '')) = 'ROOT'
         or (p.org_id = ks_invoice_import_batches.org_id and coalesce(p.can_view_invoices, false))
       )
   )
@@ -105,7 +105,7 @@ with check (
     from public.profiles p
     where p.id = auth.uid()
       and (
-        public.effective_role_code(p.role_code, p.role) = 'ROOT'
+        upper(coalesce(p.role, '')) = 'ROOT'
         or (p.org_id = ks_invoice_import_batches.org_id and coalesce(p.can_view_invoices, false))
       )
   )
@@ -121,7 +121,7 @@ using (
     select 1
     from public.profiles p
     where p.id = auth.uid()
-      and public.effective_role_code(p.role_code, p.role) = 'ROOT'
+      and upper(coalesce(p.role, '')) = 'ROOT'
   )
 );
 
@@ -136,7 +136,7 @@ using (
     from public.profiles p
     where p.id = auth.uid()
       and (
-        public.effective_role_code(p.role_code, p.role) = 'ROOT'
+        upper(coalesce(p.role, '')) = 'ROOT'
         or (p.org_id = ks_invoice_records.org_id and coalesce(p.can_view_invoices, false))
       )
   )
@@ -153,7 +153,7 @@ with check (
     from public.profiles p
     where p.id = auth.uid()
       and (
-        public.effective_role_code(p.role_code, p.role) = 'ROOT'
+        upper(coalesce(p.role, '')) = 'ROOT'
         or (p.org_id = ks_invoice_records.org_id and coalesce(p.can_view_invoices, false))
       )
   )
@@ -170,7 +170,7 @@ using (
     from public.profiles p
     where p.id = auth.uid()
       and (
-        public.effective_role_code(p.role_code, p.role) = 'ROOT'
+        upper(coalesce(p.role, '')) = 'ROOT'
         or (p.org_id = ks_invoice_records.org_id and coalesce(p.can_view_invoices, false))
       )
   )
@@ -181,7 +181,7 @@ with check (
     from public.profiles p
     where p.id = auth.uid()
       and (
-        public.effective_role_code(p.role_code, p.role) = 'ROOT'
+        upper(coalesce(p.role, '')) = 'ROOT'
         or (p.org_id = ks_invoice_records.org_id and coalesce(p.can_view_invoices, false))
       )
   )
@@ -197,6 +197,7 @@ using (
     select 1
     from public.profiles p
     where p.id = auth.uid()
-      and public.effective_role_code(p.role_code, p.role) = 'ROOT'
+      and upper(coalesce(p.role, '')) = 'ROOT'
   )
 );
+
