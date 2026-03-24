@@ -104,6 +104,9 @@ const state = {
   session: null,
   user: null,
   profile: null, // {role, display_name}
+  activeOrgId: null,
+  orgContextRequired: false,
+  orgContextPromptShown: false,
   activeProject: null,
   activeNode: null,
   activeSite: null,
@@ -137,6 +140,8 @@ const state = {
     importing: false,
     lastSummary: null,
     lastWarnings: [],
+    missingOrgContext: false,
+    pendingImportFile: null,
     showWelcomeOverlay: false,
     welcomeTimer: null,
   },
@@ -1188,6 +1193,7 @@ function safeLocalStorageRemove(key){
 }
 
 const CURRENT_PROJECT_KEY = "current_project_id";
+const ACTIVE_ORG_KEY = "speccom.active_org_id";
 const MAP_PANEL_VISIBLE_KEY = "map_panel_visible";
 const SIDEBAR_OPEN_KEY = "speccom.ui.sidebarOpen";
 const SIDEBAR_TAB_KEY = "speccom.ui.sidebarTab";
@@ -1608,6 +1614,113 @@ function setSavedProjectPreference(projectId){
   } else {
     safeLocalStorageRemove(CURRENT_PROJECT_KEY);
   }
+}
+
+function getSavedActiveOrgPreference(){
+  return safeLocalStorageGet(ACTIVE_ORG_KEY);
+}
+
+function setSavedActiveOrgPreference(orgId){
+  if (orgId){
+    safeLocalStorageSet(ACTIVE_ORG_KEY, orgId);
+  } else {
+    safeLocalStorageRemove(ACTIVE_ORG_KEY);
+  }
+}
+
+function setActiveOrgContext(orgId, { persist = true } = {}){
+  const clean = String(orgId || "").trim() || null;
+  state.activeOrgId = clean;
+  state.orgContextRequired = !clean && Boolean(state.user);
+  if (clean){
+    state.orgContextPromptShown = false;
+  }
+  if (persist){
+    setSavedActiveOrgPreference(clean);
+  }
+  return clean;
+}
+
+async function initializeOrgContext({ attemptRepair = true } = {}){
+  if (!state.user){
+    setActiveOrgContext(null);
+    return null;
+  }
+  let orgId = String(
+    state.activeProject?.org_id
+    || state.profile?.org_id
+    || state.activeOrgId
+    || getSavedActiveOrgPreference()
+    || ""
+  ).trim() || null;
+  if (!orgId && attemptRepair && state.client){
+    try { await state.client.rpc("fn_claim_profile_invite"); } catch {}
+    try {
+      const { data } = await state.client
+        .from("profiles")
+        .select("org_id")
+        .eq("id", state.user.id)
+        .maybeSingle();
+      const claimedOrgId = String(data?.org_id || "").trim() || null;
+      if (claimedOrgId){
+        orgId = claimedOrgId;
+        state.profile = { ...(state.profile || {}), org_id: claimedOrgId };
+        window.currentUserProfile = state.profile;
+      }
+    } catch {}
+    if (!orgId){
+      try {
+        const { data: orgRows, error: orgReadError } = await state.client
+          .from("orgs")
+          .select("id")
+          .limit(2);
+        if (!orgReadError && Array.isArray(orgRows) && orgRows.length === 1){
+          const onlyOrgId = String(orgRows[0]?.id || "").trim() || null;
+          if (onlyOrgId){
+            const { error: updateError } = await state.client
+              .from("profiles")
+              .update({ org_id: onlyOrgId })
+              .eq("id", state.user.id);
+            if (!updateError){
+              orgId = onlyOrgId;
+              state.profile = { ...(state.profile || {}), org_id: onlyOrgId };
+              window.currentUserProfile = state.profile;
+            }
+          }
+        }
+      } catch {}
+    }
+  }
+  setActiveOrgContext(orgId);
+  if (!orgId){
+    console.warn("[org-context] undefined", {
+      user_id: state.user?.id || null,
+    });
+    if (!state.orgContextPromptShown){
+      state.orgContextPromptShown = true;
+      toast("Organization required", "Select or create a project/org to continue.");
+      queueMicrotask(() => {
+        if (state.user){
+          openProjectsModal();
+        }
+      });
+    }
+    return null;
+  }
+  console.info("[org-context] active", {
+    user_id: state.user?.id || null,
+    org_id: orgId,
+  });
+  if (state.ksInvoices?.pendingImportFile && !state.ksInvoices.importing){
+    const pending = state.ksInvoices.pendingImportFile;
+    state.ksInvoices.pendingImportFile = null;
+    state.ksInvoices.missingOrgContext = false;
+    toast("Org context resolved", "Retrying invoice ZIP import.");
+    queueMicrotask(() => {
+      void handleKsInvoiceZipImport(pending);
+    });
+  }
+  return orgId;
 }
 
 function getSavedMapPanelVisible(){
@@ -17432,6 +17545,7 @@ async function createProject(){
     if (nextOrgId){
       state.profile = { ...(state.profile || {}), org_id: nextOrgId };
       window.currentUserProfile = state.profile;
+      setActiveOrgContext(nextOrgId);
     }
     return nextOrgId;
   };
@@ -17456,6 +17570,7 @@ async function createProject(){
           orgId = onlyOrgId;
           state.profile = { ...(state.profile || {}), org_id: orgId };
           window.currentUserProfile = state.profile;
+          setActiveOrgContext(orgId);
           return orgId;
         }
       }
@@ -17463,6 +17578,7 @@ async function createProject(){
     return null;
   };
   await ensureProjectOrgId();
+  setActiveOrgContext(orgId || state.profile?.org_id || null);
   let { data: projectId, error } = await state.client
     .rpc("fn_create_project", { p_name: name, p_description: description ?? null, p_org_id: orgId });
   if (error){
@@ -17931,8 +18047,7 @@ function setLastMessageReadAt(filter, iso){
 }
 
 function getMessageOrgId(){
-  if (state.profile?.org_id) return state.profile.org_id;
-  return null;
+  return state.activeOrgId || state.profile?.org_id || null;
 }
 
 function countUnreadMessages(){
@@ -18254,6 +18369,15 @@ async function loadProjects(){
     renderProjects();
     return;
   }
+  const orgId = await initializeOrgContext({ attemptRepair: true });
+  const userId = state.user?.id || null;
+  if (!orgId){
+    state.projects = [];
+    state.activeProject = null;
+    renderProjects();
+    console.warn("[projects] org undefined", { user_id: userId, org_id: null, count: 0 });
+    return;
+  }
   const baseSelect = "id, org_id, name, description, created_at, location, job_number, is_demo, created_by";
   let projects = [];
 
@@ -18261,6 +18385,7 @@ async function loadProjects(){
     const { data, error } = await state.client
       .from("projects")
       .select(baseSelect)
+      .eq("org_id", orgId)
       .order("name");
     if (error){
       toast("Projects load error", error.message);
@@ -18268,10 +18393,23 @@ async function loadProjects(){
     }
     projects = data || [];
     state.projects = projects;
-    if (state.activeProject){
-      const match = state.projects.find(p => p.id === state.activeProject.id);
-      state.activeProject = match || null;
-    }
+    const savedProjectId = String(
+      state.activeProject?.id
+      || state.profile?.current_project_id
+      || getSavedProjectPreference()
+      || ""
+    ).trim();
+    const preferredProject = savedProjectId
+      ? state.projects.find((p) => String(p?.id || "") === savedProjectId)
+      : null;
+    state.activeProject = preferredProject || state.projects[0] || null;
+    setSavedProjectPreference(state.activeProject?.id || null);
+    setActiveOrgContext(state.activeProject?.org_id || orgId);
+    console.info("[projects] loaded", {
+      user_id: userId,
+      org_id: orgId,
+      count: state.projects.length,
+    });
     renderProjects();
     return;
   }
@@ -18303,6 +18441,7 @@ async function loadProjects(){
     .from("projects")
     .select(baseSelect)
     .eq("created_by", state.user.id)
+    .eq("org_id", orgId)
     .order("name");
   if (!createdResp.error){
     const existing = new Set(projects.map(p => p.id));
@@ -18316,17 +18455,30 @@ async function loadProjects(){
         .from("projects")
         .select(baseSelect.replace(", created_by", ""))
         .order("name");
-      projects = data || projects;
+      projects = (data || projects).filter((row) => String(row?.org_id || "") === String(orgId));
     }
   }
 
-  state.projects = projects;
-  if (state.activeProject){
-    const match = state.projects.find(p => p.id === state.activeProject.id);
-    state.activeProject = match || null;
-  }
+  state.projects = (projects || []).filter((row) => String(row?.org_id || "") === String(orgId));
+  const savedProjectId = String(
+    state.activeProject?.id
+    || state.profile?.current_project_id
+    || getSavedProjectPreference()
+    || ""
+  ).trim();
+  const preferredProject = savedProjectId
+    ? state.projects.find((p) => String(p?.id || "") === savedProjectId)
+    : null;
+  state.activeProject = preferredProject || state.projects[0] || null;
+  setSavedProjectPreference(state.activeProject?.id || null);
+  setActiveOrgContext(state.activeProject?.org_id || orgId);
   debugLog("Loaded projects", state.projects);
   debugLog("Current project id", state.activeProject?.id || null);
+  console.info("[projects] loaded", {
+    user_id: userId,
+    org_id: orgId,
+    count: state.projects.length,
+  });
   renderProjects();
 }
 
@@ -21182,6 +21334,15 @@ async function loadBillingLocations(projectId){
 function setActiveProjectById(id){
   const next = state.projects.find(p => p.id === id) || null;
   state.activeProject = next;
+  setActiveOrgContext(next?.org_id || state.profile?.org_id || state.activeOrgId || null);
+  if (state.activeOrgId && state.ksInvoices?.pendingImportFile && !state.ksInvoices.importing){
+    const pending = state.ksInvoices.pendingImportFile;
+    state.ksInvoices.pendingImportFile = null;
+    state.ksInvoices.missingOrgContext = false;
+    queueMicrotask(() => {
+      void handleKsInvoiceZipImport(pending);
+    });
+  }
   clearImportPreviewMarkers();
   loadKmzPhotoOverridesForActiveProject();
   void loadKmzSnapshotForProject(next?.id || null, { silent: true });
@@ -23160,9 +23321,15 @@ async function handleKsInvoiceZipImport(file){
   }
   const orgId = getInvoiceScopeOrgId();
   if (!orgId){
-    toast("Missing org", "No organization context for invoice import.", "error");
+    state.ksInvoices.missingOrgContext = true;
+    state.ksInvoices.pendingImportFile = file || null;
+    state.orgContextRequired = true;
+    renderInvoicePanel();
+    toast("Missing org", "No organization context for invoice import. Select/create a project or org to continue.", "error");
     return;
   }
+  state.ksInvoices.missingOrgContext = false;
+  state.ksInvoices.pendingImportFile = null;
   state.ksInvoices.importing = true;
   state.ksInvoices.lastSummary = null;
   state.ksInvoices.lastWarnings = [];
@@ -23321,6 +23488,7 @@ function renderKsInvoiceImportCard(){
   const summary = state.ksInvoices.lastSummary;
   const importing = state.ksInvoices.importing;
   const warnings = state.ksInvoices.lastWarnings || [];
+  const orgMissing = Boolean(state.ksInvoices.missingOrgContext || state.orgContextRequired || !getInvoiceScopeOrgId());
   return `
     <div class="card" style="margin-top:12px;">
       <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
@@ -23336,6 +23504,16 @@ function renderKsInvoiceImportCard(){
       <div class="muted small" style="margin-top:8px;">
         Source format example: SpecCom_TDS_001.pdf ... SpecCom_TDS_014.pdf
       </div>
+      ${orgMissing ? `
+        <div class="note warning" style="margin-top:10px;">
+          <div style="font-weight:800;">Organization context required</div>
+          <div class="muted small" style="margin-top:6px;">Select or create a project/org, then retry import.</div>
+          <div class="row" style="margin-top:8px; gap:8px; flex-wrap:wrap;">
+            <button class="btn ghost small" type="button" data-office-action="resolveOrgContext">Resolve Org Context</button>
+            ${state.ksInvoices.pendingImportFile ? `<button class="btn ghost small" type="button" data-office-action="retryPendingInvoiceImport">Retry Pending Import</button>` : ""}
+          </div>
+        </div>
+      ` : ""}
       ${summary ? `
         <div class="note" style="margin-top:10px;">
           <div><strong>Batch:</strong> ${escapeHtml(summary.batch_id || "-")}</div>
@@ -23706,7 +23884,7 @@ function removeOfficeInvoiceLineItem(lineId){
 }
 
 function getInvoiceScopeOrgId(){
-  return state.activeProject?.org_id || state.profile?.org_id || null;
+  return state.activeProject?.org_id || state.activeOrgId || state.profile?.org_id || null;
 }
 
 function renderInvoiceFilesPanel(){
@@ -26020,6 +26198,8 @@ async function initAuth(){
         resetRedlineState({ clearMarkers: true, clearSource: true });
         state.activeNode = null;
         state.usageEvents = [];
+        setActiveOrgContext(null);
+        state.orgContextPromptShown = false;
         clearProof();
       state.profileSetupDismissed = false;
       state.pendingPreferredLanguage = "";
@@ -26067,6 +26247,7 @@ async function loadProfile(client, userId){
 
   if (!client || !userId){
     state.profile = null;
+    setActiveOrgContext(null);
     return;
   }
 
@@ -26099,6 +26280,7 @@ async function loadProfile(client, userId){
   if (error){
     toast("Profile error", error.message);
     state.profile = null;
+    setActiveOrgContext(null);
     return;
   }
   if (!data){
@@ -26131,6 +26313,7 @@ async function loadProfile(client, userId){
     state.profile.avatar_url = null;
   }
   window.currentUserProfile = state.profile;
+  await initializeOrgContext({ attemptRepair: true });
   if (state.profile?.preferred_language){
     setPreferredLanguage(state.profile.preferred_language);
   }
@@ -27789,6 +27972,19 @@ function wireUI(){
       }
       if (action === "hideInvoiceWelcome"){
         dismissKsInvoiceWelcome({ dontShowAgain: true });
+        return;
+      }
+      if (action === "resolveOrgContext"){
+        void initializeOrgContext({ attemptRepair: true });
+        openProjectsModal();
+        return;
+      }
+      if (action === "retryPendingInvoiceImport"){
+        if (!state.ksInvoices.pendingImportFile){
+          toast("No pending import", "Choose a ZIP file first.", "error");
+          return;
+        }
+        void handleKsInvoiceZipImport(state.ksInvoices.pendingImportFile);
         return;
       }
       if (action === "addLineItem"){
