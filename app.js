@@ -129,6 +129,17 @@ const state = {
     draft: null,
     routeInvoiceNumber: "",
   },
+  ksInvoices: {
+    records: [],
+    batches: [],
+    loaded: false,
+    loading: false,
+    importing: false,
+    lastSummary: null,
+    lastWarnings: [],
+    showWelcomeOverlay: false,
+    welcomeTimer: null,
+  },
   invoiceFiles: [],
   pendingSites: [],
   billingLocations: [],
@@ -1187,6 +1198,10 @@ const LEGACY_DRAWER_TAB_KEY = "speccom.ui.drawerTab";
 const LEGACY_DRAWER_WIDTH_KEY = "speccom.ui.drawerWidth";
 const OFFICE_INVOICE_RECORDS_KEY = "speccom.office.invoiceRecords.v1";
 const OFFICE_INVOICE_RECENTS_KEY = "speccom.office.invoiceRecents.v1";
+const KS_INVOICE_RECORDS_KEY = "speccom.ks.invoiceRecords.v1";
+const KS_INVOICE_BATCHES_KEY = "speccom.ks.invoiceBatches.v1";
+const KS_INVOICE_WELCOME_HIDE_KEY = "speccom.ks.invoiceWelcome.hide.v1";
+const KS_INVOICE_WELCOME_SEEN_SESSION_KEY = "speccom.ks.invoiceWelcome.sessionSeen.v1";
 const WAREHOUSE_SCAN_ITEMS_KEY = "speccom.warehouse.scanItems.v1";
 const KMZ_PHOTO_OVERRIDES_KEY_PREFIX = "speccom.kmzPhotoOverrides.";
 const INVOICE_FILES_BUCKET = "invoice-files";
@@ -2663,6 +2678,12 @@ function setActiveView(viewId, { syncHash = true } = {}){
     syncDprProjectSelection();
     renderDprProjectOptions();
     loadDailyProgressReport();
+  }
+  if (viewId === "viewInvoices"){
+    syncInvoiceDeepLinkFromUrl({ activateView: false });
+    if (state.user && !state.ksInvoices.loading){
+      loadKsInvoiceWorkspace(state.activeProject?.id || null);
+    }
   }
   if (syncHash){
     syncHashForView(viewId);
@@ -9549,6 +9570,7 @@ function syncInvoiceDeepLinkFromUrl({ activateView = false } = {}){
   const currentInvoiceId = String(state.officeInvoices.routeInvoiceNumber || "").trim();
   if (nextInvoiceId){
     state.officeInvoices.routeInvoiceNumber = nextInvoiceId;
+    triggerKsInvoiceWelcomeIfNeeded();
     if (activateView && state.user && isViewAllowed("viewInvoices")){
       setActiveView("viewInvoices");
     } else if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
@@ -21185,6 +21207,7 @@ function setActiveProjectById(id){
   loadBillingLocations(state.activeProject?.id || null);
   SpecCom.helpers.loadYourInvoices(state.activeProject?.id || null);
   loadInvoiceFiles(state.activeProject?.id || null);
+  loadKsInvoiceWorkspace(state.activeProject?.id || null);
   state.billingLocation = null;
   state.billingInvoice = null;
   state.billingItems = [];
@@ -22632,6 +22655,187 @@ function persistOfficeInvoiceState(){
   safeLocalStorageSet(OFFICE_INVOICE_RECENTS_KEY, JSON.stringify(state.officeInvoices.recents || {}));
 }
 
+function normalizeKsInvoiceNumber(value){
+  return String(value || "").trim();
+}
+
+function normalizeKsInvoiceLookup(value){
+  return normalizeKsInvoiceNumber(value).toLowerCase();
+}
+
+function parseInvoiceNumberFromFilename(fileName){
+  const base = String(fileName || "").trim().split(/[\\/]/).pop() || "";
+  if (!base) return null;
+  const withoutExt = base.replace(/\.[^.]+$/, "");
+  const clean = withoutExt.replace(/\s+/g, "_").trim();
+  const match = clean.match(/([a-z0-9]+(?:[_-][a-z0-9]+){1,})$/i);
+  if (!match?.[1]) return null;
+  return match[1].replace(/-/g, "_");
+}
+
+function isSkippableZipEntry(entryName){
+  const raw = String(entryName || "").replace(/\\/g, "/");
+  if (!raw || raw.endsWith("/")) return { skip: true, reason: "directory" };
+  const base = raw.split("/").pop() || "";
+  if (!base) return { skip: true, reason: "empty-name" };
+  if (base.startsWith("~$")) return { skip: true, reason: "temp-file" };
+  if (base.startsWith(".")) return { skip: true, reason: "hidden-file" };
+  if (/__macosx/i.test(raw)) return { skip: true, reason: "os-metadata" };
+  if (!/\.pdf$/i.test(base)) return { skip: true, reason: "unsupported-type" };
+  return { skip: false, reason: "" };
+}
+
+function findKsInvoiceByNumber(invoiceNumber){
+  const needle = normalizeKsInvoiceLookup(invoiceNumber);
+  if (!needle) return null;
+  return (state.ksInvoices.records || []).find((row) => normalizeKsInvoiceLookup(row?.invoice_number) === needle) || null;
+}
+
+function shouldShowKsInvoiceWelcome(){
+  if (!getInvoiceIdFromUrl()) return false;
+  const hide = safeLocalStorageGet(KS_INVOICE_WELCOME_HIDE_KEY);
+  if (String(hide || "") === "1") return false;
+  try {
+    if (sessionStorage.getItem(KS_INVOICE_WELCOME_SEEN_SESSION_KEY) === "1") return false;
+  } catch {}
+  return true;
+}
+
+function markKsInvoiceWelcomeSeen({ dontShowAgain = false } = {}){
+  try {
+    sessionStorage.setItem(KS_INVOICE_WELCOME_SEEN_SESSION_KEY, "1");
+  } catch {}
+  if (dontShowAgain){
+    safeLocalStorageSet(KS_INVOICE_WELCOME_HIDE_KEY, "1");
+  }
+}
+
+function dismissKsInvoiceWelcome({ dontShowAgain = false } = {}){
+  if (state.ksInvoices.welcomeTimer){
+    clearTimeout(state.ksInvoices.welcomeTimer);
+    state.ksInvoices.welcomeTimer = null;
+  }
+  markKsInvoiceWelcomeSeen({ dontShowAgain });
+  state.ksInvoices.showWelcomeOverlay = false;
+  if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
+    renderInvoicePanel();
+  }
+}
+
+function triggerKsInvoiceWelcomeIfNeeded(){
+  if (!shouldShowKsInvoiceWelcome()) return;
+  state.ksInvoices.showWelcomeOverlay = true;
+  if (state.ksInvoices.welcomeTimer){
+    clearTimeout(state.ksInvoices.welcomeTimer);
+  }
+  state.ksInvoices.welcomeTimer = setTimeout(() => {
+    dismissKsInvoiceWelcome({ dontShowAgain: false });
+  }, 2600);
+}
+
+function persistKsInvoiceLocalFallback(){
+  safeLocalStorageSet(KS_INVOICE_RECORDS_KEY, JSON.stringify(state.ksInvoices.records || []));
+  safeLocalStorageSet(KS_INVOICE_BATCHES_KEY, JSON.stringify(state.ksInvoices.batches || []));
+}
+
+function ensureKsInvoiceLocalStateLoaded(){
+  if (state.ksInvoices.loaded) return;
+  try {
+    const rawRecords = safeLocalStorageGet(KS_INVOICE_RECORDS_KEY);
+    if (rawRecords){
+      const parsed = JSON.parse(rawRecords);
+      state.ksInvoices.records = Array.isArray(parsed) ? parsed : [];
+    }
+  } catch {
+    state.ksInvoices.records = [];
+  }
+  try {
+    const rawBatches = safeLocalStorageGet(KS_INVOICE_BATCHES_KEY);
+    if (rawBatches){
+      const parsed = JSON.parse(rawBatches);
+      state.ksInvoices.batches = Array.isArray(parsed) ? parsed : [];
+    }
+  } catch {
+    state.ksInvoices.batches = [];
+  }
+  state.ksInvoices.loaded = true;
+}
+
+async function loadKsInvoiceWorkspace(projectId = state.activeProject?.id || null){
+  ensureKsInvoiceLocalStateLoaded();
+  if (!state.client || !state.user){
+    renderInvoicePanel();
+    return;
+  }
+  const orgId = getInvoiceScopeOrgId();
+  if (!orgId){
+    renderInvoicePanel();
+    return;
+  }
+  state.ksInvoices.loading = true;
+  try {
+    let recordsQuery = state.client
+      .from("ks_invoice_records")
+      .select("id, org_id, project_id, invoice_number, customer_name, source_filename, source_file_path, source_mime, import_batch_id, imported_at, status, notes, warnings, extracted_data, created_by, updated_at")
+      .eq("org_id", orgId)
+      .order("imported_at", { ascending: false })
+      .limit(500);
+    if (projectId){
+      recordsQuery = recordsQuery.or(`project_id.is.null,project_id.eq.${projectId}`);
+    }
+    const { data: recordRows, error: recordsError } = await recordsQuery;
+    if (recordsError){
+      const message = String(recordsError?.message || "").toLowerCase();
+      if (
+        (message.includes("ks_invoice_records") && message.includes("does not exist"))
+        || (message.includes("ks_invoice_records") && message.includes("could not find the table"))
+        || (message.includes("ks_invoice_records") && message.includes("schema cache"))
+      ){
+        state.ksInvoices.loading = false;
+        renderInvoicePanel();
+        return;
+      }
+      toast("K&S invoices load error", recordsError.message, "error");
+      state.ksInvoices.loading = false;
+      renderInvoicePanel();
+      return;
+    }
+    let batchQuery = state.client
+      .from("ks_invoice_import_batches")
+      .select("id, org_id, project_id, uploaded_zip_name, total_files, imported_count, skipped_count, failed_count, created_at, created_by, summary")
+      .eq("org_id", orgId)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (projectId){
+      batchQuery = batchQuery.or(`project_id.is.null,project_id.eq.${projectId}`);
+    }
+    const { data: batchRows, error: batchError } = await batchQuery;
+    if (batchError){
+      const message = String(batchError?.message || "").toLowerCase();
+      if (!(
+        (message.includes("ks_invoice_import_batches") && message.includes("does not exist"))
+        || (message.includes("ks_invoice_import_batches") && message.includes("could not find the table"))
+        || (message.includes("ks_invoice_import_batches") && message.includes("schema cache"))
+      )){
+        toast("K&S batches load error", batchError.message, "error");
+      }
+    }
+    const records = await Promise.all((recordRows || []).map(async (row) => {
+      const fileUrl = row.source_file_path ? await getPublicOrSignedUrl(INVOICE_FILES_BUCKET, row.source_file_path) : "";
+      return {
+        ...row,
+        source_file_url: fileUrl,
+      };
+    }));
+    state.ksInvoices.records = records;
+    state.ksInvoices.batches = batchRows || [];
+    persistKsInvoiceLocalFallback();
+  } finally {
+    state.ksInvoices.loading = false;
+    renderInvoicePanel();
+  }
+}
+
 function createOfficeInvoiceLineItem(){
   return {
     id: `office-line-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
@@ -22810,6 +23014,463 @@ function renderOfficeInvoiceNotFound(invoiceNumber){
   `;
 }
 
+function buildKsInvoiceLink(invoiceNumber){
+  const clean = normalizeKsInvoiceNumber(invoiceNumber);
+  if (!clean) return "";
+  return `${window.location.origin}${window.location.pathname}#invoice=${encodeURIComponent(clean)}`;
+}
+
+function copyKsInvoiceLink(invoiceNumber){
+  const link = buildKsInvoiceLink(invoiceNumber);
+  if (!link) return;
+  if (navigator.clipboard?.writeText){
+    navigator.clipboard.writeText(link)
+      .then(() => toast("Link copied", link))
+      .catch(() => toast("Copy failed", "Unable to copy link.", "error"));
+    return;
+  }
+  toast("Copy unavailable", link);
+}
+
+async function upsertKsInvoiceRecord(record){
+  const orgId = getInvoiceScopeOrgId();
+  if (!state.client || !state.user || !orgId){
+    return { ok: false, reason: "missing-context" };
+  }
+  const payload = {
+    org_id: orgId,
+    project_id: state.activeProject?.id || null,
+    invoice_number: normalizeKsInvoiceNumber(record.invoice_number),
+    invoice_number_norm: normalizeKsInvoiceLookup(record.invoice_number),
+    customer_name: "K & S Electric",
+    source_filename: String(record.source_filename || ""),
+    source_file_path: String(record.source_file_path || ""),
+    source_mime: String(record.source_mime || "application/pdf"),
+    import_batch_id: record.import_batch_id || null,
+    imported_at: record.imported_at || nowISO(),
+    status: String(record.status || "imported"),
+    notes: String(record.notes || ""),
+    warnings: Array.isArray(record.warnings) ? record.warnings : [],
+    extracted_data: record.extracted_data && typeof record.extracted_data === "object" ? record.extracted_data : {},
+    created_by: state.user.id,
+    updated_at: nowISO(),
+  };
+  const { error } = await state.client
+    .from("ks_invoice_records")
+    .upsert(payload, { onConflict: "org_id,invoice_number_norm" });
+  if (error){
+    const message = String(error?.message || "").toLowerCase();
+    if (
+      (message.includes("ks_invoice_records") && message.includes("does not exist"))
+      || (message.includes("ks_invoice_records") && message.includes("could not find the table"))
+      || (message.includes("ks_invoice_records") && message.includes("schema cache"))
+    ){
+      return { ok: false, reason: "table-missing" };
+    }
+    return { ok: false, reason: error.message || "upsert-failed" };
+  }
+  return { ok: true };
+}
+
+async function insertKsInvoiceBatch(batch){
+  const orgId = getInvoiceScopeOrgId();
+  if (!state.client || !state.user || !orgId){
+    return { ok: false, id: `local-batch-${Date.now()}`, reason: "missing-context" };
+  }
+  const payload = {
+    org_id: orgId,
+    project_id: state.activeProject?.id || null,
+    uploaded_zip_name: String(batch.uploaded_zip_name || "invoices.zip"),
+    total_files: Number(batch.total_files || 0),
+    imported_count: Number(batch.imported_count || 0),
+    skipped_count: Number(batch.skipped_count || 0),
+    failed_count: Number(batch.failed_count || 0),
+    summary: batch.summary && typeof batch.summary === "object" ? batch.summary : {},
+    created_by: state.user.id,
+  };
+  const { data, error } = await state.client
+    .from("ks_invoice_import_batches")
+    .insert(payload)
+    .select("id")
+    .maybeSingle();
+  if (error){
+    const message = String(error?.message || "").toLowerCase();
+    if (
+      (message.includes("ks_invoice_import_batches") && message.includes("does not exist"))
+      || (message.includes("ks_invoice_import_batches") && message.includes("could not find the table"))
+      || (message.includes("ks_invoice_import_batches") && message.includes("schema cache"))
+    ){
+      return { ok: false, id: `local-batch-${Date.now()}`, reason: "table-missing" };
+    }
+    return { ok: false, id: `local-batch-${Date.now()}`, reason: error.message || "insert-failed" };
+  }
+  return { ok: true, id: data?.id || `batch-${Date.now()}` };
+}
+
+async function finalizeKsInvoiceBatch(batchId, summary){
+  if (!state.client || !batchId || String(batchId).startsWith("local-batch-")) return;
+  const { error } = await state.client
+    .from("ks_invoice_import_batches")
+    .update({
+      imported_count: Number(summary.imported || 0),
+      skipped_count: Number(summary.skipped || 0),
+      failed_count: Number(summary.failed || 0),
+      total_files: Number(summary.total || 0),
+      summary,
+    })
+    .eq("id", batchId);
+  if (error){
+    const message = String(error?.message || "").toLowerCase();
+    if (!(
+      (message.includes("ks_invoice_import_batches") && message.includes("does not exist"))
+      || (message.includes("ks_invoice_import_batches") && message.includes("could not find the table"))
+      || (message.includes("ks_invoice_import_batches") && message.includes("schema cache"))
+    )){
+      toast("Batch update error", error.message, "error");
+    }
+  }
+}
+
+async function uploadKsInvoicePdf({ blob, fileName, invoiceNumber, batchId }){
+  const orgId = getInvoiceScopeOrgId();
+  const projectId = state.activeProject?.id || "org";
+  if (!state.client || !state.user || !orgId){
+    return { ok: false, reason: "missing-context", filePath: "", fileUrl: "" };
+  }
+  const safeName = String(fileName || `${invoiceNumber || "invoice"}.pdf`).replace(/[^\w.\-() ]+/g, "_");
+  const path = `${orgId}/${projectId}/ks-electric/${batchId}/${Date.now()}-${safeName}`;
+  const { error: uploadError } = await state.client.storage
+    .from(INVOICE_FILES_BUCKET)
+    .upload(path, blob, { upsert: true, contentType: "application/pdf" });
+  if (uploadError){
+    return { ok: false, reason: uploadError.message || "upload-failed", filePath: "", fileUrl: "" };
+  }
+  const fileUrl = await getPublicOrSignedUrl(INVOICE_FILES_BUCKET, path);
+  return { ok: true, filePath: path, fileUrl };
+}
+
+async function handleKsInvoiceZipImport(file){
+  if (!file){
+    toast("File required", "Choose a ZIP file first.", "error");
+    return;
+  }
+  if (!state.client || !state.user || !canViewInvoiceVault()){
+    toast("Not allowed", "Sign in with invoice access first.", "error");
+    return;
+  }
+  const orgId = getInvoiceScopeOrgId();
+  if (!orgId){
+    toast("Missing org", "No organization context for invoice import.", "error");
+    return;
+  }
+  state.ksInvoices.importing = true;
+  state.ksInvoices.lastSummary = null;
+  state.ksInvoices.lastWarnings = [];
+  renderInvoicePanel();
+  try {
+    const JSZip = await loadJsZip();
+    const zip = await JSZip.loadAsync(file);
+    const entries = Object.values(zip.files || {});
+    const batchInit = await insertKsInvoiceBatch({
+      uploaded_zip_name: file.name,
+      total_files: entries.length,
+      imported_count: 0,
+      skipped_count: 0,
+      failed_count: 0,
+      summary: { started_at: nowISO() },
+    });
+    const batchId = batchInit.id || `local-batch-${Date.now()}`;
+    const summary = {
+      batch_id: batchId,
+      uploaded_zip_name: file.name,
+      total: 0,
+      imported: 0,
+      skipped: 0,
+      failed: 0,
+      duplicates: 0,
+      warnings: [],
+      errors: [],
+      started_at: nowISO(),
+      finished_at: null,
+    };
+    const localRecords = Array.isArray(state.ksInvoices.records) ? [...state.ksInvoices.records] : [];
+    const existingByNorm = new Map(localRecords.map((row) => [normalizeKsInvoiceLookup(row?.invoice_number), row]));
+    for (const entry of entries){
+      const entryName = String(entry?.name || "");
+      if (!entry) continue;
+      summary.total += 1;
+      const skip = isSkippableZipEntry(entryName);
+      if (skip.skip){
+        summary.skipped += 1;
+        if (skip.reason !== "directory" && skip.reason !== "os-metadata"){
+          summary.warnings.push(`${entryName}: skipped (${skip.reason})`);
+        }
+        continue;
+      }
+      const baseName = entryName.split("/").pop() || entryName;
+      const parsedInvoiceNumber = parseInvoiceNumberFromFilename(baseName);
+      if (!parsedInvoiceNumber){
+        summary.skipped += 1;
+        summary.warnings.push(`${entryName}: invoice number could not be parsed`);
+        continue;
+      }
+      const normalizedInvoice = normalizeKsInvoiceLookup(parsedInvoiceNumber);
+      const existing = existingByNorm.get(normalizedInvoice) || null;
+      let blob;
+      try {
+        blob = await entry.async("blob");
+      } catch (err){
+        summary.failed += 1;
+        summary.errors.push(`${entryName}: ${err?.message || "read failed"}`);
+        continue;
+      }
+      const upload = await uploadKsInvoicePdf({
+        blob,
+        fileName: baseName,
+        invoiceNumber: parsedInvoiceNumber,
+        batchId,
+      });
+      if (!upload.ok){
+        summary.failed += 1;
+        summary.errors.push(`${entryName}: ${upload.reason || "upload failed"}`);
+        continue;
+      }
+      const fileMetaPayload = {
+        org_id: orgId,
+        project_id: state.activeProject?.id || null,
+        file_name: baseName,
+        file_path: upload.filePath,
+        uploaded_by: state.user?.id || null,
+      };
+      const { error: fileInsertError } = await state.client.from("invoice_files").insert(fileMetaPayload);
+      if (fileInsertError){
+        const msg = String(fileInsertError?.message || "").toLowerCase();
+        if (!(
+          (msg.includes("duplicate") && msg.includes("key"))
+          || (msg.includes("already exists"))
+        )){
+          summary.warnings.push(`${entryName}: file metadata insert warning (${fileInsertError.message})`);
+        }
+      }
+      const record = {
+        id: existing?.id || `ks-invoice-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        org_id: orgId,
+        project_id: state.activeProject?.id || null,
+        invoice_number: parsedInvoiceNumber,
+        invoice_number_norm: normalizedInvoice,
+        customer_name: "K & S Electric",
+        source_filename: baseName,
+        source_file_path: upload.filePath,
+        source_file_url: upload.fileUrl,
+        source_mime: "application/pdf",
+        import_batch_id: batchId,
+        imported_at: nowISO(),
+        status: existing ? "updated" : "imported",
+        notes: "",
+        warnings: [],
+        extracted_data: {},
+        created_by: state.user?.id || null,
+        updated_at: nowISO(),
+      };
+      const upsertResult = await upsertKsInvoiceRecord(record);
+      if (!upsertResult.ok && upsertResult.reason && upsertResult.reason !== "table-missing"){
+        summary.warnings.push(`${entryName}: record save warning (${upsertResult.reason})`);
+      }
+      if (existing){
+        summary.duplicates += 1;
+      } else {
+        summary.imported += 1;
+      }
+      existingByNorm.set(normalizedInvoice, record);
+    }
+    summary.finished_at = nowISO();
+    summary.skipped = Math.max(summary.skipped, 0);
+    const mergedRecords = Array.from(existingByNorm.values()).sort((a, b) => {
+      return new Date(b.imported_at || 0).getTime() - new Date(a.imported_at || 0).getTime();
+    });
+    state.ksInvoices.records = mergedRecords;
+    state.ksInvoices.batches = [{
+      id: batchId,
+      org_id: orgId,
+      project_id: state.activeProject?.id || null,
+      uploaded_zip_name: file.name,
+      total_files: summary.total,
+      imported_count: summary.imported,
+      skipped_count: summary.skipped,
+      failed_count: summary.failed,
+      created_at: nowISO(),
+      created_by: state.user?.id || null,
+      summary,
+    }, ...(state.ksInvoices.batches || []).filter((row) => String(row?.id || "") !== String(batchId))].slice(0, 100);
+    state.ksInvoices.lastSummary = summary;
+    state.ksInvoices.lastWarnings = summary.warnings || [];
+    persistKsInvoiceLocalFallback();
+    await finalizeKsInvoiceBatch(batchId, summary);
+    await loadInvoiceFiles(state.activeProject?.id || null);
+    await loadKsInvoiceWorkspace(state.activeProject?.id || null);
+    toast("K&S invoice import complete", `Imported ${summary.imported}. Skipped ${summary.skipped}. Failed ${summary.failed}.`);
+  } catch (err){
+    toast("ZIP import failed", err?.message || "Unable to process ZIP.", "error");
+  } finally {
+    state.ksInvoices.importing = false;
+    renderInvoicePanel();
+  }
+}
+
+function renderKsInvoiceImportCard(){
+  const summary = state.ksInvoices.lastSummary;
+  const importing = state.ksInvoices.importing;
+  const warnings = state.ksInvoices.lastWarnings || [];
+  return `
+    <div class="card" style="margin-top:12px;">
+      <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+        <div>
+          <h3 style="margin:0;">K &amp; S Electric Invoice Import</h3>
+          <div class="muted small">Upload a ZIP of PDF invoices. Non-invoice files are skipped safely.</div>
+        </div>
+        <label class="btn secondary small file-btn ${importing ? "disabled" : ""}">
+          ${importing ? "Importing..." : "Upload ZIP"}
+          <input id="ksInvoiceZipInput" type="file" accept=".zip,application/zip" ${importing ? "disabled" : ""} />
+        </label>
+      </div>
+      <div class="muted small" style="margin-top:8px;">
+        Source format example: SpecCom_TDS_001.pdf ... SpecCom_TDS_014.pdf
+      </div>
+      ${summary ? `
+        <div class="note" style="margin-top:10px;">
+          <div><strong>Batch:</strong> ${escapeHtml(summary.batch_id || "-")}</div>
+          <div><strong>Total:</strong> ${summary.total || 0} | <strong>Imported:</strong> ${summary.imported || 0} | <strong>Skipped:</strong> ${summary.skipped || 0} | <strong>Failed:</strong> ${summary.failed || 0} | <strong>Duplicates:</strong> ${summary.duplicates || 0}</div>
+        </div>
+      ` : ""}
+      ${warnings.length ? `
+        <div class="muted small" style="margin-top:8px;">
+          ${warnings.slice(0, 8).map((msg) => `<div>- ${escapeHtml(msg)}</div>`).join("")}
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function renderKsInvoiceList(){
+  const rows = state.ksInvoices.records || [];
+  if (!rows.length){
+    return `
+      <div class="card" style="margin-top:12px;">
+        <h3 style="margin:0;">Imported K&amp;S Invoices</h3>
+        <div class="muted small" style="margin-top:8px;">No K &amp; S invoices imported yet.</div>
+      </div>
+    `;
+  }
+  return `
+    <div class="card" style="margin-top:12px;">
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <h3 style="margin:0;">Imported K&amp;S Invoices</h3>
+        <div class="muted small">${rows.length} invoices</div>
+      </div>
+      <div style="overflow:auto; margin-top:8px;">
+        <table class="table">
+          <thead><tr><th>Invoice #</th><th>Customer</th><th>Imported</th><th>Source File</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                <td><button class="btn ghost small" type="button" data-office-action="openKsInvoice" data-office-invoice-number="${escapeHtml(row.invoice_number || "")}">${escapeHtml(row.invoice_number || "-")}</button></td>
+                <td>${escapeHtml(row.customer_name || "K & S Electric")}</td>
+                <td>${escapeHtml(new Date(row.imported_at || Date.now()).toLocaleString())}</td>
+                <td>${escapeHtml(row.source_filename || "-")}</td>
+                <td>${escapeHtml(row.status || "imported")}</td>
+                <td class="row" style="gap:6px; flex-wrap:wrap;">
+                  <button class="btn ghost small" type="button" data-office-action="openKsInvoice" data-office-invoice-number="${escapeHtml(row.invoice_number || "")}">Open</button>
+                  <button class="btn ghost small" type="button" data-office-action="copyKsInvoiceLink" data-office-invoice-number="${escapeHtml(row.invoice_number || "")}">Copy Link</button>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderKsInvoiceDetailView(invoice){
+  const extracted = invoice?.extracted_data && typeof invoice.extracted_data === "object" ? invoice.extracted_data : {};
+  const lineItems = Array.isArray(extracted.line_items) ? extracted.line_items : [];
+  const sourceUrl = invoice?.source_file_url || "";
+  return `
+    <div class="card" style="margin-top:12px;">
+      <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+        <div>
+          <h3 style="margin:0;">K &amp; S Invoice ${escapeHtml(invoice?.invoice_number || "-")}</h3>
+          <div class="muted small">${escapeHtml(invoice?.customer_name || "K & S Electric")}</div>
+        </div>
+        <div class="row" style="gap:8px; flex-wrap:wrap;">
+          <button class="btn ghost small" type="button" data-office-action="backToInvoiceList">Back to Invoice List</button>
+          <button class="btn ghost small" type="button" data-office-action="copyKsInvoiceLink" data-office-invoice-number="${escapeHtml(invoice?.invoice_number || "")}">Copy Link</button>
+        </div>
+      </div>
+      <div class="grid cols-2" style="margin-top:10px;">
+        <div><div class="small muted">Invoice Number</div><div>${escapeHtml(invoice?.invoice_number || "-")}</div></div>
+        <div><div class="small muted">Customer / Bill To</div><div>${escapeHtml(invoice?.customer_name || "K & S Electric")} / ${escapeHtml(extracted.bill_to || "-")}</div></div>
+        <div><div class="small muted">Date / Week Ending</div><div>${escapeHtml(extracted.invoice_date || "-")} / ${escapeHtml(extracted.week_ending || "-")}</div></div>
+        <div><div class="small muted">Total</div><div>${escapeHtml(extracted.total != null ? formatMoney(extracted.total) : "-")}</div></div>
+      </div>
+      <div style="margin-top:10px;">
+        <div class="small muted">Source PDF</div>
+        ${sourceUrl ? `<a class="btn ghost small" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open source PDF</a>` : `<div class="muted small">No source PDF URL available.</div>`}
+      </div>
+      <div style="margin-top:10px;">
+        <div class="small muted">Import metadata</div>
+        <div class="muted small">Batch: ${escapeHtml(invoice?.import_batch_id || "-")} | Imported: ${escapeHtml(new Date(invoice?.imported_at || Date.now()).toLocaleString())} | Source file: ${escapeHtml(invoice?.source_filename || "-")}</div>
+      </div>
+      <div style="margin-top:10px;">
+        <div class="small muted">Line items</div>
+        ${lineItems.length
+          ? `<div style="overflow:auto; margin-top:6px;">
+              <table class="table billing-table">
+                <thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
+                <tbody>
+                  ${lineItems.map((item) => `
+                    <tr>
+                      <td>${escapeHtml(item?.description || "-")}</td>
+                      <td>${escapeHtml(String(item?.qty ?? "-"))}</td>
+                      <td>${escapeHtml(item?.rate != null ? formatMoney(item.rate) : "-")}</td>
+                      <td>${escapeHtml(item?.total != null ? formatMoney(item.total) : "-")}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>`
+          : `<div class="muted small" style="margin-top:6px;">No extracted line items yet (phase 1 filename import).</div>`
+        }
+      </div>
+      <div style="margin-top:10px;">
+        <div class="small muted">Notes / warnings</div>
+        <div>${escapeHtml(invoice?.notes || "-")}</div>
+        ${(Array.isArray(invoice?.warnings) && invoice.warnings.length)
+          ? `<div class="muted small" style="margin-top:6px;">${invoice.warnings.map((w) => `<div>- ${escapeHtml(w)}</div>`).join("")}</div>`
+          : ""
+        }
+      </div>
+    </div>
+  `;
+}
+
+function renderInvoiceDeepLinkWelcomeOverlay(){
+  return `
+    <div class="card" style="margin-top:12px; position:relative; overflow:hidden;">
+      <div class="ks-welcome-overlay">
+        <div class="ks-welcome-logo">SpecCom</div>
+        <div class="ks-welcome-title">Welcome to SpecCom</div>
+        <div class="ks-welcome-subtitle">K &amp; S Electric Invoice Access</div>
+        <div class="muted" style="margin-top:6px;">Your invoice is loading...</div>
+        <div class="row" style="justify-content:center; margin-top:12px; gap:8px;">
+          <button class="btn ghost small" type="button" data-office-action="skipInvoiceWelcome">Skip</button>
+          <button class="btn ghost small" type="button" data-office-action="hideInvoiceWelcome">Don't show again</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function saveOfficeInvoiceWithStatus(status){
   ensureOfficeInvoiceStateLoaded();
   const draft = state.officeInvoices.draft;
@@ -22938,6 +23599,7 @@ function renderInvoicePanel(){
   const wrap = $("invoicePanel");
   if (!wrap) return;
   ensureOfficeInvoiceStateLoaded();
+  ensureKsInvoiceLocalStateLoaded();
   const invoices = state.officeInvoices.records || [];
   const urlInvoiceNumber = String(getInvoiceIdFromUrl() || "").trim();
   if (urlInvoiceNumber){
@@ -22945,6 +23607,7 @@ function renderInvoicePanel(){
   }
   const routeInvoiceNumber = String(state.officeInvoices.routeInvoiceNumber || "").trim();
   if (routeInvoiceNumber){
+    const matchedKsInvoice = findKsInvoiceByNumber(routeInvoiceNumber);
     const matchedInvoice = findOfficeInvoiceByNumber(routeInvoiceNumber);
     wrap.innerHTML = `
       <div class="field-stack" style="gap:10px;">
@@ -22952,7 +23615,12 @@ function renderInvoicePanel(){
           <div class="muted small">Telecom weekly invoice desk</div>
           <button class="btn" type="button" data-office-action="createInvoice">Create Invoice</button>
         </div>
-        ${matchedInvoice ? renderOfficeInvoiceDetailView(matchedInvoice) : renderOfficeInvoiceNotFound(routeInvoiceNumber)}
+        ${state.ksInvoices.showWelcomeOverlay ? renderInvoiceDeepLinkWelcomeOverlay() : ""}
+        ${!state.ksInvoices.showWelcomeOverlay ? (
+          matchedKsInvoice
+            ? renderKsInvoiceDetailView(matchedKsInvoice)
+            : (matchedInvoice ? renderOfficeInvoiceDetailView(matchedInvoice) : renderOfficeInvoiceNotFound(routeInvoiceNumber))
+        ) : ""}
       </div>
     `;
     return;
@@ -22992,6 +23660,8 @@ function renderInvoicePanel(){
             </div>`
         }
       </div>
+      ${renderKsInvoiceImportCard()}
+      ${renderKsInvoiceList()}
     </div>
   `;
   refreshOfficeInvoiceComputedFields();
@@ -25333,6 +26003,8 @@ async function initAuth(){
         await loadRateCards(state.activeProject?.id || null);
         await loadLocationProofRequirements(state.activeProject?.id || null);
         await loadBillingLocations(state.activeProject?.id || null);
+        await loadInvoiceFiles(state.activeProject?.id || null);
+        await loadKsInvoiceWorkspace(state.activeProject?.id || null);
         await loadMaterialCatalog();
       await loadAlerts();
         renderAlerts();
@@ -25371,6 +26043,8 @@ async function initAuth(){
       await loadRateCards(state.activeProject?.id || null);
       await loadLocationProofRequirements(state.activeProject?.id || null);
       await loadBillingLocations(state.activeProject?.id || null);
+      await loadInvoiceFiles(state.activeProject?.id || null);
+      await loadKsInvoiceWorkspace(state.activeProject?.id || null);
       await loadMaterialCatalog();
     await loadAlerts();
     renderAlerts();
@@ -25520,6 +26194,8 @@ async function postLoginBootstrap(client, user){
     await loadLocationProofRequirements(state.activeProject?.id || null);
     await loadBillingLocations(state.activeProject?.id || null);
     await SpecCom.helpers.loadYourInvoices(state.activeProject?.id || null);
+    await loadInvoiceFiles(state.activeProject?.id || null);
+    await loadKsInvoiceWorkspace(state.activeProject?.id || null);
     await loadMaterialCatalog();
     await loadAlerts();
     renderAlerts();
@@ -27091,12 +27767,28 @@ function wireUI(){
         openOfficeInvoiceByNumber(invoiceNumber, { syncUrl: true });
         return;
       }
+      if (action === "openKsInvoice"){
+        openOfficeInvoiceByNumber(invoiceNumber, { syncUrl: true });
+        return;
+      }
       if (action === "openInvoice"){
         openOfficeInvoiceDraft(invoiceId);
         return;
       }
       if (action === "backToInvoiceList"){
         closeOfficeInvoiceDeepLink({ syncUrl: true });
+        return;
+      }
+      if (action === "copyKsInvoiceLink"){
+        copyKsInvoiceLink(invoiceNumber);
+        return;
+      }
+      if (action === "skipInvoiceWelcome"){
+        dismissKsInvoiceWelcome({ dontShowAgain: false });
+        return;
+      }
+      if (action === "hideInvoiceWelcome"){
+        dismissKsInvoiceWelcome({ dontShowAgain: true });
         return;
       }
       if (action === "addLineItem"){
@@ -27134,6 +27826,13 @@ function wireUI(){
       }
     });
     invoicePanel.addEventListener("change", (e) => {
+      if (e.target?.id === "ksInvoiceZipInput"){
+        const file = e.target.files?.[0] || null;
+        e.target.value = "";
+        if (!file) return;
+        void handleKsInvoiceZipImport(file);
+        return;
+      }
       const fieldEl = e.target.closest("[data-office-field]");
       if (fieldEl){
         updateOfficeInvoiceDraftField(fieldEl.dataset.officeField, fieldEl.value);

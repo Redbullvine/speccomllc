@@ -2407,6 +2407,57 @@ body.map-create-open #mapSidebarToggle{
   font-weight:700;
   word-break:break-word;
 }
+.ks-welcome-overlay{
+  min-height:220px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  text-align:center;
+  gap:4px;
+  padding:20px 14px;
+  border-radius:14px;
+  background:linear-gradient(135deg, rgba(17,24,39,0.97), rgba(31,41,55,0.92));
+  color:#f9fafb;
+  animation:ksWelcomeFadeIn 360ms ease-out both;
+}
+.ks-welcome-logo{
+  font-size:22px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  font-weight:900;
+  color:#93c5fd;
+  animation:ksWelcomeRise 480ms ease-out both;
+}
+.ks-welcome-title{
+  font-size:28px;
+  font-weight:900;
+  line-height:1.1;
+  animation:ksWelcomeRise 620ms ease-out both;
+}
+.ks-welcome-subtitle{
+  font-size:14px;
+  color:#d1d5db;
+  letter-spacing:0.05em;
+  text-transform:uppercase;
+  animation:ksWelcomeRise 760ms ease-out both;
+}
+@keyframes ksWelcomeFadeIn{
+  from{ opacity:0; transform:translateY(8px); }
+  to{ opacity:1; transform:translateY(0); }
+}
+@keyframes ksWelcomeRise{
+  from{ opacity:0; transform:translateY(12px); }
+  to{ opacity:1; transform:translateY(0); }
+}
+@media (max-width: 640px){
+  .ks-welcome-title{
+    font-size:24px;
+  }
+  .ks-welcome-overlay{
+    min-height:200px;
+  }
+}
 @media (max-width: 900px){
   .map-workspace{
     position:relative;
