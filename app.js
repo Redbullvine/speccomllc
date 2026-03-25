@@ -148,6 +148,8 @@ const state = {
     introTimer: null,
     introFadeTimer: null,
     introFading: false,
+    introCountdown: 3,
+    introCountdownTimer: null,
     lastIntroMode: "",
   },
   invoiceFiles: [],
@@ -9720,7 +9722,20 @@ function clearInvoiceIntroTimer(){
     clearTimeout(state.ksInvoices.introFadeTimer);
     state.ksInvoices.introFadeTimer = null;
   }
+  if (state.ksInvoices.introCountdownTimer){
+    clearInterval(state.ksInvoices.introCountdownTimer);
+    state.ksInvoices.introCountdownTimer = null;
+  }
   state.ksInvoices.introFading = false;
+  state.ksInvoices.introCountdown = 3;
+}
+
+function hideInvoiceIntroOverlay(){
+  clearInvoiceIntroTimer();
+  state.ksInvoices.showWelcomeOverlay = false;
+  state.ksInvoices.introFading = false;
+  const el = document.getElementById("invoiceIntroOverlay");
+  if (el) el.remove();
 }
 
 function storePostAuthRedirect(){
@@ -9750,7 +9765,8 @@ function getIntroModeForRoute(hashOrState = window.location.hash){
     ? hashOrState
     : String(hashOrState?.hash || window.location.hash || "");
   const routeRef = String(
-    state.ksInvoices.pendingRouteRef
+    window.__pendingInvoiceRef
+    || state.ksInvoices.pendingRouteRef
     || state.officeInvoices.routeInvoiceNumber
     || getInvoiceIdFromUrl({ hash: routeHash, pathname: window.location.pathname })
     || ""
@@ -9786,13 +9802,22 @@ function openOfficeBillingIntroThenInvoice(routeRef, { syncUrl = false } = {}){
   }
   state.officeInvoices.routeInvoiceNumber = clean;
   state.ksInvoices.pendingRouteRef = clean;
+  window.__pendingInvoiceRef = clean;
+  console.info("[invoice-intro] pending set", { route_ref: clean });
   state.ksInvoices.showWelcomeOverlay = true;
   state.ksInvoices.introFading = false;
+  state.ksInvoices.introCountdown = 3;
   if (syncUrl){
     setInvoiceDeepLinkHash(clean);
   }
   console.info("[invoice-intro] overlay shown", { route_ref: clean });
   clearInvoiceIntroTimer();
+  state.ksInvoices.introCountdownTimer = setInterval(() => {
+    state.ksInvoices.introCountdown = Math.max(0, Number(state.ksInvoices.introCountdown || 0) - 1);
+    if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
+      renderInvoicePanel();
+    }
+  }, 1000);
   state.ksInvoices.introFadeTimer = setTimeout(() => {
     state.ksInvoices.introFading = true;
     console.info("[invoice-intro] auto-fade start", { route_ref: clean });
@@ -9801,6 +9826,7 @@ function openOfficeBillingIntroThenInvoice(routeRef, { syncUrl = false } = {}){
     }
   }, 2600);
   state.ksInvoices.introTimer = setTimeout(() => {
+    console.info("[invoice-intro] auto continue");
     continueToPendingInvoiceOpen({ source: "timer" });
   }, 3000);
   if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
@@ -9810,19 +9836,26 @@ function openOfficeBillingIntroThenInvoice(routeRef, { syncUrl = false } = {}){
 }
 
 function continueToPendingInvoiceOpen({ source = "button" } = {}){
-  const pending = String(state.ksInvoices.pendingRouteRef || state.officeInvoices.routeInvoiceNumber || "").trim();
-  if (!pending) return;
+  console.log("[invoice-intro] continue clicked");
+  const pending = String(window.__pendingInvoiceRef || "").trim();
+  if (!pending){
+    console.warn("[invoice-intro] no pending invoice");
+    cancelPendingInvoiceOpen();
+    return;
+  }
   if (source === "button"){
     console.info("[invoice-intro] continue clicked", { route_ref: pending });
   }
-  clearInvoiceIntroTimer();
+  window.__pendingInvoiceRef = null;
+  hideInvoiceIntroOverlay();
   state.officeInvoices.routeInvoiceNumber = pending;
   state.ksInvoices.pendingRouteRef = "";
-  state.ksInvoices.showWelcomeOverlay = false;
-  console.info("[invoice-intro] detail opened", { route_ref: pending });
-  if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
-    renderInvoicePanel();
-  }
+  window.__invoiceIntroBypass = true;
+  setTimeout(() => {
+    openOfficeInvoiceByRouteRef(pending, { syncUrl: true });
+    console.log("[invoice-intro] detail opened");
+    console.info("[invoice-intro] detail opened", { route_ref: pending });
+  }, 0);
 }
 
 function skipPendingInvoiceOpen(){
@@ -9832,16 +9865,14 @@ function skipPendingInvoiceOpen(){
 }
 
 function cancelPendingInvoiceOpen(){
-  const pending = String(state.ksInvoices.pendingRouteRef || state.officeInvoices.routeInvoiceNumber || "").trim();
+  console.log("[invoice-intro] cancelled");
+  const pending = String(window.__pendingInvoiceRef || state.ksInvoices.pendingRouteRef || state.officeInvoices.routeInvoiceNumber || "").trim();
   console.info("[invoice-intro] cancelled", { route_ref: pending || null });
-  clearInvoiceIntroTimer();
+  window.__pendingInvoiceRef = null;
+  hideInvoiceIntroOverlay();
   state.ksInvoices.pendingRouteRef = "";
-  state.ksInvoices.showWelcomeOverlay = false;
   state.officeInvoices.routeInvoiceNumber = "";
-  clearInvoiceDeepLinkUrl();
-  if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
-    renderInvoicePanel();
-  }
+  window.location.hash = "#office";
 }
 
 function syncInvoiceDeepLinkFromUrl({ activateView = false } = {}){
@@ -10026,6 +10057,8 @@ function clearAuthenticatedWorkspaceState(){
   state.officeInvoices.records = [];
   state.officeInvoices.draft = null;
   state.officeInvoices.routeInvoiceNumber = "";
+  window.__pendingInvoiceRef = null;
+  window.__invoiceIntroBypass = false;
   clearInvoiceIntroTimer();
   state.ksInvoices.records = [];
   state.ksInvoices.batches = [];
@@ -23642,6 +23675,10 @@ function openOfficeInvoiceByNumber(invoiceNumber, { syncUrl = true } = {}){
 function openOfficeInvoiceByRouteRef(invoiceRef, { syncUrl = true } = {}){
   const clean = String(invoiceRef || "").trim();
   if (!clean) return false;
+  if (window.__invoiceIntroBypass){
+    window.__invoiceIntroBypass = false;
+    return openOfficeInvoiceByNumber(clean, { syncUrl });
+  }
   if (state.user && (document.querySelector(".view.active")?.id || "") !== "viewInvoices" && isViewAllowed("viewInvoices")){
     setActiveView("viewInvoices");
   }
@@ -24441,21 +24478,24 @@ function renderKsInvoiceDetailView(invoice){
 
 function renderInvoiceDeepLinkWelcomeOverlay(){
   return `
-    <div class="invoice-intro-overlay">
+    <div id="invoiceIntroOverlay" class="invoice-intro-overlay">
       <div class="invoice-intro-shell invoice-intro-animate ${state.ksInvoices.introFading ? "invoice-intro-fading" : ""}">
         <button class="btn ghost small invoice-intro-skip" type="button" data-office-action="skipPendingInvoiceOpen">Skip</button>
         <div class="invoice-intro-left">
           <div class="invoice-intro-total-control">TOTAL CONTROL.</div>
           <div class="invoice-intro-mock">
-            <div class="invoice-intro-mock-top"></div>
-            <div class="invoice-intro-mock-grid">
-              <div></div><div></div><div></div><div></div>
+            <div class="invoice-intro-ui-top">
+              <div>Invoice Builder</div>
+              <button class="btn small" type="button">Create Invoice</button>
             </div>
+            <div class="invoice-intro-ui-row"><span>SpecCom_TDS_001</span><strong>$1,405.00</strong></div>
+            <div class="invoice-intro-ui-row"><span>SpecCom_TDS_002</span><strong>$524.00</strong></div>
+            <div class="invoice-intro-ui-row"><span>SpecCom_TDS_003</span><strong>$980.00</strong></div>
           </div>
           <div class="invoice-intro-checks">
-            <div>✓ Approve Technician Timesheets</div>
-            <div>✓ Generate Job Invoices Instantly</div>
-            <div>✓ Gain Full Financial Visibility</div>
+            <div>Approve Technician Timesheets</div>
+            <div>Generate Job Invoices Instantly</div>
+            <div>Gain Full Financial Visibility</div>
           </div>
           <button class="btn invoice-intro-cta" type="button">TRY DEMO MODE NOW</button>
         </div>
@@ -24472,7 +24512,7 @@ function renderInvoiceDeepLinkWelcomeOverlay(){
             <li>Update redlined prints</li>
           </ul>
           <div class="row" style="gap:8px; margin-top:12px; flex-wrap:wrap;">
-            <button class="btn small" type="button" data-office-action="continueToPendingInvoiceOpen">Continue</button>
+            <button class="btn small" type="button" data-office-action="continueToPendingInvoiceOpen">Continue (${Math.max(0, Number(state.ksInvoices.introCountdown || 0))})</button>
             <button class="btn secondary small" type="button" data-office-action="cancelPendingInvoiceOpen">Back to Office</button>
           </div>
         </div>
@@ -28952,4 +28992,5 @@ wireUI();
 applyI18n();
 syncLanguageControls();
 initAuth();
+
 

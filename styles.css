@@ -2502,27 +2502,33 @@ body.map-create-open #mapSidebarToggle{
   letter-spacing:0.02em;
 }
 .invoice-intro-mock{
-  background:rgba(255,255,255,0.05);
-  border:1px solid rgba(255,255,255,0.12);
+  background:#0f172a;
+  border:1px solid rgba(148,163,184,0.28);
   border-radius:16px;
-  padding:10px;
-  min-height:220px;
-}
-.invoice-intro-mock-top{
-  height:42px;
-  border-radius:10px;
-  background:linear-gradient(90deg, rgba(255,255,255,0.24), rgba(255,255,255,0.08));
-  margin-bottom:10px;
-}
-.invoice-intro-mock-grid{
+  padding:12px;
+  min-height:210px;
   display:grid;
-  grid-template-columns:1fr 1fr;
   gap:10px;
 }
-.invoice-intro-mock-grid > div{
-  height:78px;
+.invoice-intro-ui-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  background:#1e293b;
   border-radius:10px;
-  background:rgba(255,255,255,0.09);
+  padding:10px 12px;
+  color:#fff;
+  font-weight:800;
+}
+.invoice-intro-ui-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:10px 12px;
+  border-radius:10px;
+  background:#111827;
+  color:#e5e7eb;
+  border:1px solid rgba(148,163,184,0.2);
 }
 .invoice-intro-checks{
   display:grid;
