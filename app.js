@@ -23799,6 +23799,7 @@ async function handleKsInvoiceZipImport(file){
       duplicates: 0,
       warnings: [],
       errors: [],
+      file_results: [],
       started_at: nowISO(),
       finished_at: null,
     };
@@ -23811,6 +23812,14 @@ async function handleKsInvoiceZipImport(file){
       const skip = isSkippableZipEntry(entryName);
       if (skip.skip){
         summary.skipped += 1;
+        summary.file_results.push({
+          source_filename: entryName,
+          result: "skipped",
+          stage: "precheck",
+          reason: skip.reason,
+          extracted_invoice_number: null,
+          extracted_node_name: null,
+        });
         if (skip.reason !== "directory" && skip.reason !== "os-metadata"){
           summary.warnings.push(`${entryName}: skipped (${skip.reason})`);
         }
@@ -23823,7 +23832,21 @@ async function handleKsInvoiceZipImport(file){
         blob = await entry.async("blob");
       } catch (err){
         summary.failed += 1;
-        summary.errors.push(`${entryName}: ${err?.message || "read failed"}`);
+        const reason = err?.message || "read failed";
+        summary.errors.push(`${entryName}: ${reason}`);
+        summary.file_results.push({
+          source_filename: baseName,
+          result: "failed",
+          stage: "read-zip-entry",
+          reason,
+          extracted_invoice_number: filenameInvoiceNumber || null,
+          extracted_node_name: null,
+        });
+        console.error("[ks-import] file failed", {
+          source_filename: baseName,
+          stage: "read-zip-entry",
+          reason,
+        });
         continue;
       }
       let parsedPdf = null;
@@ -23861,7 +23884,22 @@ async function handleKsInvoiceZipImport(file){
       });
       if (!parsedInvoiceNumber){
         summary.failed += 1;
-        summary.errors.push(`${entryName}: invoice number could not be determined`);
+        const reason = "invoice number could not be determined";
+        summary.errors.push(`${entryName}: ${reason}`);
+        summary.file_results.push({
+          source_filename: baseName,
+          result: "failed",
+          stage: "parse-pdf",
+          reason,
+          extracted_invoice_number: null,
+          extracted_node_name: parsedPdf.node_name || null,
+        });
+        console.error("[ks-import] file failed", {
+          source_filename: baseName,
+          stage: "parse-pdf",
+          reason,
+          extracted_node_name: parsedPdf.node_name || null,
+        });
         continue;
       }
       const upload = await uploadKsInvoicePdf({
@@ -23872,7 +23910,23 @@ async function handleKsInvoiceZipImport(file){
       });
       if (!upload.ok){
         summary.failed += 1;
-        summary.errors.push(`${entryName}: ${upload.reason || "upload failed"}`);
+        const reason = upload.reason || "upload failed";
+        summary.errors.push(`${entryName}: ${reason}`);
+        summary.file_results.push({
+          source_filename: baseName,
+          result: "failed",
+          stage: "upload-pdf",
+          reason,
+          extracted_invoice_number: parsedInvoiceNumber || null,
+          extracted_node_name: parsedPdf.node_name || null,
+        });
+        console.error("[ks-import] file failed", {
+          source_filename: baseName,
+          stage: "upload-pdf",
+          reason,
+          extracted_invoice_number: parsedInvoiceNumber || null,
+          extracted_node_name: parsedPdf.node_name || null,
+        });
         continue;
       }
       const fileMetaPayload = {
@@ -23938,12 +23992,38 @@ async function handleKsInvoiceZipImport(file){
         updated_at: nowISO(),
       };
       const upsertResult = await upsertKsInvoiceRecord(record);
-      if (!upsertResult.ok && upsertResult.reason && upsertResult.reason !== "table-missing"){
-        summary.warnings.push(`${entryName}: record save warning (${upsertResult.reason})`);
+      if (!upsertResult.ok){
+        const reason = upsertResult.reason || "record save failed";
+        summary.failed += 1;
+        summary.errors.push(`${entryName}: db save failed (${reason})`);
+        summary.file_results.push({
+          source_filename: baseName,
+          result: "failed",
+          stage: "db-save",
+          reason,
+          extracted_invoice_number: parsedInvoiceNumber || null,
+          extracted_node_name: parsedPdf.node_name || null,
+        });
+        console.error("[ks-import] file failed", {
+          source_filename: baseName,
+          stage: "db-save",
+          reason,
+          extracted_invoice_number: parsedInvoiceNumber || null,
+          extracted_node_name: parsedPdf.node_name || null,
+        });
+        continue;
       }
       if (parsedPdf.parse_status !== "parsed" && parsedPdf.parse_error){
         summary.warnings.push(`${entryName}: ${parsedPdf.parse_error}`);
       }
+      summary.file_results.push({
+        source_filename: baseName,
+        result: existing ? "updated" : "saved",
+        stage: parsedPdf.parse_status === "parsed" ? "completed" : "completed-with-parse-warnings",
+        reason: parsedPdf.parse_error || "",
+        extracted_invoice_number: parsedInvoiceNumber || null,
+        extracted_node_name: parsedPdf.node_name || null,
+      });
       if (existing){
         summary.duplicates += 1;
       } else {
@@ -23989,6 +24069,10 @@ function renderKsInvoiceImportCard(){
   const summary = state.ksInvoices.lastSummary;
   const importing = state.ksInvoices.importing;
   const warnings = state.ksInvoices.lastWarnings || [];
+  const errors = Array.isArray(summary?.errors) ? summary.errors : [];
+  const failedDetails = Array.isArray(summary?.file_results)
+    ? summary.file_results.filter((row) => String(row?.result || "") === "failed")
+    : [];
   const orgMissing = Boolean(state.ksInvoices.missingOrgContext || state.orgContextRequired || !getInvoiceScopeOrgId());
   return `
     <div class="card" style="margin-top:12px;">
@@ -24024,6 +24108,22 @@ function renderKsInvoiceImportCard(){
       ${warnings.length ? `
         <div class="muted small" style="margin-top:8px;">
           ${warnings.slice(0, 8).map((msg) => `<div>- ${escapeHtml(msg)}</div>`).join("")}
+        </div>
+      ` : ""}
+      ${errors.length ? `
+        <div class="muted small" style="margin-top:8px; color:#b91c1c;">
+          <div style="font-weight:800; margin-bottom:4px;">Import errors</div>
+          ${errors.slice(0, 12).map((msg) => `<div>- ${escapeHtml(msg)}</div>`).join("")}
+        </div>
+      ` : ""}
+      ${failedDetails.length ? `
+        <div class="muted small" style="margin-top:8px;">
+          <div style="font-weight:800; margin-bottom:4px;">Failed file details</div>
+          ${failedDetails.slice(0, 12).map((row) => `
+            <div>
+              ${escapeHtml(row.source_filename || "-")} | stage: ${escapeHtml(row.stage || "-")} | invoice: ${escapeHtml(row.extracted_invoice_number || "-")} | node: ${escapeHtml(row.extracted_node_name || "-")} | error: ${escapeHtml(row.reason || "-")}
+            </div>
+          `).join("")}
         </div>
       ` : ""}
     </div>
