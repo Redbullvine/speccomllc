@@ -9837,6 +9837,9 @@ function showInvoiceIntroOverlay(){
 function openOfficeBillingIntroThenInvoice(routeRef, { syncUrl = false } = {}){
   const clean = String(routeRef || "").trim();
   if (!clean) return false;
+  if (String(window.__invoiceIntroResolvedRef || "") === clean){
+    return false;
+  }
   if (state.ksInvoices.showWelcomeOverlay && String(state.ksInvoices.pendingRouteRef || "") === clean){
     console.info("[intro] only one intro allowed");
     return true;
@@ -9872,6 +9875,7 @@ function continueToPendingInvoiceOpen({ source = "button" } = {}){
     console.info("[invoice-intro] continue clicked", { route_ref: pending });
   }
   window.__pendingInvoiceRef = null;
+  window.__invoiceIntroResolvedRef = pending;
   hideInvoiceIntroOverlay();
   state.officeInvoices.routeInvoiceNumber = pending;
   state.ksInvoices.pendingRouteRef = "";
@@ -9894,6 +9898,7 @@ function cancelPendingInvoiceOpen(){
   const pending = String(window.__pendingInvoiceRef || state.ksInvoices.pendingRouteRef || state.officeInvoices.routeInvoiceNumber || "").trim();
   console.info("[invoice-intro] cancelled", { route_ref: pending || null });
   window.__pendingInvoiceRef = null;
+  window.__invoiceIntroResolvedRef = "";
   hideInvoiceIntroOverlay();
   state.ksInvoices.pendingRouteRef = "";
   state.officeInvoices.routeInvoiceNumber = "";
@@ -9918,6 +9923,7 @@ function syncInvoiceDeepLinkFromUrl({ activateView = false } = {}){
   clearInvoiceIntroTimer();
   state.ksInvoices.pendingRouteRef = "";
   state.ksInvoices.showWelcomeOverlay = false;
+  window.__invoiceIntroResolvedRef = "";
   if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
     renderInvoicePanel();
   }
@@ -10084,6 +10090,7 @@ function clearAuthenticatedWorkspaceState(){
   state.officeInvoices.routeInvoiceNumber = "";
   window.__pendingInvoiceRef = null;
   window.__invoiceIntroBypass = false;
+  window.__invoiceIntroResolvedRef = "";
   clearInvoiceIntroTimer();
   state.ksInvoices.records = [];
   state.ksInvoices.batches = [];
