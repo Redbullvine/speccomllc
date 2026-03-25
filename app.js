@@ -1209,6 +1209,7 @@ const KS_INVOICE_RECORDS_KEY = "speccom.ks.invoiceRecords.v1";
 const KS_INVOICE_BATCHES_KEY = "speccom.ks.invoiceBatches.v1";
 const KS_INVOICE_WELCOME_HIDE_KEY = "speccom.ks.invoiceWelcome.hide.v1";
 const KS_INVOICE_WELCOME_SEEN_SESSION_KEY = "speccom.ks.invoiceWelcome.sessionSeen.v1";
+const POST_AUTH_REDIRECT_KEY = "postAuthRedirect";
 const WAREHOUSE_SCAN_ITEMS_KEY = "speccom.warehouse.scanItems.v1";
 const KMZ_PHOTO_OVERRIDES_KEY_PREFIX = "speccom.kmzPhotoOverrides.";
 const INVOICE_FILES_BUCKET = "invoice-files";
@@ -9699,6 +9700,28 @@ function getInvoiceIdFromUrl(locationLike = window.location){
   const pathMatch = pathname.match(/\/invoice\/([^/?#]+)/i);
   if (!pathMatch?.[1]) return "";
   return decodeInvoiceUrlToken(pathMatch[1]);
+}
+
+function hasInvoiceHashRoute(hashValue = window.location.hash){
+  const hash = String(hashValue || "").trim();
+  if (!hash) return false;
+  const normalized = hash.startsWith("#") ? hash.slice(1) : hash;
+  return /(?:^|[?&])invoice=/i.test(normalized);
+}
+
+function capturePostAuthRedirectIfNeeded(){
+  if (hasAuthenticatedSession()) return;
+  const hash = String(window.location.hash || "").trim();
+  if (!hasInvoiceHashRoute(hash)) return;
+  safeLocalStorageSet(POST_AUTH_REDIRECT_KEY, hash);
+  console.info("[auth-redirect] stored:", hash);
+}
+
+function consumePostAuthRedirectHash(){
+  const stored = String(safeLocalStorageGet(POST_AUTH_REDIRECT_KEY) || "").trim();
+  if (!stored) return "";
+  safeLocalStorageRemove(POST_AUTH_REDIRECT_KEY);
+  return stored;
 }
 
 function syncInvoiceDeepLinkFromUrl({ activateView = false } = {}){
@@ -26774,6 +26797,7 @@ async function initAuth(){
   installInvalidRefreshTokenGuard();
   setAppModeUI();
   setEnvWarning();
+  capturePostAuthRedirectIfNeeded();
 
   state.storageAvailable = storageOk();
   if (!state.storageAvailable && !isDemo){
@@ -27049,6 +27073,13 @@ async function postLoginBootstrap(client, user){
   state.authResolved = true;
   await loadProfile(client, state.user?.id);
   if (state.user){
+    const redirectHash = consumePostAuthRedirectHash();
+    if (redirectHash){
+      console.info("[auth-redirect] restoring:", redirectHash);
+      window.location.hash = redirectHash;
+    } else {
+      console.info("[auth-redirect] fallback to home");
+    }
     showAuth(false);
     await loadProjects();
     await resolveKsInvoiceDeepLinkProjectContext();
