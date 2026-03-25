@@ -9892,6 +9892,34 @@ function applySignedOutUi(reason = "unknown"){
   console.info("[auth] signed-out UI applied", { reason });
 }
 
+async function syncAuthUiFromSession(reason = "manual"){
+  if (isDemo || !state.client?.auth) return;
+  let data;
+  let error;
+  try {
+    ({ data, error } = await state.client.auth.getSession());
+  } catch (err){
+    error = err;
+  }
+  const session = data?.session || null;
+  if (error || !session?.user){
+    if (state.user || state.session){
+      console.info("[auth] session missing; forcing signed-out UI", {
+        reason,
+        error: error?.message || null,
+      });
+    }
+    state.session = null;
+    state.user = null;
+    state.profile = null;
+    applySignedOutUi(`session-sync:${reason}`);
+    return;
+  }
+  state.session = session;
+  state.user = session.user;
+  setWhoami();
+}
+
 async function ensureValidSessionForAction(actionName = "protected-action"){
   if (isDemo) return { user: state.user };
   if (!state.client){
@@ -15966,8 +15994,14 @@ function syncDemoLoginButton(){
 function setWhoami(){
   const authed = isDemo || Boolean(state.user);
   const shellVisible = authed || CONTROL_CENTER_DEV_MODE;
+  const signInTopBtn = $("btnSignInTop");
+  if (signInTopBtn) signInTopBtn.style.display = authed ? "none" : "";
   const signOutBtn = $("btnSignOut");
   if (signOutBtn) signOutBtn.style.display = authed ? "" : "none";
+  const menuSignInBtn = $("btnMenuSignIn");
+  if (menuSignInBtn) menuSignInBtn.style.display = authed ? "none" : "";
+  const menuSignOutBtn = $("btnMenuSignOut");
+  if (menuSignOutBtn) menuSignOutBtn.style.display = authed ? "" : "none";
   ["btnHome", "btnProjects", "btnMenu", "btnOpenProjects", "btnMapToggle"].forEach((id) => {
     const el = $(id);
     if (el) el.style.display = shellVisible ? "" : "none";
@@ -26491,6 +26525,12 @@ async function initAuth(){
   supabase = state.client;
   setAuthButtonsDisabled(false);
   window.addEventListener("online", () => syncPendingSites());
+  window.addEventListener("focus", () => { void syncAuthUiFromSession("window-focus"); });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible"){
+      void syncAuthUiFromSession("visibility-visible");
+    }
+  });
   SpecCom.helpers.applyAuthModeFromHash();
   window.addEventListener("hashchange", () => {
     SpecCom.helpers.applyAuthModeFromHash();
@@ -27248,6 +27288,15 @@ function wireUI(){
       await SpecCom.helpers.handleSignOut();
     });
   }
+  const signInTopBtn = $("btnSignInTop");
+  if (signInTopBtn){
+    signInTopBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      closeMenuModal();
+      showAuth(true);
+      setWhoami();
+    });
+  }
 
   const profilePhotoInput = $("profilePhotoInput");
   const profilePhotoUploadBtn = $("btnProfilePhotoUpload");
@@ -27725,6 +27774,14 @@ function wireUI(){
     menuSignOutBtn.addEventListener("click", async () => {
       closeMenuModal();
       await SpecCom.helpers.handleSignOut();
+    });
+  }
+  const menuSignInBtn = $("btnMenuSignIn");
+  if (menuSignInBtn){
+    menuSignInBtn.addEventListener("click", () => {
+      closeMenuModal();
+      showAuth(true);
+      setWhoami();
     });
   }
   const grantAccessBtn = $("btnGrantProjectAccess");
