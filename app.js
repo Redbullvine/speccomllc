@@ -23745,9 +23745,10 @@ async function uploadKsInvoicePdf({ blob, fileName, invoiceNumber, batchId }){
   }
   const safeName = String(fileName || `${invoiceNumber || "invoice"}.pdf`).replace(/[^\w.\-() ]+/g, "_");
   const path = `${orgId}/${projectId}/ks-electric/${batchId}/${Date.now()}-${safeName}`;
+  const uploadBody = new Blob([blob], { type: "application/pdf" });
   const { error: uploadError } = await state.client.storage
     .from(INVOICE_FILES_BUCKET)
-    .upload(path, blob, { upsert: true, contentType: "application/pdf" });
+    .upload(path, uploadBody, { upsert: true, contentType: "application/pdf" });
   if (uploadError){
     return { ok: false, reason: uploadError.message || "upload-failed", filePath: "", fileUrl: "" };
   }
@@ -23862,6 +23863,33 @@ async function handleKsInvoiceZipImport(file){
           reason,
         });
         continue;
+      }
+      const entryMime = String(blob?.type || "").toLowerCase();
+      const isPdfByName = /\.pdf$/i.test(baseName);
+      if (!isPdfByName){
+        summary.failed += 1;
+        const reason = `mime type ${entryMime || "(empty)"} is not supported`;
+        summary.errors.push(`${entryName}: ${reason}`);
+        summary.file_results.push({
+          source_filename: baseName,
+          result: "failed",
+          stage: "read-zip-entry",
+          reason,
+          extracted_invoice_number: filenameInvoiceNumber || null,
+          extracted_node_name: null,
+        });
+        console.error("[ks-import] file failed", {
+          source_filename: baseName,
+          stage: "read-zip-entry",
+          reason,
+        });
+        continue;
+      }
+      if (entryMime && entryMime !== "application/pdf" && entryMime !== "application/octet-stream"){
+        console.info("[ks-import] nonstandard zip entry mime accepted by extension", {
+          source_filename: baseName,
+          mime: entryMime,
+        });
       }
       let parsedPdf = null;
       try {
