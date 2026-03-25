@@ -2734,7 +2734,16 @@ function setAuthButtonsDisabled(disabled){
   if (note) note.style.display = disabled ? "" : "none";
 }
 
+function hasAuthenticatedSession(){
+  if (isDemo) return true;
+  return Boolean(state.user?.id);
+}
+
 function setActiveView(viewId, { syncHash = true } = {}){
+  if (!CONTROL_CENTER_DEV_MODE && !hasAuthenticatedSession()){
+    applySignedOutUi("set-active-view-blocked");
+    return;
+  }
   if (viewId !== "viewMap"){
     setMapFieldCreateOpen(false);
   }
@@ -9867,6 +9876,11 @@ function clearAuthenticatedWorkspaceState(){
   state.pendingPreferredLanguage = "";
   state.orgContextRequired = false;
   state.orgContextPromptShown = false;
+  document.querySelectorAll(".modal").forEach((modal) => {
+    if (modal instanceof HTMLElement){
+      modal.style.display = "none";
+    }
+  });
   setSavedProjectPreference(null);
   setActiveOrgContext(null);
   showProfileSetupModal(false);
@@ -16472,6 +16486,10 @@ function updateProjectScopedControls(){
 }
 
 function openProjectsModal(){
+  if (!hasAuthenticatedSession()){
+    applySignedOutUi("open-projects-modal-blocked");
+    return;
+  }
   const modal = $("projectsModal");
   if (!modal) return;
   renderProjectsList();
@@ -16485,6 +16503,10 @@ function closeProjectsModal(){
 }
 
 function openMessagesModal(){
+  if (!hasAuthenticatedSession()){
+    applySignedOutUi("open-messages-modal-blocked");
+    return;
+  }
   if (!state.features.messages || !state.messagesEnabled) return;
   const modal = $("messagesModal");
   if (!modal) return;
@@ -16506,6 +16528,10 @@ function closeMessagesModal(){
 }
 
 function openMenuModal(){
+  if (!hasAuthenticatedSession()){
+    applySignedOutUi("open-menu-modal-blocked");
+    return;
+  }
   const modal = $("menuModal");
   if (!modal) return;
   const isRoot = SpecCom.helpers.isRoot();
@@ -17531,6 +17557,10 @@ async function confirmGrantAccess(){
 }
 
 function openCreateProjectModal(){
+  if (!hasAuthenticatedSession()){
+    applySignedOutUi("open-create-project-modal-blocked");
+    return;
+  }
   const modal = $("createProjectModal");
   if (!modal) return;
   const name = $("createProjectName");
