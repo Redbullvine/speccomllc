@@ -23002,6 +23002,10 @@ function normalizeKsInvoiceLookup(value){
   return normalizeKsInvoiceNumber(value).toLowerCase();
 }
 
+function isUuidLike(value){
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || "").trim());
+}
+
 function parseInvoiceNumberFromFilename(fileName){
   const base = String(fileName || "").trim().split(/[\\/]/).pop() || "";
   if (!base) return null;
@@ -23171,13 +23175,16 @@ async function parseKsInvoicePdfData(buffer, { sourceFilename = "", fallbackInvo
   };
 }
 
-function findKsInvoiceByNumber(invoiceNumber){
-  const needle = normalizeKsInvoiceLookup(invoiceNumber);
+function findKsInvoiceByRouteRef(invoiceRef){
+  const raw = normalizeKsInvoiceNumber(invoiceRef);
+  if (!raw) return null;
+  const needle = normalizeKsInvoiceLookup(raw);
   if (!needle) return null;
   return (state.ksInvoices.records || []).find((row) => {
+    const rowId = normalizeKsInvoiceLookup(row?.id);
     const invoiceNo = normalizeKsInvoiceLookup(row?.invoice_number);
     const invoiceKey = normalizeKsInvoiceLookup(row?.invoice_key || buildKsInvoiceKey(row?.invoice_number));
-    if (needle === invoiceNo || needle === invoiceKey) return true;
+    if (needle === rowId || needle === invoiceNo || needle === invoiceKey) return true;
     const normalizedNeedleNoPrefix = needle.replace(/^speccom_/, "");
     return normalizedNeedleNoPrefix && normalizedNeedleNoPrefix === invoiceNo;
   }) || null;
@@ -23207,6 +23214,19 @@ async function resolveKsInvoiceDeepLinkProjectContext(){
   if (!candidates.length) return;
   let matched = null;
   for (const candidate of candidates){
+    if (isUuidLike(candidate)){
+      const byId = await state.client
+        .from("ks_invoice_records")
+        .select("id, project_id, invoice_number, invoice_key")
+        .eq("org_id", orgId)
+        .eq("id", candidate)
+        .limit(1)
+        .maybeSingle();
+      if (!byId.error && byId.data){
+        matched = byId.data;
+        break;
+      }
+    }
     const invoiceNorm = normalizeKsInvoiceLookup(candidate.replace(/^speccom_/i, ""));
     const keyCandidate = buildKsInvoiceKey(candidate);
     const query = await state.client
@@ -23512,6 +23532,12 @@ function openOfficeInvoiceByNumber(invoiceNumber, { syncUrl = true } = {}){
   return true;
 }
 
+function openOfficeInvoiceByRouteRef(invoiceRef, { syncUrl = true } = {}){
+  const clean = String(invoiceRef || "").trim();
+  if (!clean) return false;
+  return openOfficeInvoiceByNumber(clean, { syncUrl });
+}
+
 function closeOfficeInvoiceDeepLink({ syncUrl = true } = {}){
   state.officeInvoices.routeInvoiceNumber = "";
   if (syncUrl){
@@ -23584,14 +23610,14 @@ function renderOfficeInvoiceNotFound(invoiceNumber){
   `;
 }
 
-function buildKsInvoiceLink(invoiceNumber){
-  const clean = buildKsInvoiceKey(invoiceNumber);
+function buildKsInvoiceLink(invoiceRef){
+  const clean = String(invoiceRef || "").trim();
   if (!clean) return "";
   return `${window.location.origin}${window.location.pathname}#invoice=${encodeURIComponent(clean)}`;
 }
 
-function copyKsInvoiceLink(invoiceNumber){
-  const link = buildKsInvoiceLink(invoiceNumber);
+function copyKsInvoiceLink(invoiceRef){
+  const link = buildKsInvoiceLink(invoiceRef);
   if (!link) return;
   if (navigator.clipboard?.writeText){
     navigator.clipboard.writeText(link)
@@ -24196,15 +24222,15 @@ function renderKsInvoiceList(){
           <tbody>
             ${rows.map((row) => `
               <tr>
-                <td><button class="btn ghost small" type="button" data-office-action="openKsInvoice" data-office-invoice-number="${escapeHtml(row.invoice_key || buildKsInvoiceKey(row.invoice_number || ""))}">${escapeHtml(row.invoice_number || "-")}</button></td>
+                <td><button class="btn ghost small" type="button" data-office-action="openKsInvoice" data-office-invoice-number="${escapeHtml(row.id || row.invoice_number || "")}">${escapeHtml(row.invoice_number || "-")}</button></td>
                 <td>${escapeHtml(row.node_name || row.extracted_data?.node_name || "-")}</td>
                 <td>${escapeHtml(row.project_name || row.extracted_data?.project_name || "-")}</td>
                 <td>${escapeHtml(new Date(row.imported_at || Date.now()).toLocaleString())}</td>
                 <td>${escapeHtml(row.source_filename || "-")}</td>
                 <td>${escapeHtml(row.parse_status || row.status || "imported")}</td>
                 <td class="row" style="gap:6px; flex-wrap:wrap;">
-                  <button class="btn ghost small" type="button" data-office-action="openKsInvoice" data-office-invoice-number="${escapeHtml(row.invoice_key || buildKsInvoiceKey(row.invoice_number || ""))}">Open</button>
-                  <button class="btn ghost small" type="button" data-office-action="copyKsInvoiceLink" data-office-invoice-number="${escapeHtml(row.invoice_key || buildKsInvoiceKey(row.invoice_number || ""))}">Copy Link</button>
+                  <button class="btn ghost small" type="button" data-office-action="openKsInvoice" data-office-invoice-number="${escapeHtml(row.id || row.invoice_number || "")}">Open</button>
+                  <button class="btn ghost small" type="button" data-office-action="copyKsInvoiceLink" data-office-invoice-number="${escapeHtml(row.id || row.invoice_number || "")}">Copy Link</button>
                 </td>
               </tr>
             `).join("")}
@@ -24242,7 +24268,7 @@ function renderKsInvoiceDetailView(invoice){
         </div>
         <div class="row" style="gap:8px; flex-wrap:wrap;">
           <button class="btn ghost small" type="button" data-office-action="backToInvoiceList">Back to Invoice List</button>
-          <button class="btn ghost small" type="button" data-office-action="copyKsInvoiceLink" data-office-invoice-number="${escapeHtml(invoiceKey)}">Copy Link</button>
+          <button class="btn ghost small" type="button" data-office-action="copyKsInvoiceLink" data-office-invoice-number="${escapeHtml(invoice?.id || invoiceNumber || "")}">Copy Link</button>
         </div>
       </div>
       ${parseNeedsAttention ? `
@@ -24456,7 +24482,7 @@ function renderInvoicePanel(){
   }
   const routeInvoiceNumber = String(state.officeInvoices.routeInvoiceNumber || "").trim();
   if (routeInvoiceNumber){
-    const matchedKsInvoice = findKsInvoiceByNumber(routeInvoiceNumber);
+    const matchedKsInvoice = findKsInvoiceByRouteRef(routeInvoiceNumber);
     const matchedInvoice = findOfficeInvoiceByNumber(routeInvoiceNumber);
     wrap.innerHTML = `
       <div class="field-stack" style="gap:10px;">
@@ -28624,7 +28650,7 @@ function wireUI(){
         return;
       }
       if (action === "openKsInvoice"){
-        openOfficeInvoiceByNumber(invoiceNumber, { syncUrl: true });
+        openOfficeInvoiceByRouteRef(invoiceNumber, { syncUrl: true });
         return;
       }
       if (action === "openInvoice"){
