@@ -144,7 +144,8 @@ const state = {
     missingOrgContext: false,
     pendingImportFile: null,
     showWelcomeOverlay: false,
-    welcomeTimer: null,
+    pendingRouteRef: "",
+    lastIntroMode: "",
   },
   invoiceFiles: [],
   pendingSites: [],
@@ -1207,8 +1208,6 @@ const OFFICE_INVOICE_RECORDS_KEY = "speccom.office.invoiceRecords.v1";
 const OFFICE_INVOICE_RECENTS_KEY = "speccom.office.invoiceRecents.v1";
 const KS_INVOICE_RECORDS_KEY = "speccom.ks.invoiceRecords.v1";
 const KS_INVOICE_BATCHES_KEY = "speccom.ks.invoiceBatches.v1";
-const KS_INVOICE_WELCOME_HIDE_KEY = "speccom.ks.invoiceWelcome.hide.v1";
-const KS_INVOICE_WELCOME_SEEN_SESSION_KEY = "speccom.ks.invoiceWelcome.sessionSeen.v1";
 const POST_AUTH_REDIRECT_KEY = "postAuthRedirect";
 const WAREHOUSE_SCAN_ITEMS_KEY = "speccom.warehouse.scanItems.v1";
 const KMZ_PHOTO_OVERRIDES_KEY_PREFIX = "speccom.kmzPhotoOverrides.";
@@ -9709,7 +9708,7 @@ function hasInvoiceHashRoute(hashValue = window.location.hash){
   return /(?:^|[?&])invoice=/i.test(normalized);
 }
 
-function capturePostAuthRedirectIfNeeded(){
+function storePostAuthRedirect(){
   if (hasAuthenticatedSession()) return;
   const hash = String(window.location.hash || "").trim();
   if (!hasInvoiceHashRoute(hash)) return;
@@ -9717,11 +9716,88 @@ function capturePostAuthRedirectIfNeeded(){
   console.info("[auth-redirect] stored:", hash);
 }
 
-function consumePostAuthRedirectHash(){
+function restorePostAuthRedirect(){
   const stored = String(safeLocalStorageGet(POST_AUTH_REDIRECT_KEY) || "").trim();
   if (!stored) return "";
   safeLocalStorageRemove(POST_AUTH_REDIRECT_KEY);
   return stored;
+}
+
+function getIntroModeForRoute(hashOrState = window.location.hash){
+  const routeHash = typeof hashOrState === "string"
+    ? hashOrState
+    : String(hashOrState?.hash || window.location.hash || "");
+  const routeRef = String(
+    state.ksInvoices.pendingRouteRef
+    || state.officeInvoices.routeInvoiceNumber
+    || getInvoiceIdFromUrl({ hash: routeHash, pathname: window.location.pathname })
+    || ""
+  ).trim();
+  if (routeRef || hasInvoiceHashRoute(routeHash)){
+    if (state.ksInvoices.lastIntroMode !== "officeInvoice"){
+      console.info("[intro] mode=officeInvoice");
+      console.info("[intro] generic skipped because invoice route is active");
+      state.ksInvoices.lastIntroMode = "officeInvoice";
+    }
+    return "officeInvoice";
+  }
+  if (Boolean(state.intro?.genericActive)){
+    if (state.ksInvoices.lastIntroMode !== "generic"){
+      console.info("[intro] mode=generic");
+      state.ksInvoices.lastIntroMode = "generic";
+    }
+    return "generic";
+  }
+  state.ksInvoices.lastIntroMode = "";
+  return null;
+}
+
+function openOfficeBillingIntroThenInvoice(routeRef, { syncUrl = false } = {}){
+  const clean = String(routeRef || "").trim();
+  if (!clean) return false;
+  if (state.ksInvoices.showWelcomeOverlay && String(state.ksInvoices.pendingRouteRef || "") === clean){
+    console.info("[intro] only one intro allowed");
+    return true;
+  }
+  if (getIntroModeForRoute(`#invoice=${encodeURIComponent(clean)}`) !== "officeInvoice"){
+    return false;
+  }
+  state.officeInvoices.routeInvoiceNumber = clean;
+  state.ksInvoices.pendingRouteRef = clean;
+  state.ksInvoices.showWelcomeOverlay = true;
+  if (syncUrl){
+    setInvoiceDeepLinkHash(clean);
+  }
+  console.info("[invoice-intro] overlay shown", { route_ref: clean });
+  if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
+    renderInvoicePanel();
+  }
+  return true;
+}
+
+function continueToPendingInvoiceOpen(){
+  const pending = String(state.ksInvoices.pendingRouteRef || state.officeInvoices.routeInvoiceNumber || "").trim();
+  if (!pending) return;
+  console.info("[invoice-intro] continue clicked", { route_ref: pending });
+  state.officeInvoices.routeInvoiceNumber = pending;
+  state.ksInvoices.pendingRouteRef = "";
+  state.ksInvoices.showWelcomeOverlay = false;
+  console.info("[invoice-intro] detail opened", { route_ref: pending });
+  if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
+    renderInvoicePanel();
+  }
+}
+
+function cancelPendingInvoiceOpen(){
+  const pending = String(state.ksInvoices.pendingRouteRef || state.officeInvoices.routeInvoiceNumber || "").trim();
+  console.info("[invoice-intro] cancelled", { route_ref: pending || null });
+  state.ksInvoices.pendingRouteRef = "";
+  state.ksInvoices.showWelcomeOverlay = false;
+  state.officeInvoices.routeInvoiceNumber = "";
+  clearInvoiceDeepLinkUrl();
+  if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
+    renderInvoicePanel();
+  }
 }
 
 function syncInvoiceDeepLinkFromUrl({ activateView = false } = {}){
@@ -9729,8 +9805,7 @@ function syncInvoiceDeepLinkFromUrl({ activateView = false } = {}){
   const nextInvoiceId = String(invoiceId || "").trim();
   const currentInvoiceId = String(state.officeInvoices.routeInvoiceNumber || "").trim();
   if (nextInvoiceId){
-    state.officeInvoices.routeInvoiceNumber = nextInvoiceId;
-    triggerKsInvoiceWelcomeIfNeeded();
+    openOfficeBillingIntroThenInvoice(nextInvoiceId, { syncUrl: false });
     if (activateView && state.user && isViewAllowed("viewInvoices")){
       setActiveView("viewInvoices");
     } else if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
@@ -9740,6 +9815,8 @@ function syncInvoiceDeepLinkFromUrl({ activateView = false } = {}){
   }
   if (!currentInvoiceId) return false;
   state.officeInvoices.routeInvoiceNumber = "";
+  state.ksInvoices.pendingRouteRef = "";
+  state.ksInvoices.showWelcomeOverlay = false;
   if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
     renderInvoicePanel();
   }
@@ -9903,10 +9980,13 @@ function clearAuthenticatedWorkspaceState(){
   state.messageRecipients = [];
   state.officeInvoices.records = [];
   state.officeInvoices.draft = null;
+  state.officeInvoices.routeInvoiceNumber = "";
   state.ksInvoices.records = [];
   state.ksInvoices.batches = [];
   state.ksInvoices.pendingImportFile = null;
+  state.ksInvoices.pendingRouteRef = "";
   state.ksInvoices.showWelcomeOverlay = false;
+  state.ksInvoices.lastIntroMode = "";
   state.ksInvoices.missingOrgContext = false;
   state.usageEvents = [];
   state.profileSetupDismissed = false;
@@ -23275,48 +23355,6 @@ async function resolveKsInvoiceDeepLinkProjectContext(){
   setActiveProjectById(projectMatch.id);
 }
 
-function shouldShowKsInvoiceWelcome(){
-  if (!getInvoiceIdFromUrl()) return false;
-  const hide = safeLocalStorageGet(KS_INVOICE_WELCOME_HIDE_KEY);
-  if (String(hide || "") === "1") return false;
-  try {
-    if (sessionStorage.getItem(KS_INVOICE_WELCOME_SEEN_SESSION_KEY) === "1") return false;
-  } catch {}
-  return true;
-}
-
-function markKsInvoiceWelcomeSeen({ dontShowAgain = false } = {}){
-  try {
-    sessionStorage.setItem(KS_INVOICE_WELCOME_SEEN_SESSION_KEY, "1");
-  } catch {}
-  if (dontShowAgain){
-    safeLocalStorageSet(KS_INVOICE_WELCOME_HIDE_KEY, "1");
-  }
-}
-
-function dismissKsInvoiceWelcome({ dontShowAgain = false } = {}){
-  if (state.ksInvoices.welcomeTimer){
-    clearTimeout(state.ksInvoices.welcomeTimer);
-    state.ksInvoices.welcomeTimer = null;
-  }
-  markKsInvoiceWelcomeSeen({ dontShowAgain });
-  state.ksInvoices.showWelcomeOverlay = false;
-  if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
-    renderInvoicePanel();
-  }
-}
-
-function triggerKsInvoiceWelcomeIfNeeded(){
-  if (!shouldShowKsInvoiceWelcome()) return;
-  state.ksInvoices.showWelcomeOverlay = true;
-  if (state.ksInvoices.welcomeTimer){
-    clearTimeout(state.ksInvoices.welcomeTimer);
-  }
-  state.ksInvoices.welcomeTimer = setTimeout(() => {
-    dismissKsInvoiceWelcome({ dontShowAgain: false });
-  }, 2600);
-}
-
 function persistKsInvoiceLocalFallback(){
   safeLocalStorageSet(KS_INVOICE_RECORDS_KEY, JSON.stringify(state.ksInvoices.records || []));
   safeLocalStorageSet(KS_INVOICE_BATCHES_KEY, JSON.stringify(state.ksInvoices.batches || []));
@@ -23558,7 +23596,10 @@ function openOfficeInvoiceByNumber(invoiceNumber, { syncUrl = true } = {}){
 function openOfficeInvoiceByRouteRef(invoiceRef, { syncUrl = true } = {}){
   const clean = String(invoiceRef || "").trim();
   if (!clean) return false;
-  return openOfficeInvoiceByNumber(clean, { syncUrl });
+  if (state.user && (document.querySelector(".view.active")?.id || "") !== "viewInvoices" && isViewAllowed("viewInvoices")){
+    setActiveView("viewInvoices");
+  }
+  return openOfficeBillingIntroThenInvoice(clean, { syncUrl });
 }
 
 function closeOfficeInvoiceDeepLink({ syncUrl = true } = {}){
@@ -24354,15 +24395,27 @@ function renderKsInvoiceDetailView(invoice){
 
 function renderInvoiceDeepLinkWelcomeOverlay(){
   return `
-    <div class="card" style="margin-top:12px; position:relative; overflow:hidden;">
-      <div class="ks-welcome-overlay">
-        <div class="ks-welcome-logo">SpecCom</div>
-        <div class="ks-welcome-title">Welcome to SpecCom</div>
-        <div class="ks-welcome-subtitle">K &amp; S Electric Invoice Access</div>
-        <div class="muted" style="margin-top:6px;">Your invoice is loading...</div>
-        <div class="row" style="justify-content:center; margin-top:12px; gap:8px;">
-          <button class="btn ghost small" type="button" data-office-action="skipInvoiceWelcome">Skip</button>
-          <button class="btn ghost small" type="button" data-office-action="hideInvoiceWelcome">Don't show again</button>
+    <div style="position:fixed; inset:0; z-index:1200; background:rgba(8,13,24,0.76); backdrop-filter:blur(3px); display:flex; align-items:center; justify-content:center; padding:20px;">
+      <div class="ks-welcome-overlay" style="width:min(820px,96vw); min-height:0; max-height:92vh; border-radius:18px; padding:24px 22px; gap:12px; position:relative; box-shadow:0 24px 90px rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.08);">
+        <button class="btn ghost small" type="button" data-office-action="cancelPendingInvoiceOpen" style="position:absolute; top:12px; right:12px;">X</button>
+        <div class="ks-welcome-title" style="font-size:44px; letter-spacing:0.06em; margin-top:6px;">WELCOME</div>
+        <div class="ks-welcome-title" style="font-size:28px; letter-spacing:0.04em;">TO</div>
+        <div class="ks-welcome-title" style="font-size:38px; color:#93c5fd;">Office &amp; Billing</div>
+        <div style="width:min(520px,100%); text-align:left; margin-top:6px;">
+          <ul style="margin:0; padding-left:20px; display:grid; gap:6px; line-height:1.4;">
+            <li>Auto-generate invoices</li>
+            <li>Standard billing codes</li>
+            <li>Reduce missed charges</li>
+            <li>Upload zip folders with .PDF invoices</li>
+            <li>Organize billing</li>
+            <li>Verify project completions</li>
+            <li>Monitor material usage</li>
+            <li>Update redlined prints</li>
+          </ul>
+        </div>
+        <div class="row" style="justify-content:center; margin-top:10px; gap:10px; flex-wrap:wrap;">
+          <button class="btn" type="button" data-office-action="continueToPendingInvoiceOpen">Continue</button>
+          <button class="btn secondary" type="button" data-office-action="cancelPendingInvoiceOpen">Back to Office</button>
         </div>
       </div>
     </div>
@@ -24501,10 +24554,11 @@ function renderInvoicePanel(){
   const invoices = state.officeInvoices.records || [];
   const urlInvoiceNumber = String(getInvoiceIdFromUrl() || "").trim();
   if (urlInvoiceNumber){
-    state.officeInvoices.routeInvoiceNumber = urlInvoiceNumber;
+    openOfficeBillingIntroThenInvoice(urlInvoiceNumber, { syncUrl: false });
   }
   const routeInvoiceNumber = String(state.officeInvoices.routeInvoiceNumber || "").trim();
   if (routeInvoiceNumber){
+    const introMode = getIntroModeForRoute(window.location.hash || "");
     const matchedKsInvoice = findKsInvoiceByRouteRef(routeInvoiceNumber);
     const matchedInvoice = findOfficeInvoiceByNumber(routeInvoiceNumber);
     wrap.innerHTML = `
@@ -24513,8 +24567,8 @@ function renderInvoicePanel(){
           <div class="muted small">Telecom weekly invoice desk</div>
           <button class="btn" type="button" data-office-action="createInvoice">Create Invoice</button>
         </div>
-        ${state.ksInvoices.showWelcomeOverlay ? renderInvoiceDeepLinkWelcomeOverlay() : ""}
-        ${!state.ksInvoices.showWelcomeOverlay ? (
+        ${(introMode === "officeInvoice" && state.ksInvoices.showWelcomeOverlay) ? renderInvoiceDeepLinkWelcomeOverlay() : ""}
+        ${(introMode !== "officeInvoice" || !state.ksInvoices.showWelcomeOverlay) ? (
           matchedKsInvoice
             ? renderKsInvoiceDetailView(matchedKsInvoice)
             : (matchedInvoice ? renderOfficeInvoiceDetailView(matchedInvoice) : renderOfficeInvoiceNotFound(routeInvoiceNumber))
@@ -26797,7 +26851,7 @@ async function initAuth(){
   installInvalidRefreshTokenGuard();
   setAppModeUI();
   setEnvWarning();
-  capturePostAuthRedirectIfNeeded();
+  storePostAuthRedirect();
 
   state.storageAvailable = storageOk();
   if (!state.storageAvailable && !isDemo){
@@ -26851,6 +26905,9 @@ async function initAuth(){
   SpecCom.helpers.applyAuthModeFromHash();
   window.addEventListener("hashchange", () => {
     SpecCom.helpers.applyAuthModeFromHash();
+    if (!state.user){
+      storePostAuthRedirect();
+    }
     if (syncInvoiceDeepLinkFromUrl({ activateView: true })) return;
     const hashView = parseViewFromHash();
     if (!hashView || !state.user || !isViewAllowed(hashView)) return;
@@ -27073,7 +27130,7 @@ async function postLoginBootstrap(client, user){
   state.authResolved = true;
   await loadProfile(client, state.user?.id);
   if (state.user){
-    const redirectHash = consumePostAuthRedirectHash();
+    const redirectHash = restorePostAuthRedirect();
     if (redirectHash){
       console.info("[auth-redirect] restoring:", redirectHash);
       window.location.hash = redirectHash;
@@ -28696,12 +28753,12 @@ function wireUI(){
         copyKsInvoiceLink(invoiceNumber);
         return;
       }
-      if (action === "skipInvoiceWelcome"){
-        dismissKsInvoiceWelcome({ dontShowAgain: false });
+      if (action === "continueToPendingInvoiceOpen"){
+        continueToPendingInvoiceOpen();
         return;
       }
-      if (action === "hideInvoiceWelcome"){
-        dismissKsInvoiceWelcome({ dontShowAgain: true });
+      if (action === "cancelPendingInvoiceOpen"){
+        cancelPendingInvoiceOpen();
         return;
       }
       if (action === "resolveOrgContext"){
