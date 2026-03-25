@@ -24062,6 +24062,7 @@ function renderKsInvoiceDetailView(invoice){
   const sourceUrl = invoice?.source_file_url || "";
   const invoiceNumber = invoice?.invoice_number || extracted.invoice_number || "-";
   const invoiceKey = invoice?.invoice_key || extracted.invoice_key || buildKsInvoiceKey(invoiceNumber);
+  const invoiceDate = invoice?.invoice_date || extracted.invoice_date || "-";
   const weekEnding = invoice?.week_ending || extracted.week_ending || "-";
   const projectName = invoice?.project_name || extracted.project_name || "-";
   const nodeName = invoice?.node_name || extracted.node_name || "-";
@@ -24071,6 +24072,8 @@ function renderKsInvoiceDetailView(invoice){
     : (Number.isFinite(Number(extracted?.grand_total)) ? Number(extracted.grand_total) : null);
   const parseStatus = invoice?.parse_status || extracted.parse_status || "-";
   const parseError = invoice?.parse_error || extracted.parse_error || "";
+  const warningLines = Array.isArray(invoice?.warnings) ? invoice.warnings : [];
+  const parseNeedsAttention = /partial|failed/i.test(String(parseStatus || "")) || Boolean(parseError) || warningLines.length > 0;
   return `
     <div class="card" style="margin-top:12px;">
       <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
@@ -24083,15 +24086,25 @@ function renderKsInvoiceDetailView(invoice){
           <button class="btn ghost small" type="button" data-office-action="copyKsInvoiceLink" data-office-invoice-number="${escapeHtml(invoiceKey)}">Copy Link</button>
         </div>
       </div>
+      ${parseNeedsAttention ? `
+        <div class="note warning" style="margin-top:10px;">
+          <div style="font-weight:800;">Parse review needed</div>
+          <div class="muted small" style="margin-top:6px;">Status: ${escapeHtml(parseStatus || "-")}</div>
+          ${parseError ? `<div class="muted small" style="margin-top:6px;">Error: ${escapeHtml(parseError)}</div>` : ""}
+          ${warningLines.length ? `<div class="muted small" style="margin-top:6px;">${warningLines.map((w) => `<div>- ${escapeHtml(w)}</div>`).join("")}</div>` : ""}
+        </div>
+      ` : ""}
       <div class="grid cols-2" style="margin-top:10px;">
         <div><div class="small muted">Invoice Number</div><div>${escapeHtml(invoiceNumber)}</div></div>
         <div><div class="small muted">Invoice Key</div><div>${escapeHtml(invoiceKey || "-")}</div></div>
         <div><div class="small muted">Node</div><div>${escapeHtml(nodeName)}</div></div>
         <div><div class="small muted">Project</div><div>${escapeHtml(projectName)}</div></div>
+        <div><div class="small muted">Invoice Date</div><div>${escapeHtml(invoiceDate)}</div></div>
         <div><div class="small muted">Week Ending</div><div>${escapeHtml(weekEnding)}</div></div>
         <div><div class="small muted">Bill To Company</div><div>${escapeHtml(billToCompany)}</div></div>
         <div><div class="small muted">Source Filename</div><div>${escapeHtml(invoice?.source_filename || "-")}</div></div>
         <div><div class="small muted">Grand Total</div><div>${escapeHtml(grandTotal != null ? formatMoney(grandTotal) : "-")}</div></div>
+        <div><div class="small muted">Parse Status</div><div>${escapeHtml(parseStatus || "-")}</div></div>
       </div>
       <div style="margin-top:10px;">
         <div class="small muted">Source PDF</div>
@@ -24124,14 +24137,8 @@ function renderKsInvoiceDetailView(invoice){
         }
       </div>
       <div style="margin-top:10px;">
-        <div class="small muted">Notes / warnings</div>
+        <div class="small muted">Notes</div>
         <div>${escapeHtml(invoice?.notes || "-")}</div>
-        <div class="muted small" style="margin-top:6px;">Parse status: ${escapeHtml(parseStatus)}</div>
-        ${parseError ? `<div class="muted small" style="margin-top:6px;">Parse error: ${escapeHtml(parseError)}</div>` : ""}
-        ${(Array.isArray(invoice?.warnings) && invoice.warnings.length)
-          ? `<div class="muted small" style="margin-top:6px;">${invoice.warnings.map((w) => `<div>- ${escapeHtml(w)}</div>`).join("")}</div>`
-          : ""
-        }
       </div>
     </div>
   `;
