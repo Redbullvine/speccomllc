@@ -9814,6 +9814,11 @@ function openOfficeBillingIntroThenInvoice(routeRef, { syncUrl = false } = {}){
   clearInvoiceIntroTimer();
   state.ksInvoices.introCountdownTimer = setInterval(() => {
     state.ksInvoices.introCountdown = Math.max(0, Number(state.ksInvoices.introCountdown || 0) - 1);
+    if (state.ksInvoices.introCountdown <= 0){
+      console.info("[invoice-intro] auto continue");
+      continueToPendingInvoiceOpen({ source: "timer" });
+      return;
+    }
     if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
       renderInvoicePanel();
     }
@@ -9825,10 +9830,6 @@ function openOfficeBillingIntroThenInvoice(routeRef, { syncUrl = false } = {}){
       renderInvoicePanel();
     }
   }, 2600);
-  state.ksInvoices.introTimer = setTimeout(() => {
-    console.info("[invoice-intro] auto continue");
-    continueToPendingInvoiceOpen({ source: "timer" });
-  }, 3000);
   if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
     renderInvoicePanel();
   }
