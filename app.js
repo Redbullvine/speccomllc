@@ -2327,8 +2327,22 @@ function normalizeCodeForMatch(value){
     .trim();
 }
 
+function extractBillingCodesPayloadFromNotes(notes){
+  const text = String(notes || "");
+  if (!text) return "";
+  const matches = Array.from(text.matchAll(/billing codes payload\s*\(imported[^)]*\)\s*:\s*([^\r\n]+)/gi));
+  if (!matches.length) return "";
+  return String(matches[matches.length - 1]?.[1] || "").trim();
+}
+
+function getSiteCodesPayload(site){
+  const direct = String(site?.codes_payload || "").trim();
+  if (direct) return direct;
+  return extractBillingCodesPayloadFromNotes(site?.notes);
+}
+
 function getPopupBilledCodeDisplayList(site, siteCodes){
-  const payloadRows = parseBillingCodesPayload(site?.codes_payload);
+  const payloadRows = parseBillingCodesPayload(getSiteCodesPayload(site));
   if (!payloadRows.length){
     return normalizeCodeList(siteCodes);
   }
@@ -2926,7 +2940,7 @@ function stopLocationPolling(){
   }
 }
 
-const SITE_BILLING_COLUMNS = "units_allowed, units_billed, codes_payload";
+const SITE_BILLING_COLUMNS = "units_allowed, units_billed";
 const SITE_SELECT_COLUMNS = `id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, lat, lng, created_at, ${SITE_BILLING_COLUMNS}`;
 const SITE_SELECT_COLUMNS_GPS_ONLY = `id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at, ${SITE_BILLING_COLUMNS}`;
 const SITE_SELECT_COLUMNS_LEGACY_ONLY = `id, project_id, name, notes, lat, lng, created_at, ${SITE_BILLING_COLUMNS}`;
@@ -2950,7 +2964,7 @@ function isMissingLatLngColumnError(error){
 }
 
 function isMissingSiteBillingColumnError(error){
-  return ["units_allowed", "units_billed", "codes_payload"].some((col) => isMissingColumnError(error, col));
+  return ["units_allowed", "units_billed"].some((col) => isMissingColumnError(error, col));
 }
 
 function isMissingTable(err){
