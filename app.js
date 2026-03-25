@@ -23155,6 +23155,55 @@ function findKsInvoiceByNumber(invoiceNumber){
   }) || null;
 }
 
+function getInvoiceDeepLinkCandidates(invoiceRef){
+  const raw = normalizeKsInvoiceNumber(invoiceRef);
+  if (!raw) return [];
+  const key = buildKsInvoiceKey(raw);
+  const noPrefix = raw.replace(/^speccom_/i, "");
+  const set = new Set([
+    raw,
+    key,
+    noPrefix,
+    buildKsInvoiceKey(noPrefix),
+  ].filter(Boolean).map((v) => normalizeKsInvoiceNumber(v)));
+  return Array.from(set);
+}
+
+async function resolveKsInvoiceDeepLinkProjectContext(){
+  if (!state.client || !state.user) return;
+  const routeInvoice = String(getInvoiceIdFromUrl() || state.officeInvoices.routeInvoiceNumber || "").trim();
+  if (!routeInvoice) return;
+  const orgId = getInvoiceScopeOrgId();
+  if (!orgId) return;
+  const candidates = getInvoiceDeepLinkCandidates(routeInvoice);
+  if (!candidates.length) return;
+  let matched = null;
+  for (const candidate of candidates){
+    const invoiceNorm = normalizeKsInvoiceLookup(candidate.replace(/^speccom_/i, ""));
+    const keyCandidate = buildKsInvoiceKey(candidate);
+    const query = await state.client
+      .from("ks_invoice_records")
+      .select("id, project_id, invoice_number, invoice_key")
+      .eq("org_id", orgId)
+      .or(`invoice_key.eq.${keyCandidate},invoice_number_norm.eq.${invoiceNorm},invoice_number.eq.${candidate}`)
+      .limit(1)
+      .maybeSingle();
+    if (!query.error && query.data){
+      matched = query.data;
+      break;
+    }
+  }
+  if (!matched?.project_id) return;
+  if (String(state.activeProject?.id || "") === String(matched.project_id)) return;
+  const projectMatch = (state.projects || []).find((p) => String(p?.id || "") === String(matched.project_id));
+  if (!projectMatch) return;
+  console.info("[invoice-deeplink] switching project context", {
+    invoice: routeInvoice,
+    project_id: matched.project_id,
+  });
+  setActiveProjectById(projectMatch.id);
+}
+
 function shouldShowKsInvoiceWelcome(){
   if (!getInvoiceIdFromUrl()) return false;
   const hide = safeLocalStorageGet(KS_INVOICE_WELCOME_HIDE_KEY);
@@ -23246,7 +23295,7 @@ async function loadKsInvoiceWorkspace(projectId = state.activeProject?.id || nul
       .order("imported_at", { ascending: false })
       .limit(500);
     if (projectId){
-      recordsQuery = recordsQuery.or(`project_id.is.null,project_id.eq.${projectId}`);
+      recordsQuery = recordsQuery.eq("project_id", projectId);
     }
     let { data: recordRows, error: recordsError } = await recordsQuery;
     if (recordsError){
@@ -23259,7 +23308,7 @@ async function loadKsInvoiceWorkspace(projectId = state.activeProject?.id || nul
           .order("imported_at", { ascending: false })
           .limit(500);
         if (projectId){
-          fallbackQuery = fallbackQuery.or(`project_id.is.null,project_id.eq.${projectId}`);
+          fallbackQuery = fallbackQuery.eq("project_id", projectId);
         }
         ({ data: recordRows, error: recordsError } = await fallbackQuery);
       }
@@ -23287,7 +23336,7 @@ async function loadKsInvoiceWorkspace(projectId = state.activeProject?.id || nul
       .order("created_at", { ascending: false })
       .limit(100);
     if (projectId){
-      batchQuery = batchQuery.or(`project_id.is.null,project_id.eq.${projectId}`);
+      batchQuery = batchQuery.eq("project_id", projectId);
     }
     const { data: batchRows, error: batchError } = await batchQuery;
     if (batchError){
@@ -23689,6 +23738,14 @@ async function handleKsInvoiceZipImport(file){
   const session = await ensureValidSessionForAction("ks-invoice-zip-import");
   if (!session) return;
   state.user = session.user;
+  if (!state.activeProject?.id){
+    state.ksInvoices.missingOrgContext = true;
+    state.ksInvoices.pendingImportFile = file || null;
+    state.orgContextRequired = true;
+    renderInvoicePanel();
+    toast("Project required", "Select or create a project before importing invoices.", "error");
+    return;
+  }
   const orgId = getInvoiceScopeOrgId();
   if (!orgId){
     state.ksInvoices.missingOrgContext = true;
@@ -26802,6 +26859,7 @@ async function postLoginBootstrap(client, user){
   if (state.user){
     showAuth(false);
     await loadProjects();
+    await resolveKsInvoiceDeepLinkProjectContext();
     await loadProjectNodes(state.activeProject?.id || null);
     await loadProjectSites(state.activeProject?.id || null);
     await loadUnitTypes();
