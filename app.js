@@ -145,6 +145,9 @@ const state = {
     pendingImportFile: null,
     showWelcomeOverlay: false,
     pendingRouteRef: "",
+    introTimer: null,
+    introFadeTimer: null,
+    introFading: false,
     lastIntroMode: "",
   },
   invoiceFiles: [],
@@ -1208,7 +1211,7 @@ const OFFICE_INVOICE_RECORDS_KEY = "speccom.office.invoiceRecords.v1";
 const OFFICE_INVOICE_RECENTS_KEY = "speccom.office.invoiceRecents.v1";
 const KS_INVOICE_RECORDS_KEY = "speccom.ks.invoiceRecords.v1";
 const KS_INVOICE_BATCHES_KEY = "speccom.ks.invoiceBatches.v1";
-const POST_AUTH_REDIRECT_KEY = "postAuthRedirect";
+const POST_AUTH_REDIRECT_KEY = "pendingRedirect";
 const WAREHOUSE_SCAN_ITEMS_KEY = "speccom.warehouse.scanItems.v1";
 const KMZ_PHOTO_OVERRIDES_KEY_PREFIX = "speccom.kmzPhotoOverrides.";
 const INVOICE_FILES_BUCKET = "invoice-files";
@@ -9708,18 +9711,37 @@ function hasInvoiceHashRoute(hashValue = window.location.hash){
   return /(?:^|[?&])invoice=/i.test(normalized);
 }
 
+function clearInvoiceIntroTimer(){
+  if (state.ksInvoices.introTimer){
+    clearTimeout(state.ksInvoices.introTimer);
+    state.ksInvoices.introTimer = null;
+  }
+  if (state.ksInvoices.introFadeTimer){
+    clearTimeout(state.ksInvoices.introFadeTimer);
+    state.ksInvoices.introFadeTimer = null;
+  }
+  state.ksInvoices.introFading = false;
+}
+
 function storePostAuthRedirect(){
   if (hasAuthenticatedSession()) return;
   const hash = String(window.location.hash || "").trim();
   if (!hasInvoiceHashRoute(hash)) return;
-  safeLocalStorageSet(POST_AUTH_REDIRECT_KEY, hash);
+  try {
+    sessionStorage.setItem(POST_AUTH_REDIRECT_KEY, hash);
+  } catch {}
   console.info("[auth-redirect] stored:", hash);
 }
 
 function restorePostAuthRedirect(){
-  const stored = String(safeLocalStorageGet(POST_AUTH_REDIRECT_KEY) || "").trim();
+  let stored = "";
+  try {
+    stored = String(sessionStorage.getItem(POST_AUTH_REDIRECT_KEY) || "").trim();
+  } catch {}
   if (!stored) return "";
-  safeLocalStorageRemove(POST_AUTH_REDIRECT_KEY);
+  try {
+    sessionStorage.removeItem(POST_AUTH_REDIRECT_KEY);
+  } catch {}
   return stored;
 }
 
@@ -9765,20 +9787,35 @@ function openOfficeBillingIntroThenInvoice(routeRef, { syncUrl = false } = {}){
   state.officeInvoices.routeInvoiceNumber = clean;
   state.ksInvoices.pendingRouteRef = clean;
   state.ksInvoices.showWelcomeOverlay = true;
+  state.ksInvoices.introFading = false;
   if (syncUrl){
     setInvoiceDeepLinkHash(clean);
   }
   console.info("[invoice-intro] overlay shown", { route_ref: clean });
+  clearInvoiceIntroTimer();
+  state.ksInvoices.introFadeTimer = setTimeout(() => {
+    state.ksInvoices.introFading = true;
+    console.info("[invoice-intro] auto-fade start", { route_ref: clean });
+    if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
+      renderInvoicePanel();
+    }
+  }, 2600);
+  state.ksInvoices.introTimer = setTimeout(() => {
+    continueToPendingInvoiceOpen({ source: "timer" });
+  }, 3000);
   if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
     renderInvoicePanel();
   }
   return true;
 }
 
-function continueToPendingInvoiceOpen(){
+function continueToPendingInvoiceOpen({ source = "button" } = {}){
   const pending = String(state.ksInvoices.pendingRouteRef || state.officeInvoices.routeInvoiceNumber || "").trim();
   if (!pending) return;
-  console.info("[invoice-intro] continue clicked", { route_ref: pending });
+  if (source === "button"){
+    console.info("[invoice-intro] continue clicked", { route_ref: pending });
+  }
+  clearInvoiceIntroTimer();
   state.officeInvoices.routeInvoiceNumber = pending;
   state.ksInvoices.pendingRouteRef = "";
   state.ksInvoices.showWelcomeOverlay = false;
@@ -9788,9 +9825,16 @@ function continueToPendingInvoiceOpen(){
   }
 }
 
+function skipPendingInvoiceOpen(){
+  const pending = String(state.ksInvoices.pendingRouteRef || state.officeInvoices.routeInvoiceNumber || "").trim();
+  console.info("[invoice-intro] skipped by user", { route_ref: pending || null });
+  continueToPendingInvoiceOpen({ source: "skip" });
+}
+
 function cancelPendingInvoiceOpen(){
   const pending = String(state.ksInvoices.pendingRouteRef || state.officeInvoices.routeInvoiceNumber || "").trim();
   console.info("[invoice-intro] cancelled", { route_ref: pending || null });
+  clearInvoiceIntroTimer();
   state.ksInvoices.pendingRouteRef = "";
   state.ksInvoices.showWelcomeOverlay = false;
   state.officeInvoices.routeInvoiceNumber = "";
@@ -9815,6 +9859,7 @@ function syncInvoiceDeepLinkFromUrl({ activateView = false } = {}){
   }
   if (!currentInvoiceId) return false;
   state.officeInvoices.routeInvoiceNumber = "";
+  clearInvoiceIntroTimer();
   state.ksInvoices.pendingRouteRef = "";
   state.ksInvoices.showWelcomeOverlay = false;
   if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
@@ -9981,6 +10026,7 @@ function clearAuthenticatedWorkspaceState(){
   state.officeInvoices.records = [];
   state.officeInvoices.draft = null;
   state.officeInvoices.routeInvoiceNumber = "";
+  clearInvoiceIntroTimer();
   state.ksInvoices.records = [];
   state.ksInvoices.batches = [];
   state.ksInvoices.pendingImportFile = null;
@@ -24395,14 +24441,27 @@ function renderKsInvoiceDetailView(invoice){
 
 function renderInvoiceDeepLinkWelcomeOverlay(){
   return `
-    <div style="position:fixed; inset:0; z-index:1200; background:rgba(8,13,24,0.76); backdrop-filter:blur(3px); display:flex; align-items:center; justify-content:center; padding:20px;">
-      <div class="ks-welcome-overlay" style="width:min(820px,96vw); min-height:0; max-height:92vh; border-radius:18px; padding:24px 22px; gap:12px; position:relative; box-shadow:0 24px 90px rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.08);">
-        <button class="btn ghost small" type="button" data-office-action="cancelPendingInvoiceOpen" style="position:absolute; top:12px; right:12px;">X</button>
-        <div class="ks-welcome-title" style="font-size:44px; letter-spacing:0.06em; margin-top:6px;">WELCOME</div>
-        <div class="ks-welcome-title" style="font-size:28px; letter-spacing:0.04em;">TO</div>
-        <div class="ks-welcome-title" style="font-size:38px; color:#93c5fd;">Office &amp; Billing</div>
-        <div style="width:min(520px,100%); text-align:left; margin-top:6px;">
-          <ul style="margin:0; padding-left:20px; display:grid; gap:6px; line-height:1.4;">
+    <div class="invoice-intro-overlay">
+      <div class="invoice-intro-shell invoice-intro-animate ${state.ksInvoices.introFading ? "invoice-intro-fading" : ""}">
+        <button class="btn ghost small invoice-intro-skip" type="button" data-office-action="skipPendingInvoiceOpen">Skip</button>
+        <div class="invoice-intro-left">
+          <div class="invoice-intro-total-control">TOTAL CONTROL.</div>
+          <div class="invoice-intro-mock">
+            <div class="invoice-intro-mock-top"></div>
+            <div class="invoice-intro-mock-grid">
+              <div></div><div></div><div></div><div></div>
+            </div>
+          </div>
+          <div class="invoice-intro-checks">
+            <div>✓ Approve Technician Timesheets</div>
+            <div>✓ Generate Job Invoices Instantly</div>
+            <div>✓ Gain Full Financial Visibility</div>
+          </div>
+          <button class="btn invoice-intro-cta" type="button">TRY DEMO MODE NOW</button>
+        </div>
+        <div class="invoice-intro-right">
+          <div class="invoice-intro-right-title">WELCOME TO<br/>OFFICE &amp; BILLING</div>
+          <ul class="invoice-intro-bullets">
             <li>Auto-generate invoices</li>
             <li>Standard billing codes</li>
             <li>Reduce missed charges</li>
@@ -24412,10 +24471,10 @@ function renderInvoiceDeepLinkWelcomeOverlay(){
             <li>Monitor material usage</li>
             <li>Update redlined prints</li>
           </ul>
-        </div>
-        <div class="row" style="justify-content:center; margin-top:10px; gap:10px; flex-wrap:wrap;">
-          <button class="btn" type="button" data-office-action="continueToPendingInvoiceOpen">Continue</button>
-          <button class="btn secondary" type="button" data-office-action="cancelPendingInvoiceOpen">Back to Office</button>
+          <div class="row" style="gap:8px; margin-top:12px; flex-wrap:wrap;">
+            <button class="btn small" type="button" data-office-action="continueToPendingInvoiceOpen">Continue</button>
+            <button class="btn secondary small" type="button" data-office-action="cancelPendingInvoiceOpen">Back to Office</button>
+          </div>
         </div>
       </div>
     </div>
@@ -27128,13 +27187,15 @@ async function postLoginBootstrap(client, user){
   state.client = client;
   state.user = user || state.user;
   state.authResolved = true;
+  const pendingRedirect = restorePostAuthRedirect();
+  if (pendingRedirect){
+    window.location.hash = pendingRedirect;
+    console.log("[auth-redirect] restoring:", pendingRedirect);
+    console.log("[auth-redirect] early exit to restored route");
+  }
   await loadProfile(client, state.user?.id);
   if (state.user){
-    const redirectHash = restorePostAuthRedirect();
-    if (redirectHash){
-      console.info("[auth-redirect] restoring:", redirectHash);
-      window.location.hash = redirectHash;
-    } else {
+    if (!pendingRedirect){
       console.info("[auth-redirect] fallback to home");
     }
     showAuth(false);
@@ -27158,6 +27219,14 @@ async function postLoginBootstrap(client, user){
     renderCatalogResults("catalogResultsQuick", "");
     renderBillingLocations();
     resetRedlineState({ clearMarkers: true, clearSource: true });
+    if (hasInvoiceHashRoute(window.location.hash || "")){
+      console.log("[auth-redirect] default home prevented");
+      setActiveView("viewInvoices");
+      startLocationPolling();
+      syncPendingSites();
+      setWhoami();
+      return;
+    }
     setActiveView(getDefaultView());
     startLocationPolling();
     syncPendingSites();
@@ -28755,6 +28824,10 @@ function wireUI(){
       }
       if (action === "continueToPendingInvoiceOpen"){
         continueToPendingInvoiceOpen();
+        return;
+      }
+      if (action === "skipPendingInvoiceOpen"){
+        skipPendingInvoiceOpen();
         return;
       }
       if (action === "cancelPendingInvoiceOpen"){
