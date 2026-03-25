@@ -23020,7 +23020,6 @@ function isSkippableZipEntry(entryName){
   if (base.startsWith("~$")) return { skip: true, reason: "temp-file" };
   if (base.startsWith(".")) return { skip: true, reason: "hidden-file" };
   if (/__macosx/i.test(raw)) return { skip: true, reason: "os-metadata" };
-  if (!/\.pdf$/i.test(base)) return { skip: true, reason: "unsupported-type" };
   return { skip: false, reason: "" };
 }
 
@@ -23866,30 +23865,33 @@ async function handleKsInvoiceZipImport(file){
       }
       const entryMime = String(blob?.type || "").toLowerCase();
       const isPdfByName = /\.pdf$/i.test(baseName);
-      if (!isPdfByName){
-        summary.failed += 1;
-        const reason = `mime type ${entryMime || "(empty)"} is not supported`;
-        summary.errors.push(`${entryName}: ${reason}`);
+      const isPdfByMime = entryMime === "application/pdf";
+      const acceptedAsPdf = isPdfByMime || isPdfByName;
+      const uploadContentType = acceptedAsPdf ? "application/pdf" : "";
+      console.info("[ks-import] file mime check", {
+        source_filename: baseName,
+        detected_mime_type: entryMime || "",
+        extension_based_pdf_acceptance: isPdfByName,
+        upload_content_type: uploadContentType,
+      });
+      if (!acceptedAsPdf){
+        summary.skipped += 1;
+        const reason = `unsupported-type (mime: ${entryMime || "(empty)"})`;
+        summary.warnings.push(`${entryName}: skipped (${reason})`);
         summary.file_results.push({
           source_filename: baseName,
-          result: "failed",
-          stage: "read-zip-entry",
+          result: "skipped",
+          stage: "precheck",
           reason,
           extracted_invoice_number: filenameInvoiceNumber || null,
           extracted_node_name: null,
         });
-        console.error("[ks-import] file failed", {
+        console.info("[ks-import] file skipped", {
           source_filename: baseName,
-          stage: "read-zip-entry",
+          stage: "precheck",
           reason,
         });
         continue;
-      }
-      if (entryMime && entryMime !== "application/pdf" && entryMime !== "application/octet-stream"){
-        console.info("[ks-import] nonstandard zip entry mime accepted by extension", {
-          source_filename: baseName,
-          mime: entryMime,
-        });
       }
       let parsedPdf = null;
       try {
