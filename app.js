@@ -23694,7 +23694,7 @@ function openOfficeInvoiceByNumber(invoiceNumber, { syncUrl = true } = {}){
   if (!clean) return false;
   state.officeInvoices.routeInvoiceNumber = clean;
   state.officeInvoices.draft = null;
-  if (state.user && (document.querySelector(".view.active")?.id || "") !== "viewInvoices" && isViewAllowed("viewInvoices")){
+  if (state.user && (document.querySelector(".view.active")?.id || "") !== "viewInvoices"){
     setActiveView("viewInvoices");
   }
   if (syncUrl){
