@@ -18372,47 +18372,10 @@ async function loadProjects(){
   const orgId = await initializeOrgContext({ attemptRepair: true });
   const userId = state.user?.id || null;
   if (!orgId){
-    state.projects = [];
-    state.activeProject = null;
-    renderProjects();
-    console.warn("[projects] org undefined", { user_id: userId, org_id: null, count: 0 });
-    return;
+    console.warn("[projects] org undefined; attempting membership/creator fallback", { user_id: userId, org_id: null });
   }
   const baseSelect = "id, org_id, name, description, created_at, location, job_number, is_demo, created_by";
   let projects = [];
-
-  if (SpecCom.helpers.isRoot()){
-    const { data, error } = await state.client
-      .from("projects")
-      .select(baseSelect)
-      .eq("org_id", orgId)
-      .order("name");
-    if (error){
-      toast("Projects load error", error.message);
-      return;
-    }
-    projects = data || [];
-    state.projects = projects;
-    const savedProjectId = String(
-      state.activeProject?.id
-      || state.profile?.current_project_id
-      || getSavedProjectPreference()
-      || ""
-    ).trim();
-    const preferredProject = savedProjectId
-      ? state.projects.find((p) => String(p?.id || "") === savedProjectId)
-      : null;
-    state.activeProject = preferredProject || state.projects[0] || null;
-    setSavedProjectPreference(state.activeProject?.id || null);
-    setActiveOrgContext(state.activeProject?.org_id || orgId);
-    console.info("[projects] loaded", {
-      user_id: userId,
-      org_id: orgId,
-      count: state.projects.length,
-    });
-    renderProjects();
-    return;
-  }
 
   const { data: memberRows, error: memberError } = await state.client
     .from("project_members")
@@ -18437,12 +18400,15 @@ async function loadProjects(){
     .filter(Boolean);
 
   // Fallback: include projects created by the user (legacy rows missing membership)
-  const createdResp = await state.client
+  let createdQuery = state.client
     .from("projects")
     .select(baseSelect)
     .eq("created_by", state.user.id)
-    .eq("org_id", orgId)
     .order("name");
+  if (orgId){
+    createdQuery = createdQuery.eq("org_id", orgId);
+  }
+  const createdResp = await createdQuery;
   if (!createdResp.error){
     const existing = new Set(projects.map(p => p.id));
     (createdResp.data || []).forEach((row) => {
@@ -18451,15 +18417,35 @@ async function loadProjects(){
   } else {
     const message = String(createdResp.error.message || "").toLowerCase();
     if (message.includes("created_by") && message.includes("does not exist")){
-      const { data } = await state.client
+      let fallbackQuery = state.client
         .from("projects")
         .select(baseSelect.replace(", created_by", ""))
         .order("name");
-      projects = (data || projects).filter((row) => String(row?.org_id || "") === String(orgId));
+      if (orgId){
+        fallbackQuery = fallbackQuery.eq("org_id", orgId);
+      }
+      const { data } = await fallbackQuery;
+      projects = data || projects;
     }
   }
 
-  state.projects = (projects || []).filter((row) => String(row?.org_id || "") === String(orgId));
+  const uniqueProjects = [];
+  const seen = new Set();
+  (projects || []).forEach((row) => {
+    const id = String(row?.id || "").trim();
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    uniqueProjects.push(row);
+  });
+
+  let resolvedProjects = uniqueProjects;
+  if (orgId){
+    const scoped = uniqueProjects.filter((row) => String(row?.org_id || "") === String(orgId));
+    resolvedProjects = scoped.length ? scoped : uniqueProjects;
+  }
+
+  resolvedProjects.sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
+  state.projects = resolvedProjects;
   const savedProjectId = String(
     state.activeProject?.id
     || state.profile?.current_project_id
@@ -18471,12 +18457,16 @@ async function loadProjects(){
     : null;
   state.activeProject = preferredProject || state.projects[0] || null;
   setSavedProjectPreference(state.activeProject?.id || null);
-  setActiveOrgContext(state.activeProject?.org_id || orgId);
+  const resolvedOrgId = state.activeProject?.org_id || orgId || state.projects[0]?.org_id || null;
+  if (resolvedOrgId){
+    setActiveOrgContext(resolvedOrgId);
+  }
   debugLog("Loaded projects", state.projects);
   debugLog("Current project id", state.activeProject?.id || null);
   console.info("[projects] loaded", {
     user_id: userId,
-    org_id: orgId,
+    org_id: resolvedOrgId || null,
+    requested_org_id: orgId || null,
     count: state.projects.length,
   });
   renderProjects();
