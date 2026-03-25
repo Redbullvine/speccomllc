@@ -15921,13 +15921,28 @@ function exportLaborCsv(){
 }
 
 function showAuth(show){
-  if (CONTROL_CENTER_DEV_MODE){
+  if (CONTROL_CENTER_DEV_MODE && !show){
     $("viewAuth").style.display = "none";
     $("viewApp").style.display = "";
+    console.info("[auth] app UI shown", { reason: "control-center-dev-mode" });
     return;
   }
   $("viewAuth").style.display = show ? "" : "none";
   $("viewApp").style.display = show ? "none" : "";
+  console.info(show ? "[auth] auth UI shown" : "[auth] app UI shown", { source: "showAuth" });
+}
+
+function openSignInUi(source = "unknown"){
+  console.info("[auth] signIn button clicked", { source });
+  closeMenuModal();
+  SpecCom.helpers.exitResetMode();
+  setAuthButtonsDisabled(false);
+  showAuth(true);
+  setWhoami();
+  const email = $("email");
+  if (email && typeof email.focus === "function"){
+    setTimeout(() => email.focus(), 0);
+  }
 }
 
 function renderSupervisorOverview(){
@@ -27401,10 +27416,7 @@ function wireUI(){
   if (signInTopBtn){
     signInTopBtn.addEventListener("click", (e) => {
       e.preventDefault();
-      console.info("[auth] signIn button clicked");
-      closeMenuModal();
-      showAuth(true);
-      setWhoami();
+      openSignInUi("topbar");
     });
   }
 
@@ -27891,10 +27903,7 @@ function wireUI(){
   const menuSignInBtn = $("btnMenuSignIn");
   if (menuSignInBtn){
     menuSignInBtn.addEventListener("click", () => {
-      console.info("[auth] signIn button clicked");
-      closeMenuModal();
-      showAuth(true);
-      setWhoami();
+      openSignInUi("menu");
     });
   }
   const grantAccessBtn = $("btnGrantProjectAccess");
