@@ -103,6 +103,7 @@ const state = {
   client: null,
   session: null,
   user: null,
+  authResolved: false,
   profile: null, // {role, display_name}
   activeOrgId: null,
   orgContextRequired: false,
@@ -9844,51 +9845,122 @@ SpecCom.helpers.applyAuthModeFromHash = function(){
   }
 };
 
-SpecCom.helpers.handleSignOut = async function(){
-  persistDemoBootstrapSession(false);
-  closeMenuModal();
-  clearSupabaseAuthStorage();
-  if (isDemo){
-    state.activeNode = null;
+function clearAuthenticatedWorkspaceState(){
+  state.activeNode = null;
+  state.activeSite = null;
+  state.activeProject = null;
+  state.projects = [];
+  state.projectNodes = [];
+  state.projectSites = [];
+  state.invoiceFiles = [];
+  state.messages = [];
+  state.messageRecipients = [];
+  state.officeInvoices.records = [];
+  state.officeInvoices.draft = null;
+  state.ksInvoices.records = [];
+  state.ksInvoices.batches = [];
+  state.ksInvoices.pendingImportFile = null;
+  state.ksInvoices.showWelcomeOverlay = false;
+  state.ksInvoices.missingOrgContext = false;
+  state.usageEvents = [];
+  state.profileSetupDismissed = false;
+  state.pendingPreferredLanguage = "";
+  state.orgContextRequired = false;
+  state.orgContextPromptShown = false;
+  setSavedProjectPreference(null);
+  setActiveOrgContext(null);
+  showProfileSetupModal(false);
+  resetRedlineState({ clearMarkers: true, clearSource: true });
+  stopLocationWatch();
+  stopLocationPolling();
+  if (state.realtime.usageChannel && state.client){
+    state.client.removeChannel(state.realtime.usageChannel);
+    state.realtime.usageChannel = null;
+  }
+}
+
+function applySignedOutUi(reason = "unknown"){
+  state.authResolved = true;
+  clearAuthenticatedWorkspaceState();
+  document.body.classList.remove("map-mode", "sidebar-open", "map-create-open");
+  renderProjects();
+  renderProjectsList();
+  renderInvoicePanel();
+  clearProof();
+  setWhoami();
+  showAuth(true);
+  console.info("[auth] signed-out UI applied", { reason });
+}
+
+async function ensureValidSessionForAction(actionName = "protected-action"){
+  if (isDemo) return { user: state.user };
+  if (!state.client){
+    toast("Please sign in", "Supabase client unavailable.");
+    console.warn("[auth] protected-action blocked", { action: actionName, reason: "client-missing" });
+    return null;
+  }
+  let data;
+  let error;
+  try {
+    ({ data, error } = await state.client.auth.getSession());
+  } catch (err){
+    error = err;
+  }
+  if (error || !data?.session?.user){
+    console.warn("[auth] protected-action blocked", {
+      action: actionName,
+      has_session: false,
+      error: error?.message || null,
+    });
     state.session = null;
     state.user = null;
     state.profile = null;
+    applySignedOutUi(`missing-session:${actionName}`);
+    toast("Please sign in", "Your session expired. Sign in again.", "error");
+    return null;
+  }
+  state.session = data.session;
+  state.user = data.session.user;
+  console.info("[auth] protected-action session-ok", { action: actionName, user_id: state.user?.id || null });
+  return data.session;
+}
+
+SpecCom.helpers.handleSignOut = async function(){
+  persistDemoBootstrapSession(false);
+  closeMenuModal();
+  if (isDemo){
+    state.session = null;
+    state.user = null;
+    state.profile = null;
+    state.authResolved = true;
     isDemo = false;
     appMode = "real";
-    state.activeProject = null;
-    state.activeSite = null;
-    document.body.classList.remove("map-mode", "sidebar-open", "map-create-open");
     if (window.location.hash){
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
     }
-    showAuth(true);
-    setWhoami();
-    clearProof();
+    applySignedOutUi("demo-signout");
     return;
   }
-  setSavedProjectPreference(null);
+  const client = state.client || supabase;
   try{
-    const client = state.client || supabase;
     if (client?.auth){
-      await client.auth.signOut();
+      const { error } = await client.auth.signOut({ scope: "global" });
+      console.info("[auth] signOut result", { ok: !error, error: error?.message || null });
     }
   } catch (err){
     console.error("Sign out failed", err);
   } finally {
+    clearSupabaseAuthStorage();
     state.session = null;
     state.user = null;
     state.profile = null;
+    state.authResolved = true;
     isDemo = false;
     appMode = "real";
-    state.activeProject = null;
-    state.activeSite = null;
-    document.body.classList.remove("map-mode", "sidebar-open", "map-create-open");
     if (window.location.hash){
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
     }
-    showAuth(true);
-    setWhoami();
-    clearProof();
+    applySignedOutUi("signout");
   }
 };
 
@@ -17527,13 +17599,15 @@ async function createProject(){
     toast("Project created", "Project created.");
     return;
   }
+  const session = await ensureValidSessionForAction("create-project");
+  if (!session) return;
   if (!state.client){
     toast("Project error", "Client not ready.");
     return;
   }
 
   let orgId = state.profile?.org_id || null;
-  const creatorId = state.user?.id || null;
+  const creatorId = session.user?.id || state.user?.id || null;
   const refreshProfileOrgId = async () => {
     const { data, error } = await state.client
       .from("profiles")
@@ -23309,6 +23383,9 @@ async function handleKsInvoiceZipImport(file){
     toast("Not allowed", "Sign in with invoice access first.", "error");
     return;
   }
+  const session = await ensureValidSessionForAction("ks-invoice-zip-import");
+  if (!session) return;
+  state.user = session.user;
   const orgId = getInvoiceScopeOrgId();
   if (!orgId){
     state.ksInvoices.missingOrgContext = true;
@@ -23980,6 +24057,9 @@ async function uploadInvoiceFile(file){
     toast("Not allowed", "Invoice access must be granted first.", "error");
     return;
   }
+  const session = await ensureValidSessionForAction("invoice-file-upload");
+  if (!session) return;
+  state.user = session.user;
   const orgId = getInvoiceScopeOrgId();
   if (!orgId){
     toast("Missing org", "No organization context for invoice files.", "error");
@@ -24012,6 +24092,9 @@ async function uploadInvoiceFile(file){
 }
 
 async function deleteInvoiceFile(fileId){
+  const session = await ensureValidSessionForAction("invoice-file-delete");
+  if (!session) return;
+  state.user = session.user;
   if (!SpecCom.helpers.isRoot()){
     toast("Not allowed", "Only authorized accounts can delete invoice files.", "error");
     return;
@@ -25987,8 +26070,9 @@ async function recoverInvalidRefreshToken(reason){
     }
     state.session = null;
     state.user = null;
-    showAuth(true);
-    setWhoami();
+    state.profile = null;
+    state.authResolved = true;
+    applySignedOutUi("invalid-refresh-token");
     return true;
   } finally {
     invalidRefreshRecoveryRunning = false;
@@ -26016,6 +26100,7 @@ async function enterDemoBootstrapSession({ persistSession = true, toastMessage =
   const email = String(userEmail || creds.email || "demo-bootstrap-user@local").trim();
   state.user = { id: "demo-bootstrap-user", email };
   state.session = { user: state.user, access_token: "demo-bootstrap-token", token_type: "bearer" };
+  state.authResolved = true;
   state.profile = {
     role: AUTHENTICATED_ACCESS_CODE,
     display_name: "Demo Technician",
@@ -26093,9 +26178,10 @@ async function initAuth(){
       await enterDemoBootstrapSession({ persistSession: false });
       return;
     }
-    showAuth(false);
+    showAuth(true);
     setWhoami();
     setActiveView(getDefaultView());
+    state.authResolved = true;
     setAuthButtonsDisabled(false);
     return;
   }
@@ -26129,6 +26215,10 @@ async function initAuth(){
     return;
   }
 
+  state.authResolved = false;
+  showAuth(true);
+  setWhoami();
+
   // Supabase session
   try {
     const { data, error } = await state.client.auth.getSession();
@@ -26142,6 +26232,10 @@ async function initAuth(){
     } else {
       state.session = data?.session || null;
       state.user = data?.session?.user || null;
+      console.info("[auth] startup getSession", {
+        has_session: Boolean(data?.session),
+        user_id: data?.session?.user?.id || null,
+      });
     }
   } catch (error) {
     if (isInvalidRefreshError(error)) {
@@ -26155,80 +26249,42 @@ async function initAuth(){
       throw error;
     }
   }
+  state.authResolved = true;
 
-  state.client.auth.onAuthStateChange(async (_event, session) => {
+  state.client.auth.onAuthStateChange(async (event, session) => {
+    console.info("[auth] onAuthStateChange", {
+      event: event || "UNKNOWN",
+      has_session: Boolean(session),
+      user_id: session?.user?.id || null,
+    });
     state.session = session;
     state.user = session?.user || null;
-    await loadProfile(state.client, state.user?.id);
-    setWhoami();
-      if (state.user) {
-        showAuth(false);
-        await loadProjects();
-        await loadProjectNodes(state.activeProject?.id || null);
-        await loadProjectSites(state.activeProject?.id || null);
-        await loadUnitTypes();
-        await loadWorkCodes();
-        await loadRateCards(state.activeProject?.id || null);
-        await loadLocationProofRequirements(state.activeProject?.id || null);
-        await loadBillingLocations(state.activeProject?.id || null);
-        await loadInvoiceFiles(state.activeProject?.id || null);
-        await loadKsInvoiceWorkspace(state.activeProject?.id || null);
-        await loadMaterialCatalog();
-      await loadAlerts();
-        renderAlerts();
-      renderCatalogResults("catalogResults", "");
-        renderCatalogResults("catalogResultsQuick", "");
-        renderBillingLocations();
-        resetRedlineState({ clearMarkers: true, clearSource: true });
-        setActiveView(getDefaultView());
-        startLocationPolling();
-        syncPendingSites();
+    state.authResolved = true;
+    if (state.user) {
+      persistDemoBootstrapSession(false);
+      isDemo = false;
+      appMode = "real";
+      await postLoginBootstrap(state.client, state.user);
+      showAuth(false);
+      setProofStatus();
+      return;
     } else {
-        showAuth(false);
-        resetRedlineState({ clearMarkers: true, clearSource: true });
-        state.activeNode = null;
-        state.usageEvents = [];
-        setActiveOrgContext(null);
-        state.orgContextPromptShown = false;
-        clearProof();
-      state.profileSetupDismissed = false;
-      state.pendingPreferredLanguage = "";
-      showProfileSetupModal(false);
-      stopLocationWatch();
-      stopLocationPolling();
-      if (state.realtime.usageChannel){
-        state.client.removeChannel(state.realtime.usageChannel);
-        state.realtime.usageChannel = null;
-      }
+      state.profile = null;
+      applySignedOutUi(`auth-event:${event || "SIGNED_OUT"}`);
+      setProofStatus();
     }
   });
 
-    await loadProfile(state.client, state.user?.id);
-    if (state.user){
-      await loadProjects();
-      await loadProjectNodes(state.activeProject?.id || null);
-      await loadProjectSites(state.activeProject?.id || null);
-      await loadUnitTypes();
-      await loadWorkCodes();
-      await loadRateCards(state.activeProject?.id || null);
-      await loadLocationProofRequirements(state.activeProject?.id || null);
-      await loadBillingLocations(state.activeProject?.id || null);
-      await loadInvoiceFiles(state.activeProject?.id || null);
-      await loadKsInvoiceWorkspace(state.activeProject?.id || null);
-      await loadMaterialCatalog();
-    await loadAlerts();
-    renderAlerts();
-    renderCatalogResults("catalogResults", "");
-      renderCatalogResults("catalogResultsQuick", "");
-      renderBillingLocations();
-      resetRedlineState({ clearMarkers: true, clearSource: true });
-      setActiveView(getDefaultView());
-      startLocationPolling();
-      syncPendingSites();
-    }
-  setWhoami();
-  showAuth(false);
-  setActiveView(getDefaultView());
+  if (state.user){
+    persistDemoBootstrapSession(false);
+    isDemo = false;
+    appMode = "real";
+    await postLoginBootstrap(state.client, state.user);
+    showAuth(false);
+  } else {
+    state.profile = null;
+    applySignedOutUi("startup-no-session");
+  }
   setProofStatus();
 }
 
@@ -26354,6 +26410,7 @@ function showToast(message){
 async function postLoginBootstrap(client, user){
   state.client = client;
   state.user = user || state.user;
+  state.authResolved = true;
   await loadProfile(client, state.user?.id);
   if (state.user){
     showAuth(false);
