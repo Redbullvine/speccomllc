@@ -1209,6 +1209,7 @@ const OFFICE_INVOICE_RECENTS_KEY = "speccom.office.invoiceRecents.v1";
 const KS_INVOICE_RECORDS_KEY = "speccom.ks.invoiceRecords.v1";
 const KS_INVOICE_BATCHES_KEY = "speccom.ks.invoiceBatches.v1";
 const POST_AUTH_REDIRECT_KEY = "pendingRedirect";
+const INVOICE_INTRO_DURATION_SECONDS = 4;
 const WAREHOUSE_SCAN_ITEMS_KEY = "speccom.warehouse.scanItems.v1";
 const KMZ_PHOTO_OVERRIDES_KEY_PREFIX = "speccom.kmzPhotoOverrides.";
 const INVOICE_FILES_BUCKET = "invoice-files";
@@ -9786,7 +9787,7 @@ function updateInvoiceIntroContinueLabel(remaining){
 
 function startInvoiceIntroCountdown(){
   clearInvoiceIntroTimer();
-  let remaining = 3;
+  let remaining = INVOICE_INTRO_DURATION_SECONDS;
   console.info("[invoice-intro] countdown start");
   console.info(`[invoice-intro] countdown tick: ${remaining}`);
   updateInvoiceIntroContinueLabel(remaining);
@@ -9837,6 +9838,13 @@ function showInvoiceIntroOverlay(){
 function openOfficeBillingIntroThenInvoice(routeRef, { syncUrl = false } = {}){
   const clean = String(routeRef || "").trim();
   if (!clean) return false;
+  if (!state.user){
+    state.officeInvoices.routeInvoiceNumber = clean;
+    if (syncUrl){
+      setInvoiceDeepLinkHash(clean);
+    }
+    return true;
+  }
   if (String(window.__invoiceIntroResolvedRef || "") === clean){
     return false;
   }
@@ -9905,11 +9913,15 @@ function cancelPendingInvoiceOpen(){
   window.location.hash = "#office";
 }
 
-function syncInvoiceDeepLinkFromUrl({ activateView = false } = {}){
+function syncInvoiceDeepLinkFromUrl({ activateView = false, allowSignedOut = false } = {}){
   const invoiceId = getInvoiceIdFromUrl();
   const nextInvoiceId = String(invoiceId || "").trim();
   const currentInvoiceId = String(state.officeInvoices.routeInvoiceNumber || "").trim();
   if (nextInvoiceId){
+    if (!state.user && !allowSignedOut){
+      state.officeInvoices.routeInvoiceNumber = nextInvoiceId;
+      return true;
+    }
     openOfficeBillingIntroThenInvoice(nextInvoiceId, { syncUrl: false });
     if (activateView && state.user && isViewAllowed("viewInvoices")){
       setActiveView("viewInvoices");
@@ -24508,6 +24520,58 @@ function renderKsInvoiceDetailView(invoice){
   `;
 }
 
+function renderOfficeInvoiceRouteSidebar(activeInvoiceRef){
+  const activeNorm = normalizeKsInvoiceLookup(activeInvoiceRef);
+  const ksRows = (state.ksInvoices.records || []).map((row) => {
+    const ref = String(row?.id || row?.invoice_number || row?.invoice_key || "").trim();
+    const title = String(row?.invoice_number || row?.invoice_key || row?.id || "K&S invoice").trim();
+    const subtitle = [row?.node_name, row?.project_name].filter(Boolean).join(" | ") || "Imported invoice";
+    const amount = Number.isFinite(Number(row?.grand_total)) ? formatMoney(row.grand_total) : "";
+    const selected = normalizeKsInvoiceLookup(ref) === activeNorm;
+    return { ref, title, subtitle, amount, selected, kind: "K&S" };
+  }).filter((row) => row.ref);
+  const officeRows = (state.officeInvoices.records || []).map((row) => {
+    const ref = String(row?.invoice_number || row?.id || "").trim();
+    const title = String(row?.invoice_number || row?.id || "Office invoice").trim();
+    const subtitle = [row?.company_creating_invoice, row?.location].filter(Boolean).join(" | ") || "Office invoice";
+    const amount = Number.isFinite(Number(row?.total)) ? formatMoney(row.total) : "";
+    const selected = normalizeKsInvoiceLookup(ref) === activeNorm;
+    return { ref, title, subtitle, amount, selected, kind: "Office" };
+  }).filter((row) => row.ref);
+  const renderRows = (rows) => rows.length
+    ? rows.map((row) => `
+        <button class="btn ghost small" type="button" data-office-action="openInvoiceDeepLink" data-office-invoice-number="${escapeHtml(row.ref)}" style="width:100%; justify-content:space-between; text-align:left; border-color:${row.selected ? "#2563eb" : "rgba(148,163,184,0.35)"}; background:${row.selected ? "rgba(37,99,235,0.12)" : "transparent"};">
+          <span style="display:grid; gap:2px; justify-items:start;">
+            <span style="font-weight:700;">${escapeHtml(row.title)}</span>
+            <span class="muted small">${escapeHtml(row.subtitle)}</span>
+          </span>
+          <span style="text-align:right;">
+            <span class="status-pill" style="margin-bottom:4px; display:inline-block;">${escapeHtml(row.kind)}</span>
+            ${row.amount ? `<span style="display:block; font-weight:700;">${escapeHtml(row.amount)}</span>` : ""}
+          </span>
+        </button>
+      `).join("")
+    : `<div class="muted small">No invoices in this section.</div>`;
+  return `
+    <div class="card" style="margin-top:12px;">
+      <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px;">
+        <h3 style="margin:0;">Invoice list</h3>
+        <button class="btn ghost small" type="button" data-office-action="closeInvoiceDeepLink">Back</button>
+      </div>
+      <div class="field-stack" style="gap:12px;">
+        <div>
+          <div class="small muted" style="margin-bottom:6px;">Imported K&amp;S invoices</div>
+          <div class="field-stack" style="gap:6px; max-height:240px; overflow:auto;">${renderRows(ksRows)}</div>
+        </div>
+        <div>
+          <div class="small muted" style="margin-bottom:6px;">Office invoices</div>
+          <div class="field-stack" style="gap:6px; max-height:240px; overflow:auto;">${renderRows(officeRows)}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderInvoiceDeepLinkWelcomeOverlay(){
   return `
     <div id="invoiceIntroOverlay" class="invoice-intro-overlay">
@@ -24544,7 +24608,7 @@ function renderInvoiceDeepLinkWelcomeOverlay(){
             <li>Update redlined prints</li>
           </ul>
           <div class="row" style="gap:8px; margin-top:12px; flex-wrap:wrap;">
-            <button class="btn small" type="button" data-office-action="continueToPendingInvoiceOpen">Continue (3)</button>
+            <button class="btn small" type="button" data-office-action="continueToPendingInvoiceOpen">Continue (${INVOICE_INTRO_DURATION_SECONDS})</button>
             <button class="btn secondary small" type="button" data-office-action="cancelPendingInvoiceOpen">Back to Office</button>
           </div>
         </div>
@@ -24702,11 +24766,16 @@ function renderInvoicePanel(){
           <div class="muted small">Telecom weekly invoice desk</div>
           <button class="btn" type="button" data-office-action="createInvoice">Create Invoice</button>
         </div>
-        ${!blockInvoiceDetail ? (
-          matchedKsInvoice
-            ? renderKsInvoiceDetailView(matchedKsInvoice)
-            : (matchedInvoice ? renderOfficeInvoiceDetailView(matchedInvoice) : renderOfficeInvoiceNotFound(routeInvoiceNumber))
-        ) : ""}
+        <div class="office-invoice-route-layout">
+          <div class="office-invoice-route-sidebar">${renderOfficeInvoiceRouteSidebar(routeInvoiceNumber)}</div>
+          <div>
+            ${!blockInvoiceDetail ? (
+              matchedKsInvoice
+                ? renderKsInvoiceDetailView(matchedKsInvoice)
+                : (matchedInvoice ? renderOfficeInvoiceDetailView(matchedInvoice) : renderOfficeInvoiceNotFound(routeInvoiceNumber))
+            ) : ""}
+          </div>
+        </div>
       </div>
     `;
     return;

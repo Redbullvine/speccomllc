@@ -2481,7 +2481,7 @@ body.map-create-open #mapSidebarToggle{
   position:relative;
 }
 .invoice-intro-animate{
-  animation:invoiceIntroFadeIn 260ms ease-out both;
+  animation:invoiceIntroZoomIn 540ms cubic-bezier(.22,.85,.32,1) both;
 }
 .invoice-intro-fading{
   animation:invoiceIntroFadeOut 360ms ease-in both;
@@ -2577,6 +2577,21 @@ body.map-create-open #mapSidebarToggle{
   from{ opacity:1; transform:translateY(0); }
   to{ opacity:0; transform:translateY(8px); }
 }
+@keyframes invoiceIntroZoomIn{
+  0%{ opacity:0; transform:translateY(34px) scale(0.58); filter:blur(1px); }
+  70%{ opacity:1; transform:translateY(-4px) scale(1.02); filter:blur(0); }
+  100%{ opacity:1; transform:translateY(0) scale(1); filter:blur(0); }
+}
+.office-invoice-route-layout{
+  display:grid;
+  grid-template-columns:minmax(280px, 340px) minmax(0, 1fr);
+  gap:12px;
+  align-items:start;
+}
+.office-invoice-route-sidebar .card{
+  position:sticky;
+  top:10px;
+}
 @media (max-width: 900px){
   .invoice-intro-shell{
     grid-template-columns:1fr;
@@ -2588,6 +2603,12 @@ body.map-create-open #mapSidebarToggle{
   }
   .invoice-intro-right-title{
     font-size:30px;
+  }
+  .office-invoice-route-layout{
+    grid-template-columns:1fr;
+  }
+  .office-invoice-route-sidebar .card{
+    position:static;
   }
 }
 @media (max-width: 900px){
