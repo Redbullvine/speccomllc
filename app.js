@@ -22884,6 +22884,13 @@ function normalizeKsInvoiceNumber(value){
   return String(value || "").trim();
 }
 
+function buildKsInvoiceKey(invoiceNumber){
+  const clean = normalizeKsInvoiceNumber(invoiceNumber);
+  if (!clean) return "";
+  if (/^speccom_/i.test(clean)) return clean;
+  return `SpecCom_${clean}`;
+}
+
 function normalizeKsInvoiceLookup(value){
   return normalizeKsInvoiceNumber(value).toLowerCase();
 }
@@ -22910,10 +22917,164 @@ function isSkippableZipEntry(entryName){
   return { skip: false, reason: "" };
 }
 
+function parseMoneyNumber(value){
+  const num = Number.parseFloat(String(value || "").replace(/[^0-9.\-]/g, ""));
+  return Number.isFinite(num) ? num : null;
+}
+
+function parseInvoiceDateText(value){
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const match = raw.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (!match) return raw;
+  const mm = String(match[1]).padStart(2, "0");
+  const dd = String(match[2]).padStart(2, "0");
+  let yyyy = String(match[3]);
+  if (yyyy.length === 2){
+    yyyy = Number(yyyy) >= 70 ? `19${yyyy}` : `20${yyyy}`;
+  }
+  return `${mm}/${dd}/${yyyy}`;
+}
+
+async function extractPdfLines(buffer){
+  const pdfjsLib = await loadPdfJs();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  const lines = [];
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1){
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+    const items = (content?.items || [])
+      .map((item) => ({
+        text: String(item?.str || "").trim(),
+        x: Number(item?.transform?.[4] || 0),
+        y: Number(item?.transform?.[5] || 0),
+      }))
+      .filter((item) => item.text);
+    items.sort((a, b) => {
+      if (Math.abs(a.y - b.y) > 1.5) return b.y - a.y;
+      return a.x - b.x;
+    });
+    let current = null;
+    for (const item of items){
+      if (!current || Math.abs(current.y - item.y) > 1.5){
+        if (current && current.parts.length){
+          lines.push(current.parts.join(" ").replace(/\s+/g, " ").trim());
+        }
+        current = { y: item.y, parts: [item.text] };
+      } else {
+        current.parts.push(item.text);
+      }
+    }
+    if (current && current.parts.length){
+      lines.push(current.parts.join(" ").replace(/\s+/g, " ").trim());
+    }
+  }
+  return lines.filter(Boolean);
+}
+
+function parseKsInvoiceLineItems(lines){
+  const items = [];
+  let inTable = false;
+  for (const rawLine of lines){
+    const line = String(rawLine || "").replace(/\s+/g, " ").trim();
+    if (!line) continue;
+    if (!inTable && /billing\s*code|description.*qty.*rate.*total/i.test(line)){
+      inTable = true;
+      continue;
+    }
+    if (!inTable) continue;
+    if (/grand\s+total|total\s+due|invoice\s+total/i.test(line)){
+      break;
+    }
+    const match = line.match(/^([A-Z0-9][A-Z0-9_\-./]{1,})\s+(.+?)\s+(-?\d+(?:\.\d+)?)\s+\$?(-?\d[\d,]*(?:\.\d{2})?)\s+\$?(-?\d[\d,]*(?:\.\d{2})?)$/i);
+    if (!match) continue;
+    items.push({
+      code: String(match[1] || "").trim(),
+      description: String(match[2] || "").trim(),
+      qty: Number.parseFloat(String(match[3] || "0")),
+      rate: parseMoneyNumber(match[4]),
+      total: parseMoneyNumber(match[5]),
+    });
+  }
+  return items;
+}
+
+async function parseKsInvoicePdfData(buffer, { sourceFilename = "", fallbackInvoiceNumber = "" } = {}){
+  const parseWarnings = [];
+  const parseErrors = [];
+  let lines = [];
+  try {
+    lines = await extractPdfLines(buffer);
+  } catch (error){
+    parseErrors.push(`pdf-text-extract: ${error?.message || "failed"}`);
+  }
+  const text = lines.join("\n");
+  const invoiceMatch = text.match(/\bINVOICE\s*NO\.?\s*[:#-]?\s*([A-Z0-9]+(?:[_-][A-Z0-9]+)*)\b/i);
+  let invoiceNumber = normalizeKsInvoiceNumber(invoiceMatch?.[1] || "").replace(/-/g, "_");
+  if (!invoiceNumber){
+    invoiceNumber = normalizeKsInvoiceNumber(fallbackInvoiceNumber || "").replace(/-/g, "_");
+    if (invoiceNumber){
+      parseWarnings.push("invoice_number fallback to filename");
+    } else {
+      invoiceNumber = `UNPARSED_${Date.now()}`;
+      parseErrors.push("invoice_number missing in PDF and filename");
+    }
+  }
+  const invoiceKey = buildKsInvoiceKey(invoiceNumber);
+  const invoiceDateMatch = text.match(/\bDATE\b\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\b/i);
+  const weekEndingMatch = text.match(/\bWEEK\s*ENDING\b\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\b/i);
+  const projectMatch = text.match(/\bPROJECT\b\s*[:\-]?\s*([^\n\r]+)/i);
+  const nodeMatch = text.match(/\bNODE\b\s*[:\-]?\s*([^\n\r]+)/i);
+  let billToCompany = "";
+  const billToIndex = lines.findIndex((line) => /\bBILL\s*TO\b/i.test(String(line || "")));
+  if (billToIndex >= 0){
+    for (let idx = billToIndex + 1; idx < Math.min(lines.length, billToIndex + 6); idx += 1){
+      const value = String(lines[idx] || "").trim();
+      if (!value) continue;
+      if (/^(invoice|date|week|project|node)\b/i.test(value)) continue;
+      billToCompany = value;
+      break;
+    }
+  }
+  const lineItems = parseKsInvoiceLineItems(lines);
+  const totals = Array.from(text.matchAll(/\b(?:GRAND\s+TOTAL|TOTAL\s+DUE|INVOICE\s+TOTAL|TOTAL)\b[^\d\-]*(-?\$?\d[\d,]*(?:\.\d{2})?)/ig));
+  const grandTotal = totals.length ? parseMoneyNumber(totals[totals.length - 1][1]) : null;
+  if (!grandTotal && grandTotal !== 0){
+    parseWarnings.push("grand_total not found");
+  }
+  if (!lineItems.length){
+    parseWarnings.push("line_items not parsed");
+  }
+  const parseStatus = parseErrors.length
+    ? "parse_failed"
+    : (parseWarnings.length ? "parse_partial" : "parsed");
+  const parseError = parseErrors.concat(parseWarnings).join("; ");
+  return {
+    invoice_number: invoiceNumber,
+    invoice_key: invoiceKey,
+    invoice_date: parseInvoiceDateText(invoiceDateMatch?.[1] || ""),
+    week_ending: parseInvoiceDateText(weekEndingMatch?.[1] || ""),
+    project_name: String(projectMatch?.[1] || "").trim(),
+    node_name: String(nodeMatch?.[1] || "").trim(),
+    bill_to_company: String(billToCompany || "").trim(),
+    source_filename: String(sourceFilename || "").trim(),
+    line_items: lineItems,
+    grand_total: grandTotal,
+    parse_status: parseStatus,
+    parse_error: parseError,
+  };
+}
+
 function findKsInvoiceByNumber(invoiceNumber){
   const needle = normalizeKsInvoiceLookup(invoiceNumber);
   if (!needle) return null;
-  return (state.ksInvoices.records || []).find((row) => normalizeKsInvoiceLookup(row?.invoice_number) === needle) || null;
+  return (state.ksInvoices.records || []).find((row) => {
+    const invoiceNo = normalizeKsInvoiceLookup(row?.invoice_number);
+    const invoiceKey = normalizeKsInvoiceLookup(row?.invoice_key || buildKsInvoiceKey(row?.invoice_number));
+    if (needle === invoiceNo || needle === invoiceKey) return true;
+    const normalizedNeedleNoPrefix = needle.replace(/^speccom_/, "");
+    return normalizedNeedleNoPrefix && normalizedNeedleNoPrefix === invoiceNo;
+  }) || null;
 }
 
 function shouldShowKsInvoiceWelcome(){
@@ -22999,16 +23160,32 @@ async function loadKsInvoiceWorkspace(projectId = state.activeProject?.id || nul
   }
   state.ksInvoices.loading = true;
   try {
+    const ksRecordSelect = "id, org_id, project_id, invoice_number, invoice_key, invoice_number_norm, invoice_date, week_ending, project_name, node_name, bill_to_company, customer_name, source_filename, source_file_path, source_mime, import_batch_id, imported_at, status, notes, line_items, grand_total, parse_status, parse_error, warnings, extracted_data, created_by, updated_at";
     let recordsQuery = state.client
       .from("ks_invoice_records")
-      .select("id, org_id, project_id, invoice_number, customer_name, source_filename, source_file_path, source_mime, import_batch_id, imported_at, status, notes, warnings, extracted_data, created_by, updated_at")
+      .select(ksRecordSelect)
       .eq("org_id", orgId)
       .order("imported_at", { ascending: false })
       .limit(500);
     if (projectId){
       recordsQuery = recordsQuery.or(`project_id.is.null,project_id.eq.${projectId}`);
     }
-    const { data: recordRows, error: recordsError } = await recordsQuery;
+    let { data: recordRows, error: recordsError } = await recordsQuery;
+    if (recordsError){
+      const message = String(recordsError?.message || "").toLowerCase();
+      if (message.includes("invoice_key") && message.includes("does not exist")){
+        let fallbackQuery = state.client
+          .from("ks_invoice_records")
+          .select("id, org_id, project_id, invoice_number, invoice_number_norm, customer_name, source_filename, source_file_path, source_mime, import_batch_id, imported_at, status, notes, warnings, extracted_data, created_by, updated_at")
+          .eq("org_id", orgId)
+          .order("imported_at", { ascending: false })
+          .limit(500);
+        if (projectId){
+          fallbackQuery = fallbackQuery.or(`project_id.is.null,project_id.eq.${projectId}`);
+        }
+        ({ data: recordRows, error: recordsError } = await fallbackQuery);
+      }
+    }
     if (recordsError){
       const message = String(recordsError?.message || "").toLowerCase();
       if (
@@ -23047,8 +23224,21 @@ async function loadKsInvoiceWorkspace(projectId = state.activeProject?.id || nul
     }
     const records = await Promise.all((recordRows || []).map(async (row) => {
       const fileUrl = row.source_file_path ? await getPublicOrSignedUrl(INVOICE_FILES_BUCKET, row.source_file_path) : "";
+      const extracted = row.extracted_data && typeof row.extracted_data === "object" ? row.extracted_data : {};
+      const invoiceNumber = normalizeKsInvoiceNumber(row.invoice_number || extracted.invoice_number || "");
       return {
         ...row,
+        invoice_number: invoiceNumber,
+        invoice_key: String(row.invoice_key || extracted.invoice_key || buildKsInvoiceKey(invoiceNumber)),
+        invoice_date: String(row.invoice_date || extracted.invoice_date || ""),
+        week_ending: String(row.week_ending || extracted.week_ending || ""),
+        project_name: String(row.project_name || extracted.project_name || ""),
+        node_name: String(row.node_name || extracted.node_name || ""),
+        bill_to_company: String(row.bill_to_company || extracted.bill_to_company || ""),
+        line_items: Array.isArray(row.line_items) ? row.line_items : (Array.isArray(extracted.line_items) ? extracted.line_items : []),
+        grand_total: Number.isFinite(Number(row.grand_total)) ? Number(row.grand_total) : (Number.isFinite(Number(extracted.grand_total)) ? Number(extracted.grand_total) : null),
+        parse_status: String(row.parse_status || extracted.parse_status || "parsed"),
+        parse_error: String(row.parse_error || extracted.parse_error || ""),
         source_file_url: fileUrl,
       };
     }));
@@ -23240,7 +23430,7 @@ function renderOfficeInvoiceNotFound(invoiceNumber){
 }
 
 function buildKsInvoiceLink(invoiceNumber){
-  const clean = normalizeKsInvoiceNumber(invoiceNumber);
+  const clean = buildKsInvoiceKey(invoiceNumber);
   if (!clean) return "";
   return `${window.location.origin}${window.location.pathname}#invoice=${encodeURIComponent(clean)}`;
 }
@@ -23266,7 +23456,13 @@ async function upsertKsInvoiceRecord(record){
     org_id: orgId,
     project_id: state.activeProject?.id || null,
     invoice_number: normalizeKsInvoiceNumber(record.invoice_number),
+    invoice_key: buildKsInvoiceKey(record.invoice_key || record.invoice_number),
     invoice_number_norm: normalizeKsInvoiceLookup(record.invoice_number),
+    invoice_date: String(record.invoice_date || ""),
+    week_ending: String(record.week_ending || ""),
+    project_name: String(record.project_name || ""),
+    node_name: String(record.node_name || ""),
+    bill_to_company: String(record.bill_to_company || ""),
     customer_name: "K & S Electric",
     source_filename: String(record.source_filename || ""),
     source_file_path: String(record.source_file_path || ""),
@@ -23275,6 +23471,10 @@ async function upsertKsInvoiceRecord(record){
     imported_at: record.imported_at || nowISO(),
     status: String(record.status || "imported"),
     notes: String(record.notes || ""),
+    line_items: Array.isArray(record.line_items) ? record.line_items : [],
+    grand_total: Number.isFinite(Number(record.grand_total)) ? Number(record.grand_total) : null,
+    parse_status: String(record.parse_status || "parsed"),
+    parse_error: String(record.parse_error || ""),
     warnings: Array.isArray(record.warnings) ? record.warnings : [],
     extracted_data: record.extracted_data && typeof record.extracted_data === "object" ? record.extracted_data : {},
     created_by: state.user.id,
@@ -23285,6 +23485,31 @@ async function upsertKsInvoiceRecord(record){
     .upsert(payload, { onConflict: "org_id,invoice_number_norm" });
   if (error){
     const message = String(error?.message || "").toLowerCase();
+    if (message.includes("invoice_key") && message.includes("does not exist")){
+      const legacyPayload = {
+        org_id: payload.org_id,
+        project_id: payload.project_id,
+        invoice_number: payload.invoice_number,
+        invoice_number_norm: payload.invoice_number_norm,
+        customer_name: payload.customer_name,
+        source_filename: payload.source_filename,
+        source_file_path: payload.source_file_path,
+        source_mime: payload.source_mime,
+        import_batch_id: payload.import_batch_id,
+        imported_at: payload.imported_at,
+        status: payload.status,
+        notes: payload.notes,
+        warnings: payload.warnings,
+        extracted_data: payload.extracted_data,
+        created_by: payload.created_by,
+        updated_at: payload.updated_at,
+      };
+      const { error: legacyError } = await state.client
+        .from("ks_invoice_records")
+        .upsert(legacyPayload, { onConflict: "org_id,invoice_number_norm" });
+      if (!legacyError) return { ok: true };
+      return { ok: false, reason: legacyError.message || "upsert-failed" };
+    }
     if (
       (message.includes("ks_invoice_records") && message.includes("does not exist"))
       || (message.includes("ks_invoice_records") && message.includes("could not find the table"))
@@ -23442,20 +23667,51 @@ async function handleKsInvoiceZipImport(file){
         continue;
       }
       const baseName = entryName.split("/").pop() || entryName;
-      const parsedInvoiceNumber = parseInvoiceNumberFromFilename(baseName);
-      if (!parsedInvoiceNumber){
-        summary.skipped += 1;
-        summary.warnings.push(`${entryName}: invoice number could not be parsed`);
-        continue;
-      }
-      const normalizedInvoice = normalizeKsInvoiceLookup(parsedInvoiceNumber);
-      const existing = existingByNorm.get(normalizedInvoice) || null;
+      const filenameInvoiceNumber = parseInvoiceNumberFromFilename(baseName);
       let blob;
       try {
         blob = await entry.async("blob");
       } catch (err){
         summary.failed += 1;
         summary.errors.push(`${entryName}: ${err?.message || "read failed"}`);
+        continue;
+      }
+      let parsedPdf = null;
+      try {
+        const buffer = await blob.arrayBuffer();
+        parsedPdf = await parseKsInvoicePdfData(buffer, {
+          sourceFilename: baseName,
+          fallbackInvoiceNumber: filenameInvoiceNumber || "",
+        });
+      } catch (err){
+        parsedPdf = {
+          invoice_number: normalizeKsInvoiceNumber(filenameInvoiceNumber || `UNPARSED_${Date.now()}`),
+          invoice_key: buildKsInvoiceKey(filenameInvoiceNumber || `UNPARSED_${Date.now()}`),
+          invoice_date: "",
+          week_ending: "",
+          project_name: "",
+          node_name: "",
+          bill_to_company: "",
+          source_filename: baseName,
+          line_items: [],
+          grand_total: null,
+          parse_status: "parse_failed",
+          parse_error: err?.message || "pdf parse failed",
+        };
+      }
+      const parsedInvoiceNumber = normalizeKsInvoiceNumber(parsedPdf.invoice_number || filenameInvoiceNumber || "").replace(/-/g, "_");
+      const normalizedInvoice = normalizeKsInvoiceLookup(parsedInvoiceNumber);
+      const existing = existingByNorm.get(normalizedInvoice) || null;
+      console.info("[ks-import] parsed", {
+        source_filename: baseName,
+        invoice_number: parsedInvoiceNumber || null,
+        node_name: parsedPdf.node_name || null,
+        grand_total: parsedPdf.grand_total ?? null,
+        parse_status: parsedPdf.parse_status || "unknown",
+      });
+      if (!parsedInvoiceNumber){
+        summary.failed += 1;
+        summary.errors.push(`${entryName}: invoice number could not be determined`);
         continue;
       }
       const upload = await uploadKsInvoicePdf({
@@ -23491,7 +23747,13 @@ async function handleKsInvoiceZipImport(file){
         org_id: orgId,
         project_id: state.activeProject?.id || null,
         invoice_number: parsedInvoiceNumber,
+        invoice_key: buildKsInvoiceKey(parsedPdf.invoice_key || parsedInvoiceNumber),
         invoice_number_norm: normalizedInvoice,
+        invoice_date: parsedPdf.invoice_date || "",
+        week_ending: parsedPdf.week_ending || "",
+        project_name: parsedPdf.project_name || "",
+        node_name: parsedPdf.node_name || "",
+        bill_to_company: parsedPdf.bill_to_company || "",
         customer_name: "K & S Electric",
         source_filename: baseName,
         source_file_path: upload.filePath,
@@ -23499,16 +23761,38 @@ async function handleKsInvoiceZipImport(file){
         source_mime: "application/pdf",
         import_batch_id: batchId,
         imported_at: nowISO(),
-        status: existing ? "updated" : "imported",
-        notes: "",
-        warnings: [],
-        extracted_data: {},
+        status: existing
+          ? (parsedPdf.parse_status === "parsed" ? "updated" : "updated_with_parse_warnings")
+          : (parsedPdf.parse_status === "parsed" ? "imported" : "imported_with_parse_warnings"),
+        notes: parsedPdf.parse_error || "",
+        line_items: Array.isArray(parsedPdf.line_items) ? parsedPdf.line_items : [],
+        grand_total: Number.isFinite(Number(parsedPdf.grand_total)) ? Number(parsedPdf.grand_total) : null,
+        parse_status: String(parsedPdf.parse_status || "parse_partial"),
+        parse_error: String(parsedPdf.parse_error || ""),
+        warnings: parsedPdf.parse_error ? [parsedPdf.parse_error] : [],
+        extracted_data: {
+          invoice_number: parsedInvoiceNumber,
+          invoice_key: buildKsInvoiceKey(parsedPdf.invoice_key || parsedInvoiceNumber),
+          invoice_date: parsedPdf.invoice_date || "",
+          week_ending: parsedPdf.week_ending || "",
+          project_name: parsedPdf.project_name || "",
+          node_name: parsedPdf.node_name || "",
+          bill_to_company: parsedPdf.bill_to_company || "",
+          source_filename: baseName,
+          line_items: Array.isArray(parsedPdf.line_items) ? parsedPdf.line_items : [],
+          grand_total: Number.isFinite(Number(parsedPdf.grand_total)) ? Number(parsedPdf.grand_total) : null,
+          parse_status: String(parsedPdf.parse_status || "parse_partial"),
+          parse_error: String(parsedPdf.parse_error || ""),
+        },
         created_by: state.user?.id || null,
         updated_at: nowISO(),
       };
       const upsertResult = await upsertKsInvoiceRecord(record);
       if (!upsertResult.ok && upsertResult.reason && upsertResult.reason !== "table-missing"){
         summary.warnings.push(`${entryName}: record save warning (${upsertResult.reason})`);
+      }
+      if (parsedPdf.parse_status !== "parsed" && parsedPdf.parse_error){
+        summary.warnings.push(`${entryName}: ${parsedPdf.parse_error}`);
       }
       if (existing){
         summary.duplicates += 1;
@@ -23614,18 +23898,19 @@ function renderKsInvoiceList(){
       </div>
       <div style="overflow:auto; margin-top:8px;">
         <table class="table">
-          <thead><tr><th>Invoice #</th><th>Customer</th><th>Imported</th><th>Source File</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Invoice #</th><th>Node</th><th>Project</th><th>Imported</th><th>Source File</th><th>Status</th><th></th></tr></thead>
           <tbody>
             ${rows.map((row) => `
               <tr>
-                <td><button class="btn ghost small" type="button" data-office-action="openKsInvoice" data-office-invoice-number="${escapeHtml(row.invoice_number || "")}">${escapeHtml(row.invoice_number || "-")}</button></td>
-                <td>${escapeHtml(row.customer_name || "K & S Electric")}</td>
+                <td><button class="btn ghost small" type="button" data-office-action="openKsInvoice" data-office-invoice-number="${escapeHtml(row.invoice_key || buildKsInvoiceKey(row.invoice_number || ""))}">${escapeHtml(row.invoice_number || "-")}</button></td>
+                <td>${escapeHtml(row.node_name || row.extracted_data?.node_name || "-")}</td>
+                <td>${escapeHtml(row.project_name || row.extracted_data?.project_name || "-")}</td>
                 <td>${escapeHtml(new Date(row.imported_at || Date.now()).toLocaleString())}</td>
                 <td>${escapeHtml(row.source_filename || "-")}</td>
-                <td>${escapeHtml(row.status || "imported")}</td>
+                <td>${escapeHtml(row.parse_status || row.status || "imported")}</td>
                 <td class="row" style="gap:6px; flex-wrap:wrap;">
-                  <button class="btn ghost small" type="button" data-office-action="openKsInvoice" data-office-invoice-number="${escapeHtml(row.invoice_number || "")}">Open</button>
-                  <button class="btn ghost small" type="button" data-office-action="copyKsInvoiceLink" data-office-invoice-number="${escapeHtml(row.invoice_number || "")}">Copy Link</button>
+                  <button class="btn ghost small" type="button" data-office-action="openKsInvoice" data-office-invoice-number="${escapeHtml(row.invoice_key || buildKsInvoiceKey(row.invoice_number || ""))}">Open</button>
+                  <button class="btn ghost small" type="button" data-office-action="copyKsInvoiceLink" data-office-invoice-number="${escapeHtml(row.invoice_key || buildKsInvoiceKey(row.invoice_number || ""))}">Copy Link</button>
                 </td>
               </tr>
             `).join("")}
@@ -23638,25 +23923,40 @@ function renderKsInvoiceList(){
 
 function renderKsInvoiceDetailView(invoice){
   const extracted = invoice?.extracted_data && typeof invoice.extracted_data === "object" ? invoice.extracted_data : {};
-  const lineItems = Array.isArray(extracted.line_items) ? extracted.line_items : [];
+  const lineItems = Array.isArray(invoice?.line_items) ? invoice.line_items : (Array.isArray(extracted.line_items) ? extracted.line_items : []);
   const sourceUrl = invoice?.source_file_url || "";
+  const invoiceNumber = invoice?.invoice_number || extracted.invoice_number || "-";
+  const invoiceKey = invoice?.invoice_key || extracted.invoice_key || buildKsInvoiceKey(invoiceNumber);
+  const weekEnding = invoice?.week_ending || extracted.week_ending || "-";
+  const projectName = invoice?.project_name || extracted.project_name || "-";
+  const nodeName = invoice?.node_name || extracted.node_name || "-";
+  const billToCompany = invoice?.bill_to_company || extracted.bill_to_company || "-";
+  const grandTotal = Number.isFinite(Number(invoice?.grand_total))
+    ? Number(invoice.grand_total)
+    : (Number.isFinite(Number(extracted?.grand_total)) ? Number(extracted.grand_total) : null);
+  const parseStatus = invoice?.parse_status || extracted.parse_status || "-";
+  const parseError = invoice?.parse_error || extracted.parse_error || "";
   return `
     <div class="card" style="margin-top:12px;">
       <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
         <div>
-          <h3 style="margin:0;">K &amp; S Invoice ${escapeHtml(invoice?.invoice_number || "-")}</h3>
+          <h3 style="margin:0;">K &amp; S Invoice ${escapeHtml(invoiceNumber)}</h3>
           <div class="muted small">${escapeHtml(invoice?.customer_name || "K & S Electric")}</div>
         </div>
         <div class="row" style="gap:8px; flex-wrap:wrap;">
           <button class="btn ghost small" type="button" data-office-action="backToInvoiceList">Back to Invoice List</button>
-          <button class="btn ghost small" type="button" data-office-action="copyKsInvoiceLink" data-office-invoice-number="${escapeHtml(invoice?.invoice_number || "")}">Copy Link</button>
+          <button class="btn ghost small" type="button" data-office-action="copyKsInvoiceLink" data-office-invoice-number="${escapeHtml(invoiceKey)}">Copy Link</button>
         </div>
       </div>
       <div class="grid cols-2" style="margin-top:10px;">
-        <div><div class="small muted">Invoice Number</div><div>${escapeHtml(invoice?.invoice_number || "-")}</div></div>
-        <div><div class="small muted">Customer / Bill To</div><div>${escapeHtml(invoice?.customer_name || "K & S Electric")} / ${escapeHtml(extracted.bill_to || "-")}</div></div>
-        <div><div class="small muted">Date / Week Ending</div><div>${escapeHtml(extracted.invoice_date || "-")} / ${escapeHtml(extracted.week_ending || "-")}</div></div>
-        <div><div class="small muted">Total</div><div>${escapeHtml(extracted.total != null ? formatMoney(extracted.total) : "-")}</div></div>
+        <div><div class="small muted">Invoice Number</div><div>${escapeHtml(invoiceNumber)}</div></div>
+        <div><div class="small muted">Invoice Key</div><div>${escapeHtml(invoiceKey || "-")}</div></div>
+        <div><div class="small muted">Node</div><div>${escapeHtml(nodeName)}</div></div>
+        <div><div class="small muted">Project</div><div>${escapeHtml(projectName)}</div></div>
+        <div><div class="small muted">Week Ending</div><div>${escapeHtml(weekEnding)}</div></div>
+        <div><div class="small muted">Bill To Company</div><div>${escapeHtml(billToCompany)}</div></div>
+        <div><div class="small muted">Source Filename</div><div>${escapeHtml(invoice?.source_filename || "-")}</div></div>
+        <div><div class="small muted">Grand Total</div><div>${escapeHtml(grandTotal != null ? formatMoney(grandTotal) : "-")}</div></div>
       </div>
       <div style="margin-top:10px;">
         <div class="small muted">Source PDF</div>
@@ -23671,10 +23971,11 @@ function renderKsInvoiceDetailView(invoice){
         ${lineItems.length
           ? `<div style="overflow:auto; margin-top:6px;">
               <table class="table billing-table">
-                <thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
+                <thead><tr><th>Code</th><th>Description</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
                 <tbody>
                   ${lineItems.map((item) => `
                     <tr>
+                      <td>${escapeHtml(item?.code || "-")}</td>
                       <td>${escapeHtml(item?.description || "-")}</td>
                       <td>${escapeHtml(String(item?.qty ?? "-"))}</td>
                       <td>${escapeHtml(item?.rate != null ? formatMoney(item.rate) : "-")}</td>
@@ -23690,6 +23991,8 @@ function renderKsInvoiceDetailView(invoice){
       <div style="margin-top:10px;">
         <div class="small muted">Notes / warnings</div>
         <div>${escapeHtml(invoice?.notes || "-")}</div>
+        <div class="muted small" style="margin-top:6px;">Parse status: ${escapeHtml(parseStatus)}</div>
+        ${parseError ? `<div class="muted small" style="margin-top:6px;">Parse error: ${escapeHtml(parseError)}</div>` : ""}
         ${(Array.isArray(invoice?.warnings) && invoice.warnings.length)
           ? `<div class="muted small" style="margin-top:6px;">${invoice.warnings.map((w) => `<div>- ${escapeHtml(w)}</div>`).join("")}</div>`
           : ""
