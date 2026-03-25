@@ -145,11 +145,6 @@ const state = {
     pendingImportFile: null,
     showWelcomeOverlay: false,
     pendingRouteRef: "",
-    introTimer: null,
-    introFadeTimer: null,
-    introFading: false,
-    introCountdown: 3,
-    introCountdownTimer: null,
     lastIntroMode: "",
   },
   invoiceFiles: [],
@@ -9714,26 +9709,16 @@ function hasInvoiceHashRoute(hashValue = window.location.hash){
 }
 
 function clearInvoiceIntroTimer(){
-  if (state.ksInvoices.introTimer){
-    clearTimeout(state.ksInvoices.introTimer);
-    state.ksInvoices.introTimer = null;
+  if (window.__invoiceIntroTimer){
+    clearInterval(window.__invoiceIntroTimer);
+    window.__invoiceIntroTimer = null;
+    console.info("[invoice-intro] timer cleared");
   }
-  if (state.ksInvoices.introFadeTimer){
-    clearTimeout(state.ksInvoices.introFadeTimer);
-    state.ksInvoices.introFadeTimer = null;
-  }
-  if (state.ksInvoices.introCountdownTimer){
-    clearInterval(state.ksInvoices.introCountdownTimer);
-    state.ksInvoices.introCountdownTimer = null;
-  }
-  state.ksInvoices.introFading = false;
-  state.ksInvoices.introCountdown = 3;
 }
 
 function hideInvoiceIntroOverlay(){
   clearInvoiceIntroTimer();
   state.ksInvoices.showWelcomeOverlay = false;
-  state.ksInvoices.introFading = false;
   const el = document.getElementById("invoiceIntroOverlay");
   if (el) el.remove();
 }
@@ -9790,6 +9775,65 @@ function getIntroModeForRoute(hashOrState = window.location.hash){
   return null;
 }
 
+function updateInvoiceIntroContinueLabel(remaining){
+  const overlay = document.getElementById("invoiceIntroOverlay");
+  if (!overlay) return;
+  const btn = overlay.querySelector('[data-office-action="continueToPendingInvoiceOpen"]');
+  if (!btn) return;
+  const safe = Math.max(0, Number(remaining || 0));
+  btn.textContent = safe > 0 ? `Continue (${safe})` : "Continue";
+}
+
+function startInvoiceIntroCountdown(){
+  clearInvoiceIntroTimer();
+  let remaining = 3;
+  console.info("[invoice-intro] countdown start");
+  console.info(`[invoice-intro] countdown tick: ${remaining}`);
+  updateInvoiceIntroContinueLabel(remaining);
+  window.__invoiceIntroTimer = setInterval(() => {
+    remaining -= 1;
+    if (remaining > 0){
+      console.info(`[invoice-intro] countdown tick: ${remaining}`);
+      updateInvoiceIntroContinueLabel(remaining);
+      return;
+    }
+    clearInvoiceIntroTimer();
+    updateInvoiceIntroContinueLabel(0);
+    console.info("[invoice-intro] auto continue");
+    continueToPendingInvoiceOpen({ source: "timer" });
+  }, 1000);
+}
+
+function showInvoiceIntroOverlay(){
+  if (document.getElementById("invoiceIntroOverlay")){
+    console.info("[intro] only one intro allowed");
+    return;
+  }
+  const host = document.createElement("div");
+  host.innerHTML = renderInvoiceDeepLinkWelcomeOverlay();
+  const overlay = host.firstElementChild;
+  if (!(overlay instanceof HTMLElement)) return;
+  overlay.addEventListener("click", (event) => {
+    const btn = event.target instanceof Element ? event.target.closest("button[data-office-action]") : null;
+    if (!btn) return;
+    const action = String(btn.dataset.officeAction || "");
+    if (action === "continueToPendingInvoiceOpen"){
+      continueToPendingInvoiceOpen();
+      return;
+    }
+    if (action === "skipPendingInvoiceOpen"){
+      skipPendingInvoiceOpen();
+      return;
+    }
+    if (action === "cancelPendingInvoiceOpen"){
+      cancelPendingInvoiceOpen();
+    }
+  });
+  document.body.appendChild(overlay);
+  console.info("[invoice-intro] overlay mounted once");
+  startInvoiceIntroCountdown();
+}
+
 function openOfficeBillingIntroThenInvoice(routeRef, { syncUrl = false } = {}){
   const clean = String(routeRef || "").trim();
   if (!clean) return false;
@@ -9805,31 +9849,11 @@ function openOfficeBillingIntroThenInvoice(routeRef, { syncUrl = false } = {}){
   window.__pendingInvoiceRef = clean;
   console.info("[invoice-intro] pending set", { route_ref: clean });
   state.ksInvoices.showWelcomeOverlay = true;
-  state.ksInvoices.introFading = false;
-  state.ksInvoices.introCountdown = 3;
   if (syncUrl){
     setInvoiceDeepLinkHash(clean);
   }
   console.info("[invoice-intro] overlay shown", { route_ref: clean });
-  clearInvoiceIntroTimer();
-  state.ksInvoices.introCountdownTimer = setInterval(() => {
-    state.ksInvoices.introCountdown = Math.max(0, Number(state.ksInvoices.introCountdown || 0) - 1);
-    if (state.ksInvoices.introCountdown <= 0){
-      console.info("[invoice-intro] auto continue");
-      continueToPendingInvoiceOpen({ source: "timer" });
-      return;
-    }
-    if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
-      renderInvoicePanel();
-    }
-  }, 1000);
-  state.ksInvoices.introFadeTimer = setTimeout(() => {
-    state.ksInvoices.introFading = true;
-    console.info("[invoice-intro] auto-fade start", { route_ref: clean });
-    if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
-      renderInvoicePanel();
-    }
-  }, 2600);
+  showInvoiceIntroOverlay();
   if ((document.querySelector(".view.active")?.id || "") === "viewInvoices"){
     renderInvoicePanel();
   }
@@ -24480,7 +24504,7 @@ function renderKsInvoiceDetailView(invoice){
 function renderInvoiceDeepLinkWelcomeOverlay(){
   return `
     <div id="invoiceIntroOverlay" class="invoice-intro-overlay">
-      <div class="invoice-intro-shell invoice-intro-animate ${state.ksInvoices.introFading ? "invoice-intro-fading" : ""}">
+      <div class="invoice-intro-shell invoice-intro-animate">
         <button class="btn ghost small invoice-intro-skip" type="button" data-office-action="skipPendingInvoiceOpen">Skip</button>
         <div class="invoice-intro-left">
           <div class="invoice-intro-total-control">TOTAL CONTROL.</div>
@@ -24513,7 +24537,7 @@ function renderInvoiceDeepLinkWelcomeOverlay(){
             <li>Update redlined prints</li>
           </ul>
           <div class="row" style="gap:8px; margin-top:12px; flex-wrap:wrap;">
-            <button class="btn small" type="button" data-office-action="continueToPendingInvoiceOpen">Continue (${Math.max(0, Number(state.ksInvoices.introCountdown || 0))})</button>
+            <button class="btn small" type="button" data-office-action="continueToPendingInvoiceOpen">Continue (3)</button>
             <button class="btn secondary small" type="button" data-office-action="cancelPendingInvoiceOpen">Back to Office</button>
           </div>
         </div>
@@ -24659,6 +24683,10 @@ function renderInvoicePanel(){
   const routeInvoiceNumber = String(state.officeInvoices.routeInvoiceNumber || "").trim();
   if (routeInvoiceNumber){
     const introMode = getIntroModeForRoute(window.location.hash || "");
+    const blockInvoiceDetail = introMode === "officeInvoice" && state.ksInvoices.showWelcomeOverlay;
+    if (blockInvoiceDetail){
+      showInvoiceIntroOverlay();
+    }
     const matchedKsInvoice = findKsInvoiceByRouteRef(routeInvoiceNumber);
     const matchedInvoice = findOfficeInvoiceByNumber(routeInvoiceNumber);
     wrap.innerHTML = `
@@ -24667,8 +24695,7 @@ function renderInvoicePanel(){
           <div class="muted small">Telecom weekly invoice desk</div>
           <button class="btn" type="button" data-office-action="createInvoice">Create Invoice</button>
         </div>
-        ${(introMode === "officeInvoice" && state.ksInvoices.showWelcomeOverlay) ? renderInvoiceDeepLinkWelcomeOverlay() : ""}
-        ${(introMode !== "officeInvoice" || !state.ksInvoices.showWelcomeOverlay) ? (
+        ${!blockInvoiceDetail ? (
           matchedKsInvoice
             ? renderKsInvoiceDetailView(matchedKsInvoice)
             : (matchedInvoice ? renderOfficeInvoiceDetailView(matchedInvoice) : renderOfficeInvoiceNotFound(routeInvoiceNumber))
