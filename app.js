@@ -9920,6 +9920,13 @@ async function syncAuthUiFromSession(reason = "manual"){
   setWhoami();
 }
 
+function clearClientStorageOnSignOut(){
+  if (typeof window === "undefined") return;
+  try { window.localStorage.clear(); } catch {}
+  try { window.sessionStorage.clear(); } catch {}
+  clearSupabaseAuthStorage();
+}
+
 async function ensureValidSessionForAction(actionName = "protected-action"){
   if (isDemo) return { user: state.user };
   if (!state.client){
@@ -9966,19 +9973,26 @@ SpecCom.helpers.handleSignOut = async function(){
     if (window.location.hash){
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
     }
-    applySignedOutUi("demo-signout");
+    clearClientStorageOnSignOut();
+    applySignedOutUi("manual-signout");
     return;
   }
   const client = state.client || supabase;
   try{
     if (client?.auth){
       const { error } = await client.auth.signOut({ scope: "global" });
-      console.info("[auth] signOut result", { ok: !error, error: error?.message || null });
+      if (error){
+        console.error("[auth] signOut failed", error.message || error);
+      } else {
+        console.info("[auth] signOut success");
+      }
+    } else {
+      console.error("[auth] signOut failed", "supabase client unavailable");
     }
   } catch (err){
-    console.error("Sign out failed", err);
+    console.error("[auth] signOut failed", err?.message || err);
   } finally {
-    clearSupabaseAuthStorage();
+    clearClientStorageOnSignOut();
     state.session = null;
     state.user = null;
     state.profile = null;
@@ -9988,7 +10002,7 @@ SpecCom.helpers.handleSignOut = async function(){
     if (window.location.hash){
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
     }
-    applySignedOutUi("signout");
+    applySignedOutUi("manual-signout");
   }
 };
 
@@ -27292,6 +27306,7 @@ function wireUI(){
   if (signInTopBtn){
     signInTopBtn.addEventListener("click", (e) => {
       e.preventDefault();
+      console.info("[auth] signIn button clicked");
       closeMenuModal();
       showAuth(true);
       setWhoami();
@@ -27318,12 +27333,14 @@ function wireUI(){
 
   $("btnSignIn")?.addEventListener("click", (e) => {
     e.preventDefault();
+    console.info("[auth] signIn button clicked");
     handleSignIn();
   });
   const authForm = $("authForm");
   if (authForm){
     authForm.addEventListener("submit", (e) => {
       e.preventDefault();
+      console.info("[auth] signIn button clicked");
       handleSignIn();
     });
   }
@@ -27779,6 +27796,7 @@ function wireUI(){
   const menuSignInBtn = $("btnMenuSignIn");
   if (menuSignInBtn){
     menuSignInBtn.addEventListener("click", () => {
+      console.info("[auth] signIn button clicked");
       closeMenuModal();
       showAuth(true);
       setWhoami();
