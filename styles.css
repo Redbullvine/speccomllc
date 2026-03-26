@@ -4785,3 +4785,15 @@ body:not(.map-mode) .tech-workspace {
   height: calc(100vh - 60px);
   width: 100%;
 }
+
+/* -- View visibility guard: prevent stacked workspaces ------------- */
+/* Some views also set display:flex via workspace classes; force-hide all non-active views. */
+.view:not(.active) {
+  display: none !important;
+}
+
+/* Preserve intended layout when active */
+.view.active.tech-workspace,
+.view.active.invoice-workspace {
+  display: flex !important;
+}
