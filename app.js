@@ -24576,46 +24576,76 @@ function renderInvoiceDeepLinkWelcomeOverlay(){
   return `
     <div id="invoiceIntroOverlay" class="invoice-intro-overlay">
       <div class="invoice-intro-shell invoice-intro-animate">
-        <button class="btn ghost small invoice-intro-skip" type="button" data-office-action="skipPendingInvoiceOpen">Skip</button>
-        <div class="invoice-intro-left">
-          <div class="invoice-intro-total-control">TOTAL CONTROL.</div>
-          <div class="invoice-intro-mock">
-            <div class="invoice-intro-ui-top">
-              <div>Invoice Builder</div>
-              <button class="btn small" type="button">Create Invoice</button>
+
+        <!-- Skip button top right -->
+        <button class="invoice-intro-skip-btn" type="button" data-office-action="skipPendingInvoiceOpen">Skip</button>
+
+        <!-- Logo + tagline -->
+        <div class="invoice-intro-brand">
+          <div class="invoice-intro-logo-row">
+            <svg class="invoice-intro-logo-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="40" height="40" rx="10" fill="rgba(255,255,255,0.12)"/>
+              <path d="M20 8L32 14V26L20 32L8 26V14L20 8Z" fill="none" stroke="white" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M20 8V20M20 20L32 14M20 20L8 14M20 20V32" stroke="white" stroke-width="1.5" stroke-opacity="0.6"/>
+            </svg>
+            <span class="invoice-intro-logo-text">SpecCom</span>
+          </div>
+          <div class="invoice-intro-tagline">
+            <span>Field</span>
+            <span class="invoice-intro-dot">•</span>
+            <span>Dispatch</span>
+            <span class="invoice-intro-dot">•</span>
+            <span>Documentation</span>
+            <span class="invoice-intro-dot">•</span>
+            <span>Billing</span>
+          </div>
+        </div>
+
+        <!-- Center content -->
+        <div class="invoice-intro-center">
+          <div class="invoice-intro-welcome-label">Welcome to</div>
+          <div class="invoice-intro-module-title">Office &amp; Billing</div>
+
+          <!-- Feature pills -->
+          <div class="invoice-intro-pills">
+            <span class="invoice-intro-pill">Auto-generate invoices</span>
+            <span class="invoice-intro-pill">Standard billing codes</span>
+            <span class="invoice-intro-pill">Reduce missed charges</span>
+            <span class="invoice-intro-pill">ZIP folder import</span>
+            <span class="invoice-intro-pill">Verify project completions</span>
+            <span class="invoice-intro-pill">Monitor material usage</span>
+          </div>
+
+          <!-- Mock invoice card -->
+          <div class="invoice-intro-mock-card">
+            <div class="invoice-intro-mock-header">
+              <span>K &amp; S Electric Invoices</span>
+              <span class="invoice-intro-mock-badge">14 imported</span>
             </div>
-            <div class="invoice-intro-ui-row"><span>SpecCom_TDS_001</span><strong>$1,405.00</strong></div>
-            <div class="invoice-intro-ui-row"><span>SpecCom_TDS_002</span><strong>$524.00</strong></div>
-            <div class="invoice-intro-ui-row"><span>SpecCom_TDS_003</span><strong>$980.00</strong></div>
-          </div>
-          <div class="invoice-intro-checks">
-            <div>Approve Technician Timesheets</div>
-            <div>Generate Job Invoices Instantly</div>
-            <div>Gain Full Financial Visibility</div>
-          </div>
-          <button class="btn invoice-intro-cta" type="button">TRY DEMO MODE NOW</button>
-        </div>
-        <div class="invoice-intro-right">
-          <div class="invoice-intro-right-title">WELCOME TO<br/>OFFICE &amp; BILLING</div>
-          <ul class="invoice-intro-bullets">
-            <li>Auto-generate invoices</li>
-            <li>Standard billing codes</li>
-            <li>Reduce missed charges</li>
-            <li>Upload zip folders with .PDF invoices</li>
-            <li>Organize billing</li>
-            <li>Verify project completions</li>
-            <li>Monitor material usage</li>
-            <li>Update redlined prints</li>
-          </ul>
-          <div class="row" style="gap:8px; margin-top:12px; flex-wrap:wrap;">
-            <button class="btn small" type="button" data-office-action="continueToPendingInvoiceOpen">Continue (${INVOICE_INTRO_DURATION_SECONDS})</button>
-            <button class="btn secondary small" type="button" data-office-action="cancelPendingInvoiceOpen">Back to Office</button>
+            <div class="invoice-intro-mock-row"><span>SpecCom_TDS_001</span><strong>$4,733.00</strong></div>
+            <div class="invoice-intro-mock-row"><span>SpecCom_TDS_002</span><strong>$2,575.75</strong></div>
+            <div class="invoice-intro-mock-row"><span>SpecCom_TDS_003</span><strong>$1,643.00</strong></div>
           </div>
         </div>
+
+        <!-- Progress bar + actions -->
+        <div class="invoice-intro-footer">
+          <div class="invoice-intro-progress-track">
+            <div class="invoice-intro-progress-bar" style="animation-duration:${INVOICE_INTRO_DURATION_SECONDS}s"></div>
+          </div>
+          <div class="invoice-intro-actions">
+            <button class="invoice-intro-continue-btn" type="button" data-office-action="continueToPendingInvoiceOpen">
+              Continue <span id="invoiceIntroContinueCount">(${INVOICE_INTRO_DURATION_SECONDS})</span>
+            </button>
+            <button class="invoice-intro-back-btn" type="button" data-office-action="cancelPendingInvoiceOpen">Back to Office</button>
+          </div>
+        </div>
+
       </div>
     </div>
   `;
 }
+
 
 function saveOfficeInvoiceWithStatus(status){
   ensureOfficeInvoiceStateLoaded();
