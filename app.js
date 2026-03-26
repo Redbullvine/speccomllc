@@ -9658,6 +9658,7 @@ function parseViewFromHash(hashValue = window.location.hash){
   const routeToken = normalized.split(/[?&]/)[0].trim().toLowerCase();
   if (!routeToken) return null;
   if (routeToken === "map" || routeToken === "viewmap") return "viewMap";
+  if (routeToken === "redline") return "viewMap";
   if (routeToken === "home" || routeToken === "dashboard" || routeToken === "viewdashboard") return "viewDashboard";
   return null;
 }
@@ -9709,6 +9710,39 @@ function hasInvoiceHashRoute(hashValue = window.location.hash){
   return /(?:^|[?&])invoice=/i.test(normalized);
 }
 
+function hasRedlineHashRoute(hashValue = window.location.hash){
+  const hash = String(hashValue || "").trim();
+  if (!hash) return false;
+  const normalized = hash.startsWith("#") ? hash.slice(1) : hash;
+  const routeToken = normalized.split(/[?&]/)[0].trim().toLowerCase();
+  return routeToken === "redline";
+}
+
+function queueRedlineDeepLinkActivation(delayMs = 500){
+  clearTimeout(window.__redlineDeepLinkTimer);
+  window.__redlineDeepLinkTimer = setTimeout(() => {
+    if (!hasRedlineHashRoute()) return;
+    if (!state.user || !isViewAllowed("viewMap")) return;
+    const btn = document.getElementById("btnMenuOpenRedline");
+    if (btn){
+      btn.click();
+      return;
+    }
+    void launchRedlineFromMenu();
+  }, Math.max(0, Number(delayMs) || 0));
+}
+
+function syncRedlineDeepLinkFromUrl({ activateView = false } = {}){
+  if (!hasRedlineHashRoute()) return false;
+  if (activateView && state.user && isViewAllowed("viewMap")){
+    if ((document.querySelector(".view.active")?.id || "") !== "viewMap"){
+      setActiveView("viewMap", { syncHash: false });
+    }
+    queueRedlineDeepLinkActivation(500);
+  }
+  return true;
+}
+
 function clearInvoiceIntroTimer(){
   if (window.__invoiceIntroTimer){
     clearInterval(window.__invoiceIntroTimer);
@@ -9727,7 +9761,7 @@ function hideInvoiceIntroOverlay(){
 function storePostAuthRedirect(){
   if (hasAuthenticatedSession()) return;
   const hash = String(window.location.hash || "").trim();
-  if (!hasInvoiceHashRoute(hash)) return;
+  if (!hasInvoiceHashRoute(hash) && !hasRedlineHashRoute(hash)) return;
   try {
     sessionStorage.setItem(POST_AUTH_REDIRECT_KEY, hash);
   } catch {}
@@ -27221,12 +27255,14 @@ async function initAuth(){
       storePostAuthRedirect();
     }
     if (syncInvoiceDeepLinkFromUrl({ activateView: true })) return;
+    if (syncRedlineDeepLinkFromUrl({ activateView: true })) return;
     const hashView = parseViewFromHash();
     if (!hashView || !state.user || !isViewAllowed(hashView)) return;
     setActiveView(hashView, { syncHash: false });
   });
   window.addEventListener("popstate", () => {
     syncInvoiceDeepLinkFromUrl({ activateView: true });
+    syncRedlineDeepLinkFromUrl({ activateView: true });
   });
 
   if (window.location.pathname.endsWith("/demo-login")){
@@ -27475,6 +27511,15 @@ async function postLoginBootstrap(client, user){
     if (hasInvoiceHashRoute(window.location.hash || "")){
       console.log("[auth-redirect] default home prevented");
       setActiveView("viewInvoices");
+      startLocationPolling();
+      syncPendingSites();
+      setWhoami();
+      return;
+    }
+    if (hasRedlineHashRoute(window.location.hash || "")){
+      console.log("[auth-redirect] redline deep link route");
+      setActiveView("viewMap", { syncHash: false });
+      queueRedlineDeepLinkActivation(500);
       startLocationPolling();
       syncPendingSites();
       setWhoami();
