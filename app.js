@@ -24625,9 +24625,9 @@ function renderInvoiceDeepLinkWelcomeOverlay(){
               <span>K &amp; S Electric Invoices</span>
               <span class="invoice-intro-mock-badge">14 imported</span>
             </div>
-            <div class="invoice-intro-mock-row"><span>SpecCom_TDS_001</span><strong>$4,733.00</strong></div>
-            <div class="invoice-intro-mock-row"><span>SpecCom_TDS_002</span><strong>$2,575.75</strong></div>
-            <div class="invoice-intro-mock-row"><span>SpecCom_TDS_003</span><strong>$1,643.00</strong></div>
+            <div class="invoice-intro-mock-row"><span>SpecCom_TDS_001</span><strong>Imported</strong></div>
+            <div class="invoice-intro-mock-row"><span>SpecCom_TDS_002</span><strong>Imported</strong></div>
+            <div class="invoice-intro-mock-row"><span>SpecCom_TDS_003</span><strong>Imported</strong></div>
           </div>
         </div>
 
