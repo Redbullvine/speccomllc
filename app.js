@@ -9860,6 +9860,9 @@ function openOfficeBillingIntroThenInvoice(routeRef, { syncUrl = false } = {}){
   window.__pendingInvoiceRef = clean;
   console.info("[invoice-intro] pending set", { route_ref: clean });
   state.ksInvoices.showWelcomeOverlay = true;
+  if (state.user && isViewAllowed("viewInvoices") && (document.querySelector(".view.active")?.id || "") !== "viewInvoices"){
+    setActiveView("viewInvoices", { syncHash: false });
+  }
   if (syncUrl){
     setInvoiceDeepLinkHash(clean);
   }
