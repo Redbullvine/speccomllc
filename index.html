@@ -331,41 +331,55 @@
             </div>
           </div>
         </section>
-        <section id="viewInvoices" class="view">
-          <div class="grid cols-2">
-            <div class="card">
-              <h2 data-i18n="invoiceActionsTitle">Invoice actions</h2>
-              <div class="muted small">Build telecom-ready invoices with weekly line items and billing notes.</div>
-              <div class="row" style="margin-top:12px;">
-                <button id="btnCreateInvoice" class="btn" data-action="createInvoice">Create Invoice</button>
-              </div>
-              <div id="readyNote" class="note" style="margin-top:12px; display:none;"></div>
-            </div>
-            <div class="card">
-              <h2>Invoice Builder</h2>
-              <div class="muted small">Create drafts, mark ready for billing, and reuse recent header values.</div>
+        <section id="viewInvoices" class="view invoice-workspace">
 
-              <div class="hr"></div>
-              <div id="invoicePanel"></div>
+          <!-- LEFT SIDEBAR: persistent invoice navigator -->
+          <aside id="invoiceNavSidebar" class="invoice-nav-sidebar">
+            <div class="invoice-nav-header">
+              <span class="invoice-nav-title">Invoices</span>
+              <button class="btn small" type="button" data-office-action="createInvoice">+ New</button>
             </div>
-          </div>
-          <div id="invoiceFilesGate" class="note warning" style="margin-top:12px; display:none;">
-            Invoice files are private. Authorized access is required before you can view this vault.
-          </div>
-          <div id="invoiceFilesPanel" class="card" style="margin-top:12px; display:none;">
-            <div class="row" style="justify-content:space-between; align-items:center;">
-              <h2>Invoice Files</h2>
-              <div class="row">
-                <button id="btnInvoiceFilesRefresh" class="btn ghost small" type="button">Refresh</button>
-                <label class="btn secondary small file-btn">
-                  Upload file
-                  <input id="invoiceFileInput" type="file" accept=".pdf,.xlsx,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg,.zip,.txt,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/zip,image/*,text/plain" />
-                </label>
+            <div class="invoice-nav-search">
+              <input id="invoiceNavSearch" class="input compact" type="text" placeholder="Search invoices..." autocomplete="off" />
+            </div>
+            <div id="invoiceNavList" class="invoice-nav-list"></div>
+          </aside>
+
+          <!-- RIGHT MAIN AREA -->
+          <main class="invoice-main-area">
+            <div class="invoice-toolbar">
+              <div class="invoice-toolbar-left">
+                <button id="btnToggleInvoiceSidebar" class="btn ghost small icon-btn" type="button" title="Toggle invoice list">
+                  <span class="hamburger"><span></span><span></span><span></span></span>
+                </button>
+                <h2 class="invoice-toolbar-title">Office &amp; Billing</h2>
+              </div>
+              <div class="invoice-toolbar-right">
+                <button id="btnCreateInvoice" class="btn" type="button" data-action="createInvoice">Create Invoice</button>
               </div>
             </div>
-            <div id="invoiceFilesProjectScope" class="muted small" style="margin-top:8px;"></div>
-            <div id="invoiceFilesList" style="margin-top:10px;"></div>
-          </div>
+
+            <div id="invoicePanel" class="invoice-panel-body"></div>
+
+            <div id="invoiceFilesGate" class="note warning" style="margin-top:16px; display:none;">
+              Invoice files are private. Authorized access is required before you can view this vault.
+            </div>
+            <div id="invoiceFilesPanel" class="card" style="margin-top:16px; display:none;">
+              <div class="row" style="justify-content:space-between; align-items:center;">
+                <h2>Invoice Files</h2>
+                <div class="row">
+                  <button id="btnInvoiceFilesRefresh" class="btn ghost small" type="button">Refresh</button>
+                  <label class="btn secondary small file-btn">
+                    Upload file
+                    <input id="invoiceFileInput" type="file" accept=".pdf,.xlsx,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg,.zip,.txt,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/zip,image/*,text/plain" />
+                  </label>
+                </div>
+              </div>
+              <div id="invoiceFilesProjectScope" class="muted small" style="margin-top:8px;"></div>
+              <div id="invoiceFilesList" style="margin-top:10px;"></div>
+            </div>
+            <div id="readyNote" class="note" style="margin-top:12px; display:none;"></div>
+          </main>
         </section>
 
         <section id="viewBilling" class="view">

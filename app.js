@@ -24741,37 +24741,117 @@ function renderOfficeInvoiceBuilder(draft){
   renderSupervisorOverview();
 }
 
+function renderInvoiceNavSidebar() {
+  const navList = document.getElementById("invoiceNavList");
+  if (!navList) return;
+
+  const activeRef = String(
+    getInvoiceIdFromUrl() ||
+    state.officeInvoices.routeInvoiceNumber ||
+    state.officeInvoices.draft?.invoice_number ||
+    ""
+  ).trim();
+
+  const query = String(
+    document.getElementById("invoiceNavSearch")?.value || ""
+  ).toLowerCase().trim();
+
+  const ksRows = (state.ksInvoices.records || []).map((row) => {
+    const ref   = String(row?.id || row?.invoice_number || "").trim();
+    const title = String(row?.invoice_number || row?.invoice_key || ref || "K&S").trim();
+    const sub   = [row?.node_name, row?.project_name].filter(Boolean).join(" · ") || "K&S invoice";
+    const amt   = Number.isFinite(Number(row?.grand_total)) ? formatMoney(row.grand_total) : "";
+    const status = String(row?.parse_status || "").toLowerCase();
+    const pillClass = /partial/.test(status) ? "partial" : /ready/.test(status) ? "ready" : "draft";
+    const active = ref && (
+      normalizeKsInvoiceLookup(ref) === normalizeKsInvoiceLookup(activeRef)
+    );
+    return { ref, title, sub, amt, pillClass, active, kind: "ks", action: "openKsInvoice" };
+  }).filter((r) => r.ref);
+
+  const officeRows = (state.officeInvoices.records || []).map((row) => {
+    const ref   = String(row?.invoice_number || row?.id || "").trim();
+    const title = String(row?.invoice_number || row?.id || "Office").trim();
+    const sub   = [row?.company_creating_invoice, row?.location].filter(Boolean).join(" · ") || "Office invoice";
+    const amt   = Number.isFinite(Number(row?.total)) ? formatMoney(row.total) : "";
+    const status = String(row?.status || "Draft").toLowerCase();
+    const pillClass = /ready/.test(status) ? "ready" : "draft";
+    const active = ref && (
+      normalizeKsInvoiceLookup(ref) === normalizeKsInvoiceLookup(activeRef)
+    );
+    return { ref, title, sub, amt, pillClass, active, kind: "off", action: "openInvoiceDeepLink" };
+  }).filter((r) => r.ref);
+
+  const filter = (rows) => !query
+    ? rows
+    : rows.filter((r) =>
+        r.title.toLowerCase().includes(query) ||
+        r.sub.toLowerCase().includes(query) ||
+        r.amt.toLowerCase().includes(query)
+      );
+
+  const buildItems = (rows) => {
+    const filtered = filter(rows);
+    if (!filtered.length) return `<div class="invoice-nav-empty">No invoices found</div>`;
+    return filtered.map((r) => `
+      <button
+        class="invoice-nav-item ${r.active ? "is-active" : ""}"
+        type="button"
+        data-office-action="${escapeHtml(r.action)}"
+        data-office-invoice-number="${escapeHtml(r.ref)}"
+      >
+        <span class="invoice-nav-item-left">
+          <span class="invoice-nav-item-id">${escapeHtml(r.title)}</span>
+          <span class="invoice-nav-item-sub">${escapeHtml(r.sub)}</span>
+        </span>
+        <span class="invoice-nav-item-right">
+          <span class="inv-pill ${escapeHtml(r.kind)}">${r.kind === "ks" ? "K&amp;S" : "Office"}</span>
+          ${r.amt ? `<span class="invoice-nav-item-amount">${escapeHtml(r.amt)}</span>` : ""}
+          <span class="inv-pill ${escapeHtml(r.pillClass)}">${escapeHtml(r.pillClass)}</span>
+        </span>
+      </button>
+    `).join("");
+  };
+
+  const hasKs     = ksRows.length > 0;
+  const hasOffice = officeRows.length > 0;
+
+  navList.innerHTML = `
+    ${hasKs ? `<div class="invoice-nav-section-label">K&amp;S Invoices</div>${buildItems(ksRows)}` : ""}
+    ${hasOffice ? `<div class="invoice-nav-section-label">Office Invoices</div>${buildItems(officeRows)}` : ""}
+    ${!hasKs && !hasOffice ? `<div class="invoice-nav-empty">No invoices yet. Import a ZIP or create one.</div>` : ""}
+  `;
+}
+
 function renderInvoicePanel(){
   const wrap = $("invoicePanel");
   if (!wrap) return;
   ensureOfficeInvoiceStateLoaded();
   ensureKsInvoiceLocalStateLoaded();
+  renderInvoiceNavSidebar();
   const invoices = state.officeInvoices.records || [];
   const urlInvoiceNumber = String(getInvoiceIdFromUrl() || "").trim();
   if (urlInvoiceNumber){
     openOfficeBillingIntroThenInvoice(urlInvoiceNumber, { syncUrl: false });
   }
   const routeInvoiceNumber = String(state.officeInvoices.routeInvoiceNumber || "").trim();
-  if (routeInvoiceNumber){
+  if (routeInvoiceNumber) {
     const introMode = getIntroModeForRoute(window.location.hash || "");
     const blockInvoiceDetail = introMode === "officeInvoice" && state.ksInvoices.showWelcomeOverlay;
-    if (blockInvoiceDetail){
+    if (blockInvoiceDetail) {
       showInvoiceIntroOverlay();
     }
     const matchedKsInvoice = findKsInvoiceByRouteRef(routeInvoiceNumber);
-    const matchedInvoice = findOfficeInvoiceByNumber(routeInvoiceNumber);
+    const matchedInvoice   = findOfficeInvoiceByNumber(routeInvoiceNumber);
     wrap.innerHTML = `
       <div class="field-stack" style="gap:10px;">
-        <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-          <div class="muted small">Telecom weekly invoice desk</div>
-          <button class="btn" type="button" data-office-action="createInvoice">Create Invoice</button>
-        </div>
         ${renderKsInvoiceImportCard()}
-        ${renderOfficeInvoiceRouteSidebar(routeInvoiceNumber)}
         ${!blockInvoiceDetail ? (
           matchedKsInvoice
             ? renderKsInvoiceDetailView(matchedKsInvoice)
-            : (matchedInvoice ? renderOfficeInvoiceDetailView(matchedInvoice) : renderOfficeInvoiceNotFound(routeInvoiceNumber))
+            : (matchedInvoice
+                ? renderOfficeInvoiceDetailView(matchedInvoice)
+                : renderOfficeInvoiceNotFound(routeInvoiceNumber))
         ) : ""}
       </div>
     `;
@@ -28929,6 +29009,20 @@ function wireUI(){
   const btnCreateInvoice = $("btnCreateInvoice");
   if (btnCreateInvoice){
     btnCreateInvoice.addEventListener("click", () => createInvoice());
+  }
+  const btnToggleSidebar = document.getElementById("btnToggleInvoiceSidebar");
+  if (btnToggleSidebar) {
+    btnToggleSidebar.addEventListener("click", () => {
+      const sidebar = document.getElementById("invoiceNavSidebar");
+      if (sidebar) sidebar.classList.toggle("collapsed");
+    });
+  }
+
+  const invoiceNavSearch = document.getElementById("invoiceNavSearch");
+  if (invoiceNavSearch) {
+    invoiceNavSearch.addEventListener("input", () => {
+      renderInvoiceNavSidebar();
+    });
   }
   const invoicePanel = $("invoicePanel");
   if (invoicePanel){
