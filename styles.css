@@ -4715,3 +4715,73 @@ article.tech-shift-item:has(.status-blocked) .status-pill.status-blocked {
   color: rgba(255,255,255,0.9);
 }
 
+
+/* -- GIS sidebar: only visible in map-mode ------------------------ */
+
+/* Hide the GIS left rail and drawer on ALL non-map views */
+body:not(.map-mode) .gis-sidebar,
+body:not(.map-mode) .gis-drawer {
+  display: none !important;
+}
+
+/* When NOT in map-mode, the main content fills full width */
+body:not(.map-mode) .app-shell {
+  display: block !important;
+}
+body:not(.map-mode) .content {
+  width: 100% !important;
+  min-width: 0 !important;
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+}
+
+/* -- Kill horizontal overflow globally ---------------------------- */
+
+/* Prevent any view from causing body-level horizontal scroll */
+body {
+  overflow-x: hidden;
+}
+
+.app-shell,
+.content,
+.view {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Workspace layouts: constrain to viewport width */
+.tech-workspace,
+.invoice-workspace {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+/* Inner columns: prevent overflow */
+.tech-main-col,
+.tech-side-col,
+.invoice-main-area,
+.invoice-nav-sidebar {
+  min-width: 0;
+}
+
+/* Tables inside workspaces: scroll within their card, not the page */
+.tech-workspace .table,
+.invoice-workspace .table {
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+}
+
+/* Cards inside panel bodies don't overflow their container */
+.invoice-panel-body .card,
+.tech-main-col .card {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* -- Technician workspace height fix ------------------------------ */
+/* When GIS sidebar is hidden, tech-workspace fills correctly */
+body:not(.map-mode) .tech-workspace {
+  height: calc(100vh - 60px);
+  width: 100%;
+}
