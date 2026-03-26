@@ -211,51 +211,73 @@
           </div>
         </section>
 
-        <section id="viewTechnician" class="view">
-          <div class="grid cols-2">
-            <div class="card">
-              <h2>Current Activity</h2>
-              <div id="techClockStatus" class="muted small" style="margin-top:6px;"></div>
-              <div class="row" style="margin-top:12px;">
-                <button id="btnTechClockIn" class="btn" data-action="techClockIn" data-i18n="techClockIn">Clock In</button>
-                <button id="btnTechClockOut" class="btn secondary" data-action="techClockOut" data-i18n="techClockOut">Clock Out</button>
-              </div>
-              <div class="hr"></div>
-              <div class="muted small">Current state</div>
-              <div id="techJobState" class="chip" style="margin-top:8px;"></div>
-              <div id="techCurrentActivity" style="margin-top:12px;"></div>
-              <div class="row" style="flex-wrap:wrap; margin-top:12px;" id="techQuickActions">
-                <button id="btnTechLunch" class="btn ghost" data-action="techLunch" data-i18n="techLunch">Lunch</button>
-                <button id="btnTechBreak" class="btn ghost" data-action="techBreak" data-i18n="techBreak">Break</button>
-                <button id="btnTechTruckInspection" class="btn ghost" data-action="techTruckInspection" data-i18n="techTruckInspection">Truck Inspection</button>
-              </div>
-              <div class="hr"></div>
-              <h3>Today's Shift</h3>
-              <div id="techEventLog" class="tech-log"></div>
+        <section id="viewTechnician" class="view tech-workspace">
+
+          <!-- TOP: Clock bar — always visible, never buried -->
+          <div class="tech-clock-bar">
+            <div class="tech-clock-bar-left">
+              <div id="techClockStatus" class="tech-clock-status"></div>
+              <div id="techJobState" class="tech-job-state-chip"></div>
             </div>
-            <div class="card">
-              <h2>Shift Summary</h2>
-              <div id="techSummary" style="margin-top:12px;"></div>
-              <div class="hr"></div>
-              <h3>Location trail</h3>
-              <div id="techLocationTrail" class="muted small" style="margin-top:8px;"></div>
+            <div class="tech-clock-bar-right">
+              <button id="btnTechClockIn" class="btn tech-clock-btn clock-in" data-action="techClockIn" data-i18n="techClockIn">Clock In</button>
+              <button id="btnTechClockOut" class="btn tech-clock-btn clock-out" data-action="techClockOut" data-i18n="techClockOut">Clock Out</button>
             </div>
           </div>
-          <div class="card" style="margin-top:12px;">
-            <div class="row" style="justify-content:space-between;">
-              <h2 data-i18n="techWorkOrdersTitle">Work orders</h2>
-              <div class="muted small" data-i18n="techWorkOrdersSubtitle">Assigned installs and trouble tickets</div>
-            </div>
-            <div class="grid cols-2" style="margin-top:12px;">
-              <div>
-                <h3 data-i18n="techTodayTitle">Today</h3>
-                <div id="techWorkOrdersToday" style="margin-top:10px;"></div>
+
+          <!-- BODY: two-column on desktop, single-column on mobile -->
+          <div class="tech-body">
+
+            <!-- LEFT COLUMN: active work + today's queue -->
+            <div class="tech-main-col">
+
+              <!-- Active task card -->
+              <div class="card tech-active-card">
+                <div class="tech-active-header">
+                  <h2 class="tech-section-title">Current Activity</h2>
+                  <div class="row" id="techQuickActions" style="gap:8px; flex-wrap:wrap;">
+                    <button id="btnTechLunch" class="btn ghost small" data-action="techLunch" data-i18n="techLunch">Lunch</button>
+                    <button id="btnTechBreak" class="btn ghost small" data-action="techBreak" data-i18n="techBreak">Break</button>
+                    <button id="btnTechTruckInspection" class="btn ghost small" data-action="techTruckInspection" data-i18n="techTruckInspection">Truck Inspection</button>
+                  </div>
+                </div>
+                <div id="techCurrentActivity" style="margin-top:10px;"></div>
               </div>
-              <div>
-                <h3 data-i18n="techTomorrowTitle">Tomorrow</h3>
-                <div id="techWorkOrdersTomorrow" style="margin-top:10px;"></div>
+
+              <!-- Work orders -->
+              <div class="card tech-orders-card" style="margin-top:12px;">
+                <div class="row" style="justify-content:space-between; align-items:center;">
+                  <h2 class="tech-section-title" data-i18n="techWorkOrdersTitle">Work orders</h2>
+                  <span class="muted small" data-i18n="techWorkOrdersSubtitle">Assigned installs and trouble tickets</span>
+                </div>
+                <div style="margin-top:12px;">
+                  <h3 data-i18n="techTodayTitle" style="margin-bottom:8px;">Today</h3>
+                  <div id="techWorkOrdersToday"></div>
+                </div>
+                <div style="margin-top:16px;">
+                  <h3 data-i18n="techTomorrowTitle" style="margin-bottom:8px;">Tomorrow</h3>
+                  <div id="techWorkOrdersTomorrow"></div>
+                </div>
+              </div>
+
+              <!-- Today's shift log -->
+              <div class="card" style="margin-top:12px;">
+                <h2 class="tech-section-title">Today's Shift</h2>
+                <div id="techEventLog" class="tech-log" style="margin-top:10px;"></div>
               </div>
             </div>
+
+            <!-- RIGHT COLUMN: shift summary + location trail -->
+            <div class="tech-side-col">
+              <div class="card tech-summary-card">
+                <h2 class="tech-section-title">Shift Summary</h2>
+                <div id="techSummary" style="margin-top:12px;"></div>
+                <div class="hr"></div>
+                <h3 style="margin-bottom:6px;">Location trail</h3>
+                <div id="techLocationTrail" class="muted small"></div>
+              </div>
+            </div>
+
           </div>
         </section>
 
