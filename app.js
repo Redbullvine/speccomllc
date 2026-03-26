@@ -24829,20 +24829,22 @@ function renderInvoicePanel(){
   ensureOfficeInvoiceStateLoaded();
   ensureKsInvoiceLocalStateLoaded();
   renderInvoiceNavSidebar();
+
   const invoices = state.officeInvoices.records || [];
   const urlInvoiceNumber = String(getInvoiceIdFromUrl() || "").trim();
   if (urlInvoiceNumber){
     openOfficeBillingIntroThenInvoice(urlInvoiceNumber, { syncUrl: false });
   }
+
   const routeInvoiceNumber = String(state.officeInvoices.routeInvoiceNumber || "").trim();
-  if (routeInvoiceNumber) {
+  if (routeInvoiceNumber){
     const introMode = getIntroModeForRoute(window.location.hash || "");
     const blockInvoiceDetail = introMode === "officeInvoice" && state.ksInvoices.showWelcomeOverlay;
-    if (blockInvoiceDetail) {
+    if (blockInvoiceDetail){
       showInvoiceIntroOverlay();
     }
     const matchedKsInvoice = findKsInvoiceByRouteRef(routeInvoiceNumber);
-    const matchedInvoice   = findOfficeInvoiceByNumber(routeInvoiceNumber);
+    const matchedInvoice = findOfficeInvoiceByNumber(routeInvoiceNumber);
     wrap.innerHTML = `
       <div class="field-stack" style="gap:10px;">
         ${renderKsInvoiceImportCard()}
@@ -24857,19 +24859,16 @@ function renderInvoicePanel(){
     `;
     return;
   }
+
   const draft = state.officeInvoices.draft;
   wrap.innerHTML = `
     <div class="field-stack" style="gap:10px;">
-      <div class="row" style="justify-content:space-between; align-items:center;">
-        <div class="muted small">Telecom weekly invoice desk</div>
-        <button class="btn" type="button" data-office-action="createInvoice">Create Invoice</button>
-      </div>
       ${draft ? renderOfficeInvoiceBuilder(draft) : ""}
       <div class="card" style="margin-top:12px;">
         <h3>Saved Invoices</h3>
         ${!invoices.length
           ? `<div class="muted small" style="margin-top:8px;">No invoices saved yet.</div>`
-          : `<div style="overflow:auto; margin-top:8px;">
+          : `<div style="overflow-x:auto; margin-top:8px;">
               <table class="table">
                 <thead><tr><th>Invoice #</th><th>Invoice Date</th><th>Week Ending</th><th>Company</th><th>Bill To</th><th>Job #</th><th>Location</th><th>Status</th><th>Total</th><th></th></tr></thead>
                 <tbody>

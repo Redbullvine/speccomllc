@@ -4590,3 +4590,22 @@ article.tech-shift-item:has(.status-blocked) .status-pill.status-blocked {
   background: #fef9c3;
   color: #92400e;
 }
+
+/* -- Invoice panel: prevent horizontal overflow from wide tables -- */
+.invoice-panel-body {
+  overflow-x: hidden;
+}
+.invoice-panel-body .table {
+  min-width: 0;
+  width: 100%;
+  table-layout: auto;
+}
+.invoice-panel-body .card {
+  min-width: 0;
+  overflow-x: auto;
+}
+/* Remove the duplicate "Telecom weekly invoice desk" header row
+   that was left over from the old layout */
+.invoice-panel-body > .field-stack > .row:first-child:has(.muted.small) {
+  display: none;
+}
