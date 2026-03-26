@@ -6286,12 +6286,16 @@ function handleRedlineContextChange(){
 
 function getRedlinePointFromLatLng(latlng){
   const overlay = $("redlineOverlay");
+  const mapEl = $("liveMap");
   const map = state.map.instance;
-  if (!overlay || !map || !latlng || typeof map.latLngToContainerPoint !== "function"){
+  if (!map || !latlng || typeof map.latLngToContainerPoint !== "function"){
     return null;
   }
   const point = map.latLngToContainerPoint(latlng);
-  const bounds = overlay.getBoundingClientRect();
+  let bounds = overlay?.getBoundingClientRect?.() || null;
+  if (!bounds?.width || !bounds?.height){
+    bounds = mapEl?.getBoundingClientRect?.() || null;
+  }
   if (!bounds.width || !bounds.height) return null;
   return {
     marker_x: Math.max(0, Math.min(1, Number(point.x) / bounds.width)),
@@ -9139,6 +9143,12 @@ function ensureMap(){
       }
       const point = getRedlinePointFromLatLng(latlng);
       if (!point){
+        const source = state.redline.source || resolveRedlineSource();
+        if (!source?.project_id){
+          toast("Project required", "Select a project first, then add redline markers.", "error");
+        } else {
+          toast("Redline unavailable", "Map overlay is not ready yet. Try again.", "error");
+        }
         return;
       }
       state.redline.addMode = false;
@@ -9723,9 +9733,17 @@ function queueRedlineDeepLinkActivation(delayMs = 500){
   window.__redlineDeepLinkTimer = setTimeout(() => {
     if (!hasRedlineHashRoute()) return;
     if (!state.user || !isViewAllowed("viewMap")) return;
+    if ((document.querySelector(".view.active")?.id || "") !== "viewMap"){
+      setActiveView("viewMap", { syncHash: false });
+    }
     const btn = document.getElementById("btnMenuOpenRedline");
     if (btn){
       btn.click();
+      setTimeout(() => {
+        if (!state.redline.enabled){
+          void launchRedlineFromMenu();
+        }
+      }, 120);
       return;
     }
     void launchRedlineFromMenu();
