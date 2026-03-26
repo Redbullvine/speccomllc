@@ -4797,3 +4797,39 @@ body:not(.map-mode) .tech-workspace {
 .view.active.invoice-workspace {
   display: flex !important;
 }
+
+/* -- Invoice workspace polish: match app-style reference ----------- */
+@media (min-width: 901px) {
+  #viewInvoices.invoice-workspace {
+    width: min(1320px, calc(100vw - 24px));
+    margin: 10px auto 12px !important;
+    border: 1px solid rgba(148,163,184,0.22);
+    border-radius: 12px;
+    background: rgba(248, 250, 252, 0.96);
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.16);
+    height: calc(100vh - 78px);
+  }
+
+  #viewInvoices .invoice-nav-sidebar {
+    width: 286px;
+    min-width: 286px;
+    background: #eef2f7;
+  }
+
+  #viewInvoices .invoice-nav-header {
+    padding: 11px 12px 9px;
+  }
+
+  #viewInvoices .invoice-nav-search {
+    padding: 8px 9px;
+  }
+
+  #viewInvoices .invoice-nav-item {
+    padding: 8px 12px;
+    border-left-width: 4px;
+  }
+
+  #viewInvoices .invoice-panel-body {
+    padding: 12px 14px 16px;
+  }
+}
