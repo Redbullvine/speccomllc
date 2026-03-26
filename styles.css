@@ -2582,16 +2582,6 @@ body.map-create-open #mapSidebarToggle{
   70%{ opacity:1; transform:translateY(-4px) scale(1.02); filter:blur(0); }
   100%{ opacity:1; transform:translateY(0) scale(1); filter:blur(0); }
 }
-.office-invoice-route-layout{
-  display:grid;
-  grid-template-columns:minmax(280px, 340px) minmax(0, 1fr);
-  gap:12px;
-  align-items:start;
-}
-.office-invoice-route-sidebar .card{
-  position:sticky;
-  top:10px;
-}
 @media (max-width: 900px){
   .invoice-intro-shell{
     grid-template-columns:1fr;
@@ -2603,12 +2593,6 @@ body.map-create-open #mapSidebarToggle{
   }
   .invoice-intro-right-title{
     font-size:30px;
-  }
-  .office-invoice-route-layout{
-    grid-template-columns:1fr;
-  }
-  .office-invoice-route-sidebar .card{
-    position:static;
   }
 }
 @media (max-width: 900px){

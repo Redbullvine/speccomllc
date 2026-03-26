@@ -24766,16 +24766,13 @@ function renderInvoicePanel(){
           <div class="muted small">Telecom weekly invoice desk</div>
           <button class="btn" type="button" data-office-action="createInvoice">Create Invoice</button>
         </div>
-        <div class="office-invoice-route-layout">
-          <div class="office-invoice-route-sidebar">${renderOfficeInvoiceRouteSidebar(routeInvoiceNumber)}</div>
-          <div>
-            ${!blockInvoiceDetail ? (
-              matchedKsInvoice
-                ? renderKsInvoiceDetailView(matchedKsInvoice)
-                : (matchedInvoice ? renderOfficeInvoiceDetailView(matchedInvoice) : renderOfficeInvoiceNotFound(routeInvoiceNumber))
-            ) : ""}
-          </div>
-        </div>
+        ${renderKsInvoiceImportCard()}
+        ${renderOfficeInvoiceRouteSidebar(routeInvoiceNumber)}
+        ${!blockInvoiceDetail ? (
+          matchedKsInvoice
+            ? renderKsInvoiceDetailView(matchedKsInvoice)
+            : (matchedInvoice ? renderOfficeInvoiceDetailView(matchedInvoice) : renderOfficeInvoiceNotFound(routeInvoiceNumber))
+        ) : ""}
       </div>
     `;
     return;
