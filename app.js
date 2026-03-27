@@ -9799,7 +9799,12 @@ function parseViewFromHash(hashValue = window.location.hash){
   if (routeToken === "map" || routeToken === "viewmap") return "viewMap";
   if (routeToken === "redline") return "viewMap";
   if (routeToken === "home" || routeToken === "dashboard" || routeToken === "viewdashboard") return "viewDashboard";
-  if (routeToken === "billing" || routeToken === "office") return "viewInvoices";
+  if (routeToken === "billing" || routeToken === "office" || routeToken === "invoices" || routeToken === "viewinvoices") return "viewInvoices";
+  if (routeToken === "technician" || routeToken === "tech" || routeToken === "timesheet" || routeToken === "viewtechnician") return "viewTechnician";
+  if (routeToken === "warehouse" || routeToken === "catalog" || routeToken === "viewcatalog" || routeToken === "viewwarehousescan") return "viewCatalog";
+  if (routeToken === "dispatch" || routeToken === "viewdispatch") return "viewDispatch";
+  if (routeToken === "supervisor" || routeToken === "viewsupervisor") return "viewSupervisor";
+  if (routeToken === "admin" || routeToken === "viewadmin") return "viewAdmin";
   return null;
 }
 
@@ -9810,6 +9815,18 @@ function syncHashForView(viewId){
     nextHash = "#map";
   } else if (viewId === "viewDashboard"){
     nextHash = "#home";
+  } else if (viewId === "viewTechnician"){
+    nextHash = "#technician";
+  } else if (viewId === "viewInvoices"){
+    nextHash = "#office";
+  } else if (viewId === "viewCatalog" || viewId === "viewWarehouseScan"){
+    nextHash = "#warehouse";
+  } else if (viewId === "viewDispatch"){
+    nextHash = "#dispatch";
+  } else if (viewId === "viewSupervisor"){
+    nextHash = "#supervisor";
+  } else if (viewId === "viewAdmin"){
+    nextHash = "#admin";
   } else {
     return;
   }
