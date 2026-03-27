@@ -9790,6 +9790,30 @@ function canCreateProjects(){
   return isPrivilegedRole();
 }
 
+function initSplash() {
+  const splash = document.getElementById("splash-screen");
+  if (!splash) return;
+  const loginBtn = document.getElementById("splash-login-btn");
+  const demoBtn = document.getElementById("splash-demo-btn");
+  if (!loginBtn || !demoBtn) return;
+
+  function dismissSplash(targetHash) {
+    splash.classList.add("hide");
+    setTimeout(() => {
+      splash.remove();
+      if (targetHash) window.location.hash = targetHash;
+    }, 600);
+  }
+
+  loginBtn.addEventListener("click", () => {
+    dismissSplash("#login");
+  });
+
+  demoBtn.addEventListener("click", () => {
+    dismissSplash("#demo");
+  });
+}
+
 function parseViewFromHash(hashValue = window.location.hash){
   const raw = String(hashValue || "").trim();
   if (!raw || raw === "#") return null;
@@ -9799,6 +9823,7 @@ function parseViewFromHash(hashValue = window.location.hash){
   if (routeToken === "map" || routeToken === "viewmap") return "viewMap";
   if (routeToken === "redline") return "viewMap";
   if (routeToken === "home" || routeToken === "dashboard" || routeToken === "viewdashboard") return "viewDashboard";
+  if (routeToken === "demo") return "viewInvoices";
   if (routeToken === "billing" || routeToken === "office" || routeToken === "invoices" || routeToken === "viewinvoices") return "viewInvoices";
   if (routeToken === "technician" || routeToken === "tech" || routeToken === "timesheet" || routeToken === "viewtechnician") return "viewTechnician";
   if (routeToken === "warehouse" || routeToken === "catalog" || routeToken === "viewcatalog" || routeToken === "viewwarehousescan") return "viewCatalog";
@@ -9818,7 +9843,8 @@ function syncHashForView(viewId){
   } else if (viewId === "viewTechnician"){
     nextHash = "#technician";
   } else if (viewId === "viewInvoices"){
-    nextHash = "#office";
+    const currentHash = String(window.location.hash || "").trim().toLowerCase();
+    nextHash = currentHash.startsWith("#demo") ? "#demo" : "#office";
   } else if (viewId === "viewCatalog" || viewId === "viewWarehouseScan"){
     nextHash = "#warehouse";
   } else if (viewId === "viewDispatch"){
@@ -29570,10 +29596,18 @@ function wireUI(){
 }
 
 startVisibilityWatch();
-window.addEventListener("DOMContentLoaded", wireUI);
-wireUI();
-applyI18n();
-syncLanguageControls();
-initAuth();
+function startApp(){
+  initSplash();
+  wireUI();
+  applyI18n();
+  syncLanguageControls();
+  initAuth();
+}
+
+if (document.readyState === "loading"){
+  window.addEventListener("DOMContentLoaded", startApp);
+} else {
+  startApp();
+}
 
 
