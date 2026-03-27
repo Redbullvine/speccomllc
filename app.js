@@ -16546,6 +16546,20 @@ function renderProfileHomeCard(){
   const photoUrl = getProfilePhotoUrl();
   cardName.textContent = `Welcome back, ${name}`;
   cardRole.textContent = "Field verification, documentation, and billing control";
+  const indicator = document.getElementById("profileProjectIndicator");
+  const noProject = document.getElementById("profileNoProject");
+  const projectLabel = document.getElementById("profileProjectLabel");
+  const switchBtn = document.getElementById("btnProfileSwitchProject");
+  const selectBtn = document.getElementById("btnProfileSelectProject");
+  if (state.activeProject) {
+    if (indicator) { indicator.style.display = ""; projectLabel.textContent = state.activeProject.name; }
+    if (noProject) noProject.style.display = "none";
+    if (switchBtn) switchBtn.onclick = () => openProjectsModal();
+  } else {
+    if (indicator) indicator.style.display = "none";
+    if (noProject) noProject.style.display = "";
+    if (selectBtn) selectBtn.onclick = () => openProjectsModal();
+  }
   initialsEl.textContent = getInitials(name);
   imageEl.onerror = () => {
     imageEl.removeAttribute("src");
@@ -19029,11 +19043,7 @@ async function loadProjects(){
     uniqueProjects.push(row);
   });
 
-  let resolvedProjects = uniqueProjects;
-  if (orgId){
-    const scoped = uniqueProjects.filter((row) => String(row?.org_id || "") === String(orgId));
-    resolvedProjects = scoped.length ? scoped : uniqueProjects;
-  }
+  const resolvedProjects = uniqueProjects;
 
   resolvedProjects.sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
   state.projects = resolvedProjects;
@@ -26605,6 +26615,7 @@ function runShowcaseAction(action){
 function renderDemoShowcaseHome(){
   const wrap = $("demoShowcaseHome");
   if (!wrap) return;
+  renderProfileHomeCard();
   const legacyIds = [
     "dashboardJobCard",
     "dashboardActiveSiteCard",
