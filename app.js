@@ -9821,6 +9821,7 @@ function parseViewFromHash(hashValue = window.location.hash){
   const routeToken = normalized.split(/[?&]/)[0].trim().toLowerCase();
   if (!routeToken) return null;
   if (routeToken === "map" || routeToken === "viewmap") return "viewMap";
+  if (routeToken === "splicer") return "viewMap";
   if (routeToken === "redline") return "viewMap";
   if (routeToken === "home" || routeToken === "dashboard" || routeToken === "viewdashboard") return "viewDashboard";
   if (routeToken === "demo") return "viewInvoices";
@@ -16618,6 +16619,36 @@ function renderProfileHomeCard(){
     imageEl.removeAttribute("src");
     imageEl.style.display = "none";
     initialsEl.style.display = "";
+  }
+  updateCommandHeader(
+    {
+      name,
+      photoUrl,
+    },
+    String(state.activeProject?.name || "").trim()
+  );
+}
+
+function updateCommandHeader(user, projectName) {
+  const welcome = document.getElementById("cmd-welcome");
+  const avatar = document.getElementById("cmd-avatar");
+  const project = document.getElementById("cmd-project-name");
+  const subtitle = document.getElementById("cmd-subtitle");
+
+  if (welcome && user?.name) {
+    welcome.textContent = `Welcome back, ${user.name}`;
+  }
+  if (avatar && user?.name) {
+    avatar.textContent = user.name.slice(0, 2).toUpperCase();
+  }
+  if (project) {
+    project.textContent = projectName || "— None selected —";
+  }
+  if (subtitle) {
+    subtitle.textContent = "Field verification, documentation, and billing control";
+  }
+  if (avatar && user?.photoUrl) {
+    avatar.innerHTML = `<img src="${user.photoUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" alt="Profile photo" />`;
   }
 }
 
@@ -26804,7 +26835,7 @@ function renderDemoShowcaseHome(){
     "dashboardCatalogQuickCard",
   ];
   const profileCard = $("dashboardProfileCard");
-  if (profileCard) profileCard.style.display = "";
+  if (profileCard) profileCard.style.display = "none";
   legacyIds.forEach((id) => {
     const el = $(id);
     if (el) el.style.display = "none";
@@ -26857,9 +26888,32 @@ function renderDemoShowcaseHome(){
 
   wrap.style.display = "";
   wrap.innerHTML = `
-    <div class="card" style="margin-top:12px;">
-      <h2>SpecCom Control Center</h2>
-      <div class="muted small">Field verification, documentation, and billing control</div>
+    <div class="cmd-header-card" id="command-header">
+      <div class="cmd-left">
+        <div class="cmd-avatar" id="cmd-avatar">SU</div>
+        <div class="cmd-user-info">
+          <div class="cmd-welcome" id="cmd-welcome">Welcome back, Support</div>
+          <div class="cmd-subtitle" id="cmd-subtitle">Field verification, documentation, and billing control</div>
+          <div class="cmd-project" id="cmd-project">
+            <span class="cmd-project-label">Active Project:</span>
+            <span class="cmd-project-name" id="cmd-project-name">— None selected —</span>
+          </div>
+        </div>
+      </div>
+      <div class="cmd-right">
+        <div class="cmd-workspaces">
+          <span class="cmd-ws-label">Workspaces</span>
+          <div class="cmd-ws-links" id="cmd-ws-links">
+            <a href="#technician">Technician</a>
+            <a href="#splicer">Splicer</a>
+            <a href="#office">Office</a>
+            <a href="#dispatch">Dispatch Board</a>
+            <a href="#warehouse">Warehouse</a>
+            <a href="#supervisor">Supervisor</a>
+            <a href="#admin">Admin</a>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="showcase-role-grid" style="margin-top:12px;">
       ${workspaces.map((workspace) => `
@@ -26876,16 +26930,14 @@ function renderDemoShowcaseHome(){
         </article>
       `).join("")}
     </div>
-    <div class="card" style="margin-top:12px;">
-      <h3>Operational Areas</h3>
-      <div class="muted small">Use the workspaces above to jump directly into active modules for stabilization and testing.</div>
-      <div class="showcase-chip-row" style="margin-top:10px;">
-        ${workspaces.map((workspace) => (
-          `<button class="btn ghost small" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(workspace.action, { label: workspace.title, fallbackViews: workspace.action.fallbackViews || [] })))}'>${escapeHtml(workspace.title)}</button>`
-        )).join("")}
-      </div>
-    </div>
   `;
+  updateCommandHeader(
+    {
+      name: getProfileDisplayName(),
+      photoUrl: getProfilePhotoUrl(),
+    },
+    String(state.activeProject?.name || "").trim()
+  );
 }
 
 function renderProofChecklist(){
