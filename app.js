@@ -25296,6 +25296,17 @@ function renderInvoiceFilesPanel(){
   const list = $("invoiceFilesList");
   if (!gate || !panel || !scope || !list) return;
 
+  // Hide files panel when billing summary is the default view (no invoice routed)
+  const routeInvoiceNumber = String(state.officeInvoices?.routeInvoiceNumber || "").trim();
+  const urlInvoiceNumber   = String(getInvoiceIdFromUrl() || "").trim();
+  if (!routeInvoiceNumber && !urlInvoiceNumber) {
+    gate.style.display  = "none";
+    panel.style.display = "none";
+    const readyNote = $("readyNote");
+    if (readyNote) readyNote.style.display = "none";
+    return;
+  }
+
   const allowed = canViewInvoiceVault();
   gate.style.display = allowed ? "none" : "";
   panel.style.display = allowed ? "" : "none";
