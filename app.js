@@ -9799,6 +9799,7 @@ function parseViewFromHash(hashValue = window.location.hash){
   if (routeToken === "map" || routeToken === "viewmap") return "viewMap";
   if (routeToken === "redline") return "viewMap";
   if (routeToken === "home" || routeToken === "dashboard" || routeToken === "viewdashboard") return "viewDashboard";
+  if (routeToken === "billing" || routeToken === "office") return "viewInvoices";
   return null;
 }
 
@@ -25047,6 +25048,129 @@ function renderInvoiceNavSidebar() {
   `;
 }
 
+function renderRuidosoBillingSummary(){
+  const invoices = [
+    { id:"TDS_001", node:"23", loc:"1635EA_03", date:"01/19/2026", total:4733.00,   paid:true  },
+    { id:"TDS_002", node:"54", loc:"1635CA_02", date:"01/19/2026", total:3475.75,   paid:true  },
+    { id:"TDS_003", node:"9",  loc:"1635_01",   date:"01/24/2026", total:1643.00,   paid:true  },
+    { id:"TDS_004", node:"9",  loc:"1635BA_02", date:"01/24/2026", total:1877.75,   paid:true  },
+    { id:"TDS_005", node:"9",  loc:"1635BA_02", date:"01/31/2026", total:698.00,    paid:true  },
+    { id:"TDS_006", node:"9",  loc:"1635BA_01", date:"01/31/2026", total:1536.00,   paid:true  },
+    { id:"TDS_007", node:"54", loc:"1635CA_04", date:"02/07/2026", total:3595.00,   paid:true  },
+    { id:"TDS_008", node:"9",  loc:"1635BA_01", date:"02/07/2026", total:1536.00,   paid:true  },
+    { id:"TDS_009", node:"54", loc:"1635CA_04", date:"02/15/2026", total:4826.75,   paid:true  },
+    { id:"TDS_003A",node:"23", loc:"1635EA_03", date:"01/19/2026", total:3940.75,   paid:false },
+    { id:"TDS_010", node:"54", loc:"1635CA_03", date:"02/15/2026", total:1674.50,   paid:false },
+    { id:"TDS_011", node:"9",  loc:"1635BA_01", date:"02/15/2026", total:325.00,    paid:false },
+    { id:"TDS_012", node:"54", loc:"1635CA_03", date:"02/22/2026", total:1415.50,   paid:false },
+    { id:"TDS_013", node:"9",  loc:"1635BA_01", date:"02/22/2026", total:1968.00,   paid:false },
+    { id:"TDS_014", node:"54", loc:"1635CA_04", date:"02/22/2026", total:5009.00,   paid:false },
+  ];
+  const KS_PAID = 21824.00;
+  const TOTAL   = invoices.reduce((s,r) => s + r.total, 0);
+  const BALANCE = TOTAL - KS_PAID;
+  const paid    = invoices.filter(r => r.paid);
+  const unpaid  = invoices.filter(r => !r.paid);
+  const fmt     = v => "$" + v.toLocaleString("en-US", { minimumFractionDigits:2, maximumFractionDigits:2 });
+  const paidTotal   = paid.reduce((s,r) => s + r.total, 0);
+  const unpaidTotal = unpaid.reduce((s,r) => s + r.total, 0);
+
+  const row = (r, i) => `
+    <tr style="background:${i%2===0?"#f8fafc":"#fff"};">
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;font-weight:700;color:#1a3a6b;font-size:12px;">${r.id}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:center;font-size:12px;">${r.node}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;color:#64748b;font-size:11px;">${r.loc}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:center;font-size:12px;">${r.date}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;">${fmt(r.total)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:center;">
+        <span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:${r.paid?"#dcfce7":"#fee2e2"};color:${r.paid?"#166534":"#b91c1c"};">${r.paid?"PAID":"PENDING"}</span>
+      </td>
+    </tr>`;
+
+  const thead = `
+    <thead>
+      <tr>
+        ${["Invoice","Node","Location","Date","Amount","Status"].map(h =>
+          `<th style="background:#1e3a5f;color:rgba(255,255,255,.85);font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:9px 12px;text-align:${["Amount"].includes(h)?"right":"left"};">${h}</th>`
+        ).join("")}
+      </tr>
+    </thead>`;
+
+  return `
+    <div style="border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.10);font-family:'Manrope',sans-serif;margin-bottom:8px;">
+
+      <!-- Top bar -->
+      <div style="background:#1a3a6b;color:#fff;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:13px;font-weight:700;letter-spacing:.03em;">Ruidoso, NM — Fire Rebuild Billing Summary</div>
+          <div style="font-size:11px;opacity:.65;margin-top:2px;">WBS: TC-241635027 &nbsp;|&nbsp; K &amp; S Electric &nbsp;|&nbsp; March 27, 2026</div>
+        </div>
+        <button onclick="document.getElementById('btnMenuOpenRedline')?.click()" style="background:#e63946;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-family:'Manrope',sans-serif;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(230,57,70,.35);">
+          <span style="width:8px;height:8px;background:#fff;border-radius:50%;display:inline-block;animation:bs-pulse 1.4s ease-in-out infinite;"></span>
+          View Redline Map
+        </button>
+      </div>
+
+      <!-- Summary cards -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px 16px;background:#1e3a5f;">
+        <div style="background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.15);border-radius:9px;padding:11px 14px;color:#fff;">
+          <div style="font-size:10px;font-weight:600;opacity:.6;letter-spacing:.07em;text-transform:uppercase;">Total Invoiced</div>
+          <div style="font-size:20px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums;">${fmt(TOTAL)}</div>
+          <div style="font-size:10px;opacity:.5;margin-top:2px;">All 15 invoices</div>
+        </div>
+        <div style="background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.15);border-radius:9px;padding:11px 14px;color:#fff;">
+          <div style="font-size:10px;font-weight:600;opacity:.6;letter-spacing:.07em;text-transform:uppercase;">K&amp;S Paid</div>
+          <div style="font-size:20px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums;color:#4ade80;">${fmt(KS_PAID)}</div>
+          <div style="font-size:10px;opacity:.5;margin-top:2px;">9 invoices · confirmed</div>
+        </div>
+        <div style="background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.15);border-radius:9px;padding:11px 14px;color:#fff;">
+          <div style="font-size:10px;font-weight:600;opacity:.6;letter-spacing:.07em;text-transform:uppercase;">Balance Owed</div>
+          <div style="font-size:20px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums;color:#f87171;">${fmt(BALANCE)}</div>
+          <div style="font-size:10px;opacity:.5;margin-top:2px;">6 invoices · pending</div>
+        </div>
+      </div>
+
+      <!-- Tables -->
+      <div style="padding:0 16px 16px;background:#f4f6f9;">
+
+        <!-- Paid -->
+        <div style="display:flex;align-items:center;gap:8px;padding:14px 0 8px;font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#166534;">
+          ✅ Paid Invoices
+          <span style="padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:#dcfce7;color:#166534;">9 invoices · ${fmt(paidTotal)}</span>
+        </div>
+        <div style="border-radius:9px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+          <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+            ${thead}
+            <tbody>${paid.map((r,i) => row(r,i)).join("")}</tbody>
+          </table>
+        </div>
+
+        <!-- Unpaid -->
+        <div style="display:flex;align-items:center;gap:8px;padding:14px 0 8px;font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#991b1b;">
+          ⚠️ Outstanding Invoices
+          <span style="padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b;">6 invoices · ${fmt(unpaidTotal)} due</span>
+        </div>
+        <div style="border-radius:9px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+          <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+            ${thead}
+            <tbody>${unpaid.map((r,i) => row(r,i)).join("")}</tbody>
+            <tr style="background:#e2e8f0;border-top:2px solid #cbd5e1;">
+              <td colspan="4" style="padding:9px 12px;font-weight:700;font-size:12px;">Balance Due to Spec Communications</td>
+              <td style="padding:9px 12px;font-weight:700;font-size:12px;text-align:right;color:#b91c1c;">${fmt(BALANCE)}</td>
+              <td style="padding:9px 12px;font-weight:700;font-size:11px;color:#b91c1c;">AWAITING APPROVAL</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+    <style>
+      @keyframes bs-pulse {
+        0%,100%{opacity:1;transform:scale(1);}
+        50%{opacity:.35;transform:scale(.65);}
+      }
+    </style>`;
+}
+
 function renderInvoicePanel(){
   const wrap = $("invoicePanel");
   if (!wrap) return;
@@ -25087,6 +25211,7 @@ function renderInvoicePanel(){
   const draft = state.officeInvoices.draft;
   wrap.innerHTML = `
     <div class="field-stack" style="gap:10px;">
+      ${renderRuidosoBillingSummary()}
       ${draft ? renderOfficeInvoiceBuilder(draft) : ""}
       <div class="card" style="margin-top:12px;">
         <h3>Saved Invoices</h3>
