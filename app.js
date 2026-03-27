@@ -419,10 +419,10 @@ function normalizeRole(role){
   return AUTHENTICATED_ACCESS_CODE;
 }
 
-function isPatrickIdentity(value){
+function isPrivilegedIdentity(value){
   const text = String(value || "").trim().toLowerCase();
   if (!text) return false;
-  return /\bpatrick\b/.test(text);
+  return /\b(admin|owner|support)\b/.test(text);
 }
 
 function resolveProvisionedRoleCode(identity){
@@ -5779,6 +5779,16 @@ async function loadRedlineMarkers({ silent = false } = {}){
       return;
     }
     rows = data || [];
+    // Also load splice overage requests (pre-seeded, shown in all redline views)
+    const { data: overageData } = await state.client
+      .from("redline_markers")
+      .select("*")
+      .eq("overage_request", true)
+      .order("created_at", { ascending: true });
+    if (overageData && overageData.length){
+      const existingIds = new Set(rows.map((r) => r.id));
+      overageData.forEach((r) => { if (!existingIds.has(r.id)) rows.push(r); });
+    }
   }
   const creatorIds = Array.from(new Set(rows.map((row) => String(row.created_by || "")).filter(Boolean)));
   if (creatorIds.length){
@@ -5842,30 +5852,149 @@ function renderRedlineList(){
     listEl.innerHTML = `<div class="muted small">Loading redline markers...</div>`;
     return;
   }
-  if (!markers.length){
+  
+  const overageMarkers = markers.filter((m) => m.overage_request);
+  const standardMarkers = markers.filter((m) => !m.overage_request);
+  let html = "";
+
+  if (overageMarkers.length){
+    const pendingCount = overageMarkers.filter((m) => (m.approval_status || "pending") === "pending").length;
+    html += `
+      <div class="overage-section-header">
+        <span>⚠️ Splice Overage Requests</span>
+        ${pendingCount ? `<span class="overage-pending-count">${pendingCount} pending K&S approval</span>` : ""}
+      </div>
+    `;
+    html += overageMarkers.map((marker) => {
+      const canManage = canManageRedlineMarker(marker);
+      const extra = (marker.field_qty || 0) - (marker.design_qty || 0);
+      return `
+        <article class="redline-item overage-item">
+          <div class="redline-item-top">
+            <div class="overage-title"><b>${escapeHtml(marker.title || "Overage")}</b></div>
+            ${getOverageApprovalBadge(marker)}
+          </div>
+          <div class="overage-qty-row">
+            <span class="overage-qty-cell"><span class="muted small">Design</span><b>${marker.design_qty ?? "—"}</b></span>
+            <span class="overage-arrow">→</span>
+            <span class="overage-qty-cell"><span class="muted small">Field</span><b>${marker.field_qty ?? "—"}</b></span>
+            <span class="overage-arrow">→</span>
+            <span class="overage-qty-cell overage-extra"><span class="muted small">Extra</span><b>+${extra}</b></span>
+          </div>
+          <div class="muted small overage-meta">
+            📋 ${escapeHtml(marker.staking_sheet || "—")}
+            ${marker.field_date ? ` &nbsp;·&nbsp; 📅 ${escapeHtml(marker.field_date)}` : ""}
+            ${marker.tech_name ? ` &nbsp;·&nbsp; 👷 ${escapeHtml(marker.tech_name)}` : ""}
+          </div>
+          <div class="muted small overage-justification">
+            💡 ${escapeHtml(getJustificationLabel(marker.justification_category))}
+          </div>
+          ${marker.notes ? `<div class="muted small overage-notes">${escapeHtml(String(marker.notes).slice(0, 150))}</div>` : ""}
+          ${marker.approval_note ? `<div class="muted small overage-approval-note">📝 K&S note: ${escapeHtml(marker.approval_note)}</div>` : ""}
+          <div class="redline-item-actions">
+            <button type="button" class="btn ghost small" data-redline-action="edit" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">Edit</button>
+            <button type="button" class="btn secondary small" data-overage-action="approve" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">✅ Mark Approved</button>
+            <button type="button" class="btn ghost small" data-overage-action="deny" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">❌ Deny</button>
+            ${canManage ? `<button type="button" class="btn danger small" data-redline-action="delete" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">Delete</button>` : ""}
+          </div>
+        </article>
+      `;
+    }).join("");
+  }
+
+  if (standardMarkers.length){
+    if (overageMarkers.length) html += `<div class="overage-section-header" style="margin-top:12px;">Standard Redline Markers</div>`;
+    html += standardMarkers.map((marker) => {
+      const canManage = canManageRedlineMarker(marker);
+      const status = normalizeRedlineStatus(marker.status);
+      const summary = marker.title || marker.notes || marker.new_value || marker.old_value || "-";
+      const nodeLabel = String(marker.node_name || marker.attached_node_id || "").trim();
+      return `
+        <article class="redline-item">
+          <div class="redline-item-top">
+            <div><b>#${marker.marker_number}</b> ${escapeHtml(getRedlineTypeLabel(marker.change_type))}</div>
+            <span class="redline-status ${status}">${escapeHtml(status)}</span>
+          </div>
+          ${nodeLabel ? `<div class="muted small">Node: ${escapeHtml(nodeLabel)}</div>` : ""}
+          <div class="muted small">${escapeHtml(String(summary).slice(0, 130))}</div>
+          <div class="redline-item-actions">
+            <button type="button" class="btn ghost small" data-redline-action="edit" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">Edit</button>
+            ${canManage ? `<button type="button" class="btn danger small" data-redline-action="delete" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">Delete</button>` : ""}
+          </div>
+        </article>
+      `;
+    }).join("");
+  }
+
+  if (!html){
     listEl.innerHTML = `<div class="muted small">No markers for this source.</div>`;
     return;
   }
-  listEl.innerHTML = markers.map((marker) => {
-    const canManage = canManageRedlineMarker(marker);
-    const status = normalizeRedlineStatus(marker.status);
-    const summary = marker.title || marker.notes || marker.new_value || marker.old_value || "-";
-    const nodeLabel = String(marker.node_name || marker.attached_node_id || "").trim();
-    return `
-      <article class="redline-item">
-        <div class="redline-item-top">
-          <div><b>#${marker.marker_number}</b> ${escapeHtml(getRedlineTypeLabel(marker.change_type))}</div>
-          <span class="redline-status ${status}">${escapeHtml(status)}</span>
-        </div>
-        ${nodeLabel ? `<div class="muted small">Node: ${escapeHtml(nodeLabel)}</div>` : ""}
-        <div class="muted small">${escapeHtml(String(summary).slice(0, 130))}</div>
-        <div class="redline-item-actions">
-          <button type="button" class="btn ghost small" data-redline-action="edit" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">Edit</button>
-          ${canManage ? `<button type="button" class="btn danger small" data-redline-action="delete" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">Delete</button>` : ""}
-        </div>
-      </article>
-    `;
-  }).join("");
+  listEl.innerHTML = html;
+
+  listEl.querySelectorAll("[data-overage-action]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const action = btn.dataset.overageAction;
+      const markerId = btn.dataset.redlineMarkerId;
+      handleOverageApprovalAction(markerId, action);
+    });
+  });
+}
+
+function getOverageApprovalBadge(marker){
+  if (!marker.overage_request) return "";
+  const s = String(marker.approval_status || "pending");
+  const map = { pending: ["⏳", "overage-pending"], approved: ["✅", "overage-approved"], denied: ["❌", "overage-denied"] };
+  const [icon, cls] = map[s] || map.pending;
+  return `<span class="overage-badge ${cls}">${icon} K&S ${s.charAt(0).toUpperCase()+s.slice(1)}</span>`;
+}
+
+function getJustificationLabel(cat){
+  const labels = {
+    new_pole_location: "New pole location (fire rebuild)",
+    spool_end_butt_splice: "Spool-end butt splice",
+    re_entry: "Re-entry after continuity test",
+    density_upgrade: "Density upgrade required",
+    not_on_print: "Not on staking print",
+    other: "Other",
+  };
+  return labels[cat] || cat || "—";
+}
+
+async function handleOverageApprovalAction(markerId, action){
+  if (!markerId || !state.client) return;
+  const marker = state.redline.markers.find((m) => String(m.id) === String(markerId));
+  if (!marker) return;
+  if (action === "approve"){
+    const note = prompt("Optional note for K&S approval (or leave blank):", "") ?? null;
+    const { error } = await state.client
+      .from("redline_markers")
+      .update({
+        approval_status: "approved",
+        approval_note: note || null,
+        approved_by: state.user?.email || state.user?.id || "user",
+        approved_at: new Date().toISOString(),
+        status: "resolved",
+      })
+      .eq("id", markerId);
+    if (error){ toast("Error", error.message, "error"); return; }
+    toast("Approved", `${marker.title || "Overage"} marked as approved.`, "success");
+  } else if (action === "deny"){
+    const note = prompt("Reason for denial (required):", "");
+    if (!note) return;
+    const { error } = await state.client
+      .from("redline_markers")
+      .update({
+        approval_status: "denied",
+        approval_note: note,
+        approved_by: state.user?.email || state.user?.id || "user",
+        approved_at: new Date().toISOString(),
+      })
+      .eq("id", markerId);
+    if (error){ toast("Error", error.message, "error"); return; }
+    toast("Denied", `${marker.title || "Overage"} marked as denied.`, "error");
+  }
+  await loadRedlineMarkers({ silent: true });
 }
 
 function renderRedlineSummary(){
@@ -19196,7 +19325,7 @@ async function saveAdminSmsSettings(){
   };
   syncAdminSmsInputs();
   setAdminInventoryStatus("SMS settings saved.");
-  toast("SMS settings updated", smsEnabled ? "Patrick notifications are enabled." : "SMS notifications are disabled.");
+  toast("SMS settings updated", smsEnabled ? "SMS notifications are enabled." : "SMS notifications are disabled.");
 }
 
 async function loadAdminProfiles(){
