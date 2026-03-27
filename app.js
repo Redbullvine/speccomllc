@@ -16583,9 +16583,8 @@ function getInitials(name){
 function renderProfileHomeCard(){
   const cardName = $("profileCardName");
   const cardRole = $("profileCardRole");
-  const initialsEl = $("profileAvatarInitials");
-  const imageEl = $("profileAvatarImg");
-  if (!cardName || !cardRole || !initialsEl || !imageEl) return;
+  const avatarDisplay = $("prof-avatar-display");
+  if (!cardName || !cardRole) return;
 
   const name = getProfileDisplayName();
   const photoUrl = getProfilePhotoUrl();
@@ -16605,20 +16604,12 @@ function renderProfileHomeCard(){
     if (noProject) noProject.style.display = "";
     if (selectBtn) selectBtn.onclick = () => openProjectsModal();
   }
-  initialsEl.textContent = getInitials(name);
-  imageEl.onerror = () => {
-    imageEl.removeAttribute("src");
-    imageEl.style.display = "none";
-    initialsEl.style.display = "";
-  };
-  if (photoUrl){
-    imageEl.src = photoUrl;
-    imageEl.style.display = "";
-    initialsEl.style.display = "none";
-  } else {
-    imageEl.removeAttribute("src");
-    imageEl.style.display = "none";
-    initialsEl.style.display = "";
+  if (avatarDisplay){
+    if (photoUrl){
+      avatarDisplay.innerHTML = `<img src="${photoUrl}" alt="Profile photo" />`;
+    } else {
+      avatarDisplay.textContent = getInitials(name);
+    }
   }
   updateCommandHeader(
     {
@@ -16627,6 +16618,11 @@ function renderProfileHomeCard(){
     },
     String(state.activeProject?.name || "").trim()
   );
+  void initProfilePhotoUpload({
+    id: state.user?.id || "",
+    name,
+    photoUrl,
+  });
 }
 
 function updateCommandHeader(user, projectName) {
@@ -16652,21 +16648,29 @@ function updateCommandHeader(user, projectName) {
   }
 }
 
+function updateCommandHeaderAvatar(photoUrl) {
+  const avatar = document.getElementById("cmd-avatar");
+  if (!avatar) return;
+  if (photoUrl) {
+    avatar.innerHTML = `<img src="${photoUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" alt="Profile photo" />`;
+  }
+}
+
 async function saveProfilePhotoFromFile(file){
   if (!file) return;
   const userId = String(state.user?.id || "").trim();
   if (!userId){
     toast("Not signed in", "Sign in first to save profile photo.", "error");
-    return;
+    return false;
   }
   const ext = getAvatarFileExtension(file);
   if (!ext){
     toast("Invalid file", "Choose JPG, PNG, or WEBP.", "error");
-    return;
+    return false;
   }
   if (!state.client){
     toast("Upload failed", "Client not ready.", "error");
-    return;
+    return false;
   }
   const objectPath = `${userId}/avatar.${ext}`;
   const storage = state.client.storage.from("profile-images");
@@ -16677,7 +16681,7 @@ async function saveProfilePhotoFromFile(file){
   });
   if (uploadError){
     toast("Upload failed", uploadError.message || "Could not upload profile photo.", "error");
-    return;
+    return false;
   }
   const { data: publicUrlData } = storage.getPublicUrl(objectPath);
   const avatarUrl = String(publicUrlData?.publicUrl || objectPath).trim();
@@ -16687,13 +16691,82 @@ async function saveProfilePhotoFromFile(file){
     .eq("id", userId);
   if (updateError){
     toast("Save failed", updateError.message || "Could not save profile avatar URL.", "error");
-    return;
+    return false;
   }
   state.profile = state.profile || {};
   state.profile.avatar_url = avatarUrl;
   window.currentUserProfile = state.profile;
+  updateCommandHeaderAvatar(avatarUrl);
   renderProfileHomeCard();
   toast("Profile photo saved", "Your profile photo was updated.");
+  return true;
+}
+
+async function initProfilePhotoUpload(user) {
+  const wrap = document.getElementById("prof-avatar-wrap");
+  const input = document.getElementById("prof-photo-input");
+  const display = document.getElementById("prof-avatar-display");
+  const hint = document.querySelector(".prof-photo-hint");
+  const uploading = document.querySelector(".prof-photo-uploading");
+
+  if (!wrap || !input || !display) return;
+
+  if (user?.photoUrl) {
+    display.innerHTML = `<img src="${user.photoUrl}" alt="Profile photo"/>`;
+  } else if (user?.name) {
+    display.textContent = user.name.slice(0, 2).toUpperCase();
+  }
+
+  if (!wrap.dataset.uploadBound){
+    wrap.addEventListener("click", () => input.click());
+    wrap.dataset.uploadBound = "1";
+  }
+  if (input.dataset.uploadBound) return;
+  input.dataset.uploadBound = "1";
+
+  input.addEventListener("change", async (e) => {
+    const target = e.target;
+    const file = target?.files?.[0] || null;
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast("Photo must be under 2MB", "Choose a JPG, PNG, or WEBP file under 2MB.", "error");
+      input.value = "";
+      return;
+    }
+
+    const localUrl = URL.createObjectURL(file);
+    display.innerHTML = `<img src="${localUrl}" alt="Profile photo"/>`;
+    if (hint) hint.style.display = "none";
+    if (uploading) {
+      uploading.textContent = "Uploading…";
+      uploading.style.display = "block";
+    }
+
+    try {
+      const saved = await saveProfilePhotoFromFile(file);
+      if (!saved){
+        if (hint) hint.style.display = "block";
+        if (uploading) uploading.style.display = "none";
+        URL.revokeObjectURL(localUrl);
+        input.value = "";
+        return;
+      }
+      if (uploading) uploading.textContent = "Photo updated!";
+      setTimeout(() => {
+        if (hint) hint.style.display = "block";
+        if (uploading) uploading.style.display = "none";
+      }, 2500);
+    } catch (err) {
+      console.error("Photo upload failed:", err);
+      toast("Upload failed", "Please try again.", "error");
+      if (hint) hint.style.display = "block";
+      if (uploading) uploading.style.display = "none";
+    }
+
+    URL.revokeObjectURL(localUrl);
+    input.value = "";
+  });
 }
 
 async function clearProfilePhoto(){
@@ -28434,16 +28507,12 @@ function wireUI(){
     });
   }
 
-  const profilePhotoInput = $("profilePhotoInput");
   const profilePhotoUploadBtn = $("btnProfilePhotoUpload");
   const profilePhotoClearBtn = $("btnProfilePhotoClear");
-  if (profilePhotoUploadBtn && profilePhotoInput){
-    profilePhotoUploadBtn.addEventListener("click", () => profilePhotoInput.click());
-    profilePhotoInput.addEventListener("change", async () => {
-      const file = profilePhotoInput.files?.[0] || null;
-      profilePhotoInput.value = "";
-      if (!file) return;
-      await saveProfilePhotoFromFile(file);
+  if (profilePhotoUploadBtn){
+    profilePhotoUploadBtn.addEventListener("click", () => {
+      const input = document.getElementById("prof-photo-input");
+      if (input) input.click();
     });
   }
   if (profilePhotoClearBtn){
