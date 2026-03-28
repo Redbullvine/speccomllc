@@ -16626,25 +16626,243 @@ function renderProfileHomeCard(){
 }
 
 function updateCommandHeader(user, projectName) {
-  const welcome = document.getElementById("cmd-welcome");
+  const welcome = document.getElementById("cmd-name");
   const avatar = document.getElementById("cmd-avatar");
-  const project = document.getElementById("cmd-project-name");
-  const subtitle = document.getElementById("cmd-subtitle");
+  const project = document.getElementById("cmd-proj-badge");
+  const subtitle = document.getElementById("cmd-role");
 
   if (welcome && user?.name) {
     welcome.textContent = `Welcome back, ${user.name}`;
   }
-  if (avatar && user?.name) {
+  if (avatar && user?.name && !user?.photoUrl) {
     avatar.textContent = user.name.slice(0, 2).toUpperCase();
   }
   if (project) {
-    project.textContent = projectName || "— None selected —";
+    project.textContent = projectName || "— None —";
   }
   if (subtitle) {
     subtitle.textContent = "Field verification, documentation, and billing control";
   }
   if (avatar && user?.photoUrl) {
     avatar.innerHTML = `<img src="${user.photoUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" alt="Profile photo" />`;
+  }
+}
+
+let currentMsgTab = "company";
+
+window.navigateTo = function navigateTo(target) {
+  const next = String(target || "").trim().toLowerCase();
+  if (!next) return;
+  if (next === "home") return setActiveView("viewDashboard");
+  if (next === "timesheet") return setActiveView("viewTechnician");
+  if (next === "map") return setActiveView("viewMap");
+  if (next === "office") return setActiveView("viewInvoices");
+  if (next === "dispatch") return setActiveView("viewDispatch");
+  if (next === "warehouse") return setActiveView("viewCatalog");
+  if (next === "supervisor") return setActiveView("viewSupervisor");
+  if (next === "admin") return setActiveView("viewAdmin");
+  if (next === "projects") return openProjectsModal();
+  if (next === "messages") return openMessagesModal();
+};
+
+window.handleSignOut = async function handleSignOut() {
+  await SpecCom.helpers.handleSignOut();
+};
+
+window.showProfilePage = function showProfilePage() {
+  const modal = $("profilePageModal");
+  if (!modal) return;
+  modal.style.display = "";
+  const name = getProfileDisplayName();
+  const email = String(state.user?.email || "").trim();
+  const language = String(state.profile?.preferred_language || getPreferredLanguage() || "en").trim();
+  const displayInput = $("profilePageDisplayName");
+  const emailInput = $("profilePageEmail");
+  const languageInput = $("profilePageLanguage");
+  if (displayInput) displayInput.value = name;
+  if (emailInput) emailInput.value = email;
+  if (languageInput) languageInput.value = language;
+  const avatar = $("profile-page-avatar-display");
+  const photoUrl = getProfilePhotoUrl();
+  if (avatar){
+    if (photoUrl) avatar.innerHTML = `<img src="${photoUrl}" alt="Profile photo"/>`;
+    else avatar.textContent = getInitials(name);
+  }
+  void initProfilePhotoUpload({ id: state.user?.id || "", name, photoUrl });
+};
+
+window.hideProfilePage = function hideProfilePage() {
+  const modal = $("profilePageModal");
+  if (modal) modal.style.display = "none";
+};
+
+async function saveProfilePageDetails(){
+  if (!state.client || !state.user?.id){
+    toast("Profile", "Sign in to update your profile.", "error");
+    return;
+  }
+  const nextName = String($("profilePageDisplayName")?.value || "").trim();
+  const nextLanguage = String($("profilePageLanguage")?.value || "en").trim();
+  const updates = { display_name: nextName || null, preferred_language: nextLanguage || "en" };
+  const { error } = await state.client.from("profiles").update(updates).eq("id", state.user.id);
+  if (error){
+    toast("Profile", error.message || "Could not save profile.", "error");
+    return;
+  }
+  state.profile = state.profile || {};
+  state.profile.display_name = updates.display_name;
+  state.profile.preferred_language = updates.preferred_language;
+  applyLanguage(updates.preferred_language);
+  syncLanguageControls();
+  renderProfileHomeCard();
+  window.hideProfilePage();
+  toast("Profile", "Profile updated.");
+}
+
+function formatMsgTime(value){
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString();
+}
+
+function renderBoardMessages(messages) {
+  const feed = document.getElementById("msg-feed-company");
+  if (!feed) return;
+  if (!messages.length){
+    feed.innerHTML = `<div class="muted small">No messages yet.</div>`;
+    return;
+  }
+  feed.innerHTML = messages.map((m) => `
+    <div class="msg-item">
+      ${m.pinned ? '<div class="msg-pin">📌 Pinned</div>' : ""}
+      <div class="msg-item-header">
+        <span class="msg-author">${escapeHtml(String(m.user_name || "User"))}</span>
+        <span class="msg-time">${escapeHtml(formatMsgTime(m.created_at))}</span>
+      </div>
+      <div class="msg-text">${escapeHtml(String(m.body || ""))}</div>
+    </div>
+  `).join("");
+}
+
+async function loadBoardMessages(scope = "company") {
+  const client = state.client;
+  const userId = String(state.user?.id || "").trim();
+  if (!client){
+    renderBoardMessages([]);
+    return;
+  }
+  let query = client
+    .from("messages")
+    .select("*")
+    .eq("channel", "BOARD")
+    .eq("scope", scope)
+    .order("pinned", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (scope === "personal" && userId){
+    query = query.eq("sender_id", userId);
+  }
+  const { data, error } = await query;
+  if (error){
+    const feed = document.getElementById("msg-feed-company");
+    if (feed) feed.innerHTML = `<div class="muted small">Message board unavailable.</div>`;
+    return;
+  }
+  renderBoardMessages(data || []);
+}
+
+window.switchMsgTab = function switchMsgTab(scope, el) {
+  document.querySelectorAll(".msg-tab").forEach((t) => t.classList.remove("active"));
+  if (el) el.classList.add("active");
+  currentMsgTab = scope === "mine" ? "personal" : "company";
+  void loadBoardMessages(currentMsgTab);
+};
+
+window.postMessage = async function postMessage() {
+  const input = document.getElementById("msg-input");
+  const body = String(input?.value || "").trim();
+  if (!body || !state.user || !state.client) return;
+  const orgId = getMessageOrgId();
+  if (!orgId && !SpecCom.helpers.isRoot()){
+    toast("Messages", "Project/org context required.", "error");
+    return;
+  }
+  const name = String(state.profile?.display_name || state.user?.email || "User").trim();
+  const { error } = await state.client.from("messages").insert({
+    org_id: orgId || null,
+    sender_id: state.user.id,
+    recipient_id: null,
+    channel: "BOARD",
+    user_id: state.user.id,
+    user_name: name,
+    scope: currentMsgTab || "company",
+    body,
+    pinned: false,
+  });
+  if (error){
+    toast("Messages", error.message || "Could not post message.", "error");
+    return;
+  }
+  if (input) input.value = "";
+  await loadBoardMessages(currentMsgTab || "company");
+};
+
+function wxCodeToText(code) {
+  const map = {0:"Clear sky",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Foggy",48:"Icy fog",51:"Light drizzle",53:"Drizzle",55:"Heavy drizzle",61:"Light rain",63:"Rain",65:"Heavy rain",71:"Light snow",73:"Snow",75:"Heavy snow",77:"Snow grains",80:"Rain showers",81:"Heavy showers",85:"Snow showers",95:"Thunderstorm",96:"Thunderstorm with hail"};
+  return map[code] || "Unknown";
+}
+
+function wxCodeToEmoji(code) {
+  if (code === 0) return "☀️";
+  if (code <= 2) return "⛅";
+  if (code === 3) return "☁️";
+  if (code <= 48) return "🌫️";
+  if (code <= 55) return "🌦️";
+  if (code <= 65) return "🌧️";
+  if (code <= 77) return "❄️";
+  if (code <= 82) return "🌨️";
+  return "⛈️";
+}
+
+async function loadWeather(cityName, projectRef) {
+  try {
+    const locationEl = $("wx-location");
+    const projectEl = $("wx-proj-ref");
+    if (!locationEl || !projectEl) return;
+    locationEl.textContent = cityName || "Project location";
+    projectEl.textContent = `Active project — ${projectRef || "Unknown"}`;
+    if (!cityName) return;
+    const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1`);
+    const geoData = await geoRes.json();
+    const loc = geoData?.results?.[0];
+    if (!loc) return;
+    const wxRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,weathercode,windspeed_10m,windgusts_10m,relativehumidity_2m,precipitation&daily=weathercode,temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&windspeed_unit=mph&precipitation_unit=inch&timezone=auto&forecast_days=4`);
+    const wx = await wxRes.json();
+    const c = wx?.current;
+    if (!c) return;
+    $("wx-temp").textContent = String(Math.round(Number(c.temperature_2m || 0)));
+    $("wx-condition").textContent = wxCodeToText(Number(c.weathercode));
+    $("wx-wind").textContent = `${Math.round(Number(c.windspeed_10m || 0))} mph`;
+    $("wx-gusts").textContent = `${Math.round(Number(c.windgusts_10m || 0))} mph`;
+    $("wx-humidity").textContent = `${Math.round(Number(c.relativehumidity_2m || 0))}%`;
+    $("wx-precip").textContent = `${Number(c.precipitation || 0).toFixed(2)} in`;
+    if (Number(c.windgusts_10m || 0) >= 35){
+      $("wx-alert-wrap").style.display = "block";
+      $("wx-alert-text").textContent = `Wind Advisory — gusts up to ${Math.round(Number(c.windgusts_10m || 0))} mph. Aerial work not recommended.`;
+    } else {
+      $("wx-alert-wrap").style.display = "none";
+    }
+    const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const forecastEl = $("wx-forecast");
+    if (forecastEl){
+      const time = Array.isArray(wx?.daily?.time) ? wx.daily.time : [];
+      forecastEl.innerHTML = time.map((dateStr, i) => {
+        const d = new Date(dateStr);
+        return `<div class="wx-day"><div class="wx-day-name">${days[d.getDay()]}</div><div style="font-size:18px;">${wxCodeToEmoji(Number(wx?.daily?.weathercode?.[i]))}</div><div class="wx-day-hi">${Math.round(Number(wx?.daily?.temperature_2m_max?.[i] || 0))}°</div><div class="wx-day-lo">${Math.round(Number(wx?.daily?.temperature_2m_min?.[i] || 0))}°</div></div>`;
+      }).join("");
+    }
+  } catch (e) {
+    console.warn("Weather load failed:", e);
   }
 }
 
@@ -16703,70 +16921,74 @@ async function saveProfilePhotoFromFile(file){
 }
 
 async function initProfilePhotoUpload(user) {
-  const wrap = document.getElementById("prof-avatar-wrap");
-  const input = document.getElementById("prof-photo-input");
-  const display = document.getElementById("prof-avatar-display");
-  const hint = document.querySelector(".prof-photo-hint");
-  const uploading = document.querySelector(".prof-photo-uploading");
+  const contexts = [
+    {
+      wrap: document.getElementById("prof-avatar-wrap"),
+      input: document.getElementById("prof-photo-input"),
+      display: document.getElementById("prof-avatar-display"),
+      hint: document.querySelector(".prof-photo-hint"),
+      uploading: document.querySelector(".prof-photo-uploading"),
+    },
+    {
+      wrap: document.getElementById("profile-page-avatar-wrap"),
+      input: document.getElementById("profile-page-photo-input"),
+      display: document.getElementById("profile-page-avatar-display"),
+      hint: document.getElementById("profile-page-photo-hint"),
+      uploading: document.getElementById("profile-page-photo-uploading"),
+    },
+  ];
 
-  if (!wrap || !input || !display) return;
-
-  if (user?.photoUrl) {
-    display.innerHTML = `<img src="${user.photoUrl}" alt="Profile photo"/>`;
-  } else if (user?.name) {
-    display.textContent = user.name.slice(0, 2).toUpperCase();
-  }
-
-  if (!wrap.dataset.uploadBound){
-    wrap.addEventListener("click", () => input.click());
-    wrap.dataset.uploadBound = "1";
-  }
-  if (input.dataset.uploadBound) return;
-  input.dataset.uploadBound = "1";
-
-  input.addEventListener("change", async (e) => {
-    const target = e.target;
-    const file = target?.files?.[0] || null;
-    if (!file) return;
-
-    if (file.size > 2 * 1024 * 1024) {
-      toast("Photo must be under 2MB", "Choose a JPG, PNG, or WEBP file under 2MB.", "error");
-      input.value = "";
-      return;
+  for (const ctx of contexts){
+    const { wrap, input, display, hint, uploading } = ctx;
+    if (!wrap || !input || !display) continue;
+    if (user?.photoUrl) display.innerHTML = `<img src="${user.photoUrl}" alt="Profile photo"/>`;
+    else if (user?.name) display.textContent = user.name.slice(0, 2).toUpperCase();
+    if (!wrap.dataset.uploadBound){
+      wrap.addEventListener("click", () => input.click());
+      wrap.dataset.uploadBound = "1";
     }
-
-    const localUrl = URL.createObjectURL(file);
-    display.innerHTML = `<img src="${localUrl}" alt="Profile photo"/>`;
-    if (hint) hint.style.display = "none";
-    if (uploading) {
-      uploading.textContent = "Uploading…";
-      uploading.style.display = "block";
-    }
-
-    try {
-      const saved = await saveProfilePhotoFromFile(file);
-      if (!saved){
-        if (hint) hint.style.display = "block";
-        if (uploading) uploading.style.display = "none";
-        URL.revokeObjectURL(localUrl);
+    if (input.dataset.uploadBound) continue;
+    input.dataset.uploadBound = "1";
+    input.addEventListener("change", async (e) => {
+      const target = e.target;
+      const file = target?.files?.[0] || null;
+      if (!file) return;
+      if (file.size > 2 * 1024 * 1024) {
+        toast("Photo must be under 2MB", "Choose a JPG, PNG, or WEBP file under 2MB.", "error");
         input.value = "";
         return;
       }
-      if (uploading) uploading.textContent = "Photo updated!";
-      setTimeout(() => {
+      const localUrl = URL.createObjectURL(file);
+      display.innerHTML = `<img src="${localUrl}" alt="Profile photo"/>`;
+      if (hint) hint.style.display = "none";
+      if (uploading) {
+        uploading.textContent = "Uploading...";
+        uploading.style.display = "block";
+      }
+      try {
+        const saved = await saveProfilePhotoFromFile(file);
+        if (!saved){
+          if (hint) hint.style.display = "block";
+          if (uploading) uploading.style.display = "none";
+          URL.revokeObjectURL(localUrl);
+          input.value = "";
+          return;
+        }
+        if (uploading) uploading.textContent = "Photo updated!";
+        setTimeout(() => {
+          if (hint) hint.style.display = "block";
+          if (uploading) uploading.style.display = "none";
+        }, 2500);
+      } catch (err) {
+        console.error("Photo upload failed:", err);
+        toast("Upload failed", "Please try again.", "error");
         if (hint) hint.style.display = "block";
         if (uploading) uploading.style.display = "none";
-      }, 2500);
-    } catch (err) {
-      console.error("Photo upload failed:", err);
-      toast("Upload failed", "Please try again.", "error");
-      if (hint) hint.style.display = "block";
-      if (uploading) uploading.style.display = "none";
-    }
-
-    URL.revokeObjectURL(localUrl);
-    input.value = "";
-  });
+      }
+      URL.revokeObjectURL(localUrl);
+      input.value = "";
+    });
+  }
 }
 
 async function clearProfilePhoto(){
@@ -26899,118 +27121,199 @@ function renderDemoShowcaseHome(){
   const wrap = $("demoShowcaseHome");
   if (!wrap) return;
   renderProfileHomeCard();
-  const legacyIds = [
-    "dashboardJobCard",
-    "dashboardActiveSiteCard",
-    "dashboardActivityCard",
-    "dashboardFeatureHubCard",
-    "dashboardAllowedQtyCard",
-    "dashboardCatalogQuickCard",
-  ];
+  const legacyIds = ["dashboardJobCard","dashboardActiveSiteCard","dashboardActivityCard","dashboardFeatureHubCard","dashboardAllowedQtyCard","dashboardCatalogQuickCard"];
   const profileCard = $("dashboardProfileCard");
   if (profileCard) profileCard.style.display = "none";
-  legacyIds.forEach((id) => {
-    const el = $(id);
-    if (el) el.style.display = "none";
-  });
+  legacyIds.forEach((id) => { const el = $(id); if (el) el.style.display = "none"; });
   const workspaces = [
     {
       title: "Technician",
+      iconClass: "icon-blue",
+      accent: "",
       summary: "Clock in, field tasks, and photo capture.",
       chips: ["Clock in", "Field tasks", "Photos"],
       action: { type: "view", target: "viewTechnician" },
+      iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5"><path d="M9 2v6l4 2"/><circle cx="9" cy="9" r="6"/></svg>',
     },
     {
       title: "Splicer",
+      iconClass: "icon-teal",
+      accent: "accent-teal",
       summary: "Projects, closures, billing codes, and redline map workflows.",
-      chips: ["Projects", "Closures", "Billing codes", "Redline map"],
+      chips: ["Projects", "Closures", "Billing codes"],
       action: { type: "view", target: "viewMap", fallbackViews: ["viewNodes", "viewDashboard"] },
+      iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><path d="M3 9h12"/><path d="M6 5l-3 4 3 4"/><path d="M12 5l3 4-3 4"/></svg>',
     },
     {
       title: "Office",
+      iconClass: "icon-blue",
+      accent: "",
       summary: "Invoice processing, reports, and billing review operations.",
-      chips: ["Invoices", "Reports", "Billing review"],
+      chips: ["Invoices", "Reports", "Billing"],
       action: { type: "view", target: "viewInvoices" },
+      iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5"><rect x="4" y="2.5" width="10" height="13" rx="1.5"/><path d="M6.5 6h5M6.5 9h5M6.5 12h3.5"/></svg>',
     },
     {
-      title: "Dispatch Board",
-      summary: "Create work orders, assign crews, manage queue, and prepare for live routing visibility.",
-      chips: ["Create work order", "Assign / reassign", "Dispatch queue", "Live map"],
+      title: "Dispatch",
+      iconClass: "icon-amber",
+      accent: "accent-amber",
+      summary: "Create work orders, assign crews, and manage queue.",
+      chips: ["Create", "Assign", "Queue"],
       action: { type: "view", target: "viewDispatch", fallbackViews: ["viewDashboard"] },
+      iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#D39A44" stroke-width="1.5"><path d="M2 9h14"/><path d="M9 2v14"/><circle cx="9" cy="9" r="6"/></svg>',
     },
     {
       title: "Warehouse",
+      iconClass: "icon-teal",
+      accent: "accent-teal",
       summary: "Inventory, material search, and assignment visibility.",
-      chips: ["Inventory", "Material search", "Assignments"],
+      chips: ["Inventory", "Search", "Assignments"],
       action: { type: "view", target: "viewCatalog" },
       secondaryAction: { type: "view", target: "viewWarehouseScan", label: "Scan Item" },
+      iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><rect x="3" y="3" width="12" height="12" rx="1.5"/><path d="M3 8h12"/></svg>',
     },
     {
       title: "Supervisor",
+      iconClass: "icon-purple",
+      accent: "accent-purple",
       summary: "Progress oversight, field verification, and daily metrics.",
-      chips: ["Progress", "Field verification", "Daily metrics"],
+      chips: ["Progress", "Verification", "Metrics"],
       action: { type: "view", target: "viewSupervisor", fallbackViews: ["viewDailyReport", "viewDashboard"] },
+      iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#A59CF4" stroke-width="1.5"><path d="M3 13l4-4 3 3 5-7"/><circle cx="13.5" cy="5" r="1.3" fill="#A59CF4" stroke="none"/></svg>',
     },
     {
       title: "Admin",
+      iconClass: "icon-coral",
+      accent: "accent-coral",
       summary: "User, project, and system control surfaces.",
-      chips: ["Users", "Projects", "System controls"],
+      chips: ["Users", "Projects", "System"],
       action: { type: "view", target: "viewAdmin" },
+      iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#EE835D" stroke-width="1.5"><circle cx="9" cy="9" r="2.2"/><path d="M9 2.5v2M9 13.5v2M2.5 9h2M13.5 9h2M4.2 4.2l1.4 1.4M12.4 12.4l1.4 1.4M13.8 4.2l-1.4 1.4M5.6 12.4l-1.4 1.4"/></svg>',
     },
   ];
 
   wrap.style.display = "";
   wrap.innerHTML = `
-    <div class="cmd-header-card" id="command-header">
+    <div id="command-header">
       <div class="cmd-left">
-        <div class="cmd-avatar" id="cmd-avatar">SU</div>
-        <div class="cmd-user-info">
-          <div class="cmd-welcome" id="cmd-welcome">Welcome back, Support</div>
-          <div class="cmd-subtitle" id="cmd-subtitle">Field verification, documentation, and billing control</div>
+        <div class="cmd-avatar" id="cmd-avatar" onclick="showProfilePage()">SU</div>
+        <div>
+          <div class="cmd-name" id="cmd-name">Welcome back</div>
+          <div class="cmd-role" id="cmd-role">Field verification, documentation, and billing control</div>
           <div class="cmd-project" id="cmd-project">
-            <span class="cmd-project-label">Active Project:</span>
-            <span class="cmd-project-name" id="cmd-project-name">— None selected —</span>
+            <span class="cmd-proj-label">Active Project</span>
+            <span class="cmd-proj-badge" id="cmd-proj-badge">— None —</span>
           </div>
         </div>
       </div>
       <div class="cmd-right">
-        <div class="cmd-workspaces">
-          <span class="cmd-ws-label">Workspaces</span>
-          <div class="cmd-ws-links" id="cmd-ws-links">
-            <a href="#technician">Technician</a>
-            <a href="#splicer">Splicer</a>
-            <a href="#office">Office</a>
-            <a href="#dispatch">Dispatch Board</a>
-            <a href="#warehouse">Warehouse</a>
-            <a href="#supervisor">Supervisor</a>
-            <a href="#admin">Admin</a>
-          </div>
-        </div>
+        <button class="cmd-action" onclick="navigateTo('messages')" type="button">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
+            <path d="M8 2a6 6 0 016 6c0 3-1.5 4.5-1.5 4.5H3.5S2 11 2 8a6 6 0 016-6z"/>
+            <path d="M6 13.5a2 2 0 004 0"/>
+          </svg>
+          Messages
+        </button>
+        <button class="cmd-action" onclick="navigateTo('projects')" type="button">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
+            <rect x="2" y="3" width="12" height="10" rx="1.5"/>
+            <path d="M5 3V2M11 3V2M2 7h12"/>
+          </svg>
+          Projects
+        </button>
+        <button class="cmd-action cmd-signout" onclick="handleSignOut()" type="button">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
+            <path d="M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3M10 11l3-3-3-3M13 8H6"/>
+          </svg>
+          Sign out
+        </button>
       </div>
     </div>
-    <div class="showcase-role-grid" style="margin-top:12px;">
+    <div class="section-label">Workspaces</div>
+    <div class="ws-grid">
       ${workspaces.map((workspace) => `
-        <article class="card showcase-role-card">
-          <div class="showcase-role-title">${escapeHtml(workspace.title)}</div>
-          <div class="muted small">${escapeHtml(workspace.summary)}</div>
-          <div class="showcase-chip-row" style="margin-top:8px;">
-            ${workspace.chips.map((chip) => `<span class="chip">${escapeHtml(chip)}</span>`).join("")}
-          </div>
-          <div class="row" style="margin-top:12px; justify-content:flex-end;">
-            ${workspace.secondaryAction ? `<button class="btn secondary" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(workspace.secondaryAction, { label: workspace.secondaryAction.label || "Open" })))}'>${escapeHtml(workspace.secondaryAction.label || "Open")}</button>` : ""}
-            <button class="btn" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(workspace.action, { label: workspace.title, fallbackViews: workspace.action.fallbackViews || [] })))}'>Open Workspace</button>
+        <article class="ws-card ${workspace.accent}">
+          <div class="ws-icon ${workspace.iconClass}">${workspace.iconSvg}</div>
+          <div class="ws-title">${escapeHtml(workspace.title)}</div>
+          <div class="ws-desc">${escapeHtml(workspace.summary)}</div>
+          <div class="ws-tags">${workspace.chips.map((chip) => `<span class="ws-tag">${escapeHtml(chip)}</span>`).join("")}</div>
+          <div class="ws-footer">
+            <button class="ws-open" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(workspace.action, { label: workspace.title, fallbackViews: workspace.action.fallbackViews || [] })))}'>Open <span class="ws-open-arrow">></span></button>
+            ${workspace.secondaryAction ? `<button class="ws-open ws-open-teal" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(workspace.secondaryAction, { label: workspace.secondaryAction.label || "Scan Item" })))}'>Scan Item</button>` : ""}
           </div>
         </article>
       `).join("")}
+      <div class="msg-card" id="message-board-card">
+        <div class="msg-header">
+          <div class="msg-title-row">
+            <div class="msg-icon">
+              <svg viewBox="0 0 18 18" fill="none" stroke="#7F77DD" stroke-width="1.5" width="18" height="18">
+                <rect x="2" y="3" width="14" height="9" rx="1.5"/>
+                <path d="M5 14l2-2h7"/>
+              </svg>
+            </div>
+            <div>
+              <div class="msg-title">Message Board</div>
+              <div class="msg-subtitle">Company-wide and personal feeds</div>
+            </div>
+          </div>
+          <div class="msg-tabs">
+            <div class="msg-tab active" onclick="switchMsgTab('company', this)">Company</div>
+            <div class="msg-tab" onclick="switchMsgTab('mine', this)">Mine</div>
+          </div>
+        </div>
+        <div class="msg-feed" id="msg-feed-company"></div>
+        <div class="msg-compose">
+          <input class="msg-input" id="msg-input" type="text" placeholder="Post to company board..." />
+          <button class="msg-send" onclick="postMessage()">Post</button>
+        </div>
+      </div>
+    </div>
+    <div style="padding: 0 20px 20px;">
+      <div id="weather-card" class="wx-card">
+        <div class="wx-header">
+          <div class="wx-loc-row">
+            <div class="wx-icon-wrap">
+              <svg viewBox="0 0 18 18" fill="none" stroke="#378ADD" stroke-width="1.5" width="18" height="18">
+                <path d="M9 2a5 5 0 015 5c0 3.5-5 9-5 9S4 10.5 4 7a5 5 0 015-5z"/>
+                <circle cx="9" cy="7" r="1.5"/>
+              </svg>
+            </div>
+            <div>
+              <div class="wx-location" id="wx-location">Loading...</div>
+              <div class="wx-proj-ref" id="wx-proj-ref">Active project</div>
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div><span class="wx-temp" id="wx-temp">--</span><span class="wx-unit">°F</span></div>
+            <div class="wx-condition" id="wx-condition">Fetching weather...</div>
+          </div>
+        </div>
+        <div id="wx-alert-wrap" style="display:none;">
+          <div class="wx-alert">
+            <svg viewBox="0 0 14 14" fill="none" stroke="#EF9F27" stroke-width="1.5" width="14" height="14">
+              <path d="M7 1L1 12h12L7 1z"/>
+              <line x1="7" y1="5" x2="7" y2="8"/>
+              <circle cx="7" cy="10" r="0.5" fill="#EF9F27"/>
+            </svg>
+            <span class="wx-alert-text" id="wx-alert-text"></span>
+          </div>
+        </div>
+        <div class="wx-stats" id="wx-stats">
+          <div class="wx-stat"><div class="wx-stat-label">Wind</div><div class="wx-stat-val" id="wx-wind">--</div></div>
+          <div class="wx-stat"><div class="wx-stat-label">Gusts</div><div class="wx-stat-val" id="wx-gusts">--</div></div>
+          <div class="wx-stat"><div class="wx-stat-label">Humidity</div><div class="wx-stat-val" id="wx-humidity">--</div></div>
+          <div class="wx-stat"><div class="wx-stat-label">Precip</div><div class="wx-stat-val" id="wx-precip">--</div></div>
+        </div>
+        <div class="wx-forecast" id="wx-forecast"></div>
+      </div>
     </div>
   `;
-  updateCommandHeader(
-    {
-      name: getProfileDisplayName(),
-      photoUrl: getProfilePhotoUrl(),
-    },
-    String(state.activeProject?.name || "").trim()
-  );
+  updateCommandHeader({ name: getProfileDisplayName(), photoUrl: getProfilePhotoUrl() }, String(state.activeProject?.name || "").trim());
+  const citySeed = String(state.activeProject?.city || state.activeProject?.location || "").trim();
+  void loadWeather(citySeed, String(state.activeProject?.id || state.activeProject?.name || "").trim());
+  currentMsgTab = "company";
+  void loadBoardMessages("company");
 }
 
 function renderProofChecklist(){
@@ -28505,6 +28808,36 @@ function wireUI(){
       e.preventDefault();
       openSignInUi("topbar");
     });
+  }
+  const navScannerBtn = $("nav-scanner-btn");
+  if (navScannerBtn){
+    navScannerBtn.addEventListener("click", () => {
+      if (isViewAllowed("viewWarehouseScan")) setActiveView("viewWarehouseScan");
+    });
+  }
+  const navRedlineBtn = $("nav-redline-btn");
+  if (navRedlineBtn){
+    navRedlineBtn.addEventListener("click", () => {
+      setActiveView("viewMap", { syncHash: false });
+      queueRedlineDeepLinkActivation(200);
+      window.location.hash = "#redline";
+    });
+  }
+  const navSpliceBtn = $("nav-splice-btn");
+  if (navSpliceBtn){
+    navSpliceBtn.addEventListener("click", () => {
+      const btn = $("btnMenuAddSpliceDetails");
+      if (btn) btn.click();
+      else toast("Splice", "Open map workspace to add splice details.");
+    });
+  }
+  const profilePageCloseBtn = $("btnProfilePageClose");
+  if (profilePageCloseBtn){
+    profilePageCloseBtn.addEventListener("click", () => window.hideProfilePage?.());
+  }
+  const profilePageSaveBtn = $("btnProfilePageSave");
+  if (profilePageSaveBtn){
+    profilePageSaveBtn.addEventListener("click", () => { void saveProfilePageDetails(); });
   }
 
   const profilePhotoUploadBtn = $("btnProfilePhotoUpload");
