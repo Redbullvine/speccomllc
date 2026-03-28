@@ -63,6 +63,12 @@ a{color:inherit}
   border:1px solid rgba(212,175,55,.7);
   color:var(--brand);
 }
+.brand img {
+  height: 36px;
+  width: auto;
+  object-fit: contain;
+}
+
 .brand-title{font-size:16px; font-weight:900; letter-spacing:.4px}
 .badge{
   display:inline-flex; align-items:center; gap:8px;
@@ -4993,4 +4999,26 @@ body:not(.map-mode) .tech-workspace {
   background: rgba(55,138,221,0.22);
   border-color: rgba(55,138,221,0.5);
   color: #fff;
+}
+
+.nav-logo-img {
+  height: 36px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+
+.splash-logo-img {
+  height: 64px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+}
+
+.invoice-logo-img {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+  display: block;
 }
