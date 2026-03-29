@@ -25653,6 +25653,52 @@ function saveRuidosoInvoiceModal(){
   renderInvoicePanel();
 }
 
+function renderOfficeInvoiceSummary(){
+  const invoices = Array.isArray(state.officeInvoices.records) ? state.officeInvoices.records : [];
+  const total = invoices.reduce((sum, row) => sum + Number(row?.total || 0), 0);
+  const readyCount = invoices.filter((row) => /ready|paid/i.test(String(row?.status || ""))).length;
+  const draftCount = Math.max(0, invoices.length - readyCount);
+  const recentRows = invoices.slice(0, 5);
+  return `
+    <div class="card" style="margin-top:12px;">
+      <div class="row" style="justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+        <h3 style="margin:0;">Office Invoice Totals</h3>
+        <span class="muted small">${invoices.length} invoice${invoices.length === 1 ? "" : "s"}</span>
+      </div>
+      <div class="grid cols-3" style="margin-top:10px;">
+        <div class="card">
+          <div class="small muted">Total Card</div>
+          <div style="font-size:20px; font-weight:800;">${formatMoney(total)}</div>
+        </div>
+        <div class="card">
+          <div class="small muted">Ready / Paid</div>
+          <div style="font-size:20px; font-weight:800;">${readyCount}</div>
+        </div>
+        <div class="card">
+          <div class="small muted">Draft</div>
+          <div style="font-size:20px; font-weight:800;">${draftCount}</div>
+        </div>
+      </div>
+      ${recentRows.length ? `
+        <div style="overflow-x:auto; margin-top:10px;">
+          <table class="table">
+            <thead><tr><th>Invoice #</th><th>Status</th><th>Total</th></tr></thead>
+            <tbody>
+              ${recentRows.map((row) => `
+                <tr>
+                  <td>${escapeHtml(row?.invoice_number || row?.id || "-")}</td>
+                  <td>${escapeHtml(row?.status || "Draft")}</td>
+                  <td>${formatMoney(Number(row?.total || 0))}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      ` : `<div class="muted small" style="margin-top:10px;">No invoices saved yet.</div>`}
+    </div>
+  `;
+}
+
 function renderInvoicePanel(){
   const wrap = $("invoicePanel");
   if (!wrap) return;
@@ -25693,7 +25739,7 @@ function renderInvoicePanel(){
   const draft = state.officeInvoices.draft;
   wrap.innerHTML = `
     <div class="field-stack" style="gap:10px;">
-      ${renderRuidosoBillingSummary()}
+      ${renderOfficeInvoiceSummary()}
       ${draft ? renderOfficeInvoiceBuilder(draft) : ""}
       <div class="card" style="margin-top:12px;">
         <h3>Saved Invoices</h3>
@@ -25714,7 +25760,12 @@ function renderInvoicePanel(){
                       <td>${escapeHtml(row.location || "-")}</td>
                       <td>${escapeHtml(row.status || "Draft")}</td>
                       <td>${formatMoney(row.total || 0)}</td>
-                      <td><button class="btn ghost small" type="button" data-office-action="openInvoice" data-office-invoice-id="${escapeHtml(row.id)}">Open</button></td>
+                      <td>
+                        <div class="row" style="gap:6px; flex-wrap:wrap;">
+                          <button class="btn ghost small" type="button" data-office-action="openInvoice" data-office-invoice-id="${escapeHtml(row.id)}">Open</button>
+                          <button class="btn danger small" type="button" data-office-action="deleteInvoice" data-office-invoice-id="${escapeHtml(row.id)}">Delete</button>
+                        </div>
+                      </td>
                     </tr>
                   `).join("")}
                 </tbody>
@@ -25765,6 +25816,26 @@ function removeOfficeInvoiceLineItem(lineId){
   }
   draft.updated_at = nowISO();
   renderInvoicePanel();
+}
+
+function deleteOfficeInvoiceRecord(invoiceId){
+  const id = String(invoiceId || "").trim();
+  if (!id) return;
+  const row = (state.officeInvoices.records || []).find((item) => String(item?.id || "") === id);
+  if (!row) return;
+  const label = row.invoice_number || row.id || "invoice";
+  if (!confirm(`Delete invoice "${label}"?`)) return;
+  state.officeInvoices.records = (state.officeInvoices.records || []).filter((item) => String(item?.id || "") !== id);
+  if (state.officeInvoices.draft && String(state.officeInvoices.draft.id || "") === id){
+    state.officeInvoices.draft = null;
+  }
+  if (String(state.officeInvoices.routeInvoiceNumber || "").trim() === String(row.invoice_number || "").trim()){
+    state.officeInvoices.routeInvoiceNumber = "";
+    clearInvoiceDeepLinkUrl();
+  }
+  persistOfficeInvoiceState();
+  renderInvoicePanel();
+  toast("Invoice deleted", `${label} removed.`);
 }
 
 function getInvoiceScopeOrgId(){
@@ -30028,6 +30099,10 @@ function wireUI(){
       }
       if (action === "openInvoice"){
         openOfficeInvoiceDraft(invoiceId);
+        return;
+      }
+      if (action === "deleteInvoice"){
+        deleteOfficeInvoiceRecord(invoiceId);
         return;
       }
       if (action === "backToInvoiceList"){
