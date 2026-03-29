@@ -122,6 +122,24 @@ const state = {
   },
   orgs: [],
   invoices: [],
+  ruidosoInvoices: [
+    { id:"TDS_001", node:"23", loc:"1635EA_03", date:"01/19/2026", total:4733.00,   paid:true  },
+    { id:"TDS_002", node:"54", loc:"1635CA_02", date:"01/19/2026", total:3475.75,   paid:true  },
+    { id:"TDS_003", node:"9",  loc:"1635_01",   date:"01/24/2026", total:1643.00,   paid:true  },
+    { id:"TDS_004", node:"9",  loc:"1635BA_02", date:"01/24/2026", total:1877.75,   paid:true  },
+    { id:"TDS_005", node:"9",  loc:"1635BA_02", date:"01/31/2026", total:698.00,    paid:true  },
+    { id:"TDS_006", node:"9",  loc:"1635BA_01", date:"01/31/2026", total:1536.00,   paid:true  },
+    { id:"TDS_007", node:"54", loc:"1635CA_04", date:"02/07/2026", total:3595.00,   paid:true  },
+    { id:"TDS_008", node:"9",  loc:"1635BA_01", date:"02/07/2026", total:1536.00,   paid:true  },
+    { id:"TDS_009", node:"54", loc:"1635CA_04", date:"02/15/2026", total:4826.75,   paid:true  },
+    { id:"TDS_003A",node:"23", loc:"1635EA_03", date:"01/19/2026", total:3940.75,   paid:false },
+    { id:"TDS_010", node:"54", loc:"1635CA_03", date:"02/15/2026", total:1674.50,   paid:false },
+    { id:"TDS_011", node:"9",  loc:"1635BA_01", date:"02/15/2026", total:325.00,    paid:false },
+    { id:"TDS_012", node:"54", loc:"1635CA_03", date:"02/22/2026", total:1415.50,   paid:false },
+    { id:"TDS_013", node:"9",  loc:"1635BA_01", date:"02/22/2026", total:1968.00,   paid:false },
+    { id:"TDS_014", node:"54", loc:"1635CA_04", date:"02/22/2026", total:5009.00,   paid:false },
+  ],
+  ruidosoInvoiceModal: { open: false, mode: "add", targetId: null },
   officeInvoices: {
     records: [],
     recents: {
@@ -25418,49 +25436,40 @@ function renderInvoiceNavSidebar() {
 }
 
 function renderRuidosoBillingSummary(){
-  const invoices = [
-    { id:"TDS_001", node:"23", loc:"1635EA_03", date:"01/19/2026", total:4733.00,   paid:true  },
-    { id:"TDS_002", node:"54", loc:"1635CA_02", date:"01/19/2026", total:3475.75,   paid:true  },
-    { id:"TDS_003", node:"9",  loc:"1635_01",   date:"01/24/2026", total:1643.00,   paid:true  },
-    { id:"TDS_004", node:"9",  loc:"1635BA_02", date:"01/24/2026", total:1877.75,   paid:true  },
-    { id:"TDS_005", node:"9",  loc:"1635BA_02", date:"01/31/2026", total:698.00,    paid:true  },
-    { id:"TDS_006", node:"9",  loc:"1635BA_01", date:"01/31/2026", total:1536.00,   paid:true  },
-    { id:"TDS_007", node:"54", loc:"1635CA_04", date:"02/07/2026", total:3595.00,   paid:true  },
-    { id:"TDS_008", node:"9",  loc:"1635BA_01", date:"02/07/2026", total:1536.00,   paid:true  },
-    { id:"TDS_009", node:"54", loc:"1635CA_04", date:"02/15/2026", total:4826.75,   paid:true  },
-    { id:"TDS_003A",node:"23", loc:"1635EA_03", date:"01/19/2026", total:3940.75,   paid:false },
-    { id:"TDS_010", node:"54", loc:"1635CA_03", date:"02/15/2026", total:1674.50,   paid:false },
-    { id:"TDS_011", node:"9",  loc:"1635BA_01", date:"02/15/2026", total:325.00,    paid:false },
-    { id:"TDS_012", node:"54", loc:"1635CA_03", date:"02/22/2026", total:1415.50,   paid:false },
-    { id:"TDS_013", node:"9",  loc:"1635BA_01", date:"02/22/2026", total:1968.00,   paid:false },
-    { id:"TDS_014", node:"54", loc:"1635CA_04", date:"02/22/2026", total:5009.00,   paid:false },
-  ];
-  const KS_PAID = 21824.00;
-  const TOTAL   = invoices.reduce((s,r) => s + r.total, 0);
-  const BALANCE = TOTAL - KS_PAID;
-  const paid    = invoices.filter(r => r.paid);
-  const unpaid  = invoices.filter(r => !r.paid);
-  const fmt     = v => "$" + v.toLocaleString("en-US", { minimumFractionDigits:2, maximumFractionDigits:2 });
+  const invoices = state.ruidosoInvoices || [];
+  const KS_PAID  = 21824.00;
+  const TOTAL    = invoices.reduce((s,r) => s + r.total, 0);
+  const BALANCE  = TOTAL - KS_PAID;
+  const paid     = invoices.filter(r => r.paid);
+  const unpaid   = invoices.filter(r => !r.paid);
+  const fmt      = v => "$" + v.toLocaleString("en-US", { minimumFractionDigits:2, maximumFractionDigits:2 });
   const paidTotal   = paid.reduce((s,r) => s + r.total, 0);
   const unpaidTotal = unpaid.reduce((s,r) => s + r.total, 0);
 
+  const actionBtnStyle = (bg, hoverBg) =>
+    `style="background:${bg};color:#fff;border:none;border-radius:5px;padding:3px 9px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif;"`;
+
   const row = (r, i) => `
     <tr style="background:${i%2===0?"#f8fafc":"#fff"};">
-      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;font-weight:700;color:#1a3a6b;font-size:12px;">${r.id}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:center;font-size:12px;">${r.node}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;color:#64748b;font-size:11px;">${r.loc}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:center;font-size:12px;">${r.date}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;font-weight:700;color:#1a3a6b;font-size:12px;">${escapeHtml(r.id)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:center;font-size:12px;">${escapeHtml(r.node)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;color:#64748b;font-size:11px;">${escapeHtml(r.loc)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:center;font-size:12px;">${escapeHtml(r.date)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;">${fmt(r.total)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:center;">
         <span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:${r.paid?"#dcfce7":"#fee2e2"};color:${r.paid?"#166534":"#b91c1c"};">${r.paid?"PAID":"PENDING"}</span>
+      </td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:center;white-space:nowrap;">
+        <button type="button" data-office-action="ruidosoReplaceInvoice" data-ruidoso-id="${escapeHtml(r.id)}" ${actionBtnStyle("#0070c0")}>↑ Replace</button>
+        <button type="button" data-office-action="ruidosoDeleteInvoice"  data-ruidoso-id="${escapeHtml(r.id)}" ${actionBtnStyle("#c00000")} style="margin-left:4px;background:#c00000;color:#fff;border:none;border-radius:5px;padding:3px 9px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif;">✕ Delete</button>
       </td>
     </tr>`;
 
   const thead = `
     <thead>
       <tr>
-        ${["Invoice","Node","Location","Date","Amount","Status"].map(h =>
-          `<th style="background:#1e3a5f;color:rgba(255,255,255,.85);font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:9px 12px;text-align:${["Amount"].includes(h)?"right":"left"};">${h}</th>`
+        ${["Invoice","Node","Location","Date","Amount","Status","Actions"].map(h =>
+          `<th style="background:#1e3a5f;color:rgba(255,255,255,.85);font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:9px 12px;text-align:${h==="Amount"?"right":"left"};">${h}</th>`
         ).join("")}
       </tr>
     </thead>`;
@@ -25469,15 +25478,18 @@ function renderRuidosoBillingSummary(){
     <div style="border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.10);font-family:'Manrope',sans-serif;margin-bottom:8px;">
 
       <!-- Top bar -->
-      <div style="background:#1a3a6b;color:#fff;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;">
+      <div style="background:#1a3a6b;color:#fff;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
         <div>
           <div style="font-size:13px;font-weight:700;letter-spacing:.03em;">Ruidoso, NM — Fire Rebuild Billing Summary</div>
           <div style="font-size:11px;opacity:.65;margin-top:2px;">WBS: TC-241635027 &nbsp;|&nbsp; K &amp; S Electric &nbsp;|&nbsp; March 27, 2026</div>
         </div>
-        <button onclick="document.getElementById('btnMenuOpenRedline')?.click()" style="background:#e63946;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-family:'Manrope',sans-serif;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(230,57,70,.35);">
-          <span style="width:8px;height:8px;background:#fff;border-radius:50%;display:inline-block;animation:bs-pulse 1.4s ease-in-out infinite;"></span>
-          View Redline Map
-        </button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button type="button" data-office-action="ruidosoAddInvoice" style="background:#00b050;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:'Manrope',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">＋ Add Invoice</button>
+          <button onclick="document.getElementById('btnMenuOpenRedline')?.click()" style="background:#e63946;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-family:'Manrope',sans-serif;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(230,57,70,.35);">
+            <span style="width:8px;height:8px;background:#fff;border-radius:50%;display:inline-block;animation:bs-pulse 1.4s ease-in-out infinite;"></span>
+            View Redline Map
+          </button>
+        </div>
       </div>
 
       <!-- Summary cards -->
@@ -25485,17 +25497,17 @@ function renderRuidosoBillingSummary(){
         <div style="background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.15);border-radius:9px;padding:11px 14px;color:#fff;">
           <div style="font-size:10px;font-weight:600;opacity:.6;letter-spacing:.07em;text-transform:uppercase;">Total Invoiced</div>
           <div style="font-size:20px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums;">${fmt(TOTAL)}</div>
-          <div style="font-size:10px;opacity:.5;margin-top:2px;">All 15 invoices</div>
+          <div style="font-size:10px;opacity:.5;margin-top:2px;">All ${invoices.length} invoice${invoices.length!==1?"s":""}</div>
         </div>
         <div style="background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.15);border-radius:9px;padding:11px 14px;color:#fff;">
           <div style="font-size:10px;font-weight:600;opacity:.6;letter-spacing:.07em;text-transform:uppercase;">K&amp;S Paid</div>
           <div style="font-size:20px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums;color:#4ade80;">${fmt(KS_PAID)}</div>
-          <div style="font-size:10px;opacity:.5;margin-top:2px;">9 invoices · confirmed</div>
+          <div style="font-size:10px;opacity:.5;margin-top:2px;">${paid.length} invoice${paid.length!==1?"s":""} · confirmed</div>
         </div>
         <div style="background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.15);border-radius:9px;padding:11px 14px;color:#fff;">
           <div style="font-size:10px;font-weight:600;opacity:.6;letter-spacing:.07em;text-transform:uppercase;">Balance Owed</div>
           <div style="font-size:20px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums;color:#f87171;">${fmt(BALANCE)}</div>
-          <div style="font-size:10px;opacity:.5;margin-top:2px;">6 invoices · pending</div>
+          <div style="font-size:10px;opacity:.5;margin-top:2px;">${unpaid.length} invoice${unpaid.length!==1?"s":""} · pending</div>
         </div>
       </div>
 
@@ -25505,28 +25517,29 @@ function renderRuidosoBillingSummary(){
         <!-- Paid -->
         <div style="display:flex;align-items:center;gap:8px;padding:14px 0 8px;font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#166534;">
           ✅ Paid Invoices
-          <span style="padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:#dcfce7;color:#166534;">9 invoices · ${fmt(paidTotal)}</span>
+          <span style="padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:#dcfce7;color:#166534;">${paid.length} invoice${paid.length!==1?"s":""} · ${fmt(paidTotal)}</span>
         </div>
         <div style="border-radius:9px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);">
           <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
             ${thead}
-            <tbody>${paid.map((r,i) => row(r,i)).join("")}</tbody>
+            <tbody>${paid.length ? paid.map((r,i) => row(r,i)).join("") : `<tr><td colspan="7" style="padding:16px;text-align:center;color:#64748b;font-size:12px;">No paid invoices.</td></tr>`}</tbody>
           </table>
         </div>
 
         <!-- Unpaid -->
         <div style="display:flex;align-items:center;gap:8px;padding:14px 0 8px;font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#991b1b;">
           ⚠️ Outstanding Invoices
-          <span style="padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b;">6 invoices · ${fmt(unpaidTotal)} due</span>
+          <span style="padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b;">${unpaid.length} invoice${unpaid.length!==1?"s":""} · ${fmt(unpaidTotal)} due</span>
         </div>
         <div style="border-radius:9px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);">
           <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
             ${thead}
-            <tbody>${unpaid.map((r,i) => row(r,i)).join("")}</tbody>
+            <tbody>${unpaid.length ? unpaid.map((r,i) => row(r,i)).join("") : `<tr><td colspan="7" style="padding:16px;text-align:center;color:#64748b;font-size:12px;">No outstanding invoices.</td></tr>`}</tbody>
             <tr style="background:#e2e8f0;border-top:2px solid #cbd5e1;">
               <td colspan="4" style="padding:9px 12px;font-weight:700;font-size:12px;">Balance Due to Spec Communications</td>
               <td style="padding:9px 12px;font-weight:700;font-size:12px;text-align:right;color:#b91c1c;">${fmt(BALANCE)}</td>
               <td style="padding:9px 12px;font-weight:700;font-size:11px;color:#b91c1c;">AWAITING APPROVAL</td>
+              <td></td>
             </tr>
           </table>
         </div>
@@ -25538,6 +25551,106 @@ function renderRuidosoBillingSummary(){
         50%{opacity:.35;transform:scale(.65);}
       }
     </style>`;
+}
+
+function openRuidosoInvoiceModal(mode, targetId = null){
+  state.ruidosoInvoiceModal = { open: true, mode, targetId };
+  const existing = document.getElementById("ruidosoInvoiceModal");
+  if (existing) existing.remove();
+  const prefill = mode === "replace" && targetId
+    ? (state.ruidosoInvoices || []).find(r => r.id === targetId) || {}
+    : {};
+  const overlay = document.createElement("div");
+  overlay.id = "ruidosoInvoiceModal";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;font-family:'Manrope',sans-serif;";
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:28px 30px;width:440px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.4);position:relative;">
+      <button type="button" id="ruidosoModalClose" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:22px;cursor:pointer;color:#666;">×</button>
+      <h2 style="font-size:15px;font-weight:800;color:#1a3a6b;margin-bottom:18px;">${mode==="replace"?"Replace Invoice: "+escapeHtml(targetId||""):"Add Invoice"}</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:#555;">Invoice ID</label>
+          <input id="ri_id"   value="${escapeHtml(prefill.id||"")}"   placeholder="e.g. TDS_015" style="border:1px solid #ccc;border-radius:5px;padding:7px 9px;font-size:13px;font-family:'Manrope',sans-serif;outline:none;">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:#555;">Amount ($)</label>
+          <input id="ri_total" type="number" step="0.01" value="${prefill.total||""}" placeholder="0.00" style="border:1px solid #ccc;border-radius:5px;padding:7px 9px;font-size:13px;font-family:'Manrope',sans-serif;outline:none;">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:#555;">Node</label>
+          <input id="ri_node"  value="${escapeHtml(prefill.node||"")}"  placeholder="e.g. 9" style="border:1px solid #ccc;border-radius:5px;padding:7px 9px;font-size:13px;font-family:'Manrope',sans-serif;outline:none;">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:#555;">Location</label>
+          <input id="ri_loc"   value="${escapeHtml(prefill.loc||"")}"   placeholder="e.g. 1635BA_01" style="border:1px solid #ccc;border-radius:5px;padding:7px 9px;font-size:13px;font-family:'Manrope',sans-serif;outline:none;">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:#555;">Date</label>
+          <input id="ri_date"  value="${escapeHtml(prefill.date||"")}"  placeholder="MM/DD/YYYY" style="border:1px solid #ccc;border-radius:5px;padding:7px 9px;font-size:13px;font-family:'Manrope',sans-serif;outline:none;">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:#555;">Status</label>
+          <select id="ri_paid" style="border:1px solid #ccc;border-radius:5px;padding:7px 9px;font-size:13px;font-family:'Manrope',sans-serif;outline:none;">
+            <option value="true"  ${prefill.paid===true?"selected":""}>Paid</option>
+            <option value="false" ${prefill.paid===false?"selected":""}>Pending</option>
+          </select>
+        </div>
+        <div style="grid-column:1/-1;display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:#555;">Upload Invoice File (optional)</label>
+          <label style="display:flex;align-items:center;gap:8px;border:2px dashed #0070c0;border-radius:6px;padding:10px 14px;cursor:pointer;background:#f0f7ff;">
+            <input id="ri_file" type="file" accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg" style="display:none;">
+            <span style="font-size:20px;">📎</span>
+            <span id="ri_file_label" style="font-size:12px;color:#0070c0;font-weight:600;">Click to attach file</span>
+          </label>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
+        <button type="button" id="ruidosoModalCancel" style="background:#eee;color:#333;border:none;border-radius:6px;padding:8px 18px;font-size:13px;cursor:pointer;font-family:'Manrope',sans-serif;">Cancel</button>
+        <button type="button" id="ruidosoModalSave"   style="background:#1a3a6b;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif;">💾 Save Invoice</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector("#ri_file").addEventListener("change", (e) => {
+    const f = e.target.files?.[0];
+    overlay.querySelector("#ri_file_label").textContent = f ? "📄 " + f.name : "Click to attach file";
+  });
+  overlay.querySelector("#ruidosoModalClose").addEventListener("click",  closeRuidosoInvoiceModal);
+  overlay.querySelector("#ruidosoModalCancel").addEventListener("click", closeRuidosoInvoiceModal);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeRuidosoInvoiceModal(); });
+  overlay.querySelector("#ruidosoModalSave").addEventListener("click", saveRuidosoInvoiceModal);
+}
+
+function closeRuidosoInvoiceModal(){
+  const el = document.getElementById("ruidosoInvoiceModal");
+  if (el) el.remove();
+  state.ruidosoInvoiceModal = { open: false, mode: "add", targetId: null };
+}
+
+function saveRuidosoInvoiceModal(){
+  const id    = String(document.getElementById("ri_id")?.value || "").trim();
+  const total = parseFloat(document.getElementById("ri_total")?.value) || 0;
+  const node  = String(document.getElementById("ri_node")?.value  || "").trim();
+  const loc   = String(document.getElementById("ri_loc")?.value   || "").trim();
+  const date  = String(document.getElementById("ri_date")?.value  || "").trim();
+  const paid  = document.getElementById("ri_paid")?.value === "true";
+  if (!id || !total){
+    toast("Missing fields", "Invoice ID and Amount are required.", "error");
+    return;
+  }
+  const entry = { id, node, loc, date, total, paid };
+  const { mode, targetId } = state.ruidosoInvoiceModal;
+  if (mode === "replace" && targetId){
+    const idx = (state.ruidosoInvoices || []).findIndex(r => r.id === targetId);
+    if (idx !== -1) state.ruidosoInvoices[idx] = entry;
+    else state.ruidosoInvoices.push(entry);
+  } else {
+    state.ruidosoInvoices = state.ruidosoInvoices || [];
+    state.ruidosoInvoices.push(entry);
+  }
+  closeRuidosoInvoiceModal();
+  toast("Invoice saved", id);
+  renderInvoicePanel();
 }
 
 function renderInvoicePanel(){
@@ -29969,6 +30082,23 @@ function wireUI(){
       if (action === "cancelDraft"){
         state.officeInvoices.draft = null;
         renderInvoicePanel();
+      }
+      if (action === "ruidosoDeleteInvoice"){
+        const rid = String(btn.dataset.ruidosoId || "");
+        if (!rid) return;
+        state.ruidosoInvoices = (state.ruidosoInvoices || []).filter(r => r.id !== rid);
+        toast("Invoice removed", rid);
+        renderInvoicePanel();
+        return;
+      }
+      if (action === "ruidosoReplaceInvoice"){
+        const rid = String(btn.dataset.ruidosoId || "");
+        openRuidosoInvoiceModal("replace", rid);
+        return;
+      }
+      if (action === "ruidosoAddInvoice"){
+        openRuidosoInvoiceModal("add");
+        return;
       }
     });
     invoicePanel.addEventListener("input", (e) => {
