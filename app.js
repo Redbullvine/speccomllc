@@ -25450,8 +25450,12 @@ function renderRuidosoBillingSummary(){
     `style="background:${bg};color:#fff;border:none;border-radius:5px;padding:3px 9px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif;"`;
 
   const row = (r, i) => `
-    <tr style="background:${i%2===0?"#f8fafc":"#fff"};">
-      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;font-weight:700;color:#1a3a6b;font-size:12px;">${escapeHtml(r.id)}</td>
+    <tr style="background:${i%2===0?"#f8fafc":"#fff"};" data-ruidoso-id="${escapeHtml(r.id)}">
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;font-weight:700;color:#1a3a6b;font-size:12px;">
+        <button type="button" data-office-action="ruidosoReplaceInvoice" data-ruidoso-id="${escapeHtml(r.id)}" style="background:none;border:none;padding:0;margin:0;color:#1a3a6b;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif;font-size:12px;">
+          ${escapeHtml(r.id)}
+        </button>
+      </td>
       <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:center;font-size:12px;">${escapeHtml(r.node)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;color:#64748b;font-size:11px;">${escapeHtml(r.loc)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:center;font-size:12px;">${escapeHtml(r.date)}</td>
@@ -25460,8 +25464,8 @@ function renderRuidosoBillingSummary(){
         <span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:${r.paid?"#dcfce7":"#fee2e2"};color:${r.paid?"#166534":"#b91c1c"};">${r.paid?"PAID":"PENDING"}</span>
       </td>
       <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:center;white-space:nowrap;">
-        <button type="button" data-office-action="ruidosoReplaceInvoice" data-ruidoso-id="${escapeHtml(r.id)}" ${actionBtnStyle("#0070c0")}>↑ Replace</button>
-        <button type="button" data-office-action="ruidosoDeleteInvoice"  data-ruidoso-id="${escapeHtml(r.id)}" ${actionBtnStyle("#c00000")} style="margin-left:4px;background:#c00000;color:#fff;border:none;border-radius:5px;padding:3px 9px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif;">✕ Delete</button>
+        <button type="button" data-office-action="ruidosoReplaceInvoice" data-ruidoso-id="${escapeHtml(r.id)}" ${actionBtnStyle("#0070c0")}>Replace</button>
+        <button type="button" data-office-action="ruidosoDeleteInvoice" data-ruidoso-id="${escapeHtml(r.id)}" style="margin-left:4px;background:#c00000;color:#fff;border:none;border-radius:5px;padding:3px 9px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif;">Delete</button>
       </td>
     </tr>`;
 
@@ -25485,6 +25489,7 @@ function renderRuidosoBillingSummary(){
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <button type="button" data-office-action="ruidosoAddInvoice" style="background:#00b050;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:'Manrope',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">＋ Add Invoice</button>
+          <button type="button" data-office-action="ruidosoUploadInvoice" style="background:#0ea5e9;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:'Manrope',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">Upload Invoice</button>
           <button onclick="document.getElementById('btnMenuOpenRedline')?.click()" style="background:#e63946;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-family:'Manrope',sans-serif;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(230,57,70,.35);">
             <span style="width:8px;height:8px;background:#fff;border-radius:50%;display:inline-block;animation:bs-pulse 1.4s ease-in-out infinite;"></span>
             View Redline Map
@@ -25739,7 +25744,7 @@ function renderInvoicePanel(){
   const draft = state.officeInvoices.draft;
   wrap.innerHTML = `
     <div class="field-stack" style="gap:10px;">
-      ${renderOfficeInvoiceSummary()}
+      ${renderRuidosoBillingSummary()}
       ${draft ? renderOfficeInvoiceBuilder(draft) : ""}
       <div class="card" style="margin-top:12px;">
         <h3>Saved Invoices</h3>
@@ -30080,7 +30085,14 @@ function wireUI(){
   if (invoicePanel){
     invoicePanel.addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-office-action]");
-      if (!btn) return;
+      if (!btn){
+        const row = e.target.closest("tr[data-ruidoso-id]");
+        const rid = String(row?.dataset?.ruidosoId || "");
+        if (rid){
+          openRuidosoInvoiceModal("replace", rid);
+        }
+        return;
+      }
       const action = String(btn.dataset.officeAction || "");
       const invoiceId = String(btn.dataset.officeInvoiceId || "");
       const invoiceNumber = String(btn.dataset.officeInvoiceNumber || "");
@@ -30168,10 +30180,15 @@ function wireUI(){
       }
       if (action === "ruidosoReplaceInvoice"){
         const rid = String(btn.dataset.ruidosoId || "");
+        if (!rid) return;
         openRuidosoInvoiceModal("replace", rid);
         return;
       }
       if (action === "ruidosoAddInvoice"){
+        openRuidosoInvoiceModal("add");
+        return;
+      }
+      if (action === "ruidosoUploadInvoice"){
         openRuidosoInvoiceModal("add");
         return;
       }
@@ -30268,5 +30285,3 @@ if (document.readyState === "loading"){
 } else {
   startApp();
 }
-
-
