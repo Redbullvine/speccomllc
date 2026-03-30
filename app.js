@@ -25728,6 +25728,7 @@ function renderInvoicePanel(){
     const matchedInvoice = findOfficeInvoiceByNumber(routeInvoiceNumber);
     wrap.innerHTML = `
       <div class="field-stack" style="gap:10px;">
+        ${renderRuidosoBillingSummary()}
         ${renderKsInvoiceImportCard()}
         ${!blockInvoiceDetail ? (
           matchedKsInvoice
