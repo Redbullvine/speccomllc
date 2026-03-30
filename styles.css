@@ -5320,3 +5320,14 @@ body:not(.map-mode) .tech-workspace {
     grid-template-columns: 1fr;
   }
 }
+#warehouseScanCameraStream{
+  width:100%;
+  max-height:280px;
+  border-radius:12px;
+  background:#050c17;
+}
+.warehouse-mode-active{
+  border-color: rgba(0, 212, 255, 0.65) !important;
+  color: #d0ecff !important;
+  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.15);
+}

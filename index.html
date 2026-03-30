@@ -1431,6 +1431,17 @@
               <button id="btnWarehouseScanToCatalog" class="btn ghost small" type="button">Material Catalog</button>
             </div>
             <div class="muted small">Scan barcode, QR, or serial to intake inventory quickly.</div>
+            <div class="row" style="margin-top:10px; gap:8px; align-items:center; flex-wrap:wrap;">
+              <span class="muted small">Mode:</span>
+              <button id="btnWarehouseModeIn" class="btn small" type="button">Scan In (+1)</button>
+              <button id="btnWarehouseModeOut" class="btn ghost small" type="button">Scan Out (-1)</button>
+              <button id="btnWarehouseCameraStart" class="btn secondary small" type="button">Start Camera Scanner</button>
+              <button id="btnWarehouseCameraStop" class="btn ghost small" type="button" disabled>Stop Camera</button>
+            </div>
+            <div class="camera-panel" style="margin-top:10px;">
+              <video id="warehouseScanCameraStream" autoplay playsinline muted></video>
+              <div id="warehouseCameraStatus" class="muted small" style="margin-top:8px;">Camera scanner is off.</div>
+            </div>
             <form id="warehouseScanForm" class="row" style="margin-top:12px;" autocomplete="off">
               <input id="warehouseScanInput" class="input" placeholder="Scan barcode / QR / serial" />
               <button id="btnWarehouseScanSubmit" class="btn" type="submit">Scan</button>

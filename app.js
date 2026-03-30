@@ -209,6 +209,15 @@ const state = {
     items: [],
     lastScannedValue: "",
     match: null,
+    mode: "in",
+    cameraActive: false,
+    cameraStream: null,
+    cameraRaf: 0,
+    detector: null,
+    detectBusy: false,
+    lastDetectedValue: "",
+    lastDetectedAt: 0,
+    lastDetectAttemptAt: 0,
   },
   projects: [],
   messages: [],
@@ -2777,6 +2786,9 @@ function setActiveView(viewId, { syncHash = true } = {}){
     applySignedOutUi("set-active-view-blocked");
     return;
   }
+  if (viewId !== "viewWarehouseScan"){
+    stopWarehouseScanCamera();
+  }
   if (viewId !== "viewMap"){
     setMapFieldCreateOpen(false);
   }
@@ -2812,6 +2824,7 @@ function setActiveView(viewId, { syncHash = true } = {}){
   }
   if (viewId === "viewWarehouseScan"){
     renderWarehouseScanView();
+    renderWarehouseModeUi();
     queueMicrotask(() => focusWarehouseScanInput());
   }
   if (viewId === "viewMap"){
@@ -27007,6 +27020,156 @@ function maybeCreateDemoAlert(nodeId, unitTypeId){
   });
 }
 
+function updateWarehouseCameraStatus(message){
+  const status = $("warehouseCameraStatus");
+  if (status) status.textContent = String(message || "");
+}
+
+function renderWarehouseModeUi(){
+  const inBtn = $("btnWarehouseModeIn");
+  const outBtn = $("btnWarehouseModeOut");
+  const startBtn = $("btnWarehouseCameraStart");
+  const stopBtn = $("btnWarehouseCameraStop");
+  const mode = state.warehouseScan.mode === "out" ? "out" : "in";
+  if (inBtn){
+    inBtn.classList.toggle("warehouse-mode-active", mode === "in");
+    inBtn.classList.toggle("ghost", mode !== "in");
+  }
+  if (outBtn){
+    outBtn.classList.toggle("warehouse-mode-active", mode === "out");
+    outBtn.classList.toggle("ghost", mode !== "out");
+  }
+  if (startBtn) startBtn.disabled = Boolean(state.warehouseScan.cameraActive);
+  if (stopBtn) stopBtn.disabled = !state.warehouseScan.cameraActive;
+}
+
+async function ensureWarehouseBarcodeDetector(){
+  if (state.warehouseScan.detector) return state.warehouseScan.detector;
+  if (typeof window === "undefined" || !("BarcodeDetector" in window)) return null;
+  try{
+    state.warehouseScan.detector = new window.BarcodeDetector({
+      formats: ["qr_code", "code_128", "code_39", "ean_13", "ean_8", "upc_a", "upc_e", "itf", "codabar"],
+    });
+  } catch {
+    try{
+      state.warehouseScan.detector = new window.BarcodeDetector();
+    } catch {
+      state.warehouseScan.detector = null;
+    }
+  }
+  return state.warehouseScan.detector;
+}
+
+function stopWarehouseScanCamera(){
+  const ws = state.warehouseScan;
+  if (ws.cameraRaf){
+    cancelAnimationFrame(ws.cameraRaf);
+    ws.cameraRaf = 0;
+  }
+  ws.detectBusy = false;
+  if (ws.cameraStream){
+    ws.cameraStream.getTracks().forEach((track) => {
+      try { track.stop(); } catch {}
+    });
+    ws.cameraStream = null;
+  }
+  ws.cameraActive = false;
+  const video = $("warehouseScanCameraStream");
+  if (video){
+    try { video.pause(); } catch {}
+    video.srcObject = null;
+  }
+  updateWarehouseCameraStatus("Camera scanner is off.");
+  renderWarehouseModeUi();
+}
+
+function processWarehouseDetectedCode(rawValue){
+  const value = String(rawValue || "").trim();
+  if (!value) return;
+  const now = Date.now();
+  if (value === state.warehouseScan.lastDetectedValue && (now - Number(state.warehouseScan.lastDetectedAt || 0)) < 1800){
+    return;
+  }
+  state.warehouseScan.lastDetectedValue = value;
+  state.warehouseScan.lastDetectedAt = now;
+  const input = $("warehouseScanInput");
+  if (input) input.value = value;
+  handleWarehouseScanSubmit(value);
+}
+
+async function tickWarehouseScanDetector(){
+  const ws = state.warehouseScan;
+  if (!ws.cameraActive){
+    ws.cameraRaf = 0;
+    return;
+  }
+  ws.cameraRaf = requestAnimationFrame(() => { void tickWarehouseScanDetector(); });
+  const detector = ws.detector;
+  const video = $("warehouseScanCameraStream");
+  if (!detector || !video || video.readyState < 2) return;
+  const now = Date.now();
+  if (ws.detectBusy || (now - Number(ws.lastDetectAttemptAt || 0)) < 220) return;
+  ws.lastDetectAttemptAt = now;
+  ws.detectBusy = true;
+  try{
+    const found = await detector.detect(video);
+    const first = Array.isArray(found) && found.length ? found[0] : null;
+    const rawValue = first?.rawValue || "";
+    if (rawValue){
+      processWarehouseDetectedCode(rawValue);
+    }
+  } catch {
+    // ignore detector frame failures and continue scanning
+  } finally {
+    ws.detectBusy = false;
+  }
+}
+
+async function startWarehouseScanCamera(){
+  const ws = state.warehouseScan;
+  if (ws.cameraActive){
+    renderWarehouseModeUi();
+    return;
+  }
+  const video = $("warehouseScanCameraStream");
+  if (!video){
+    toast("Scanner unavailable", "Camera preview element not found.");
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    toast("Camera unavailable", "This browser does not support camera capture.");
+    updateWarehouseCameraStatus("Camera unavailable in this browser.");
+    return;
+  }
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } },
+      audio: false,
+    });
+    video.srcObject = stream;
+    try { await video.play(); } catch {}
+    ws.cameraStream = stream;
+    ws.cameraActive = true;
+    ws.lastDetectedValue = "";
+    ws.lastDetectedAt = 0;
+    ws.lastDetectAttemptAt = 0;
+    ws.detector = await ensureWarehouseBarcodeDetector();
+    if (ws.detector){
+      updateWarehouseCameraStatus("Camera active. Point at ONT/router barcode or QR code.");
+      void tickWarehouseScanDetector();
+    } else {
+      updateWarehouseCameraStatus("Camera active. Barcode auto-detect unsupported here; use manual scan input.");
+      toast("Limited scanner support", "Camera is on, but this browser does not support native barcode detection.");
+    }
+  } catch (err){
+    console.warn("Warehouse camera start failed:", err);
+    toast("Camera blocked", "Allow camera access to scan ONT/router barcodes.");
+    updateWarehouseCameraStatus("Camera permission denied or unavailable.");
+    stopWarehouseScanCamera();
+  }
+  renderWarehouseModeUi();
+}
+
 function loadWarehouseScanState(){
   if (state.warehouseScan.loaded) return;
   const raw = safeLocalStorageGet(WAREHOUSE_SCAN_ITEMS_KEY);
@@ -27128,7 +27291,7 @@ function renderWarehouseScanResult(){
       <div class="muted small">Qty on hand: <b>${qty}</b></div>
       <div class="row" style="margin-top:10px;">
         <button class="btn" type="button" data-warehouse-action="receiveStock">Receive Into Stock</button>
-        <button class="btn ghost" type="button" data-warehouse-action="issueLater">Issue Later</button>
+        <button class="btn danger" type="button" data-warehouse-action="issueStock" ${qty <= 0 ? "disabled" : ""}>Issue From Stock</button>
       </div>
     </div>
   `;
@@ -27138,10 +27301,12 @@ function renderWarehouseScanView(){
   loadWarehouseScanState();
   const status = $("warehouseScanStatus");
   if (status){
+    const modeLabel = state.warehouseScan.mode === "out" ? "Scan Out mode (-1)" : "Scan In mode (+1)";
     status.textContent = state.warehouseScan.lastScannedValue
-      ? `Last scan: ${state.warehouseScan.lastScannedValue}`
-      : "Ready to scan.";
+      ? `Last scan: ${state.warehouseScan.lastScannedValue} • ${modeLabel}`
+      : `Ready to scan. ${modeLabel}`;
   }
+  renderWarehouseModeUi();
   renderWarehouseScanResult();
 }
 
@@ -27164,6 +27329,37 @@ function upsertWarehouseScannedItem(item){
   return next;
 }
 
+function applyWarehouseScanModeAction(match){
+  const mode = state.warehouseScan.mode === "out" ? "out" : "in";
+  const item = match?.item || null;
+  if (!item) return false;
+  const qty = Number(item.qty_on_hand || 0);
+  if (mode === "out"){
+    if (qty <= 0){
+      toast("No stock", `${item.material_name || "Item"} has no quantity available to issue.`);
+      return false;
+    }
+    const next = upsertWarehouseScannedItem({
+      ...item,
+      barcode_value: item.barcode_value || state.warehouseScan.lastScannedValue,
+      qty_on_hand: qty - 1,
+    });
+    persistWarehouseScanState();
+    state.warehouseScan.match = { source: "warehouse", item: next };
+    toast("Inventory scanned out", `${next.material_name || "Item"} -1 (Qty ${Number(next.qty_on_hand || 0)}).`);
+    return true;
+  }
+  const next = upsertWarehouseScannedItem({
+    ...item,
+    barcode_value: item.barcode_value || state.warehouseScan.lastScannedValue,
+    qty_on_hand: qty + 1,
+  });
+  persistWarehouseScanState();
+  state.warehouseScan.match = { source: "warehouse", item: next };
+  toast("Inventory scanned in", `${next.material_name || "Item"} +1 (Qty ${Number(next.qty_on_hand || 0)}).`);
+  return true;
+}
+
 function handleWarehouseScanSubmit(scanValue){
   const value = String(scanValue || "").trim();
   if (!value){
@@ -27173,11 +27369,13 @@ function handleWarehouseScanSubmit(scanValue){
   }
   state.warehouseScan.lastScannedValue = value;
   state.warehouseScan.match = findWarehouseScanMatch(value);
+  const matched = state.warehouseScan.match;
+  if (matched){
+    applyWarehouseScanModeAction(matched);
+  }
   closeWarehouseCreateForm();
   renderWarehouseScanView();
-  if (state.warehouseScan.match){
-    toast("Item found", "Inventory item matched.");
-  } else {
+  if (!state.warehouseScan.match){
     toast("Item not found", "Create a new inventory item.");
   }
   const input = $("warehouseScanInput");
@@ -29191,10 +29389,51 @@ function wireUI(){
         focusWarehouseScanInput();
         return;
       }
-      if (action === "issueLater"){
-        toast("Queued", "Item flagged for issue workflow.");
+      if (action === "issueStock"){
+        const match = state.warehouseScan.match?.item || null;
+        if (!match) return;
+        const qty = Number(match.qty_on_hand || 0);
+        if (qty <= 0){
+          toast("No stock", `${match.material_name || "Item"} has no quantity available to issue.`);
+          return;
+        }
+        const next = upsertWarehouseScannedItem({
+          ...match,
+          barcode_value: match.barcode_value || state.warehouseScan.lastScannedValue,
+          qty_on_hand: qty - 1,
+        });
+        persistWarehouseScanState();
+        state.warehouseScan.match = { source: "warehouse", item: next };
+        renderWarehouseScanView();
+        toast("Inventory updated", `${next.material_name || "Item"} issued from stock.`);
         focusWarehouseScanInput();
       }
+    });
+  }
+  const warehouseModeInBtn = $("btnWarehouseModeIn");
+  if (warehouseModeInBtn){
+    warehouseModeInBtn.addEventListener("click", () => {
+      state.warehouseScan.mode = "in";
+      renderWarehouseScanView();
+      toast("Warehouse mode", "Scan In mode enabled (+1 per scan).");
+    });
+  }
+  const warehouseModeOutBtn = $("btnWarehouseModeOut");
+  if (warehouseModeOutBtn){
+    warehouseModeOutBtn.addEventListener("click", () => {
+      state.warehouseScan.mode = "out";
+      renderWarehouseScanView();
+      toast("Warehouse mode", "Scan Out mode enabled (-1 per scan).");
+    });
+  }
+  const warehouseCameraStartBtn = $("btnWarehouseCameraStart");
+  if (warehouseCameraStartBtn){
+    warehouseCameraStartBtn.addEventListener("click", () => { void startWarehouseScanCamera(); });
+  }
+  const warehouseCameraStopBtn = $("btnWarehouseCameraStop");
+  if (warehouseCameraStopBtn){
+    warehouseCameraStopBtn.addEventListener("click", () => {
+      stopWarehouseScanCamera();
     });
   }
   const warehouseCreateForm = $("warehouseCreateForm");
