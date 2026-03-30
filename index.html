@@ -1442,6 +1442,23 @@
               <video id="warehouseScanCameraStream" autoplay playsinline muted></video>
               <div id="warehouseCameraStatus" class="muted small" style="margin-top:8px;">Camera scanner is off.</div>
             </div>
+            <div class="card" style="margin-top:12px;">
+              <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+                <h3 style="margin:0;">Label Capture</h3>
+                <button id="btnWarehouseFinalizeTransaction" class="btn small" type="button">Finalize Scan Transaction</button>
+              </div>
+              <div class="muted small" style="margin-top:6px;">Tap a field, then scan that barcode from the ONT/router label.</div>
+              <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+                <button class="btn ghost small" type="button" data-warehouse-capture-target="product_desc">Product Desc</button>
+                <button class="btn ghost small" type="button" data-warehouse-capture-target="model_no">Model No</button>
+                <button class="btn ghost small" type="button" data-warehouse-capture-target="serial_no">Serial No</button>
+                <button class="btn ghost small" type="button" data-warehouse-capture-target="fsan">FSAN</button>
+                <button class="btn ghost small" type="button" data-warehouse-capture-target="onu_mac">ONU MAC</button>
+                <button class="btn ghost small" type="button" data-warehouse-capture-target="mta_mac">MTA MAC</button>
+                <button class="btn ghost small" type="button" data-warehouse-capture-target="clei">CLEI</button>
+              </div>
+              <div id="warehouseCaptureStatus" class="muted small" style="margin-top:8px;">No field selected.</div>
+            </div>
             <form id="warehouseScanForm" class="row" style="margin-top:12px;" autocomplete="off">
               <input id="warehouseScanInput" class="input" placeholder="Scan barcode / QR / serial" />
               <button id="btnWarehouseScanSubmit" class="btn" type="submit">Scan</button>
@@ -1457,6 +1474,10 @@
                 <input id="warehouseCreateModel" class="input" placeholder="model" />
                 <input id="warehouseCreateSerialNumber" class="input" placeholder="serial_number" />
                 <input id="warehouseCreateBarcodeValue" class="input" placeholder="barcode_value" />
+                <input id="warehouseCreateFsan" class="input" placeholder="fsan" />
+                <input id="warehouseCreateOnuMac" class="input" placeholder="onu_mac" />
+                <input id="warehouseCreateMtaMac" class="input" placeholder="mta_mac" />
+                <input id="warehouseCreateClei" class="input" placeholder="clei" />
                 <textarea id="warehouseCreateDescription" class="input" rows="3" placeholder="description"></textarea>
                 <div class="row">
                   <button id="btnWarehouseCreateSave" class="btn" type="submit">Save Item</button>

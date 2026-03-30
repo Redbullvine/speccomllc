@@ -5330,4 +5330,8 @@ body:not(.map-mode) .tech-workspace {
   border-color: rgba(0, 212, 255, 0.65) !important;
   color: #d0ecff !important;
   box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.15);
+}.warehouse-capture-active{
+  border-color: rgba(0, 212, 255, 0.65) !important;
+  color: #d0ecff !important;
+  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.15);
 }

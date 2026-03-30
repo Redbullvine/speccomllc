@@ -218,6 +218,7 @@ const state = {
     lastDetectedValue: "",
     lastDetectedAt: 0,
     lastDetectAttemptAt: 0,
+    captureTarget: "",
   },
   projects: [],
   messages: [],
@@ -27025,6 +27026,49 @@ function updateWarehouseCameraStatus(message){
   if (status) status.textContent = String(message || "");
 }
 
+const WAREHOUSE_CAPTURE_FIELDS = [
+  "product_desc",
+  "model_no",
+  "serial_no",
+  "fsan",
+  "onu_mac",
+  "mta_mac",
+  "clei",
+];
+
+const WAREHOUSE_CAPTURE_LABELS = {
+  product_desc: "Product Desc",
+  model_no: "Model No",
+  serial_no: "Serial No",
+  fsan: "FSAN",
+  onu_mac: "ONU MAC",
+  mta_mac: "MTA MAC",
+  clei: "CLEI",
+};
+
+function getWarehouseCaptureInputId(target){
+  if (target === "product_desc") return "warehouseCreateMaterialName";
+  if (target === "model_no") return "warehouseCreateModel";
+  if (target === "serial_no") return "warehouseCreateSerialNumber";
+  if (target === "fsan") return "warehouseCreateFsan";
+  if (target === "onu_mac") return "warehouseCreateOnuMac";
+  if (target === "mta_mac") return "warehouseCreateMtaMac";
+  if (target === "clei") return "warehouseCreateClei";
+  return "";
+}
+
+function getNextWarehouseCaptureTarget(current){
+  const idx = WAREHOUSE_CAPTURE_FIELDS.indexOf(String(current || ""));
+  if (idx < 0 || idx >= WAREHOUSE_CAPTURE_FIELDS.length - 1) return "";
+  return WAREHOUSE_CAPTURE_FIELDS[idx + 1];
+}
+
+function setWarehouseCaptureTarget(target){
+  const normalized = WAREHOUSE_CAPTURE_FIELDS.includes(String(target || "")) ? String(target) : "";
+  state.warehouseScan.captureTarget = normalized;
+  renderWarehouseModeUi();
+}
+
 function renderWarehouseModeUi(){
   const inBtn = $("btnWarehouseModeIn");
   const outBtn = $("btnWarehouseModeOut");
@@ -27041,6 +27085,17 @@ function renderWarehouseModeUi(){
   }
   if (startBtn) startBtn.disabled = Boolean(state.warehouseScan.cameraActive);
   if (stopBtn) stopBtn.disabled = !state.warehouseScan.cameraActive;
+  const captureTarget = String(state.warehouseScan.captureTarget || "");
+  const captureStatus = $("warehouseCaptureStatus");
+  if (captureStatus){
+    captureStatus.textContent = captureTarget
+      ? `Selected field: ${WAREHOUSE_CAPTURE_LABELS[captureTarget] || captureTarget}. Scan now.`
+      : "No field selected.";
+  }
+  document.querySelectorAll("button[data-warehouse-capture-target]").forEach((btn) => {
+    const target = String(btn?.dataset?.warehouseCaptureTarget || "");
+    btn.classList.toggle("warehouse-capture-active", target === captureTarget);
+  });
 }
 
 async function ensureWarehouseBarcodeDetector(){
@@ -27092,9 +27147,48 @@ function processWarehouseDetectedCode(rawValue){
   }
   state.warehouseScan.lastDetectedValue = value;
   state.warehouseScan.lastDetectedAt = now;
+  const captureTarget = String(state.warehouseScan.captureTarget || "");
+  if (captureTarget){
+    handleWarehouseFieldCapture(captureTarget, value);
+    return;
+  }
   const input = $("warehouseScanInput");
   if (input) input.value = value;
   handleWarehouseScanSubmit(value);
+}
+
+function handleWarehouseFieldCapture(target, value){
+  const wrap = $("warehouseCreateWrap");
+  if (wrap && wrap.style.display === "none"){
+    wrap.style.display = "";
+  }
+  const inputId = getWarehouseCaptureInputId(target);
+  if (!inputId){
+    handleWarehouseScanSubmit(value);
+    return;
+  }
+  const input = $(inputId);
+  if (!input){
+    handleWarehouseScanSubmit(value);
+    return;
+  }
+  input.value = String(value || "");
+  if (target === "serial_no"){
+    const barcodeInput = $("warehouseCreateBarcodeValue");
+    if (barcodeInput && !String(barcodeInput.value || "").trim()){
+      barcodeInput.value = String(value || "");
+    }
+  }
+  const next = getNextWarehouseCaptureTarget(target);
+  state.warehouseScan.captureTarget = next;
+  renderWarehouseModeUi();
+  const label = WAREHOUSE_CAPTURE_LABELS[target] || target;
+  if (next){
+    const nextLabel = WAREHOUSE_CAPTURE_LABELS[next] || next;
+    toast("Captured", `${label} scanned. Next: ${nextLabel}.`);
+  } else {
+    toast("Captured", `${label} scanned. Ready to finalize transaction.`);
+  }
 }
 
 async function tickWarehouseScanDetector(){
@@ -27207,6 +27301,10 @@ function findWarehouseScanMatch(scanValue){
       item.serial_number,
       item.model,
       item.material_name,
+      item.fsan,
+      item.onu_mac,
+      item.mta_mac,
+      item.clei,
     ].some((value) => String(value || "").trim().toLowerCase() === needle);
   });
   if (localMatch){
@@ -27248,6 +27346,10 @@ function openWarehouseCreateForm(scanValue = ""){
   $("warehouseCreateModel").value = "";
   $("warehouseCreateSerialNumber").value = "";
   $("warehouseCreateBarcodeValue").value = String(scanValue || "");
+  if ($("warehouseCreateFsan")) $("warehouseCreateFsan").value = "";
+  if ($("warehouseCreateOnuMac")) $("warehouseCreateOnuMac").value = "";
+  if ($("warehouseCreateMtaMac")) $("warehouseCreateMtaMac").value = "";
+  if ($("warehouseCreateClei")) $("warehouseCreateClei").value = "";
   $("warehouseCreateDescription").value = "";
 }
 
@@ -27288,6 +27390,7 @@ function renderWarehouseScanResult(){
         Barcode: ${escapeHtml(item.barcode_value || "-")} | Serial: ${escapeHtml(item.serial_number || "-")}
       </div>
       <div class="muted small">Category: ${escapeHtml(item.category || "-")} | Brand: ${escapeHtml(item.brand || "-")} | Model: ${escapeHtml(item.model || "-")}</div>
+      <div class="muted small">FSAN: ${escapeHtml(item.fsan || "-")} | ONU MAC: ${escapeHtml(item.onu_mac || "-")} | MTA MAC: ${escapeHtml(item.mta_mac || "-")} | CLEI: ${escapeHtml(item.clei || "-")}</div>
       <div class="muted small">Qty on hand: <b>${qty}</b></div>
       <div class="row" style="margin-top:10px;">
         <button class="btn" type="button" data-warehouse-action="receiveStock">Receive Into Stock</button>
@@ -27360,11 +27463,73 @@ function applyWarehouseScanModeAction(match){
   return true;
 }
 
+function buildWarehouseItemFromCreateForm(){
+  return {
+    material_name: $("warehouseCreateMaterialName")?.value?.trim() || "",
+    category: $("warehouseCreateCategory")?.value?.trim() || "",
+    brand: $("warehouseCreateBrand")?.value?.trim() || "",
+    model: $("warehouseCreateModel")?.value?.trim() || "",
+    serial_number: $("warehouseCreateSerialNumber")?.value?.trim() || "",
+    barcode_value: $("warehouseCreateBarcodeValue")?.value?.trim() || "",
+    fsan: $("warehouseCreateFsan")?.value?.trim() || "",
+    onu_mac: $("warehouseCreateOnuMac")?.value?.trim() || "",
+    mta_mac: $("warehouseCreateMtaMac")?.value?.trim() || "",
+    clei: $("warehouseCreateClei")?.value?.trim() || "",
+    description: $("warehouseCreateDescription")?.value?.trim() || "",
+  };
+}
+
+function finalizeWarehouseScanTransaction(){
+  const draft = buildWarehouseItemFromCreateForm();
+  const lookupCandidates = [
+    draft.serial_number,
+    draft.barcode_value,
+    draft.onu_mac,
+    draft.mta_mac,
+    draft.fsan,
+    draft.model,
+  ].filter(Boolean);
+  let match = null;
+  for (const candidate of lookupCandidates){
+    match = findWarehouseScanMatch(candidate);
+    if (match) break;
+  }
+  if (!match){
+    if (!draft.material_name){
+      draft.material_name = draft.model || "ONT / Router";
+    }
+    if (!draft.barcode_value){
+      draft.barcode_value = draft.serial_number || draft.onu_mac || draft.mta_mac || state.warehouseScan.lastScannedValue || "";
+    }
+    if (!draft.barcode_value){
+      toast("Scan required", "Capture at least one barcode field (serial/MAC/FSAN) before finalizing.");
+      return;
+    }
+    const created = upsertWarehouseScannedItem({ ...draft, qty_on_hand: 0 });
+    persistWarehouseScanState();
+    match = { source: "warehouse", item: created };
+  }
+  state.warehouseScan.match = match;
+  state.warehouseScan.lastScannedValue = draft.barcode_value || draft.serial_number || state.warehouseScan.lastScannedValue || "";
+  applyWarehouseScanModeAction(match);
+  renderWarehouseScanView();
+}
+
 function handleWarehouseScanSubmit(scanValue){
   const value = String(scanValue || "").trim();
   if (!value){
     toast("Scan required", "Scan barcode / QR / serial first.");
     focusWarehouseScanInput();
+    return;
+  }
+  const captureTarget = String(state.warehouseScan.captureTarget || "");
+  if (captureTarget){
+    handleWarehouseFieldCapture(captureTarget, value);
+    const inputCapture = $("warehouseScanInput");
+    if (inputCapture){
+      inputCapture.value = "";
+      focusWarehouseScanInput();
+    }
     return;
   }
   state.warehouseScan.lastScannedValue = value;
@@ -29436,6 +29601,21 @@ function wireUI(){
       stopWarehouseScanCamera();
     });
   }
+  const warehouseFinalizeBtn = $("btnWarehouseFinalizeTransaction");
+  if (warehouseFinalizeBtn){
+    warehouseFinalizeBtn.addEventListener("click", () => {
+      finalizeWarehouseScanTransaction();
+    });
+  }
+  document.querySelectorAll("button[data-warehouse-capture-target]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = String(btn.dataset.warehouseCaptureTarget || "");
+      if (!target) return;
+      setWarehouseCaptureTarget(target);
+      const label = WAREHOUSE_CAPTURE_LABELS[target] || target;
+      toast("Capture target", `${label} selected. Scan now.`);
+    });
+  });
   const warehouseCreateForm = $("warehouseCreateForm");
   if (warehouseCreateForm){
     warehouseCreateForm.addEventListener("submit", (e) => {
@@ -29447,6 +29627,10 @@ function wireUI(){
         model: $("warehouseCreateModel")?.value?.trim() || "",
         serial_number: $("warehouseCreateSerialNumber")?.value?.trim() || "",
         barcode_value: $("warehouseCreateBarcodeValue")?.value?.trim() || "",
+        fsan: $("warehouseCreateFsan")?.value?.trim() || "",
+        onu_mac: $("warehouseCreateOnuMac")?.value?.trim() || "",
+        mta_mac: $("warehouseCreateMtaMac")?.value?.trim() || "",
+        clei: $("warehouseCreateClei")?.value?.trim() || "",
         description: $("warehouseCreateDescription")?.value?.trim() || "",
         qty_on_hand: 0,
       };
