@@ -5241,3 +5241,82 @@ body:not(.map-mode) .tech-workspace {
 #viewTechnician .tech-clock-status {
   color: var(--chrome-secondary);
 }
+/* -- Technician Workspace round 2 fixes ------------------------------ */
+#viewTechnician .tech-summary-card {
+  background: var(--midnight-surface);
+  border: 1px solid var(--midnight-border);
+  border-top: 2px solid var(--chrome-highlight);
+  border-radius: 10px;
+  overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#viewTechnician #techSummary .kpi {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+#viewTechnician #techSummary .tile {
+  background: var(--midnight-elevated);
+  border: 1px solid var(--midnight-border);
+  border-radius: 8px;
+  color: var(--chrome-primary);
+  min-width: 0;
+}
+
+#viewTechnician #techSummary .tile .label,
+#viewTechnician .tech-summary-card > h2.tech-section-title {
+  color: var(--chrome-secondary);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+#viewTechnician .tech-summary-card > h2.tech-section-title {
+  letter-spacing: 0.1em;
+}
+
+#viewTechnician #techSummary .tile .value {
+  color: var(--chrome-primary);
+  font-weight: 600;
+}
+
+#viewTechnician #techLocationTrail,
+#viewTechnician #techLocationTrail .muted,
+#viewTechnician #techLocationTrail.muted,
+#viewTechnician #techLocationTrail .small {
+  color: var(--chrome-muted) !important;
+  font-size: 0.75rem;
+}
+
+#viewTechnician #techJobState {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  box-sizing: border-box;
+}
+
+#viewTechnician #techJobState:has(.status-not-started) {
+  border: 1px solid rgba(200, 220, 240, 0.5);
+  color: #8899aa;
+  background: transparent;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#viewTechnician #techJobState:has(.status-not-started) .dot.status-not-started {
+  width: 6px;
+  height: 6px;
+  background: #8899aa;
+}
+
+@media (max-width: 900px) {
+  #viewTechnician #techSummary .kpi {
+    grid-template-columns: 1fr;
+  }
+}
