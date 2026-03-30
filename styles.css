@@ -5022,3 +5022,222 @@ body:not(.map-mode) .tech-workspace {
   object-fit: contain;
   display: block;
 }
+
+/* -- Technician Workspace Midnight Metallic Blue + Chrome theme ----- */
+:root {
+  --midnight-base: #060d1a;
+  --midnight-surface: #0a1628;
+  --midnight-elevated: #0f2040;
+  --midnight-border: rgba(160, 200, 230, 0.15);
+  --chrome-highlight: rgba(180, 210, 240, 0.35);
+  --chrome-primary: #d0dce8;
+  --chrome-secondary: #7a9ab8;
+  --chrome-muted: #4a6a88;
+  --chrome-border: rgba(200, 220, 240, 0.5);
+  --teal-accent: #00d4ff;
+  --status-not-started: #8899aa;
+  --status-in-progress: #f0a040;
+  --status-complete: #40d090;
+  --check-in-green: #00c070;
+  --check-out-red: #e05050;
+}
+
+#viewTechnician {
+  background: var(--midnight-base) !important;
+}
+
+#viewTechnician::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.06;
+  background-repeat: no-repeat, no-repeat;
+  background-position: center -40px, center 160px;
+  background-size: min(130vw, 1800px) 520px, min(130vw, 1800px) 620px;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 600' fill='none'%3E%3Cpath d='M-120 420C120 280 380 260 620 350C820 425 1080 410 1360 260C1510 178 1670 172 1780 210' stroke='%2300d4ff' stroke-width='2.25' stroke-linecap='round'/%3E%3Cpath d='M-140 520C90 400 320 380 530 450C790 538 1060 520 1330 380C1490 296 1670 284 1780 320' stroke='%2300d4ff' stroke-width='1.75' stroke-linecap='round'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 700' fill='none'%3E%3Cpath d='M-120 300C100 220 380 220 620 300C840 372 1090 378 1320 290C1510 220 1680 224 1780 260' stroke='%2300d4ff' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M-120 160C120 104 370 114 590 184C820 258 1080 264 1320 200C1520 146 1680 150 1780 182' stroke='%2300d4ff' stroke-width='1.2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+#viewTechnician > * {
+  position: relative;
+  z-index: 1;
+}
+
+#viewTechnician.tech-workspace,
+#viewTechnician .tech-clock-bar,
+#viewTechnician .tech-main-col,
+#viewTechnician .tech-side-col {
+  background: transparent;
+}
+
+#viewTechnician .tech-clock-bar {
+  border-bottom: 1px solid var(--midnight-border);
+}
+
+#viewTechnician .tech-side-col {
+  border-left: 1px solid var(--midnight-border);
+}
+
+#viewTechnician .tech-active-card,
+#viewTechnician .tech-orders-card,
+#viewTechnician .tech-summary-card,
+#viewTechnician .wo-card {
+  background: var(--midnight-surface);
+  border: 1px solid var(--midnight-border);
+  border-top: 1px solid var(--chrome-highlight);
+  border-radius: 10px;
+}
+
+#viewTechnician .tech-clock-btn.clock-in {
+  background: var(--check-in-green);
+  border-color: var(--check-in-green);
+}
+
+#viewTechnician .tech-clock-btn.clock-in:hover {
+  filter: brightness(1.08);
+}
+
+#viewTechnician .tech-clock-btn.clock-out {
+  background: var(--check-out-red);
+  border-color: var(--check-out-red);
+}
+
+#viewTechnician .tech-clock-btn.clock-out:hover {
+  filter: brightness(1.08);
+}
+
+#viewTechnician article.tech-shift-item {
+  background: var(--midnight-surface);
+  border: 1px solid var(--midnight-border);
+  border-top: 1px solid var(--chrome-highlight);
+  border-left: 1px solid var(--midnight-border);
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), 0 0 0 0 var(--teal-accent);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+#viewTechnician article.tech-shift-item:hover {
+  background: var(--midnight-elevated);
+  border-color: rgba(0, 212, 255, 0.3);
+  box-shadow: 0 6px 32px rgba(0, 0, 0, 0.5), 0 0 12px rgba(0, 212, 255, 0.08);
+}
+
+#viewTechnician .tech-shift-title {
+  color: var(--chrome-primary);
+  font-weight: 600;
+}
+
+#viewTechnician .tech-shift-sub,
+#viewTechnician article.tech-shift-item .muted.small {
+  color: var(--chrome-secondary);
+}
+
+#viewTechnician article.tech-shift-item .muted {
+  color: var(--chrome-muted);
+}
+
+#viewTechnician .status-pill.status-not-started,
+#viewTechnician .status-not-started {
+  border: 1px solid var(--chrome-border);
+  color: var(--status-not-started);
+  background: transparent;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  box-shadow: none;
+}
+
+#viewTechnician .status-pill.status-in-progress,
+#viewTechnician .status-in-progress {
+  border: 1px solid var(--status-in-progress);
+  color: var(--status-in-progress);
+  background: rgba(240, 160, 64, 0.1);
+  box-shadow: 0 0 8px rgba(240, 160, 64, 0.3);
+}
+
+#viewTechnician .status-pill.status-complete,
+#viewTechnician .status-complete {
+  border: 1px solid var(--status-complete);
+  color: var(--status-complete);
+  background: rgba(64, 208, 144, 0.1);
+  box-shadow: 0 0 8px rgba(64, 208, 144, 0.3);
+}
+/* -- Technician Workspace step 5-8 refinements ---------------------- */
+#viewTechnician .tech-shift-actions button[data-tech-shift-action="focus"] {
+  border: 1px solid rgba(160, 200, 230, 0.3);
+  color: var(--chrome-primary);
+  background: rgba(255,255,255,0.04);
+  border-radius: 6px;
+  padding: 4px 14px;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+#viewTechnician .tech-shift-actions button[data-tech-shift-action="focus"]:hover {
+  background: rgba(0, 212, 255, 0.08);
+  border-color: var(--teal-accent);
+  color: var(--teal-accent);
+}
+
+#viewTechnician .tech-clock-btn.clock-in {
+  background: linear-gradient(135deg, #00c070, #009954);
+  box-shadow: 0 2px 12px rgba(0, 192, 112, 0.4);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+#viewTechnician .tech-clock-btn.clock-out {
+  background: linear-gradient(135deg, #e05050, #b83030);
+  box-shadow: 0 2px 12px rgba(224, 80, 80, 0.4);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+#viewTechnician .tech-main-col > .card,
+#viewTechnician .tech-active-card,
+#viewTechnician .tech-orders-card,
+#viewTechnician .tech-summary-card,
+#viewTechnician .tech-current-card,
+#viewTechnician .wo-card {
+  background: var(--midnight-surface);
+  border: 1px solid var(--midnight-border);
+  border-top: 1px solid var(--chrome-highlight);
+  border-radius: 10px;
+}
+
+#viewTechnician .tech-section-title,
+#viewTechnician .tech-orders-card h3,
+#viewTechnician .tech-summary-card h3 {
+  color: var(--chrome-secondary);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+}
+
+#viewTechnician .tech-summary-card,
+#viewTechnician #techSummary .tile,
+#viewTechnician #techSummary .label,
+#viewTechnician #techSummary .value,
+#viewTechnician #techSummary + .hr + h3,
+#viewTechnician #techLocationTrail,
+#viewTechnician .tech-clock-status,
+#viewTechnician .tech-job-state-chip {
+  color: var(--chrome-primary);
+}
+
+#viewTechnician #techSummary .label,
+#viewTechnician #techLocationTrail,
+#viewTechnician .tech-clock-status {
+  color: var(--chrome-secondary);
+}
