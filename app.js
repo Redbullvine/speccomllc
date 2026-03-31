@@ -2241,6 +2241,7 @@ let errorDudeHideTimer = null;
 function showErrorDude(message){
   const wrap = $("errorDudeToast");
   const sign = $("errorDudeSignText");
+  const figure = wrap?.querySelector?.(".error-dude-wrap");
   if (!wrap || !sign){
     $("toastTitle").textContent = "Error";
     $("toastBody").textContent = message || "Something went wrong.";
@@ -2253,15 +2254,29 @@ function showErrorDude(message){
   wrap.style.display = "flex";
   wrap.classList.remove("is-leaving");
   wrap.classList.add("show");
+  if (figure instanceof HTMLElement){
+    // Fail-safe: force entrance animation so the character does not stay off-screen.
+    figure.style.animation = "none";
+    figure.style.transform = "translateX(120%)";
+    void figure.offsetWidth;
+    figure.style.animation = "errorDudeCartoonIn .52s cubic-bezier(.2,.85,.3,1) forwards";
+  }
   clearTimeout(errorDudeLeaveTimer);
   clearTimeout(errorDudeHideTimer);
   errorDudeLeaveTimer = setTimeout(() => {
     wrap.classList.add("is-leaving");
-  }, 4000);
+    if (figure instanceof HTMLElement){
+      figure.style.animation = "errorDudeCartoonOut .65s ease-in-out forwards";
+    }
+  }, 5000);
   errorDudeHideTimer = setTimeout(() => {
     wrap.classList.remove("show", "is-leaving");
+    if (figure instanceof HTMLElement){
+      figure.style.animation = "";
+      figure.style.transform = "";
+    }
     wrap.style.display = "none";
-  }, 4700);
+  }, 5800);
 }
 window.showErrorDude = showErrorDude;
 
