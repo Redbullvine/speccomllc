@@ -1773,6 +1773,10 @@ function isMobileViewport(){
   return window.matchMedia("(max-width: 900px)").matches;
 }
 
+function isBottomNavViewport(){
+  return window.matchMedia("(max-width: 480px)").matches;
+}
+
 function isMapViewActive(){
   return Boolean($("viewMap")?.classList.contains("active"));
 }
@@ -2214,6 +2218,17 @@ function isDuplicateKeyError(error){
 }
 
 function toast(title, body, variant){
+  const message = [title, body].filter(Boolean).join(" | ");
+  const mobileErrorLike = (() => {
+    if (!isBottomNavViewport()) return false;
+    if (variant === "error") return true;
+    const source = String(message || "").toLowerCase();
+    return source.includes("item not found") || source.includes("no match");
+  })();
+  if (mobileErrorLike){
+    showErrorDude(message || "Something went wrong.");
+    return;
+  }
   $("toastTitle").textContent = title;
   $("toastBody").textContent = body;
   const toastEl = $("toast");
@@ -2221,6 +2236,35 @@ function toast(title, body, variant){
   toastEl.classList.add("show");
   setTimeout(() => toastEl.classList.remove("show"), 4200);
 }
+
+let errorDudeLeaveTimer = null;
+let errorDudeHideTimer = null;
+function showErrorDude(message){
+  const wrap = $("errorDudeToast");
+  const sign = $("errorDudeSignText");
+  if (!wrap || !sign){
+    $("toastTitle").textContent = "Error";
+    $("toastBody").textContent = message || "Something went wrong.";
+    const toastEl = $("toast");
+    toastEl.classList.add("error", "show");
+    setTimeout(() => toastEl.classList.remove("show"), 4200);
+    return;
+  }
+  sign.textContent = String(message || "Something went wrong.");
+  wrap.style.display = "";
+  wrap.classList.remove("is-leaving");
+  wrap.classList.add("show");
+  clearTimeout(errorDudeLeaveTimer);
+  clearTimeout(errorDudeHideTimer);
+  errorDudeLeaveTimer = setTimeout(() => {
+    wrap.classList.add("is-leaving");
+  }, 4000);
+  errorDudeHideTimer = setTimeout(() => {
+    wrap.classList.remove("show", "is-leaving");
+    wrap.style.display = "none";
+  }, 4700);
+}
+window.showErrorDude = showErrorDude;
 
 function reportErrorToast(title, error){
   const message = typeof error === "string" ? error : getDetailedErrorMessage(error);
@@ -2782,6 +2826,20 @@ function hasAuthenticatedSession(){
   return Boolean(state.user?.id);
 }
 
+function syncMobileBottomNav(viewId){
+  const nav = $("mobileBottomNav");
+  if (!nav) return;
+  const activeKey = (() => {
+    if (viewId === "viewDashboard") return "home";
+    if (viewId === "viewTechnician") return "timesheet";
+    if (viewId === "viewMap") return "map";
+    return "more";
+  })();
+  nav.querySelectorAll("button[data-mobile-nav]").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.mobileNav === activeKey);
+  });
+}
+
 function setActiveView(viewId, { syncHash = true } = {}){
   if (!CONTROL_CENTER_DEV_MODE && !hasAuthenticatedSession()){
     applySignedOutUi("set-active-view-blocked");
@@ -2800,6 +2858,7 @@ function setActiveView(viewId, { syncHash = true } = {}){
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.view === viewId);
   });
+  syncMobileBottomNav(viewId);
   if (viewId === "viewAdmin"){
     loadAdminProfiles();
     loadAdminMaterialSettings();
@@ -29383,6 +29442,29 @@ function wireUI(){
       if (btn) btn.click();
       else toast("Splice", "Open map workspace to add splice details.");
     });
+  }
+  const mobileBottomNav = $("mobileBottomNav");
+  if (mobileBottomNav){
+    mobileBottomNav.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-mobile-nav]");
+      if (!btn || !mobileBottomNav.contains(btn)) return;
+      const target = String(btn.dataset.mobileNav || "");
+      if (target === "home"){
+        if (isViewAllowed("viewDashboard")) setActiveView("viewDashboard");
+        return;
+      }
+      if (target === "timesheet"){
+        if (isViewAllowed("viewTechnician")) setActiveView("viewTechnician");
+        return;
+      }
+      if (target === "map"){
+        if (isViewAllowed("viewMap")) setActiveView("viewMap");
+        return;
+      }
+      openMenuModal();
+    });
+    const activeViewId = document.querySelector(".view.active")?.id || "viewDashboard";
+    syncMobileBottomNav(activeViewId);
   }
   const profilePageCloseBtn = $("btnProfilePageClose");
   if (profilePageCloseBtn){

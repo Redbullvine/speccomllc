@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SpecCom | Field Verification</title>
   <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -210,14 +210,24 @@
     #main-navbar {
       background: var(--nav-bg);
       border-bottom: 1px solid rgba(55,138,221,0.15);
-      padding: 0 24px;
-      height: 56px;
+      padding: 8px 16px;
+      min-height: 56px;
+      height: auto;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 10px;
       position: sticky;
       top: 0;
       z-index: 100;
+    }
+    .nav-logo-img {
+      height: clamp(24px, 4vw, 36px);
+      width: auto;
+      max-width: min(42vw, 180px);
+      object-fit: contain;
+      display: block;
+      flex-shrink: 1;
     }
     .nav-logo {
       font-family: var(--font-brand);
@@ -227,7 +237,14 @@
       color: #fff;
     }
     .nav-logo span { color: var(--accent-blue); }
-    .nav-tools { display: flex; align-items: center; gap: 6px; }
+    .nav-tools {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: nowrap;
+      min-width: 0;
+      margin-left: auto;
+    }
     .nav-pill {
       background: transparent;
       border: 1px solid rgba(255,255,255,0.12);
@@ -236,10 +253,15 @@
       font-size: 12px;
       font-weight: 300;
       letter-spacing: 1.5px;
-      padding: 6px 16px;
+      min-height: 44px;
+      padding: 10px 14px;
       border-radius: 20px;
       cursor: pointer;
       transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
     }
     .nav-pill:hover {
       border-color: rgba(55,138,221,0.5);
@@ -251,12 +273,20 @@
       border: none;
       color: rgba(160,190,220,0.5);
       cursor: pointer;
-      padding: 8px;
+      padding: 0;
+      width: 44px;
+      height: 44px;
+      min-height: 44px;
+      flex: 0 0 44px;
       border-radius: 8px;
       transition: all 0.2s;
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+    .nav-util svg {
+      width: 18px;
+      height: 18px;
     }
     .nav-util:hover {
       color: rgba(55,138,221,0.9);
@@ -655,6 +685,47 @@
       .cmd-right { width: 100%; flex-wrap: wrap; }
       .wx-stats, .wx-forecast { grid-template-columns: repeat(2,1fr); }
       #app-footer { flex-direction: column; gap: 6px; align-items: flex-start; }
+    }
+    @media (max-width: 480px) {
+      #main-navbar { display: none; }
+      body,
+      .app-container {
+        padding-bottom: calc(74px + env(safe-area-inset-bottom));
+      }
+      #mobileBottomNav { display: flex !important; }
+      #command-header {
+        margin: 12px 10px 0;
+        padding: 14px;
+      }
+      .section-label {
+        padding: 16px 12px 8px;
+      }
+      .ws-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        padding: 0 10px 12px;
+      }
+      .ws-card,
+      .msg-card,
+      .wx-card {
+        padding: 16px;
+      }
+      .ws-footer,
+      .msg-header {
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .msg-compose {
+        flex-direction: column;
+      }
+      .msg-send {
+        width: 100%;
+        min-height: 44px;
+      }
+      .wx-stats,
+      .wx-forecast {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
   </style>
 </head>
@@ -1431,7 +1502,7 @@
               <button id="btnWarehouseScanToCatalog" class="btn ghost small" type="button">Material Catalog</button>
             </div>
             <div class="muted small">Scan barcode, QR, or serial to intake inventory quickly.</div>
-            <div class="row" style="margin-top:10px; gap:8px; align-items:center; flex-wrap:wrap;">
+            <div class="row warehouse-mode-row" style="margin-top:10px; gap:8px; align-items:center; flex-wrap:wrap;">
               <span class="muted small">Mode:</span>
               <button id="btnWarehouseModeIn" class="btn small" type="button">Scan In (+1)</button>
               <button id="btnWarehouseModeOut" class="btn ghost small" type="button">Scan Out (-1)</button>
@@ -1448,7 +1519,7 @@
                 <button id="btnWarehouseFinalizeTransaction" class="btn small" type="button">Finalize Scan Transaction</button>
               </div>
               <div class="muted small" style="margin-top:6px;">Tap a field, then scan that barcode from the ONT/router label.</div>
-              <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+              <div class="row warehouse-capture-grid" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
                 <button class="btn ghost small" type="button" data-warehouse-capture-target="product_desc">Product Desc</button>
                 <button class="btn ghost small" type="button" data-warehouse-capture-target="model_no">Model No</button>
                 <button class="btn ghost small" type="button" data-warehouse-capture-target="serial_no">Serial No</button>
@@ -1459,7 +1530,7 @@
               </div>
               <div id="warehouseCaptureStatus" class="muted small" style="margin-top:8px;">No field selected.</div>
             </div>
-            <form id="warehouseScanForm" class="row" style="margin-top:12px;" autocomplete="off">
+            <form id="warehouseScanForm" class="row warehouse-scan-form" style="margin-top:12px;" autocomplete="off">
               <input id="warehouseScanInput" class="input" placeholder="Scan barcode / QR / serial" />
               <button id="btnWarehouseScanSubmit" class="btn" type="submit">Scan</button>
             </form>
@@ -1984,12 +2055,56 @@
     <div id="toastTitle" class="title">Notice</div>
     <div id="toastBody" class="body"></div>
   </div>
+  <div id="errorDudeToast" class="error-dude-toast" aria-live="polite" aria-atomic="true" style="display:none;">
+    <div class="error-dude-wrap">
+      <svg class="error-dude-svg" viewBox="0 0 96 96" role="img" aria-label="Error helper character">
+        <g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="20" cy="20" r="7"></circle>
+          <path d="M20 27v22"></path>
+          <path d="M20 34l-10 8"></path>
+          <path d="M20 34l10 8"></path>
+          <path d="M20 49l-8 14"></path>
+          <path d="M20 49l9 14"></path>
+          <path d="M31 22h24"></path>
+          <path d="M55 22l6 8-6 8"></path>
+        </g>
+        <rect x="56" y="14" width="34" height="22" rx="4" fill="currentColor" opacity=".18"></rect>
+      </svg>
+      <div class="error-dude-sign">
+        <span id="errorDudeSignText">Item not found</span>
+      </div>
+    </div>
+  </div>
   <nav id="mobileBottomNav" class="mobile-nav" aria-hidden="true" style="display:none;">
-    <button type="button">Home</button>
-    <button type="button">Jobs</button>
-    <button type="button">Map</button>
-    <button type="button">Messages</button>
-    <button type="button">More</button>
+    <button class="mobile-nav-btn is-active" type="button" data-mobile-nav="home" aria-label="Home">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M3 9.2L10 3l7 6.2"></path>
+        <path d="M5.5 8.8V17h9V8.8"></path>
+      </svg>
+      <span>Home</span>
+    </button>
+    <button class="mobile-nav-btn" type="button" data-mobile-nav="timesheet" aria-label="Timesheet">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="10" cy="10" r="7"></circle>
+        <path d="M10 6.5v4.1l2.8 1.8"></path>
+      </svg>
+      <span>Time</span>
+    </button>
+    <button class="mobile-nav-btn" type="button" data-mobile-nav="map" aria-label="Map">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M4 4.5l4.6-1.5 2.8 1 4.6-1.5v13L11.4 17l-2.8-1L4 17z"></path>
+        <path d="M8.6 3v13M11.4 4v13"></path>
+      </svg>
+      <span>Map</span>
+    </button>
+    <button class="mobile-nav-btn" type="button" data-mobile-nav="more" aria-label="More options">
+      <svg viewBox="0 0 20 20" fill="currentColor">
+        <circle cx="5" cy="10" r="1.6"></circle>
+        <circle cx="10" cy="10" r="1.6"></circle>
+        <circle cx="15" cy="10" r="1.6"></circle>
+      </svg>
+      <span>More</span>
+    </button>
   </nav>
   </div>
 
