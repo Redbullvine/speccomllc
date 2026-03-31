@@ -2257,11 +2257,11 @@ function showErrorDude(message){
   clearTimeout(errorDudeHideTimer);
   errorDudeLeaveTimer = setTimeout(() => {
     wrap.classList.add("is-leaving");
-  }, 4300);
+  }, 4000);
   errorDudeHideTimer = setTimeout(() => {
     wrap.classList.remove("show", "is-leaving");
     wrap.style.display = "none";
-  }, 5200);
+  }, 4700);
 }
 window.showErrorDude = showErrorDude;
 

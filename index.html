@@ -2057,22 +2057,44 @@
   </div>
   <div id="errorDudeToast" class="error-dude-toast" aria-live="polite" aria-atomic="true" style="display:none;">
     <div class="error-dude-wrap">
-      <svg class="error-dude-svg" viewBox="0 0 96 96" role="img" aria-label="Error helper character">
-        <g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="20" cy="20" r="7"></circle>
-          <path d="M20 27v22"></path>
-          <path d="M20 34l-10 8"></path>
-          <path d="M20 34l10 8"></path>
-          <path d="M20 49l-8 14"></path>
-          <path d="M20 49l9 14"></path>
-          <path d="M31 22h24"></path>
-          <path d="M55 22l6 8-6 8"></path>
-        </g>
-        <rect x="56" y="14" width="34" height="22" rx="4" fill="currentColor" opacity=".18"></rect>
-      </svg>
       <div class="error-dude-sign">
         <span id="errorDudeSignText">Item not found</span>
       </div>
+      <svg class="error-dude-svg" viewBox="0 0 120 180" role="img" aria-label="Cartoon man holding sign">
+        <defs>
+          <linearGradient id="hatGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#c8a46a"></stop>
+            <stop offset="100%" stop-color="#8d6533"></stop>
+          </linearGradient>
+          <linearGradient id="coatGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#7a4f2d"></stop>
+            <stop offset="100%" stop-color="#5b381f"></stop>
+          </linearGradient>
+        </defs>
+        <ellipse cx="68" cy="14" rx="28" ry="5" fill="#6f4a26"></ellipse>
+        <rect x="46" y="4" width="44" height="16" rx="6" fill="url(#hatGrad)" stroke="#5d3f20" stroke-width="2"></rect>
+        <ellipse cx="68" cy="24" rx="34" ry="8" fill="url(#hatGrad)" stroke="#5d3f20" stroke-width="2"></ellipse>
+
+        <circle cx="68" cy="50" r="23" fill="#f4cfaa" stroke="#9f6f48" stroke-width="2"></circle>
+        <rect x="53" y="45" width="13" height="8" rx="3" fill="none" stroke="#2b2b2b" stroke-width="2"></rect>
+        <rect x="70" y="45" width="13" height="8" rx="3" fill="none" stroke="#2b2b2b" stroke-width="2"></rect>
+        <line x1="66" y1="49" x2="70" y2="49" stroke="#2b2b2b" stroke-width="2"></line>
+        <circle cx="60" cy="49" r="1.3" fill="#2b2b2b"></circle>
+        <circle cx="76" cy="49" r="1.3" fill="#2b2b2b"></circle>
+        <path d="M61 60q7 5 14 0" fill="none" stroke="#7d4e34" stroke-width="2.5" stroke-linecap="round"></path>
+
+        <ellipse cx="68" cy="92" rx="29" ry="27" fill="url(#coatGrad)" stroke="#4a2d18" stroke-width="2"></ellipse>
+        <path d="M56 74h24v33H56z" fill="#f4f0e8"></path>
+        <path d="M68 74l-8 11h16z" fill="#b32424"></path>
+        <rect x="65" y="84" width="6" height="24" rx="2" fill="#b32424"></rect>
+        <path d="M39 86q-8 7-11 20" fill="none" stroke="#7a4f2d" stroke-width="9" stroke-linecap="round"></path>
+        <path d="M98 87q7 8 9 20" fill="none" stroke="#7a4f2d" stroke-width="9" stroke-linecap="round"></path>
+
+        <rect x="56" y="118" width="10" height="30" rx="5" fill="#2e3c4f"></rect>
+        <rect x="72" y="118" width="10" height="30" rx="5" fill="#2e3c4f"></rect>
+        <ellipse cx="61" cy="151" rx="9" ry="5.5" fill="#1e1e1e"></ellipse>
+        <ellipse cx="77" cy="151" rx="9" ry="5.5" fill="#1e1e1e"></ellipse>
+      </svg>
     </div>
   </div>
   <nav id="mobileBottomNav" class="mobile-nav" aria-hidden="true" style="display:none;">

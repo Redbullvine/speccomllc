@@ -5802,3 +5802,80 @@ label,
   from{opacity:1; transform:translateX(0) translateY(0);} 
   to{opacity:0; transform:translateX(120%) translateY(8px);} 
 }
+
+/* Cartoon man error character redesign */
+.error-dude-toast{
+  position:fixed;
+  bottom:80px;
+  right:12px;
+  left:auto;
+  width:176px;
+  z-index:100002;
+  pointer-events:none;
+  display:none;
+  filter:drop-shadow(0 8px 18px rgba(0,0,0,0.35));
+}
+
+.error-dude-toast.show{
+  display:flex !important;
+}
+
+.error-dude-wrap{
+  width:176px;
+  display:flex;
+  align-items:flex-end;
+  justify-content:flex-end;
+  gap:6px;
+  transform:translateX(120%);
+}
+
+.error-dude-sign{
+  order:1;
+  width:102px;
+  min-height:58px;
+  border-radius:10px;
+  border:2px solid #7c5a2b;
+  background:#fffde7;
+  color:#1f1f1f;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  padding:6px 7px;
+}
+
+#errorDudeSignText{
+  font-size:13px;
+  line-height:1.15;
+  font-weight:800;
+  color:#1f1f1f;
+}
+
+.error-dude-svg{
+  order:2;
+  width:74px;
+  height:160px;
+  flex:0 0 auto;
+}
+
+.error-dude-toast.show .error-dude-wrap{
+  animation:errorDudeCartoonIn .52s cubic-bezier(.2,.85,.3,1) forwards;
+}
+
+.error-dude-toast.is-leaving .error-dude-wrap{
+  animation:errorDudeCartoonOut .65s ease-in-out forwards;
+}
+
+@keyframes errorDudeCartoonIn{
+  from{transform:translateX(120%);} 
+  72%{transform:translateX(-4%);} 
+  to{transform:translateX(0);} 
+}
+
+@keyframes errorDudeCartoonOut{
+  from{transform:translateX(0);} 
+  to{transform:translateX(120%);} 
+}
+.error-dude-toast.show .error-dude-svg{
+  animation:none;
+}
