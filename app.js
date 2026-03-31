@@ -2219,13 +2219,12 @@ function isDuplicateKeyError(error){
 
 function toast(title, body, variant){
   const message = [title, body].filter(Boolean).join(" | ");
-  const mobileErrorLike = (() => {
-    if (!isBottomNavViewport()) return false;
+  const errorLike = (() => {
     if (variant === "error") return true;
     const source = String(message || "").toLowerCase();
     return source.includes("item not found") || source.includes("no match");
   })();
-  if (mobileErrorLike){
+  if (errorLike){
     showErrorDude(message || "Something went wrong.");
     return;
   }
@@ -2251,18 +2250,18 @@ function showErrorDude(message){
     return;
   }
   sign.textContent = String(message || "Something went wrong.");
-  wrap.style.display = "";
+  wrap.style.display = "flex";
   wrap.classList.remove("is-leaving");
   wrap.classList.add("show");
   clearTimeout(errorDudeLeaveTimer);
   clearTimeout(errorDudeHideTimer);
   errorDudeLeaveTimer = setTimeout(() => {
     wrap.classList.add("is-leaving");
-  }, 4000);
+  }, 4300);
   errorDudeHideTimer = setTimeout(() => {
     wrap.classList.remove("show", "is-leaving");
     wrap.style.display = "none";
-  }, 4700);
+  }, 5200);
 }
 window.showErrorDude = showErrorDude;
 

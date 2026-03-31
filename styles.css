@@ -5732,3 +5732,73 @@ label,
     bottom:calc(90px + env(safe-area-inset-bottom));
   }
 }
+
+/* Bottom-nav content clearance quick fix */
+@media (max-width: 480px){
+  .page,
+  .container,
+  .content,
+  #viewApp,
+  .app-container,
+  .view,
+  #viewDispatch,
+  #viewTechnician,
+  #viewAdmin,
+  #viewWarehouseScan{
+    padding-bottom:calc(120px + env(safe-area-inset-bottom)) !important;
+  }
+
+  #toast.toast{
+    bottom:calc(102px + env(safe-area-inset-bottom));
+  }
+
+  #viewWarehouseScan #warehouseScanForm,
+  #viewWarehouseScan #warehouseScanStatus,
+  #viewWarehouseScan #warehouseScanResult,
+  #viewWarehouseScan #warehouseCreateWrap,
+  #viewWarehouseScan #btnWarehouseScanSubmit,
+  #viewWarehouseScan #warehouseScanInput{
+    scroll-margin-bottom:calc(130px + env(safe-area-inset-bottom));
+  }
+
+  #viewWarehouseScan #warehouseScanResult,
+  #viewWarehouseScan #warehouseCreateWrap{
+    margin-bottom:calc(18px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Error dude visibility + timing overrides */
+.error-dude-toast.show{
+  display:flex !important;
+}
+
+.error-dude-toast{
+  left:auto;
+  right:12px;
+  width:auto;
+  max-width:min(92vw, 420px);
+}
+
+.error-dude-wrap{
+  margin-left:auto;
+  transform:translateX(120%) translateY(14px);
+}
+
+.error-dude-toast.show .error-dude-wrap{
+  animation:errorDudeIn .46s cubic-bezier(.16,.84,.3,1) forwards;
+}
+
+.error-dude-toast.is-leaving .error-dude-wrap{
+  animation:errorDudeOut .62s ease-in forwards;
+}
+
+@keyframes errorDudeIn{
+  from{opacity:0; transform:translateX(120%) translateY(14px);} 
+  60%{opacity:1; transform:translateX(-6%) translateY(0);} 
+  to{opacity:1; transform:translateX(0) translateY(0);} 
+}
+
+@keyframes errorDudeOut{
+  from{opacity:1; transform:translateX(0) translateY(0);} 
+  to{opacity:0; transform:translateX(120%) translateY(8px);} 
+}
