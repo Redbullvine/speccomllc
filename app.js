@@ -4958,7 +4958,7 @@ function focusSiteOnMap(siteId){
     const latLng = targetMarker.getLatLng();
     const zoom = Math.max(state.map.instance.getZoom() || 0, 17);
     state.map.instance.setView(latLng, zoom);
-    if (targetMarker.openPopup) targetMarker.openPopup();
+    void handleSiteMarkerClick(targetMarker, siteKey, () => site);
   }
 }
 
@@ -6266,8 +6266,77 @@ function closeRedlineEditor(){
   state.redline.editorMarkerId = null;
 }
 
+function openOverageEditor(marker){
+  if (!marker || !marker.id) return;
+  const backdrop = $("overageEditorBackdrop");
+  if (!backdrop) return;
+  closeRedlineEditor();
+  state.redline.editorMarkerId = marker.id;
+  const titleEl = $("overageTitleInput");
+  const designEl = $("overageDesignQty");
+  const fieldEl = $("overageFieldQty");
+  const sheetEl = $("overageStakingSheet");
+  const dateEl = $("overageFieldDate");
+  const techEl = $("overageTechName");
+  const justEl = $("overageJustification");
+  const notesEl = $("overageNotesInput");
+  if (titleEl) titleEl.value = marker.title || "";
+  if (designEl) designEl.value = marker.design_qty != null ? String(marker.design_qty) : "";
+  if (fieldEl) fieldEl.value = marker.field_qty != null ? String(marker.field_qty) : "";
+  if (sheetEl) sheetEl.value = marker.staking_sheet || "";
+  if (dateEl) dateEl.value = marker.field_date || "";
+  if (techEl) techEl.value = marker.tech_name || "";
+  if (justEl) justEl.value = marker.justification_category || "new_pole_location";
+  if (notesEl) notesEl.value = marker.notes || "";
+  backdrop.hidden = false;
+}
+
+function closeOverageEditor(){
+  const backdrop = $("overageEditorBackdrop");
+  if (backdrop) backdrop.hidden = true;
+  state.redline.editorMarkerId = null;
+}
+
+async function saveOverageEditorChanges(){
+  const markerId = state.redline.editorMarkerId;
+  if (!markerId) return;
+  const titleEl = $("overageTitleInput");
+  const designEl = $("overageDesignQty");
+  const fieldEl = $("overageFieldQty");
+  const sheetEl = $("overageStakingSheet");
+  const dateEl = $("overageFieldDate");
+  const techEl = $("overageTechName");
+  const justEl = $("overageJustification");
+  const notesEl = $("overageNotesInput");
+  const payload = {
+    title: (titleEl?.value || "").trim() || null,
+    design_qty: designEl?.value !== "" ? Number(designEl.value) : null,
+    field_qty: fieldEl?.value !== "" ? Number(fieldEl.value) : null,
+    staking_sheet: (sheetEl?.value || "").trim() || null,
+    field_date: (dateEl?.value || "").trim() || null,
+    tech_name: (techEl?.value || "").trim() || null,
+    justification_category: justEl?.value || null,
+    notes: (notesEl?.value || "").trim() || null,
+    updated_at: new Date().toISOString(),
+  };
+  if (!state.client){
+    toast("Not connected", "No database connection.", "error");
+    return;
+  }
+  const { error } = await state.client.from("redline_markers").update(payload).eq("id", markerId);
+  if (error){
+    toast("Save failed", error.message || "Could not save overage changes.", "error");
+    return;
+  }
+  closeOverageEditor();
+  await loadRedlineMarkers();
+  renderRedlineUi();
+  toast("Saved", "Overage marker updated.", "success");
+}
+
 function resetRedlineState({ clearMarkers = false, clearSource = false } = {}){
   closeRedlineEditor();
+  closeOverageEditor();
   state.redline.enabled = false;
   state.redline.panelOpen = false;
   state.redline.addMode = false;
@@ -6631,7 +6700,11 @@ function bindRedlineUiHandlers(){
     if (!markerId) return;
     const marker = state.redline.markers.find((row) => String(row.id || "") === markerId) || null;
     if (action === "edit"){
-      openRedlineEditor({ marker });
+      if (marker && marker.overage_request){
+        openOverageEditor(marker);
+      } else {
+        openRedlineEditor({ marker });
+      }
       return;
     }
     if (action === "delete"){
@@ -6657,6 +6730,22 @@ function bindRedlineUiHandlers(){
   $("redlineEditorBackdrop")?.addEventListener("click", (event) => {
     if (event.target === $("redlineEditorBackdrop")){
       closeRedlineEditor();
+    }
+  });
+  $("btnOverageEditorClose")?.addEventListener("click", () => {
+    closeOverageEditor();
+    renderRedlineUi();
+  });
+  $("btnOverageCancelEdit")?.addEventListener("click", () => {
+    closeOverageEditor();
+    renderRedlineUi();
+  });
+  $("btnOverageSaveEdit")?.addEventListener("click", () => {
+    void saveOverageEditorChanges();
+  });
+  $("overageEditorBackdrop")?.addEventListener("click", (event) => {
+    if (event.target === $("overageEditorBackdrop")){
+      closeOverageEditor();
     }
   });
   resetRedlineState();
@@ -6725,23 +6814,21 @@ async function renderMapPopupActiveSite({ syncSelection = true } = {}){
     ]);
     const latest = getMapPopupSnapshot();
     const siteKey = toSiteIdKey(site.id);
-    const activeSite = latest && toSiteIdKey(latest.site?.id) === siteKey
-      ? latest.site
-      : (getVisibleSiteByIdKey(siteKey) || site);
-    const activeMarker = latest?.marker || marker;
-    const requiredCodesForPopup = latest?.requiredCodes || requiredCodes;
-    bindSiteMarkerPopup(activeMarker, activeSite, {
+    // If the popup has moved to a different site (or been closed), don't overwrite it with stale data
+    if (!latest || toSiteIdKey(latest.site?.id) !== siteKey) return;
+    const requiredCodesForPopup = latest.requiredCodes || requiredCodes;
+    bindSiteMarkerPopup(marker, latest.site || site, {
       requiredCodes: requiredCodesForPopup,
       siteCodes,
       loadingCodes: false,
       sitePhotos,
       loadingPhotos: false,
-      pageIndex: latest?.index ?? index,
-      pageTotal: latest?.total ?? total,
-      nearbySites: latest?.nearby ?? nearby,
+      pageIndex: latest.index ?? index,
+      pageTotal: latest.total ?? total,
+      nearbySites: latest.nearby ?? nearby,
     });
-    if (!activeMarker?.isPopupOpen || activeMarker.isPopupOpen()){
-      if (activeMarker?.openPopup) activeMarker.openPopup();
+    if (!marker?.isPopupOpen || marker.isPopupOpen()){
+      if (marker?.openPopup) marker.openPopup();
     }
   } catch (error){
     debugLog("[map] marker popup update failed", error);
@@ -9361,6 +9448,18 @@ function ensureMap(){
   renderMapLayerPanel();
   setMapBasemap(state.map.basemap);
   renderFeatureDrawer();
+  map.on("popupclose", () => {
+    // Clear popup context so stale async callbacks don't corrupt the next popup
+    state.map.popupSiteKeys = [];
+    state.map.popupSiteIndex = 0;
+    state.map.popupMarker = null;
+    // Refocus the search input so the user can immediately search the next location
+    const searchInput = $("kmzTreeSearch");
+    if (searchInput){
+      searchInput.focus();
+      searchInput.select();
+    }
+  });
   map.on("click", async (event) => {
     const latlng = event?.latlng;
     if (!latlng){

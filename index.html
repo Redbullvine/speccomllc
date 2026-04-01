@@ -1464,6 +1464,47 @@
               </div>
             </div>
           </div>
+          <div id="overageEditorBackdrop" class="redline-editor-backdrop" hidden>
+            <div class="card redline-editor">
+              <div class="row" style="justify-content:space-between; align-items:center; gap:10px;">
+                <div class="site-panel-title">Edit Splice Overage</div>
+                <button id="btnOverageEditorClose" class="btn ghost small" type="button">Close</button>
+              </div>
+              <label class="small" for="overageTitleInput">Title</label>
+              <input id="overageTitleInput" class="input" type="text" placeholder="Enclosure / location name" />
+              <div class="row" style="gap:8px;">
+                <div style="flex:1;">
+                  <label class="small" for="overageDesignQty">Design Qty</label>
+                  <input id="overageDesignQty" class="input" type="number" min="0" placeholder="0" />
+                </div>
+                <div style="flex:1;">
+                  <label class="small" for="overageFieldQty">Field Qty</label>
+                  <input id="overageFieldQty" class="input" type="number" min="0" placeholder="0" />
+                </div>
+              </div>
+              <label class="small" for="overageStakingSheet">Staking Sheet</label>
+              <input id="overageStakingSheet" class="input" type="text" placeholder="e.g. 1635CA_04" />
+              <label class="small" for="overageFieldDate">Field Date</label>
+              <input id="overageFieldDate" class="input" type="date" />
+              <label class="small" for="overageTechName">Tech Name</label>
+              <input id="overageTechName" class="input" type="text" placeholder="Technician name" />
+              <label class="small" for="overageJustification">Justification</label>
+              <select id="overageJustification" class="input">
+                <option value="new_pole_location">New pole location (fire rebuild)</option>
+                <option value="spool_end_butt_splice">Spool-end butt splice</option>
+                <option value="re_entry">Re-entry after continuity test</option>
+                <option value="density_upgrade">Density upgrade required</option>
+                <option value="not_on_print">Not on staking print</option>
+                <option value="other">Other</option>
+              </select>
+              <label class="small" for="overageNotesInput">Notes</label>
+              <textarea id="overageNotesInput" class="input" rows="4" placeholder="Field notes"></textarea>
+              <div class="row" style="justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+                <button id="btnOverageCancelEdit" class="btn ghost small" type="button">Cancel</button>
+                <button id="btnOverageSaveEdit" class="btn secondary small" type="button">Save Changes</button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <div id="techCloseoutModal" class="modal" style="display:none;">
