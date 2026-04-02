@@ -5345,23 +5345,56 @@ body:not(.map-mode) .tech-workspace {
   gap: 6px;
   min-height: 24px;
   box-sizing: border-box;
-}
-
-#viewTechnician #techJobState:has(.status-not-started) {
-  border: 1px solid rgba(200, 220, 240, 0.5);
-  color: #8899aa;
-  background: transparent;
+  /* override the light base background for the dark theme */
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   padding: 3px 10px;
   font-size: 0.7rem;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: var(--chrome-secondary, #94a3b8);
 }
 
+/* NOT STARTED — muted */
+#viewTechnician #techJobState:has(.status-not-started) {
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.3);
+  color: #94a3b8;
+}
 #viewTechnician #techJobState:has(.status-not-started) .dot.status-not-started {
-  width: 6px;
-  height: 6px;
-  background: #8899aa;
+  width: 6px; height: 6px; background: #94a3b8;
+}
+
+/* ACTIVE / IN PROGRESS — blue */
+#viewTechnician #techJobState:has(.status-in-progress) {
+  background: rgba(96, 165, 250, 0.12);
+  border-color: rgba(96, 165, 250, 0.45);
+  color: #93c5fd;
+}
+#viewTechnician #techJobState:has(.status-in-progress) .dot.status-in-progress {
+  width: 6px; height: 6px; background: #60a5fa;
+}
+
+/* PAUSED / BLOCKED — amber */
+#viewTechnician #techJobState:has(.status-blocked) {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.4);
+  color: #fcd34d;
+}
+#viewTechnician #techJobState:has(.status-blocked) .dot.status-blocked {
+  width: 6px; height: 6px; background: #fbbf24;
+}
+
+/* COMPLETE — green */
+#viewTechnician #techJobState:has(.status-complete) {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #86efac;
+}
+#viewTechnician #techJobState:has(.status-complete) .dot.status-complete {
+  width: 6px; height: 6px; background: #22c55e;
 }
 
 @media (max-width: 900px) {
