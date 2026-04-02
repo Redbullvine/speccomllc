@@ -5397,6 +5397,40 @@ body:not(.map-mode) .tech-workspace {
   width: 6px; height: 6px; background: #22c55e;
 }
 
+/* -- Closeout modal dark theme ---------------------------------------- */
+#techCloseoutModal .modal-card {
+  background: var(--midnight-elevated, #0f2040);
+  border: 1px solid var(--midnight-border);
+  color: var(--chrome-primary, #d0dce8);
+}
+#techCloseoutModal .modal-header h2 {
+  color: var(--chrome-primary, #d0dce8);
+}
+#techCloseoutModal #techCloseoutBody label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--chrome-secondary, #7a9ab8);
+  margin-bottom: 2px;
+}
+#techCloseoutModal #techCloseoutBody .input,
+#techCloseoutModal #techCloseoutBody select,
+#techCloseoutModal #techCloseoutBody textarea {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--midnight-border);
+  color: var(--chrome-primary, #d0dce8);
+  border-radius: 6px;
+}
+#techCloseoutModal #techCloseoutBody select option {
+  background: var(--midnight-elevated, #0f2040);
+  color: var(--chrome-primary, #d0dce8);
+}
+#techCloseoutModal #techCloseoutBody input[type="file"] {
+  color: var(--chrome-secondary, #7a9ab8);
+}
+
 @media (max-width: 900px) {
   #viewTechnician #techSummary .kpi {
     grid-template-columns: 1fr;
