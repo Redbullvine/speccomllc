@@ -4353,7 +4353,7 @@ body.map-mode .map-canvas .leaflet-control-zoom a{
   .tech-clock-btn { min-width: 80px; font-size: 14px; }
 }
 
-/* -- Technician Shift Items — field-readable cards --------------- */
+/* -- Technician Shift Items ï¿½ field-readable cards --------------- */
 
 /* Each shift item is a full card with a colored left border by status */
 article.tech-shift-item {
@@ -4366,7 +4366,7 @@ article.tech-shift-item {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-/* Status-colored left border — instant visual scan */
+/* Status-colored left border ï¿½ instant visual scan */
 article.tech-shift-item:has(.status-in-progress) { border-left-color: #2563eb; box-shadow: 0 2px 8px rgba(37,99,235,0.10); }
 article.tech-shift-item:has(.status-complete)     { border-left-color: #16a34a; }
 article.tech-shift-item:has(.status-blocked)      { border-left-color: #dc2626; }
@@ -4382,7 +4382,7 @@ article.tech-shift-item:has(.status-on-site)      { border-left-color: #0891b2; 
   margin-bottom: 6px;
 }
 
-/* Job title — large and bold, easy to read at arm's length */
+/* Job title ï¿½ large and bold, easy to read at arm's length */
 .tech-shift-title {
   font-size: 15px;
   font-weight: 700;
@@ -4390,14 +4390,14 @@ article.tech-shift-item:has(.status-on-site)      { border-left-color: #0891b2; 
   color: var(--text, #0f172a);
 }
 
-/* Subtitle — address, customer, type */
+/* Subtitle ï¿½ address, customer, type */
 .tech-shift-sub {
   font-size: 12px;
   opacity: 0.6;
   margin-top: 2px;
 }
 
-/* Status pill — bigger, bolder, color-coded */
+/* Status pill ï¿½ bigger, bolder, color-coded */
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -4434,7 +4434,7 @@ article.tech-shift-item .muted.small {
   margin-top: 4px;
 }
 
-/* Open button — big enough for gloved thumb */
+/* Open button ï¿½ big enough for gloved thumb */
 .tech-shift-actions {
   margin-top: 10px;
 }
@@ -5182,6 +5182,55 @@ body:not(.map-mode) .tech-workspace {
   background: rgba(0, 212, 255, 0.08);
   border-color: var(--teal-accent);
   color: var(--teal-accent);
+}
+
+/* Currently-viewed item in timeline */
+#viewTechnician article.tech-shift-item.is-current {
+  border-left: 3px solid #60a5fa;
+  padding-left: 9px;
+}
+#viewTechnician .tech-shift-actions button.is-current-item {
+  border-color: rgba(96, 165, 250, 0.6);
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.08);
+}
+
+/* Pre-inspection checklist */
+.tech-checklist {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.tech-checklist-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--chrome-secondary, #94a3b8);
+  margin-bottom: 4px;
+}
+.tech-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--chrome-primary, #e2e8f0);
+  cursor: pointer;
+  padding: 4px 2px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.tech-checklist-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  accent-color: #60a5fa;
+}
+.tech-checklist-item.is-checked {
+  color: #60a5fa;
 }
 
 #viewTechnician .tech-clock-btn.clock-in {

@@ -11858,11 +11858,12 @@ function renderCurrentShiftActivity(){
       ${appointmentWindow ? `<div class="muted small">${escapeHtml(appointmentWindow)}</div>` : ""}
       ${compliancePill ? `<div>${compliancePill}</div>` : ""}
       ${item.kind === "inspection" ? `
-        <div class="field-stack" style="gap:6px;">
-          <label><input type="checkbox" data-tech-checklist="tires" data-tech-item-id="${item.id}" ${item.checklist?.tires ? "checked" : ""} /> Tires</label>
-          <label><input type="checkbox" data-tech-checklist="lights" data-tech-item-id="${item.id}" ${item.checklist?.lights ? "checked" : ""} /> Lights</label>
-          <label><input type="checkbox" data-tech-checklist="safety" data-tech-item-id="${item.id}" ${item.checklist?.safety ? "checked" : ""} /> Safety Equipment</label>
-          <label><input type="checkbox" data-tech-checklist="tools" data-tech-item-id="${item.id}" ${item.checklist?.tools ? "checked" : ""} /> Tools Loaded</label>
+        <div class="tech-checklist">
+          <div class="tech-checklist-title">Pre-Inspection Checklist</div>
+          <label class="tech-checklist-item ${item.checklist?.tires ? 'is-checked' : ''}"><input type="checkbox" data-tech-checklist="tires" data-tech-item-id="${item.id}" ${item.checklist?.tires ? "checked" : ""} /> Tires</label>
+          <label class="tech-checklist-item ${item.checklist?.lights ? 'is-checked' : ''}"><input type="checkbox" data-tech-checklist="lights" data-tech-item-id="${item.id}" ${item.checklist?.lights ? "checked" : ""} /> Lights</label>
+          <label class="tech-checklist-item ${item.checklist?.safety ? 'is-checked' : ''}"><input type="checkbox" data-tech-checklist="safety" data-tech-item-id="${item.id}" ${item.checklist?.safety ? "checked" : ""} /> Safety Equipment</label>
+          <label class="tech-checklist-item ${item.checklist?.tools ? 'is-checked' : ''}"><input type="checkbox" data-tech-checklist="tools" data-tech-item-id="${item.id}" ${item.checklist?.tools ? "checked" : ""} /> Tools Loaded</label>
         </div>
       ` : ""}
       <div class="tech-shift-actions">
@@ -11889,8 +11890,11 @@ function renderTodayShiftTimeline(){
     const complianceSource = getTechItemComplianceSource(item);
     const compliancePill = complianceSource ? renderAppointmentCompliancePill(complianceSource) : "";
     const appointmentWindow = formatTechAppointmentWindow(item);
+    const isCurrent = item.id === sim.activeItemId;
+    const focusBtnLabel = isCurrent ? (item.status === "ACTIVE" ? "Active ↑" : "Viewing ↑") : "Open";
+    const focusBtnClass = isCurrent ? "btn ghost small is-current-item" : "btn ghost small";
     return `
-      <article class="tech-shift-item">
+      <article class="tech-shift-item${isCurrent ? " is-current" : ""}">
         <div class="tech-shift-head">
           <div>
             <div class="tech-shift-title">${item.order}. ${escapeHtml(item.title)}</div>
@@ -11903,7 +11907,7 @@ function renderTodayShiftTimeline(){
         ${appointmentWindow ? `<div class="muted small">${escapeHtml(appointmentWindow)}</div>` : ""}
         ${compliancePill ? `<div>${compliancePill}</div>` : ""}
         <div class="tech-shift-actions">
-          <button class="btn ghost small" type="button" data-tech-shift-action="focus" data-tech-item-id="${item.id}">Open</button>
+          <button class="${focusBtnClass}" type="button" data-tech-shift-action="focus" data-tech-item-id="${item.id}">${focusBtnLabel}</button>
         </div>
       </article>
     `;
