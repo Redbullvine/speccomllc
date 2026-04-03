@@ -4343,14 +4343,41 @@ body.map-mode .map-canvas .leaflet-control-zoom a{
     height: 100%;
   }
   .tech-main-col {
-    overflow-y: auto;
+    overflow-y: scroll;
     overflow-x: hidden;
     height: 100%;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(160, 200, 230, 0.35) transparent;
+  }
+  .tech-main-col::-webkit-scrollbar {
+    width: 6px;
+  }
+  .tech-main-col::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .tech-main-col::-webkit-scrollbar-thumb {
+    background: rgba(160, 200, 230, 0.35);
+    border-radius: 99px;
+  }
+  .tech-main-col::-webkit-scrollbar-thumb:hover {
+    background: rgba(160, 200, 230, 0.6);
   }
   .tech-side-col {
     overflow-y: auto;
     overflow-x: hidden;
     height: 100%;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(160, 200, 230, 0.25) transparent;
+  }
+  .tech-side-col::-webkit-scrollbar {
+    width: 4px;
+  }
+  .tech-side-col::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .tech-side-col::-webkit-scrollbar-thumb {
+    background: rgba(160, 200, 230, 0.25);
+    border-radius: 99px;
   }
 }
 
@@ -4797,10 +4824,14 @@ body {
 }
 
 /* Cards inside panel bodies don't overflow their container */
-.invoice-panel-body .card,
-.tech-main-col .card {
+.invoice-panel-body .card {
   min-width: 0;
   overflow: hidden;
+}
+/* Tech main col cards must NOT clip — shift items need their full height */
+.tech-main-col .card {
+  min-width: 0;
+  overflow: visible;
 }
 
 /* -- Technician workspace height fix ------------------------------ */
