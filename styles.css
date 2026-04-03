@@ -3951,6 +3951,35 @@ body.map-mode .map-canvas .leaflet-control-zoom a{
   }
 }
 @media (max-width: 900px){
+  /* Details drawer: bottom sheet on mobile so it doesn't cover the field panel */
+  body.map-mode .map-details-drawer{
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    min-width: 0;
+    max-height: 46vh;
+    border-radius: 16px 16px 0 0;
+    border-bottom: none;
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.28);
+  }
+  /* Pull-handle hint at top of bottom sheet */
+  body.map-mode .map-details-drawer.is-open::before {
+    content: "";
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 99px;
+    background: rgba(148,163,184,0.4);
+    margin: 8px auto 0;
+    flex-shrink: 0;
+  }
+  /* Field panel: limit its height so it doesn't eat the whole screen */
+  body.map-mode .map-field-panel {
+    max-height: 52vh;
+    overflow-y: auto;
+  }
   body.map-mode .topbar-inner{
     padding:7px 10px;
     flex-direction:row;
