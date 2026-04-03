@@ -1916,6 +1916,7 @@ function setDrawerOpen(openBool, { persist = true } = {}){
   }
   applyDrawerUiState();
   queueMapInvalidate([120, 220]);
+  if (typeof window.__updateSidebarBackdrop === "function") window.__updateSidebarBackdrop(open);
 }
 
 function toggleSidebarOpen(){
@@ -30083,6 +30084,16 @@ function wireUI(){
   if (placesHideBtn){
     placesHideBtn.addEventListener("click", () => setDrawerOpen(false));
   }
+  // Mobile sidebar backdrop — tap outside to close
+  const sidebarBackdrop = document.createElement("div");
+  sidebarBackdrop.id = "gisSidebarBackdrop";
+  sidebarBackdrop.style.cssText = "position:fixed;inset:0;z-index:3998;display:none;";
+  sidebarBackdrop.addEventListener("click", () => setDrawerOpen(false));
+  document.body.appendChild(sidebarBackdrop);
+  const _origSetDrawerOpen = window.setDrawerOpen;
+  window.__updateSidebarBackdrop = function(open){
+    sidebarBackdrop.style.display = (open && isMobileViewport()) ? "block" : "none";
+  };
   const layersHideBtn = $("btnLayersHide");
   if (layersHideBtn){
     layersHideBtn.addEventListener("click", () => setLayersPanelOpen(false));
