@@ -4336,7 +4336,25 @@ body.map-mode .map-canvas .leaflet-control-zoom a{
 .compliance-pink   { background: #fce7f3; color: #9d174d; }
 .compliance-red    { background: #fee2e2; color: #991b1b; }
 
-/* Mobile: stack columns */
+/* Desktop: both columns scroll independently within the fixed-height workspace */
+@media (min-width: 701px) {
+  .tech-body {
+    overflow: hidden;
+    height: 100%;
+  }
+  .tech-main-col {
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: 100%;
+  }
+  .tech-side-col {
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: 100%;
+  }
+}
+
+/* Mobile: stack columns, full page scroll */
 @media (max-width: 700px) {
   .tech-workspace { height: auto; overflow: visible; }
   .tech-body { flex-direction: column; overflow: visible; }
@@ -4790,6 +4808,11 @@ body {
 body:not(.map-mode) .tech-workspace {
   height: calc(100vh - 60px);
   width: 100%;
+  overflow: hidden;
+}
+body:not(.map-mode) .tech-workspace .tech-body {
+  height: 100%;
+  overflow: hidden;
 }
 
 /* -- View visibility guard: prevent stacked workspaces ------------- */
