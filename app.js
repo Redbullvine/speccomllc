@@ -1234,11 +1234,13 @@ const LEGACY_DRAWER_TAB_KEY = "speccom.ui.drawerTab";
 const LEGACY_DRAWER_WIDTH_KEY = "speccom.ui.drawerWidth";
 const OFFICE_INVOICE_RECORDS_KEY = "speccom.office.invoiceRecords.v1";
 const OFFICE_INVOICE_RECENTS_KEY = "speccom.office.invoiceRecents.v1";
+const OFFICE_INVOICE_DRAFT_KEY = "speccom.office.invoiceDraft.v1";
 const KS_INVOICE_RECORDS_KEY = "speccom.ks.invoiceRecords.v1";
 const KS_INVOICE_BATCHES_KEY = "speccom.ks.invoiceBatches.v1";
 const POST_AUTH_REDIRECT_KEY = "pendingRedirect";
 const INVOICE_INTRO_DURATION_SECONDS = 4;
 const WAREHOUSE_SCAN_ITEMS_KEY = "speccom.warehouse.scanItems.v1";
+const TECH_SIM_KEY = "speccom.tech.simulation.v1";
 const KMZ_PHOTO_OVERRIDES_KEY_PREFIX = "speccom.kmzPhotoOverrides.";
 const INVOICE_FILES_BUCKET = "invoice-files";
 const KMZ_SNAPSHOT_TABLE = "project_kmz_snapshots";
@@ -11530,8 +11532,44 @@ function hydrateTechnicianShiftAppointments(sim){
   });
 }
 
+function persistTechnicianSimulation(){
+  const sim = state.technician.simulation;
+  try {
+    safeLocalStorageSet(TECH_SIM_KEY, JSON.stringify({
+      clockedInAt: sim.clockedInAt,
+      clockedOutAt: sim.clockedOutAt,
+      activeItemId: sim.activeItemId,
+      items: sim.items,
+      savedAt: new Date().toISOString(),
+    }));
+  } catch {}
+}
+
+function loadTechnicianSimulation(){
+  const raw = safeLocalStorageGet(TECH_SIM_KEY);
+  if (!raw) return;
+  try {
+    const saved = JSON.parse(raw);
+    if (!saved || typeof saved !== "object") return;
+    // Only restore if saved today — don't carry over yesterday's shift
+    const savedDate = saved.savedAt ? new Date(saved.savedAt).toDateString() : null;
+    if (savedDate && savedDate !== new Date().toDateString()) {
+      safeLocalStorageSet(TECH_SIM_KEY, "");
+      return;
+    }
+    const sim = state.technician.simulation;
+    if (saved.clockedInAt) sim.clockedInAt = saved.clockedInAt;
+    if (saved.clockedOutAt) sim.clockedOutAt = saved.clockedOutAt;
+    if (saved.activeItemId) sim.activeItemId = saved.activeItemId;
+    if (Array.isArray(saved.items) && saved.items.length) sim.items = saved.items;
+  } catch {}
+}
+
 function ensureTechnicianSimulationState(){
   const sim = state.technician.simulation;
+  if (!Array.isArray(sim.items) || !sim.items.length){
+    loadTechnicianSimulation();
+  }
   if (!Array.isArray(sim.items) || !sim.items.length){
     sim.items = createTechnicianShiftItems();
   }
@@ -11950,6 +11988,7 @@ function startShiftActivity(itemId){
   item.paused_at = null;
   item.status = "ACTIVE";
   sim.activeItemId = item.id;
+  persistTechnicianSimulation();
   renderTechnicianSimulation();
 }
 
@@ -11965,6 +12004,7 @@ function pauseShiftActivity(itemId){
   if (!item || item.status !== "ACTIVE") return;
   item.status = "PAUSED";
   item.paused_at = nowISO();
+  persistTechnicianSimulation();
   renderTechnicianSimulation();
 }
 
@@ -11977,6 +12017,7 @@ function resumeShiftActivity(itemId){
   item.paused_at = null;
   item.status = "ACTIVE";
   state.technician.simulation.activeItemId = item.id;
+  persistTechnicianSimulation();
   renderTechnicianSimulation();
 }
 
@@ -12004,6 +12045,7 @@ function completeShiftActivity(itemId, { skipForm = false } = {}){
   if (next){
     sim.activeItemId = next.id;
   }
+  persistTechnicianSimulation();
   renderTechnicianSimulation();
 }
 
@@ -12013,6 +12055,7 @@ function addShiftItemNote(itemId, note){
   if (!item || !text) return;
   item.notes = Array.isArray(item.notes) ? item.notes : [];
   item.notes.push(text);
+  persistTechnicianSimulation();
   renderTechnicianSimulation();
 }
 
@@ -12022,6 +12065,7 @@ function addShiftItemPhoto(itemId, fileName){
   if (!item || !name) return;
   item.photos = Array.isArray(item.photos) ? item.photos : [];
   item.photos.push(name);
+  persistTechnicianSimulation();
   renderTechnicianSimulation();
 }
 
@@ -16193,6 +16237,7 @@ async function startTechnicianTimesheet(){
     sim.clockedOutAt = null;
     const next = getCurrentShiftItem();
     sim.activeItemId = next?.id || null;
+    persistTechnicianSimulation();
     setTechnicianShiftTicking();
     renderTechnicianDashboard();
     toast("Clock in", "Technician shift started.");
@@ -16338,6 +16383,7 @@ async function endTechnicianTimesheet(){
       completeShiftActivity(eos.id, { skipForm: true });
     }
     sim.clockedOutAt = nowISO();
+    persistTechnicianSimulation();
     renderTechnicianDashboard();
     toast("Clock out", "Technician shift ended.");
     return;
@@ -23961,6 +24007,7 @@ function ensureOfficeInvoiceStateLoaded(){
   if (state.officeInvoices.loaded) return;
   const recordsRaw = safeLocalStorageGet(OFFICE_INVOICE_RECORDS_KEY);
   const recentsRaw = safeLocalStorageGet(OFFICE_INVOICE_RECENTS_KEY);
+  const draftRaw = safeLocalStorageGet(OFFICE_INVOICE_DRAFT_KEY);
   if (recordsRaw){
     try{
       const parsed = JSON.parse(recordsRaw);
@@ -23978,12 +24025,25 @@ function ensureOfficeInvoiceStateLoaded(){
       };
     } catch {}
   }
+  if (draftRaw){
+    try{
+      const parsed = JSON.parse(draftRaw);
+      if (parsed && typeof parsed === "object" && parsed.id){
+        state.officeInvoices.draft = parsed;
+      }
+    } catch {}
+  }
   state.officeInvoices.loaded = true;
 }
 
 function persistOfficeInvoiceState(){
   safeLocalStorageSet(OFFICE_INVOICE_RECORDS_KEY, JSON.stringify(state.officeInvoices.records || []));
   safeLocalStorageSet(OFFICE_INVOICE_RECENTS_KEY, JSON.stringify(state.officeInvoices.recents || {}));
+  if (state.officeInvoices.draft){
+    safeLocalStorageSet(OFFICE_INVOICE_DRAFT_KEY, JSON.stringify(state.officeInvoices.draft));
+  } else {
+    safeLocalStorageSet(OFFICE_INVOICE_DRAFT_KEY, "");
+  }
 }
 
 function normalizeKsInvoiceNumber(value){
@@ -24445,6 +24505,7 @@ function createOfficeInvoiceDraft(){
     created_at: nowISO(),
     updated_at: nowISO(),
   };
+  persistOfficeInvoiceState();
   renderInvoicePanel();
 }
 
@@ -24458,6 +24519,7 @@ function openOfficeInvoiceDraft(invoiceId){
   if (!Array.isArray(state.officeInvoices.draft.line_items) || !state.officeInvoices.draft.line_items.length){
     state.officeInvoices.draft.line_items = [createOfficeInvoiceLineItem()];
   }
+  persistOfficeInvoiceState();
   renderInvoicePanel();
 }
 
@@ -26001,6 +26063,7 @@ function addOfficeInvoiceLineItem(){
   draft.line_items = Array.isArray(draft.line_items) ? draft.line_items : [];
   draft.line_items.push(createOfficeInvoiceLineItem());
   draft.updated_at = nowISO();
+  persistOfficeInvoiceState();
   renderInvoicePanel();
 }
 
@@ -26012,6 +26075,7 @@ function removeOfficeInvoiceLineItem(lineId){
     draft.line_items = [createOfficeInvoiceLineItem()];
   }
   draft.updated_at = nowISO();
+  persistOfficeInvoiceState();
   renderInvoicePanel();
 }
 
@@ -29348,6 +29412,7 @@ function wireUI(){
         const key = checkbox.dataset.techChecklist;
         if (item?.checklist && key){
           item.checklist[key] = Boolean(checkbox.checked);
+          persistTechnicianSimulation();
           renderTechnicianSimulation();
         }
         return;
@@ -30802,6 +30867,7 @@ function wireUI(){
       }
       if (action === "cancelDraft"){
         state.officeInvoices.draft = null;
+        persistOfficeInvoiceState();
         renderInvoicePanel();
       }
       if (action === "ruidosoDeleteInvoice"){
@@ -30851,10 +30917,12 @@ function wireUI(){
       const fieldEl = e.target.closest("[data-office-field]");
       if (fieldEl){
         updateOfficeInvoiceDraftField(fieldEl.dataset.officeField, fieldEl.value);
+        persistOfficeInvoiceState();
       }
       const lineEl = e.target.closest("[data-office-line-id][data-office-line-field]");
       if (lineEl){
         updateOfficeInvoiceLineField(lineEl.dataset.officeLineId, lineEl.dataset.officeLineField, lineEl.value);
+        persistOfficeInvoiceState();
       }
     });
   }
