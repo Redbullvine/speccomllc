@@ -1241,6 +1241,7 @@ const POST_AUTH_REDIRECT_KEY = "pendingRedirect";
 const INVOICE_INTRO_DURATION_SECONDS = 4;
 const WAREHOUSE_SCAN_ITEMS_KEY = "speccom.warehouse.scanItems.v1";
 const TECH_SIM_KEY = "speccom.tech.simulation.v1";
+const RUIDOSO_INVOICES_KEY = "speccom.ruidoso.invoices.v1";
 const KMZ_PHOTO_OVERRIDES_KEY_PREFIX = "speccom.kmzPhotoOverrides.";
 const INVOICE_FILES_BUCKET = "invoice-files";
 const KMZ_SNAPSHOT_TABLE = "project_kmz_snapshots";
@@ -25688,7 +25689,25 @@ function renderInvoiceNavSidebar() {
   `;
 }
 
+function persistRuidosoInvoices(){
+  try {
+    safeLocalStorageSet(RUIDOSO_INVOICES_KEY, JSON.stringify(state.ruidosoInvoices || []));
+  } catch {}
+}
+
+function loadRuidosoInvoices(){
+  if (state._ruidosoLoaded) return;
+  state._ruidosoLoaded = true;
+  const raw = safeLocalStorageGet(RUIDOSO_INVOICES_KEY);
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length) state.ruidosoInvoices = parsed;
+  } catch {}
+}
+
 function renderRuidosoBillingSummary(){
+  loadRuidosoInvoices();
   const invoices = state.ruidosoInvoices || [];
   const KS_PAID  = 21824.00;
   const TOTAL    = invoices.reduce((s,r) => s + r.total, 0);
@@ -25717,7 +25736,7 @@ function renderRuidosoBillingSummary(){
         <span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:${r.paid?"#dcfce7":"#fee2e2"};color:${r.paid?"#166534":"#b91c1c"};">${r.paid?"PAID":"PENDING"}</span>
       </td>
       <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:center;white-space:nowrap;">
-        <button type="button" data-office-action="ruidosoReplaceInvoice" data-ruidoso-id="${escapeHtml(r.id)}" ${actionBtnStyle("#0070c0")}>Replace</button>
+        <button type="button" data-office-action="ruidosoReplaceInvoice" data-ruidoso-id="${escapeHtml(r.id)}" ${actionBtnStyle("#0070c0")}>Edit</button>
         <button type="button" data-office-action="ruidosoDeleteInvoice" data-ruidoso-id="${escapeHtml(r.id)}" style="margin-left:4px;background:#c00000;color:#fff;border:none;border-radius:5px;padding:3px 9px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif;">Delete</button>
       </td>
     </tr>`;
@@ -25824,7 +25843,7 @@ function openRuidosoInvoiceModal(mode, targetId = null){
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:12px;padding:28px 30px;width:440px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.4);position:relative;">
       <button type="button" id="ruidosoModalClose" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:22px;cursor:pointer;color:#666;">×</button>
-      <h2 style="font-size:15px;font-weight:800;color:#1a3a6b;margin-bottom:18px;">${mode==="replace"?"Replace Invoice: "+escapeHtml(targetId||""):"Add Invoice"}</h2>
+      <h2 style="font-size:15px;font-weight:800;color:#1a3a6b;margin-bottom:18px;">${mode==="replace"?"Edit Invoice: "+escapeHtml(targetId||""):"Add Invoice"}</h2>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div style="display:flex;flex-direction:column;gap:4px;">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:#555;">Invoice ID</label>
@@ -25907,6 +25926,7 @@ function saveRuidosoInvoiceModal(){
     state.ruidosoInvoices.push(entry);
   }
   closeRuidosoInvoiceModal();
+  persistRuidosoInvoices();
   toast("Invoice saved", id);
   renderInvoicePanel();
 }
@@ -30780,6 +30800,20 @@ function wireUI(){
       renderInvoiceNavSidebar();
     });
   }
+  const invoiceNavList = document.getElementById("invoiceNavList");
+  if (invoiceNavList) {
+    invoiceNavList.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-office-action]");
+      if (!btn) return;
+      const action = String(btn.dataset.officeAction || "");
+      const invoiceNumber = String(btn.dataset.officeInvoiceNumber || "");
+      if (action === "openKsInvoice"){
+        openOfficeInvoiceByRouteRef(invoiceNumber, { syncUrl: true });
+      } else if (action === "openInvoiceDeepLink"){
+        openOfficeInvoiceByNumber(invoiceNumber, { syncUrl: true });
+      }
+    });
+  }
   const invoicePanel = $("invoicePanel");
   if (invoicePanel){
     invoicePanel.addEventListener("click", (e) => {
@@ -30874,6 +30908,7 @@ function wireUI(){
         const rid = String(btn.dataset.ruidosoId || "");
         if (!rid) return;
         state.ruidosoInvoices = (state.ruidosoInvoices || []).filter(r => r.id !== rid);
+        persistRuidosoInvoices();
         toast("Invoice removed", rid);
         renderInvoicePanel();
         return;
