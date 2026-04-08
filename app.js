@@ -17730,6 +17730,7 @@ function renderProjectsList(){
     if (deleteBtn){
       deleteBtn.addEventListener("click", () => {
         setActiveProjectById(project.id);
+        closeProjectsModal();
         openDeleteProjectModal();
       });
     }
