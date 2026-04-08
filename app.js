@@ -122,23 +122,7 @@ const state = {
   },
   orgs: [],
   invoices: [],
-  ruidosoInvoices: [
-    { id:"TDS_001", node:"23", loc:"1635EA_03", date:"01/19/2026", total:4733.00,   paid:true  },
-    { id:"TDS_002", node:"54", loc:"1635CA_02", date:"01/19/2026", total:3475.75,   paid:true  },
-    { id:"TDS_003", node:"9",  loc:"1635_01",   date:"01/24/2026", total:1643.00,   paid:true  },
-    { id:"TDS_004", node:"9",  loc:"1635BA_02", date:"01/24/2026", total:1877.75,   paid:true  },
-    { id:"TDS_005", node:"9",  loc:"1635BA_02", date:"01/31/2026", total:698.00,    paid:true  },
-    { id:"TDS_006", node:"9",  loc:"1635BA_01", date:"01/31/2026", total:1536.00,   paid:true  },
-    { id:"TDS_007", node:"54", loc:"1635CA_04", date:"02/07/2026", total:3595.00,   paid:true  },
-    { id:"TDS_008", node:"9",  loc:"1635BA_01", date:"02/07/2026", total:1536.00,   paid:true  },
-    { id:"TDS_009", node:"54", loc:"1635CA_04", date:"02/15/2026", total:4826.75,   paid:true  },
-    { id:"TDS_003A",node:"23", loc:"1635EA_03", date:"01/19/2026", total:3940.75,   paid:false },
-    { id:"TDS_010", node:"54", loc:"1635CA_03", date:"02/15/2026", total:1674.50,   paid:false },
-    { id:"TDS_011", node:"9",  loc:"1635BA_01", date:"02/15/2026", total:325.00,    paid:false },
-    { id:"TDS_012", node:"54", loc:"1635CA_03", date:"02/22/2026", total:1415.50,   paid:false },
-    { id:"TDS_013", node:"9",  loc:"1635BA_01", date:"02/22/2026", total:1968.00,   paid:false },
-    { id:"TDS_014", node:"54", loc:"1635CA_04", date:"02/22/2026", total:5009.00,   paid:false },
-  ],
+  ruidosoInvoices: [],
   ruidosoInvoiceModal: { open: false, mode: "add", targetId: null },
   officeInvoices: {
     records: [],
@@ -25086,6 +25070,12 @@ function persistKsInvoiceLocalFallback(){
 
 function ensureKsInvoiceLocalStateLoaded(){
   if (state.ksInvoices.loaded) return;
+  if (isDemoShowcaseMode() || isDemo){
+    state.ksInvoices.records = [];
+    state.ksInvoices.batches = [];
+    state.ksInvoices.loaded = true;
+    return;
+  }
   try {
     const rawRecords = safeLocalStorageGet(KS_INVOICE_RECORDS_KEY);
     if (rawRecords){
@@ -25109,6 +25099,55 @@ function ensureKsInvoiceLocalStateLoaded(){
 
 async function loadKsInvoiceWorkspace(projectId = state.activeProject?.id || null){
   ensureKsInvoiceLocalStateLoaded();
+  if (isDemoShowcaseMode() || isDemo){
+    state.ksInvoices.records = [
+      {
+        id: "demo-ks-001",
+        invoice_number: "DEMO_001",
+        invoice_key: "SpecCom_DEMO_001",
+        invoice_date: "01/10/2026",
+        week_ending: "01/10/2026",
+        project_name: "Showcase Rebuild",
+        node_name: "NODE-A1",
+        bill_to_company: "Acme Telecom",
+        customer_name: "Acme Telecom",
+        source_filename: "SpecCom_DEMO_001.pdf",
+        imported_at: nowISO(),
+        status: "imported",
+        line_items: [],
+        grand_total: 2900.00,
+        parse_status: "parsed",
+        parse_error: "",
+        warnings: [],
+        extracted_data: {},
+        source_file_url: "",
+      },
+      {
+        id: "demo-ks-002",
+        invoice_number: "DEMO_002",
+        invoice_key: "SpecCom_DEMO_002",
+        invoice_date: "01/17/2026",
+        week_ending: "01/17/2026",
+        project_name: "Showcase Rebuild",
+        node_name: "NODE-B3",
+        bill_to_company: "Acme Telecom",
+        customer_name: "Acme Telecom",
+        source_filename: "SpecCom_DEMO_002.pdf",
+        imported_at: nowISO(),
+        status: "imported",
+        line_items: [],
+        grand_total: 2060.00,
+        parse_status: "parsed",
+        parse_error: "",
+        warnings: [],
+        extracted_data: {},
+        source_file_url: "",
+      },
+    ];
+    state.ksInvoices.batches = [];
+    renderInvoicePanel();
+    return;
+  }
   if (!state.client || !state.user){
     renderInvoicePanel();
     return;
@@ -26465,8 +26504,38 @@ function persistRuidosoInvoices(){
 function loadRuidosoInvoices(){
   if (state._ruidosoLoaded) return;
   state._ruidosoLoaded = true;
+  if (isDemoShowcaseMode() || isDemo) {
+    if (state.ruidosoInvoices?.length) return;
+    state.ruidosoInvoices = [
+      { id:"DEMO_001", node:"NODE-A1", loc:"1635EA_03", date:"2026-01-10", total:2900.00, paid:true  },
+      { id:"DEMO_002", node:"NODE-B3", loc:"1635CA_02", date:"2026-01-17", total:2060.00, paid:true  },
+      { id:"DEMO_003", node:"NODE-C2", loc:"1635_01",   date:"2026-01-24", total:3315.00, paid:true  },
+      { id:"DEMO_004", node:"NODE-A2", loc:"1635BA_02", date:"2026-01-31", total:1730.00, paid:false },
+      { id:"DEMO_005", node:"NODE-D1", loc:"1635BA_01", date:"2026-02-07", total:970.00,  paid:false },
+    ];
+    return;
+  }
   const raw = safeLocalStorageGet(RUIDOSO_INVOICES_KEY);
-  if (!raw) return;
+  if (!raw) {
+    state.ruidosoInvoices = [
+      { id:"TDS_001", node:"23", loc:"1635EA_03", date:"01/19/2026", total:4733.00,   paid:true  },
+      { id:"TDS_002", node:"54", loc:"1635CA_02", date:"01/19/2026", total:3475.75,   paid:true  },
+      { id:"TDS_003", node:"9",  loc:"1635_01",   date:"01/24/2026", total:1643.00,   paid:true  },
+      { id:"TDS_004", node:"9",  loc:"1635BA_02", date:"01/24/2026", total:1877.75,   paid:true  },
+      { id:"TDS_005", node:"9",  loc:"1635BA_02", date:"01/31/2026", total:698.00,    paid:true  },
+      { id:"TDS_006", node:"9",  loc:"1635BA_01", date:"01/31/2026", total:1536.00,   paid:true  },
+      { id:"TDS_007", node:"54", loc:"1635CA_04", date:"02/07/2026", total:3595.00,   paid:true  },
+      { id:"TDS_008", node:"9",  loc:"1635BA_01", date:"02/07/2026", total:1536.00,   paid:true  },
+      { id:"TDS_009", node:"54", loc:"1635CA_04", date:"02/15/2026", total:4826.75,   paid:true  },
+      { id:"TDS_003A",node:"23", loc:"1635EA_03", date:"01/19/2026", total:3940.75,   paid:false },
+      { id:"TDS_010", node:"54", loc:"1635CA_03", date:"02/15/2026", total:1674.50,   paid:false },
+      { id:"TDS_011", node:"9",  loc:"1635BA_01", date:"02/15/2026", total:325.00,    paid:false },
+      { id:"TDS_012", node:"54", loc:"1635CA_03", date:"02/22/2026", total:1415.50,   paid:false },
+      { id:"TDS_013", node:"9",  loc:"1635BA_01", date:"02/22/2026", total:1968.00,   paid:false },
+      { id:"TDS_014", node:"54", loc:"1635CA_04", date:"02/22/2026", total:5009.00,   paid:false },
+    ];
+    return;
+  }
   try {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length) state.ruidosoInvoices = parsed;
@@ -26476,7 +26545,11 @@ function loadRuidosoInvoices(){
 function renderRuidosoBillingSummary(){
   loadRuidosoInvoices();
   const invoices = state.ruidosoInvoices || [];
-  const KS_PAID  = 21824.00;
+  const isShowcase = isDemoShowcaseMode() || isDemo;
+  const projectLabel = isShowcase ? "Showcase City, ST — Demo Rebuild Billing Summary" : "Ruidoso, NM — Fire Rebuild Billing Summary";
+  const projectMeta  = isShowcase ? "WBS: TC-000000000 &nbsp;|&nbsp; Acme Telecom &nbsp;|&nbsp; Demo Mode" : "WBS: TC-241635027 &nbsp;|&nbsp; K &amp; S Electric &nbsp;|&nbsp; March 27, 2026";
+  const KS_PAID = isShowcase ? 8275.00 : 21824.00;
+  const KS_PAID_LABEL = isShowcase ? "Client Paid" : "K&amp;S Paid";
   const TOTAL    = invoices.reduce((s,r) => s + r.total, 0);
   const BALANCE  = TOTAL - KS_PAID;
   const paid     = invoices.filter(r => r.paid);
@@ -26523,8 +26596,8 @@ function renderRuidosoBillingSummary(){
       <!-- Top bar -->
       <div style="background:#1a3a6b;color:#fff;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
         <div>
-          <div style="font-size:13px;font-weight:700;letter-spacing:.03em;">Ruidoso, NM — Fire Rebuild Billing Summary</div>
-          <div style="font-size:11px;opacity:.65;margin-top:2px;">WBS: TC-241635027 &nbsp;|&nbsp; K &amp; S Electric &nbsp;|&nbsp; March 27, 2026</div>
+          <div style="font-size:13px;font-weight:700;letter-spacing:.03em;">${projectLabel}</div>
+          <div style="font-size:11px;opacity:.65;margin-top:2px;">${projectMeta}</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <button type="button" data-office-action="ruidosoAddInvoice" style="background:#00b050;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:'Manrope',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">＋ Add Invoice</button>
@@ -26544,7 +26617,7 @@ function renderRuidosoBillingSummary(){
           <div style="font-size:10px;opacity:.5;margin-top:2px;">All ${invoices.length} invoice${invoices.length!==1?"s":""}</div>
         </div>
         <div style="background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.15);border-radius:9px;padding:11px 14px;color:#fff;">
-          <div style="font-size:10px;font-weight:600;opacity:.6;letter-spacing:.07em;text-transform:uppercase;">K&amp;S Paid</div>
+          <div style="font-size:10px;font-weight:600;opacity:.6;letter-spacing:.07em;text-transform:uppercase;">${KS_PAID_LABEL}</div>
           <div style="font-size:20px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums;color:#4ade80;">${fmt(KS_PAID)}</div>
           <div style="font-size:10px;opacity:.5;margin-top:2px;">${paid.length} invoice${paid.length!==1?"s":""} · confirmed</div>
         </div>
@@ -31898,3 +31971,4 @@ if (document.readyState === "loading"){
 } else {
   startApp();
 }
+
