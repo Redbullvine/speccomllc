@@ -18912,6 +18912,22 @@ async function deleteProjectFallback(client, projectId){
   return true;
 }
 
+async function softDeleteProjectFallback(client, projectId){
+  const { error } = await client
+    .from("projects")
+    .update({
+      active: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", projectId);
+
+  if (error){
+    throw error;
+  }
+
+  return true;
+}
+
 async function deleteProject(){
   if (!state.activeProject){
     toast("Project required", "Select a project to delete.");
@@ -18937,13 +18953,19 @@ async function deleteProject(){
       await deleteProjectRpc(state.client, projectId);
     } catch (err) {
       if (isRpc404(err)){
-        await deleteProjectFallback(state.client, projectId);
+        try {
+          await deleteProjectFallback(state.client, projectId);
+        } catch (deleteErr) {
+          await softDeleteProjectFallback(state.client, projectId);
+        }
+      } else if (String(err?.message || "").toLowerCase().includes("role_code")) {
+        await softDeleteProjectFallback(state.client, projectId);
       } else {
         throw err;
       }
     }
     toast("Project deleted", "Project deleted.");
-    state.projects = (state.projects || []).filter(p => p.id !== projectId);
+    state.projects = (state.projects || []).filter((p) => String(p.id) !== String(projectId));
     state.activeProject = state.projects[0] || null;
     closeDeleteProjectModal();
     renderProjects();
@@ -19836,7 +19858,7 @@ async function loadProjects(){
   if (!orgId){
     console.warn("[projects] org undefined; attempting membership/creator fallback", { user_id: userId, org_id: null });
   }
-  const baseSelect = "id, org_id, name, description, created_at, location, job_number, is_demo, created_by";
+  const baseSelect = "id, org_id, name, description, created_at, location, job_number, is_demo, created_by, active";
   let projects = [];
 
   const { data: memberRows, error: memberError } = await state.client
@@ -19895,7 +19917,7 @@ async function loadProjects(){
   const seen = new Set();
   (projects || []).forEach((row) => {
     const id = String(row?.id || "").trim();
-    if (!id || seen.has(id)) return;
+    if (!id || seen.has(id) || row?.active === false) return;
     seen.add(id);
     uniqueProjects.push(row);
   });
