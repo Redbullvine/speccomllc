@@ -2785,6 +2785,14 @@ body.map-create-open #mapSidebarToggle{
 .project-row.active{
   border-color: rgba(212,175,55,.9);
   background: rgba(212,175,55,.12);
+  color:#1f2937;
+}
+.project-row.active .project-row-select,
+.project-row.active .project-row-title{
+  color:#1f2937;
+}
+.project-row.active .project-row-meta{
+  color:#475569;
 }
 .project-row-title{
   font-weight:800;
@@ -2792,6 +2800,27 @@ body.map-create-open #mapSidebarToggle{
 .project-row-meta{
   color:var(--muted);
   font-size:12px;
+}
+
+#viewAdmin .card{
+  color:#1f2937;
+}
+#viewAdmin .card h2,
+#viewAdmin .card h3{
+  color:#334155;
+}
+#viewAdmin .card .muted,
+#viewAdmin .card .small{
+  color:#64748b;
+}
+#viewAdmin .table td{
+  color:#1f2937;
+}
+#viewAdmin .table tbody tr:nth-child(even){
+  background:#f8fafc;
+}
+#viewAdmin .table tbody tr:hover{
+  background:#eef2ff;
 }
 .kmz-photo-section{
   margin-top:10px;
