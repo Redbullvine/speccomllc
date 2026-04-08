@@ -18873,6 +18873,7 @@ function openDeleteProjectModal(){
     toast("Not allowed", "Only authorized team members can delete projects.");
     return;
   }
+  closeProjectsModal();
   const modal = $("deleteProjectModal");
   if (!modal) return;
   const input = $("deleteProjectConfirm");
@@ -18892,6 +18893,19 @@ async function deleteProjectRpc(client, projectId) {
   });
 
   if (error) {
+    throw error;
+  }
+
+  return true;
+}
+
+async function deleteProjectFallback(client, projectId){
+  const { error } = await client
+    .from("projects")
+    .delete()
+    .eq("id", projectId);
+
+  if (error){
     throw error;
   }
 
@@ -18919,7 +18933,15 @@ async function deleteProject(){
 
   const projectId = state.activeProject.id;
   try {
-    await deleteProjectRpc(state.client, projectId);
+    try {
+      await deleteProjectRpc(state.client, projectId);
+    } catch (err) {
+      if (isRpc404(err)){
+        await deleteProjectFallback(state.client, projectId);
+      } else {
+        throw err;
+      }
+    }
     toast("Project deleted", "Project deleted.");
     state.projects = (state.projects || []).filter(p => p.id !== projectId);
     state.activeProject = state.projects[0] || null;
@@ -18931,7 +18953,7 @@ async function deleteProject(){
     }
   } catch (err) {
     console.error("Delete failed", err);
-    toast("Delete failed", "Delete failed.");
+    toast("Delete failed", err?.message || "Delete failed.");
   }
 }
 
