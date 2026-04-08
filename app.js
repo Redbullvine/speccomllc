@@ -10068,8 +10068,13 @@ function initSplash() {
     dismissSplash("#login");
   });
 
-  demoBtn.addEventListener("click", () => {
-    dismissSplash("#demo");
+  demoBtn.addEventListener("click", async () => {
+    try {
+      await demoLogin({ routeToDemo: true, dismissSplashOnSuccess: true, dismissSplash });
+    } catch (error){
+      console.warn("[demo] splash login failed", error);
+      toast("Demo login failed", error?.message || "Unable to start demo session.");
+    }
   });
 }
 
@@ -11549,11 +11554,17 @@ SpecCom.helpers.loadYourInvoices = async function(projectId){
     return;
   }
   if (!state.client) return;
-  const { data, error } = await state.client
+  let query = state.client
     .from("invoices")
     .select("id, invoice_number, status, total, site_id, billed_by_org_id, billed_to_org_id, created_at")
-    .eq("project_id", projectId)
-    .order("created_at", { ascending: false });
+    .eq("project_id", projectId);
+  if (isDemoUser()){
+    const demoOrgId = state.profile?.org_id || state.activeOrgId || state.activeProject?.org_id || null;
+    if (demoOrgId){
+      query = query.eq("billed_by_org_id", demoOrgId);
+    }
+  }
+  const { data, error } = await query.order("created_at", { ascending: false });
   if (error){
     toast("Invoices load error", error.message);
     return;
@@ -30177,10 +30188,14 @@ async function loadProfile(client, userId){
   renderLocations();
 }
 
-async function demoLogin(){
-  if (isDemo) return;
-  if (isDemoBootstrapEnabled()){
-    await handleSignIn();
+async function demoLogin(options = {}){
+  const { routeToDemo = false, dismissSplashOnSuccess = false, dismissSplash = null } = options || {};
+  if (isDemo){
+    if (dismissSplashOnSuccess && typeof dismissSplash === "function"){
+      dismissSplash(routeToDemo ? "#demo" : undefined);
+    } else if (routeToDemo){
+      window.location.hash = "#demo";
+    }
     return;
   }
   const creds = getDemoCredentials();
@@ -30192,6 +30207,11 @@ async function demoLogin(){
     toast("Demo login unavailable", "Set DEMO_PASSWORD to enable demo login.");
     return;
   }
+  try {
+    await state.client.auth.signOut({ scope: "global" });
+  } catch (signOutError){
+    console.warn("[demo] pre-login sign out failed", signOutError);
+  }
   const { error } = await state.client.auth.signInWithPassword({
     email: creds.email,
     password: creds.password,
@@ -30199,6 +30219,11 @@ async function demoLogin(){
   if (error){
     toast("Demo login failed", error.message);
   } else {
+    if (dismissSplashOnSuccess && typeof dismissSplash === "function"){
+      dismissSplash(routeToDemo ? "#demo" : undefined);
+    } else if (routeToDemo){
+      window.location.hash = "#demo";
+    }
     toast("Demo session", t("demoLoginNote"));
   }
 }
