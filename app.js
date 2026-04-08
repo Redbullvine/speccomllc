@@ -25143,6 +25143,69 @@ async function loadKsInvoiceWorkspace(projectId = state.activeProject?.id || nul
         extracted_data: {},
         source_file_url: "",
       },
+      {
+        id: "demo-ks-003",
+        invoice_number: "DEMO_003",
+        invoice_key: "SpecCom_DEMO_003",
+        invoice_date: "01/24/2026",
+        week_ending: "01/24/2026",
+        project_name: "Showcase Rebuild",
+        node_name: "NODE-C2",
+        bill_to_company: "Acme Telecom",
+        customer_name: "Acme Telecom",
+        source_filename: "SpecCom_DEMO_003.pdf",
+        imported_at: nowISO(),
+        status: "imported",
+        line_items: [],
+        grand_total: 3315.00,
+        parse_status: "parsed",
+        parse_error: "",
+        warnings: [],
+        extracted_data: {},
+        source_file_url: "",
+      },
+      {
+        id: "demo-ks-004",
+        invoice_number: "DEMO_004",
+        invoice_key: "SpecCom_DEMO_004",
+        invoice_date: "01/31/2026",
+        week_ending: "01/31/2026",
+        project_name: "Showcase Rebuild",
+        node_name: "NODE-A2",
+        bill_to_company: "Acme Telecom",
+        customer_name: "Acme Telecom",
+        source_filename: "SpecCom_DEMO_004.pdf",
+        imported_at: nowISO(),
+        status: "imported",
+        line_items: [],
+        grand_total: 1730.00,
+        parse_status: "parsed",
+        parse_error: "",
+        warnings: [],
+        extracted_data: {},
+        source_file_url: "",
+      },
+      {
+        id: "demo-ks-005",
+        invoice_number: "DEMO_005",
+        invoice_key: "SpecCom_DEMO_005",
+        invoice_date: "02/07/2026",
+        week_ending: "02/07/2026",
+        project_name: "Showcase Rebuild",
+        node_name: "NODE-D1",
+        bill_to_company: "Acme Telecom",
+        customer_name: "Acme Telecom",
+        source_filename: "SpecCom_DEMO_005.pdf",
+        imported_at: nowISO(),
+        status: "imported",
+        line_items: [],
+        grand_total: 970.00,
+        parse_status: "parsed",
+        parse_error: "",
+        warnings: [],
+        extracted_data: {},
+        source_file_url: "",
+      },
     ];
     state.ksInvoices.batches = [];
     renderInvoicePanel();
@@ -26546,10 +26609,10 @@ function renderRuidosoBillingSummary(){
   loadRuidosoInvoices();
   const invoices = state.ruidosoInvoices || [];
   const isShowcase = isDemoShowcaseMode() || isDemo;
-  const projectLabel = isShowcase ? "Showcase City, ST — Demo Rebuild Billing Summary" : "Ruidoso, NM — Fire Rebuild Billing Summary";
-  const projectMeta  = isShowcase ? "WBS: TC-000000000 &nbsp;|&nbsp; Acme Telecom &nbsp;|&nbsp; Demo Mode" : "WBS: TC-241635027 &nbsp;|&nbsp; K &amp; S Electric &nbsp;|&nbsp; March 27, 2026";
+  const PROJECT_LABEL = isShowcase ? "Showcase City, ST — Demo Rebuild Billing Summary" : "Ruidoso, NM — Fire Rebuild Billing Summary";
+  const PROJECT_META  = isShowcase ? "Acme Telecom | Demo Mode" : "K & S Electric | March 27, 2026";
   const KS_PAID = isShowcase ? 8275.00 : 21824.00;
-  const KS_PAID_LABEL = isShowcase ? "Client Paid" : "K&amp;S Paid";
+  const KS_PAID_LABEL = isShowcase ? "Client Paid" : "K&S Paid";
   const TOTAL    = invoices.reduce((s,r) => s + r.total, 0);
   const BALANCE  = TOTAL - KS_PAID;
   const paid     = invoices.filter(r => r.paid);
@@ -26596,8 +26659,8 @@ function renderRuidosoBillingSummary(){
       <!-- Top bar -->
       <div style="background:#1a3a6b;color:#fff;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
         <div>
-          <div style="font-size:13px;font-weight:700;letter-spacing:.03em;">${projectLabel}</div>
-          <div style="font-size:11px;opacity:.65;margin-top:2px;">${projectMeta}</div>
+          <div style="font-size:13px;font-weight:700;letter-spacing:.03em;">${PROJECT_LABEL}</div>
+          <div style="font-size:11px;opacity:.65;margin-top:2px;">${PROJECT_META}</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <button type="button" data-office-action="ruidosoAddInvoice" style="background:#00b050;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:'Manrope',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">＋ Add Invoice</button>
@@ -31971,4 +32034,5 @@ if (document.readyState === "loading"){
 } else {
   startApp();
 }
+
 
