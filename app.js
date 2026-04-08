@@ -106,6 +106,7 @@ const state = {
   authResolved: false,
   profile: null, // {role, display_name}
   activeOrgId: null,
+  supportConsoleOrgOverride: null,
   orgContextRequired: false,
   orgContextPromptShown: false,
   activeProject: null,
@@ -220,6 +221,8 @@ const state = {
   adminWorkspace: {
     tab: "companies",
     companies: [],
+    companiesLoaded: false,
+    loadingCompanies: false,
     users: [],
     projects: [],
     companyEditId: null,
@@ -1707,9 +1710,10 @@ async function initializeOrgContext({ attemptRepair = true } = {}){
     return null;
   }
   let orgId = String(
-    state.activeProject?.org_id
-    || state.profile?.org_id
+    state.supportConsoleOrgOverride
+    || state.activeProject?.org_id
     || state.activeOrgId
+    || state.profile?.org_id
     || getSavedActiveOrgPreference()
     || ""
   ).trim() || null;
@@ -9985,10 +9989,11 @@ function isFieldRole(roleCode = getRoleCode()){
 function getShowcaseAccountEmails(){
   const env = getRuntimeEnv();
   const raw = String(env?.LIVE_SHOWCASE_EMAILS || env?.DEMO_SHOWCASE_EMAILS || "").trim();
-  const list = raw
+  const list = ["demo.version@speccom.llc"]
+    .concat(raw
     .split(/[,\s;]+/)
     .map((item) => normalizeEmail(item))
-    .filter(Boolean);
+    .filter(Boolean));
   const demoBootstrapEmail = normalizeEmail(env?.DEMO_BOOTSTRAP_EMAIL || env?.["DEMO_" + "AD" + "MIN_EMAIL"]);
   if (demoBootstrapEmail) list.push(demoBootstrapEmail);
   return new Set(list);
@@ -10002,15 +10007,16 @@ function isShowcaseAccountUser(){
 }
 
 function isDemoShowcaseMode(){
-  if (String(appMode || "").toLowerCase() === "demo") return true;
   const env = getRuntimeEnv();
-  if (parseBooleanFlag(env?.DEMO_SHOWCASE_ENABLED)){
-    return true;
+  const enabled = String(appMode || "").toLowerCase() === "demo"
+    || parseBooleanFlag(env?.DEMO_SHOWCASE_ENABLED)
+    || parseBooleanFlag(env?.DEMO_SHOWCASE_ACCOUNT_ENABLED);
+  if (!enabled) return false;
+  if (state.user){
+    if (isAppRoot()) return false;
+    return isShowcaseAccountUser();
   }
-  if (parseBooleanFlag(env?.DEMO_SHOWCASE_ACCOUNT_ENABLED) && isShowcaseAccountUser()){
-    return true;
-  }
-  return false;
+  return true;
 }
 
 function canShowModule(moduleKey){
@@ -10599,7 +10605,10 @@ function clearAuthenticatedWorkspaceState(){
   state.pendingPreferredLanguage = "";
   state.orgContextRequired = false;
   state.orgContextPromptShown = false;
+  state.supportConsoleOrgOverride = null;
   state.adminWorkspace.companies = [];
+  state.adminWorkspace.companiesLoaded = false;
+  state.adminWorkspace.loadingCompanies = false;
   state.adminWorkspace.users = [];
   state.adminWorkspace.projects = [];
   state.adminWorkspace.tab = "companies";
@@ -19905,7 +19914,8 @@ async function loadProjects(){
     renderProjects();
     return;
   }
-  const orgId = await initializeOrgContext({ attemptRepair: true });
+  const orgId = state.supportConsoleOrgOverride
+    || await initializeOrgContext({ attemptRepair: true });
   const userId = state.user?.id || null;
   if (!orgId){
     console.warn("[projects] org undefined; attempting membership/creator fallback", { user_id: userId, org_id: null });
@@ -19913,49 +19923,66 @@ async function loadProjects(){
   const baseSelect = "id, org_id, name, description, created_at, location, job_number, is_demo, created_by, active";
   let projects = [];
 
-  const { data: memberRows, error: memberError } = await state.client
-    .from("project_members")
-    .select(`
-      project_id,
-      projects (
-        ${baseSelect}
-      )
-    `)
-    .eq("user_id", state.user.id);
-  if (memberError){
-    toast("Projects load error", memberError.message);
-    return;
-  }
-  projects = (memberRows || [])
-    .map((row) => {
-      if (!row?.projects) return null;
-      return {
-        ...row.projects,
-      };
-    })
-    .filter(Boolean);
-
-  // Fallback: include projects created by the user (legacy rows missing membership)
-  let createdQuery = state.client
-    .from("projects")
-    .select(baseSelect)
-    .eq("created_by", state.user.id)
-    .order("name");
-  const createdResp = await createdQuery;
-  if (!createdResp.error){
-    const existing = new Set(projects.map(p => p.id));
-    (createdResp.data || []).forEach((row) => {
-      if (!existing.has(row.id)) projects.push(row);
-    });
+  if (isAppRoot()){
+    let query = state.client
+      .from("projects")
+      .select(baseSelect)
+      .order("name");
+    if (orgId){
+      query = query.eq("org_id", orgId);
+    }
+    const { data, error } = await query;
+    if (error){
+      toast("Projects load error", error.message);
+      return;
+    }
+    projects = data || [];
   } else {
-    const message = String(createdResp.error.message || "").toLowerCase();
-    if (message.includes("created_by") && message.includes("does not exist")){
-      let fallbackQuery = state.client
-        .from("projects")
-        .select(baseSelect.replace(", created_by", ""))
-        .order("name");
-      const { data } = await fallbackQuery;
-      projects = data || projects;
+
+    const { data: memberRows, error: memberError } = await state.client
+      .from("project_members")
+      .select(`
+        project_id,
+        projects (
+          ${baseSelect}
+        )
+      `)
+      .eq("user_id", state.user.id);
+    if (memberError){
+      toast("Projects load error", memberError.message);
+      return;
+    }
+    projects = (memberRows || [])
+      .map((row) => {
+        if (!row?.projects) return null;
+        return {
+          ...row.projects,
+        };
+      })
+      .filter(Boolean);
+
+    // Fallback: include projects created by the user (legacy rows missing membership)
+    let createdQuery = state.client
+      .from("projects")
+      .select(baseSelect)
+      .eq("created_by", state.user.id)
+      .order("name");
+    const createdResp = await createdQuery;
+    if (!createdResp.error){
+      const existing = new Set(projects.map(p => p.id));
+      (createdResp.data || []).forEach((row) => {
+        if (!existing.has(row.id)) projects.push(row);
+      });
+    } else {
+      const message = String(createdResp.error.message || "").toLowerCase();
+      if (message.includes("created_by") && message.includes("does not exist")){
+        let fallbackQuery = state.client
+          .from("projects")
+          .select(baseSelect.replace(", created_by", ""))
+          .order("name");
+        const { data } = await fallbackQuery;
+        projects = data || projects;
+      }
     }
   }
 
@@ -20345,8 +20372,12 @@ function closeAdminInviteModal(){
 async function loadAdminCompanies(){
   if (!state.client || !isAppAdmin()){
     state.adminWorkspace.companies = [];
+    state.adminWorkspace.companiesLoaded = false;
+    state.adminWorkspace.loadingCompanies = false;
     return;
   }
+  if (state.adminWorkspace.loadingCompanies) return;
+  state.adminWorkspace.loadingCompanies = true;
   let { data, error } = await state.client
     .from("orgs")
     .select("id, name, role, created_at, profiles(count)")
@@ -20377,6 +20408,7 @@ async function loadAdminCompanies(){
   }
 
   if (error){
+    state.adminWorkspace.loadingCompanies = false;
     toast("Companies load error", error.message || "Unable to load companies.", "error");
     return;
   }
@@ -20385,6 +20417,8 @@ async function loadAdminCompanies(){
     ...row,
     user_count: Number(row?.profiles?.[0]?.count || row?.profiles?.count || 0),
   }));
+  state.adminWorkspace.companiesLoaded = true;
+  state.adminWorkspace.loadingCompanies = false;
   state.orgs = (data || []).map((row) => ({ id: row.id, name: row.name, role: row.role }));
 }
 
@@ -28846,9 +28880,196 @@ function runShowcaseAction(action){
   toast("Control Center", "Opening Projects.");
 }
 
+function renderSupportConsoleBar(){
+  if (!isAppRoot()) return "";
+  const orgs = state.adminWorkspace?.companies || [];
+  const activeOrgId = state.supportConsoleOrgOverride || state.activeOrgId || state.profile?.org_id || "";
+  const activeOrg = orgs.find((org) => String(org.id || "") === String(activeOrgId || ""));
+  const orgOptions = orgs.map((org) => `
+      <option value="${escapeHtml(org.id)}" ${String(org.id || "") === String(activeOrgId || "") ? "selected" : ""}>
+        ${escapeHtml(org.name || "Organization")}
+      </option>
+    `).join("");
+
+  return `
+    <div id="support-console-bar" style="
+      background:linear-gradient(135deg,#1a0a2e,#2d1054);
+      border-bottom:2px solid #7c3aed;
+      padding:10px 20px;
+      display:flex;
+      align-items:center;
+      gap:14px;
+      flex-wrap:wrap;
+      border-radius:18px;
+      margin:0 0 18px;
+    ">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="
+          background:#7c3aed;color:#fff;font-size:9px;font-weight:800;
+          letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;
+          border-radius:4px;
+        ">⚡ Support Console</span>
+        <span style="color:#a78bfa;font-size:11px;">Viewing as:</span>
+      </div>
+      <select id="supportConsoleOrgSelect"
+        onchange="switchSupportConsoleOrg(this.value)"
+        style="
+          background:#2d1054;color:#e9d5ff;border:1px solid #7c3aed;
+          border-radius:6px;padding:6px 12px;font-size:13px;font-weight:600;
+          cursor:pointer;min-width:200px;
+        ">
+        ${orgOptions || `<option value="">No companies loaded</option>`}
+      </select>
+      <div style="color:#a78bfa;font-size:11px;" id="supportConsoleOrgMeta">
+        ${activeOrg ? `${escapeHtml(activeOrg.name || "")} · ${escapeHtml(activeOrg.role || "")}` : ""}
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" onclick="navigateTo('admin')"
+          style="background:#4c1d95;color:#e9d5ff;border:1px solid #7c3aed;
+          border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;">
+          🛡 Admin Panel
+        </button>
+        <button type="button" onclick="openSupportQuickFix()"
+          style="background:#dc2626;color:#fff;border:none;
+          border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;">
+          🚨 Quick Fix
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+async function switchSupportConsoleOrg(orgId){
+  const nextOrgId = String(orgId || "").trim();
+  if (!isAppRoot() || !nextOrgId) return;
+  state.supportConsoleOrgOverride = nextOrgId;
+  setActiveOrgContext(nextOrgId);
+  if (state.profile){
+    state.profile.support_console_active = true;
+  }
+  if (window.currentUser){
+    window.currentUser.orgId = nextOrgId;
+    window.currentUser.supportConsoleActive = true;
+  }
+  state.projects = [];
+  state.activeProject = null;
+  state.projectNodes = [];
+  state.projectSites = [];
+  state.activeNode = null;
+  state.activeSite = null;
+  state.ksInvoices.loaded = false;
+  state.ksInvoices.records = [];
+  state.ksInvoices.batches = [];
+  state._ruidosoLoaded = false;
+  state.ruidosoInvoices = [];
+  await loadProjects();
+  await loadAdminCompanies();
+  renderDemoShowcaseHome();
+  const orgs = state.adminWorkspace?.companies || [];
+  const org = orgs.find((row) => String(row.id || "") === nextOrgId);
+  toast("Company switched", `Now viewing: ${org?.name || nextOrgId}`, "info");
+}
+
+window.switchSupportConsoleOrg = switchSupportConsoleOrg;
+
+function openSupportQuickFix(){
+  if (!isAppRoot()) return;
+  document.getElementById("quickFixModal")?.remove();
+  const activeOrg = (state.adminWorkspace?.companies || [])
+    .find((org) => String(org.id || "") === String(state.activeOrgId || state.supportConsoleOrgOverride || ""));
+  const orgName = activeOrg?.name || "Selected Company";
+  const project = state.activeProject;
+
+  const modal = document.createElement("div");
+  modal.id = "quickFixModal";
+  modal.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  `;
+  modal.innerHTML = `
+    <div style="background:#0f0f1a;border:1px solid #7c3aed;border-radius:14px;
+      padding:28px;max-width:520px;width:100%;color:#e2e8f0;font-family:'Manrope',sans-serif;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div>
+          <div style="font-size:16px;font-weight:800;color:#f1f5f9;">🚨 Quick Fix Console</div>
+          <div style="font-size:12px;color:#a78bfa;margin-top:2px;">
+            ${escapeHtml(orgName)} ${project ? "· " + escapeHtml(project.name || "") : ""}
+          </div>
+        </div>
+        <button onclick="document.getElementById('quickFixModal')?.remove()"
+          style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;">✕</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <button onclick="navigateTo('map');document.getElementById('quickFixModal')?.remove();"
+          style="background:#1e3a5f;border:1px solid #3b82f6;border-radius:8px;
+          padding:14px;text-align:left;cursor:pointer;color:#e2e8f0;">
+          <div style="font-size:18px;">🗺</div>
+          <div style="font-weight:700;font-size:13px;margin-top:6px;">Open Map</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">View all sites & nodes</div>
+        </button>
+
+        <button onclick="navigateTo('office');document.getElementById('quickFixModal')?.remove();"
+          style="background:#1e3a5f;border:1px solid #3b82f6;border-radius:8px;
+          padding:14px;text-align:left;cursor:pointer;color:#e2e8f0;">
+          <div style="font-size:18px;">📄</div>
+          <div style="font-weight:700;font-size:13px;margin-top:6px;">Open Invoices</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Review billing & payments</div>
+        </button>
+
+        <button onclick="navigateTo('projects');document.getElementById('quickFixModal')?.remove();"
+          style="background:#1e3a5f;border:1px solid #3b82f6;border-radius:8px;
+          padding:14px;text-align:left;cursor:pointer;color:#e2e8f0;">
+          <div style="font-size:18px;">📁</div>
+          <div style="font-weight:700;font-size:13px;margin-top:6px;">Switch Project</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Change active project</div>
+        </button>
+
+        <button onclick="navigateTo('admin');document.getElementById('quickFixModal')?.remove();"
+          style="background:#3b0764;border:1px solid #7c3aed;border-radius:8px;
+          padding:14px;text-align:left;cursor:pointer;color:#e2e8f0;">
+          <div style="font-size:18px;">🛡</div>
+          <div style="font-weight:700;font-size:13px;margin-top:6px;">Admin Panel</div>
+          <div style="font-size:11px;color:#a78bfa;margin-top:2px;">Users, orgs, permissions</div>
+        </button>
+
+        <button onclick="SpecCom.helpers.unlockAllBilling?.();toast('Billing unlocked','All nodes unlocked for this project.','info');document.getElementById('quickFixModal')?.remove();"
+          style="background:#1c1917;border:1px solid #f59e0b;border-radius:8px;
+          padding:14px;text-align:left;cursor:pointer;color:#e2e8f0;">
+          <div style="font-size:18px;">🔓</div>
+          <div style="font-weight:700;font-size:13px;margin-top:6px;">Unlock Billing</div>
+          <div style="font-size:11px;color:#fbbf24;margin-top:2px;">Force unlock active project</div>
+        </button>
+
+        <button onclick="loadProjects().then(()=>{renderDemoShowcaseHome();});document.getElementById('quickFixModal')?.remove();"
+          style="background:#1c1917;border:1px solid #10b981;border-radius:8px;
+          padding:14px;text-align:left;cursor:pointer;color:#e2e8f0;">
+          <div style="font-size:18px;">🔄</div>
+          <div style="font-weight:700;font-size:13px;margin-top:6px;">Force Reload</div>
+          <div style="font-size:11px;color:#6ee7b7;margin-top:2px;">Refresh all project data</div>
+        </button>
+      </div>
+
+      <div style="margin-top:16px;padding:12px;background:#1e1e2e;border-radius:8px;
+        font-size:11px;color:#64748b;line-height:1.6;">
+        🔐 Root access active · All RLS bypassed · Changes affect live data
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) modal.remove();
+  });
+}
+
+window.openSupportQuickFix = openSupportQuickFix;
+
 function renderDemoShowcaseHome(){
   const wrap = $("demoShowcaseHome");
   if (!wrap) return;
+  if (isAppRoot() && !state.adminWorkspace.companiesLoaded && !state.adminWorkspace.loadingCompanies){
+    void loadAdminCompanies().then(() => renderDemoShowcaseHome());
+  }
   renderProfileHomeCard();
   const legacyIds = ["dashboardJobCard","dashboardActiveSiteCard","dashboardActivityCard","dashboardFeatureHubCard","dashboardAllowedQtyCard","dashboardCatalogQuickCard"];
   const profileCard = $("dashboardProfileCard");
@@ -28935,6 +29156,7 @@ function renderDemoShowcaseHome(){
 
   wrap.style.display = "";
   wrap.innerHTML = `
+    ${renderSupportConsoleBar()}
     <div id="command-header">
       <div class="cmd-left">
         <div class="cmd-avatar" id="cmd-avatar" onclick="showProfilePage()">SU</div>
@@ -29869,7 +30091,7 @@ async function loadProfile(client, userId){
   }
 
   // Expect a public.profiles row keyed by auth.uid()
-  let profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id, role, avatar_url";
+  let profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id, role, avatar_url, support_console_active";
   let { data, error } = await client
     .from("profiles")
     .select(profileSelect)
@@ -29879,7 +30101,7 @@ async function loadProfile(client, userId){
   if (error){
     const message = String(error.message || "").toLowerCase();
     if (message.includes("avatar_url") && message.includes("does not exist")){
-      profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id, role";
+      profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id, role, support_console_active";
       ({ data, error } = await client
         .from("profiles")
         .select(profileSelect)
@@ -29888,7 +30110,7 @@ async function loadProfile(client, userId){
     } else if (message.includes("does not exist")){
       ({ data, error } = await client
         .from("profiles")
-        .select("display_name, org_id, role")
+        .select("display_name, org_id, role, support_console_active")
         .eq("id", userId)
         .maybeSingle());
     }
@@ -29939,6 +30161,7 @@ async function loadProfile(client, userId){
     email: state.user?.email || "",
     role: String(state.profile?.role || "member").trim().toLowerCase(),
     orgId: state.profile?.org_id || null,
+    supportConsoleActive: Boolean(state.profile?.support_console_active),
   };
   await initializeOrgContext({ attemptRepair: true });
   if (state.profile?.preferred_language){
