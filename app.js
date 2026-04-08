@@ -233,6 +233,16 @@ const state = {
     reportDate: null,
     metrics: null,
   },
+  adminWorkspace: {
+    tab: "companies",
+    companies: [],
+    users: [],
+    projects: [],
+    companyEditId: null,
+    userOrgFilter: "all",
+    projectOrgFilter: "all",
+    companyUsersOrgId: null,
+  },
   adminProfiles: [],
   materialAdminRows: [],
   materialSmsSubscription: null,
@@ -459,9 +469,41 @@ function resolveProvisionedRoleCode(identity){
   return AUTHENTICATED_ACCESS_CODE;
 }
 
+function getAppUserRole(){
+  if (!state.user) return null;
+  const raw = String(state.profile?.role || window.currentUser?.role || "").trim().toLowerCase();
+  if (raw === "root" || raw === "admin" || raw === "member") return raw;
+  if (raw === "owner" || raw === "support") return "root";
+  if (raw === "project_manager") return "admin";
+  return "member";
+}
+
+function isAppRoot(){
+  return getAppUserRole() === "root";
+}
+
+function isAppAdmin(){
+  const role = getAppUserRole();
+  return role === "root" || role === "admin";
+}
+
+function formatAppRoleLabel(role){
+  const normalized = String(role || "").trim().toLowerCase();
+  if (normalized === "root") return "Root";
+  if (normalized === "admin") return "Admin";
+  return "Member";
+}
+
+function mapAppRoleToInviteCode(role){
+  const normalized = String(role || "").trim().toLowerCase();
+  if (normalized === "root") return "ROOT";
+  if (normalized === "admin") return "ADMIN";
+  return "USER_LEVEL_1";
+}
+
 function getRoleCode(member = state.profile){
   if (!state.user) return null;
-  return AUTHENTICATED_ACCESS_CODE;
+  return getAppUserRole() || AUTHENTICATED_ACCESS_CODE;
 }
 
 function isTechnician(x){
@@ -482,7 +524,7 @@ function isTds(x){
 
 function formatRoleLabel(roleCode){
   if (!state.user) return "-";
-  return "Authenticated";
+  return formatAppRoleLabel(roleCode);
 }
 
 const I18N = {
@@ -2864,6 +2906,12 @@ function setActiveView(viewId, { syncHash = true } = {}){
     applySignedOutUi("set-active-view-blocked");
     return;
   }
+  if (!CONTROL_CENTER_DEV_MODE && !isViewAllowed(viewId)){
+    if (viewId !== getDefaultView()){
+      setActiveView(getDefaultView(), { syncHash });
+    }
+    return;
+  }
   if (viewId !== "viewWarehouseScan"){
     stopWarehouseScanCamera();
   }
@@ -2879,8 +2927,7 @@ function setActiveView(viewId, { syncHash = true } = {}){
   });
   syncMobileBottomNav(viewId);
   if (viewId === "viewAdmin"){
-    loadAdminProfiles();
-    loadAdminMaterialSettings();
+    loadAdminWorkspaceData();
   }
   if (viewId === "viewTechnician"){
     if (state.features.labor) loadTechnicianTimesheet();
@@ -9909,15 +9956,15 @@ function isDemoUser(){
 }
 
 SpecCom.helpers.isRoot = function(){
-  return Boolean(state.user);
+  return isAppRoot();
 };
 
 SpecCom.helpers.isSupport = function(){
-  return Boolean(state.user);
+  return String(state.profile?.role || "").trim().toLowerCase() === "support";
 };
 
 SpecCom.helpers.isPlatformAdmin = function(){
-  return SpecCom.helpers.isRoot() || SpecCom.helpers.isSupport();
+  return isAppAdmin() || SpecCom.helpers.isSupport();
 };
 
 function isBillingManager(){
@@ -9925,11 +9972,11 @@ function isBillingManager(){
 }
 
 function isOwner(){
-  return Boolean(state.user);
+  return isAppAdmin();
 }
 
 function isOwnerOrAdmin(){
-  return Boolean(state.user);
+  return isAppAdmin();
 }
 
 function isPrivilegedRole(roleCode = getRoleCode()){
@@ -10425,6 +10472,7 @@ function isViewAllowed(viewId){
   }
   const allowed = getProductionAllowedViews();
   if (!allowed.has(viewId)) return false;
+  if (viewId === "viewAdmin") return isAppAdmin();
   if (viewId === "viewLabor") return canViewLabor();
   if (viewId === "viewDispatch") return canViewDispatch();
   if (viewId === "viewSupervisor") return canViewDispatch();
@@ -10556,6 +10604,12 @@ function clearAuthenticatedWorkspaceState(){
   state.pendingPreferredLanguage = "";
   state.orgContextRequired = false;
   state.orgContextPromptShown = false;
+  state.adminWorkspace.companies = [];
+  state.adminWorkspace.users = [];
+  state.adminWorkspace.projects = [];
+  state.adminWorkspace.tab = "companies";
+  state.adminWorkspace.companyUsersOrgId = null;
+  window.currentUser = null;
   document.querySelectorAll(".modal").forEach((modal) => {
     if (modal instanceof HTMLElement){
       modal.style.display = "none";
@@ -17052,8 +17106,9 @@ function renderProfileHomeCard(){
 
   const name = getProfileDisplayName();
   const photoUrl = getProfilePhotoUrl();
+  const roleLabel = formatAppRoleLabel(getAppUserRole());
   cardName.textContent = `Welcome back, ${name}`;
-  cardRole.textContent = "Field verification, documentation, and billing control";
+  cardRole.textContent = `${roleLabel} access`;
   const indicator = document.getElementById("profileProjectIndicator");
   const noProject = document.getElementById("profileNoProject");
   const projectLabel = document.getElementById("profileProjectLabel");
@@ -17079,6 +17134,7 @@ function renderProfileHomeCard(){
     {
       name,
       photoUrl,
+      roleLabel,
     },
     String(state.activeProject?.name || "").trim()
   );
@@ -17105,7 +17161,7 @@ function updateCommandHeader(user, projectName) {
     project.textContent = projectName || "— None —";
   }
   if (subtitle) {
-    subtitle.textContent = "Field verification, documentation, and billing control";
+    subtitle.textContent = user?.roleLabel ? `${user.roleLabel} access` : "Field verification, documentation, and billing control";
   }
   if (avatar && user?.photoUrl) {
     avatar.innerHTML = `<img src="${user.photoUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" alt="Profile photo" />`;
@@ -19135,9 +19191,6 @@ async function fetchProjectByName(name, orgId){
     .select(baseSelect)
     .eq("name", name)
     .limit(1);
-  if (orgId){
-    query = query.eq("org_id", orgId);
-  }
   let { data, error } = await query;
   if (error && orgId){
     const message = String(error.message || "").toLowerCase();
@@ -19889,9 +19942,6 @@ async function loadProjects(){
     .select(baseSelect)
     .eq("created_by", state.user.id)
     .order("name");
-  if (orgId){
-    createdQuery = createdQuery.eq("org_id", orgId);
-  }
   const createdResp = await createdQuery;
   if (!createdResp.error){
     const existing = new Set(projects.map(p => p.id));
@@ -19905,9 +19955,6 @@ async function loadProjects(){
         .from("projects")
         .select(baseSelect.replace(", created_by", ""))
         .order("name");
-      if (orgId){
-        fallbackQuery = fallbackQuery.eq("org_id", orgId);
-      }
       const { data } = await fallbackQuery;
       projects = data || projects;
     }
@@ -20215,6 +20262,476 @@ async function saveAdminSmsSettings(){
   syncAdminSmsInputs();
   setAdminInventoryStatus("SMS settings saved.");
   toast("SMS settings updated", smsEnabled ? "SMS notifications are enabled." : "SMS notifications are disabled.");
+}
+
+function getAdminWorkspaceTab(){
+  const tab = String(state.adminWorkspace?.tab || "companies").trim().toLowerCase();
+  if (tab === "users" || tab === "projects") return tab;
+  return "companies";
+}
+
+function setAdminWorkspaceTab(tab){
+  state.adminWorkspace.tab = String(tab || "companies").trim().toLowerCase() || "companies";
+  renderAdminWorkspace();
+}
+
+function getAdminUserRows(){
+  const rows = Array.isArray(state.adminWorkspace?.users) ? state.adminWorkspace.users : [];
+  if (!isAppRoot()) return [];
+  const filterOrgId = String(state.adminWorkspace?.userOrgFilter || state.adminWorkspace?.companyUsersOrgId || "all").trim();
+  if (!filterOrgId || filterOrgId === "all") return rows;
+  return rows.filter((row) => String(row.org_id || "") === filterOrgId);
+}
+
+function getAdminProjectRows(){
+  const rows = Array.isArray(state.adminWorkspace?.projects) ? state.adminWorkspace.projects : [];
+  if (!isAppRoot()) return [];
+  const filterOrgId = String(state.adminWorkspace?.projectOrgFilter || "all").trim();
+  if (!filterOrgId || filterOrgId === "all") return rows;
+  return rows.filter((row) => String(row.org_id || "") === filterOrgId);
+}
+
+function populateAdminInviteOrgOptions(selectedOrgId = ""){
+  const select = $("adminInviteOrg");
+  if (!select) return;
+  const orgs = state.orgs || [];
+  select.innerHTML = orgs.map((org) => (
+    `<option value="${escapeHtml(org.id)}">${escapeHtml(org.name || "Organization")}</option>`
+  )).join("");
+  if (selectedOrgId){
+    select.value = selectedOrgId;
+  } else if (state.profile?.org_id){
+    select.value = state.profile.org_id;
+  }
+}
+
+function openAdminCompanyModal(company = null){
+  if (!isAppAdmin()) return;
+  state.adminWorkspace.companyEditId = company?.id || null;
+  const modal = $("adminCompanyModal");
+  const title = $("adminCompanyModalTitle");
+  const name = $("adminCompanyName");
+  const role = $("adminCompanyRole");
+  if (!modal || !name || !role) return;
+  if (title) title.textContent = company ? "Edit company" : "Add company";
+  name.value = company?.name || "";
+  role.value = String(company?.role || "prime").toLowerCase();
+  modal.style.display = "";
+}
+
+function closeAdminCompanyModal(){
+  const modal = $("adminCompanyModal");
+  if (!modal) return;
+  modal.style.display = "none";
+  state.adminWorkspace.companyEditId = null;
+}
+
+function openAdminInviteModal(orgId = ""){
+  if (!isAppRoot()) return;
+  const modal = $("adminInviteModal");
+  if (!modal) return;
+  $("adminInviteEmail").value = "";
+  $("adminInviteName").value = "";
+  $("adminInviteRole").value = "member";
+  populateAdminInviteOrgOptions(orgId);
+  modal.style.display = "";
+}
+
+function closeAdminInviteModal(){
+  const modal = $("adminInviteModal");
+  if (!modal) return;
+  modal.style.display = "none";
+}
+
+async function loadAdminCompanies(){
+  if (!state.client || !isAppAdmin()){
+    state.adminWorkspace.companies = [];
+    return;
+  }
+  let { data, error } = await state.client
+    .from("orgs")
+    .select("id, name, role, created_at, profiles(count)")
+    .order("name");
+
+  if (error){
+    const baseRes = await state.client
+      .from("orgs")
+      .select("id, name, role, created_at")
+      .order("name");
+    data = baseRes.data || [];
+    error = baseRes.error || null;
+    if (!error){
+      const profilesRes = await state.client
+        .from("profiles")
+        .select("org_id");
+      const counts = new Map();
+      (profilesRes.data || []).forEach((row) => {
+        const key = String(row.org_id || "").trim();
+        if (!key) return;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      });
+      data = (data || []).map((row) => ({
+        ...row,
+        profiles: [{ count: counts.get(String(row.id || "")) || 0 }],
+      }));
+    }
+  }
+
+  if (error){
+    toast("Companies load error", error.message || "Unable to load companies.", "error");
+    return;
+  }
+
+  state.adminWorkspace.companies = (data || []).map((row) => ({
+    ...row,
+    user_count: Number(row?.profiles?.[0]?.count || row?.profiles?.count || 0),
+  }));
+  state.orgs = (data || []).map((row) => ({ id: row.id, name: row.name, role: row.role }));
+}
+
+async function loadAdminUsers(){
+  if (!state.client || !isAppRoot()){
+    state.adminWorkspace.users = [];
+    return;
+  }
+  let { data, error } = await state.client
+    .from("profiles")
+    .select("id, display_name, role, org_id, work_email, created_at, orgs(name)")
+    .order("created_at", { ascending: true });
+
+  if (error){
+    ({ data, error } = await state.client
+      .from("profiles")
+      .select("id, display_name, role, org_id, created_at")
+      .order("created_at", { ascending: true }));
+  }
+
+  if (error){
+    toast("Users load error", error.message || "Unable to load users.", "error");
+    return;
+  }
+
+  state.adminWorkspace.users = data || [];
+}
+
+async function loadAdminProjects(){
+  if (!state.client || !isAppRoot()){
+    state.adminWorkspace.projects = [];
+    return;
+  }
+  let { data, error } = await state.client
+    .from("projects")
+    .select("id, name, description, job_number, location, org_id, active, created_at, orgs(name)")
+    .order("created_at", { ascending: false });
+
+  if (error){
+    ({ data, error } = await state.client
+      .from("projects")
+      .select("id, name, description, job_number, location, org_id, active, created_at")
+      .order("created_at", { ascending: false }));
+  }
+
+  if (error){
+    toast("Projects load error", error.message || "Unable to load projects.", "error");
+    return;
+  }
+
+  state.adminWorkspace.projects = data || [];
+}
+
+async function loadAdminWorkspaceData(){
+  const notice = $("adminWorkspaceNotice");
+  if (!isAppAdmin()){
+    if (notice) notice.textContent = "Admin visibility is limited to root and admin accounts.";
+    renderAdminWorkspace();
+    return;
+  }
+  if (notice){
+    notice.textContent = isAppRoot()
+      ? "Root can manage companies, users, and projects across organizations."
+      : "Admin can manage companies. User and project administration is limited to root.";
+  }
+  await loadAdminCompanies();
+  if (isAppRoot()){
+    await loadAdminUsers();
+    await loadAdminProjects();
+  }
+  renderAdminWorkspace();
+}
+
+function renderAdminCompaniesTab(){
+  const companies = state.adminWorkspace.companies || [];
+  return `
+    <div class="card">
+      <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+        <div>
+          <h3 style="margin:0;">Companies</h3>
+          <div class="muted small">Manage organization records and access scope.</div>
+        </div>
+        <button class="btn" type="button" data-admin-action="add-company">Add Company</button>
+      </div>
+      <div style="overflow:auto; margin-top:12px;">
+        <table class="table">
+          <thead>
+            <tr><th>Company Name</th><th>Role</th><th># Users</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            ${companies.map((row) => `
+              <tr>
+                <td>${escapeHtml(row.name || "-")}</td>
+                <td>${escapeHtml(String(row.role || "-").toUpperCase())}</td>
+                <td>${escapeHtml(String(row.user_count || 0))}</td>
+                <td>
+                  <div class="row" style="gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+                    <button class="btn ghost small" type="button" data-admin-action="edit-company" data-org-id="${escapeHtml(row.id)}">Edit</button>
+                    ${isAppRoot() ? `<button class="btn secondary small" type="button" data-admin-action="view-company-users" data-org-id="${escapeHtml(row.id)}">View Users</button>` : ""}
+                  </div>
+                </td>
+              </tr>
+            `).join("") || `<tr><td colspan="4" class="muted small">No companies found.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminUsersTab(){
+  if (!isAppRoot()){
+    return `<div class="card"><div class="muted small">User administration is limited to root accounts.</div></div>`;
+  }
+  const rows = getAdminUserRows();
+  const orgOptions = [`<option value="all">All companies</option>`]
+    .concat((state.orgs || []).map((org) => `<option value="${escapeHtml(org.id)}">${escapeHtml(org.name || "Organization")}</option>`))
+    .join("");
+  return `
+    <div class="card">
+      <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+        <div>
+          <h3 style="margin:0;">Users</h3>
+          <div class="muted small">Manage company membership and app role visibility.</div>
+        </div>
+        <div class="row" style="gap:8px; flex-wrap:wrap;">
+          <select id="adminUsersOrgFilter" class="input" style="min-width:200px;">
+            ${orgOptions}
+          </select>
+          <button class="btn" type="button" data-admin-action="open-invite">Invite</button>
+        </div>
+      </div>
+      <div style="overflow:auto; margin-top:12px;">
+        <table class="table">
+          <thead>
+            <tr><th>Name</th><th>Email</th><th>Org</th><th>Role</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                <td>${escapeHtml(row.display_name || "-")}</td>
+                <td>${escapeHtml(row.work_email || row.id || "-")}</td>
+                <td>
+                  <select class="input compact" data-admin-user-field="org_id" data-user-id="${escapeHtml(row.id)}">
+                    ${(state.orgs || []).map((org) => `<option value="${escapeHtml(org.id)}" ${String(row.org_id || "") === String(org.id) ? "selected" : ""}>${escapeHtml(org.name || "Organization")}</option>`).join("")}
+                  </select>
+                </td>
+                <td>
+                  <select class="input compact" data-admin-user-field="role" data-user-id="${escapeHtml(row.id)}">
+                    ${["member", "admin", "root"].map((role) => `<option value="${role}" ${String(row.role || "").toLowerCase() === role ? "selected" : ""}>${formatAppRoleLabel(role)}</option>`).join("")}
+                  </select>
+                </td>
+                <td><button class="btn secondary small" type="button" data-admin-action="save-user" data-user-id="${escapeHtml(row.id)}">Save</button></td>
+              </tr>
+            `).join("") || `<tr><td colspan="5" class="muted small">No users found.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminProjectsTab(){
+  if (!isAppRoot()){
+    return `<div class="card"><div class="muted small">Project administration across organizations is limited to root accounts.</div></div>`;
+  }
+  const rows = getAdminProjectRows();
+  const orgOptions = [`<option value="all">All companies</option>`]
+    .concat((state.orgs || []).map((org) => `<option value="${escapeHtml(org.id)}">${escapeHtml(org.name || "Organization")}</option>`))
+    .join("");
+  return `
+    <div class="card">
+      <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+        <div>
+          <h3 style="margin:0;">Projects</h3>
+          <div class="muted small">All projects visible through root-level RLS access.</div>
+        </div>
+        <select id="adminProjectsOrgFilter" class="input" style="min-width:220px;">${orgOptions}</select>
+      </div>
+      <div style="overflow:auto; margin-top:12px;">
+        <table class="table">
+          <thead>
+            <tr><th>Project</th><th>Org</th><th>Job #</th><th>Location</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                <td>${escapeHtml(row.name || "-")}</td>
+                <td>${escapeHtml(row.orgs?.name || row.org_id || "-")}</td>
+                <td>${escapeHtml(row.job_number || "-")}</td>
+                <td>${escapeHtml(row.location || "-")}</td>
+                <td>${row.active === false ? '<span class="status-pill" style="background:rgba(239,68,68,0.14); color:#ef9a9a;">Inactive</span>' : '<span class="status-pill">Active</span>'}</td>
+              </tr>
+            `).join("") || `<tr><td colspan="5" class="muted small">No projects found.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminWorkspace(){
+  const wrap = $("adminWorkspaceBody");
+  const tab = getAdminWorkspaceTab();
+  document.querySelectorAll("[data-admin-tab]").forEach((btn) => {
+    btn.classList.toggle("secondary", btn.dataset.adminTab === tab);
+    if (!isAppRoot() && (btn.dataset.adminTab === "users" || btn.dataset.adminTab === "projects")){
+      btn.style.display = "none";
+    } else {
+      btn.style.display = "";
+    }
+  });
+  if (!wrap) return;
+  if (!isAppAdmin()){
+    wrap.innerHTML = `<div class="card"><div class="muted small">Admin access is limited to root and admin roles.</div></div>`;
+    return;
+  }
+  if (tab === "users"){
+    wrap.innerHTML = renderAdminUsersTab();
+  } else if (tab === "projects"){
+    wrap.innerHTML = renderAdminProjectsTab();
+  } else {
+    wrap.innerHTML = renderAdminCompaniesTab();
+  }
+  const usersFilter = $("adminUsersOrgFilter");
+  if (usersFilter){
+    usersFilter.value = state.adminWorkspace.userOrgFilter || state.adminWorkspace.companyUsersOrgId || "all";
+  }
+  const projectsFilter = $("adminProjectsOrgFilter");
+  if (projectsFilter){
+    projectsFilter.value = state.adminWorkspace.projectOrgFilter || "all";
+  }
+}
+
+async function saveAdminCompany(){
+  if (!isAppAdmin()){
+    toast("Not allowed", "Only root and admin can manage companies.", "error");
+    return;
+  }
+  const name = String($("adminCompanyName")?.value || "").trim();
+  const role = String($("adminCompanyRole")?.value || "prime").trim().toLowerCase();
+  if (!name){
+    toast("Company name required", "Enter a company name.", "error");
+    return;
+  }
+  const payload = { name, role };
+  const companyId = state.adminWorkspace.companyEditId || null;
+  const query = companyId
+    ? state.client.from("orgs").update(payload).eq("id", companyId)
+    : state.client.from("orgs").insert(payload);
+  const { error } = await query;
+  if (error){
+    toast("Company save failed", error.message || "Unable to save company.", "error");
+    return;
+  }
+  closeAdminCompanyModal();
+  await loadAdminCompanies();
+  renderAdminWorkspace();
+  toast("Company saved", companyId ? "Company updated." : "Company created.");
+}
+
+async function saveAdminUserAccess(userId){
+  if (!isAppRoot()){
+    toast("Not allowed", "Only root can manage user access.", "error");
+    return;
+  }
+  const orgSelect = document.querySelector(`[data-admin-user-field="org_id"][data-user-id="${userId}"]`);
+  const roleSelect = document.querySelector(`[data-admin-user-field="role"][data-user-id="${userId}"]`);
+  if (!orgSelect || !roleSelect) return;
+  const { error } = await state.client
+    .from("profiles")
+    .update({
+      org_id: orgSelect.value || null,
+      role: roleSelect.value || "member",
+    })
+    .eq("id", userId);
+  if (error){
+    toast("User update failed", error.message || "Unable to update user.", "error");
+    return;
+  }
+  if (String(userId) === String(state.user?.id || "")){
+    state.profile = {
+      ...(state.profile || {}),
+      org_id: orgSelect.value || null,
+      role: roleSelect.value || "member",
+    };
+    window.currentUserProfile = state.profile;
+    window.currentUser = {
+      ...(window.currentUser || {}),
+      role: String(state.profile.role || "member").toLowerCase(),
+      orgId: state.profile.org_id || null,
+    };
+    setActiveOrgContext(state.profile.org_id || null);
+    setRoleUI();
+  }
+  await loadAdminUsers();
+  renderAdminWorkspace();
+  toast("User updated", "Organization and role saved.");
+}
+
+async function sendAdminInvite(){
+  if (!isAppRoot()){
+    toast("Not allowed", "Only root can invite users.", "error");
+    return;
+  }
+  const email = String($("adminInviteEmail")?.value || "").trim().toLowerCase();
+  const displayName = String($("adminInviteName")?.value || "").trim();
+  const orgId = String($("adminInviteOrg")?.value || "").trim();
+  const role = String($("adminInviteRole")?.value || "member").trim().toLowerCase();
+  if (!email || !email.includes("@")){
+    toast("Invite failed", "Enter a valid email address.", "error");
+    return;
+  }
+  if (!orgId){
+    toast("Invite failed", "Select a company for the invite.", "error");
+    return;
+  }
+  const { error: inviteRowError } = await state.client.rpc("fn_upsert_profile_invite", {
+    p_email: email,
+    p_role_code: mapAppRoleToInviteCode(role),
+    p_display_name: displayName || null,
+    p_org_id: orgId,
+  });
+  if (inviteRowError){
+    toast("Invite failed", inviteRowError.message || "Unable to save invite.", "error");
+    return;
+  }
+  let deliveryMessage = "Invite saved.";
+  let deliveryError = null;
+  if (typeof state.client.auth?.admin?.inviteUserByEmail === "function"){
+    const response = await state.client.auth.admin.inviteUserByEmail(email);
+    deliveryError = response?.error || null;
+  } else {
+    const response = await state.client.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: true },
+    });
+    deliveryError = response?.error || null;
+  }
+  if (deliveryError){
+    deliveryMessage = `Invite saved but email delivery failed: ${deliveryError.message}`;
+  } else {
+    deliveryMessage = "Invite saved and sign-in email sent.";
+  }
+  closeAdminInviteModal();
+  toast("Invite sent", deliveryMessage);
 }
 
 async function loadAdminProfiles(){
@@ -22595,9 +23112,6 @@ async function loadRateCards(projectId){
     .from("rate_cards")
     .select("id, name, project_id")
     .order("created_at", { ascending: false });
-  if (projectId){
-    query = query.or(`project_id.eq.${projectId},project_id.is.null`);
-  }
   const { data, error } = await query;
   if (error){
     toast("Rate cards error", error.message);
@@ -26449,9 +26963,6 @@ async function loadInvoiceFiles(projectId = state.activeProject?.id || null){
     .eq("org_id", orgId)
     .order("created_at", { ascending: false })
     .limit(200);
-  if (projectId){
-    query = query.or(`project_id.is.null,project_id.eq.${projectId}`);
-  }
   const { data, error } = await query;
   if (error){
     const message = String(error?.message || "").toLowerCase();
@@ -28194,6 +28705,7 @@ function renderDemoShowcaseHome(){
   legacyIds.forEach((id) => { const el = $(id); if (el) el.style.display = "none"; });
   const workspaces = [
     {
+      id: "technician",
       title: "Technician",
       iconClass: "icon-blue",
       accent: "",
@@ -28203,6 +28715,7 @@ function renderDemoShowcaseHome(){
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5"><path d="M9 2v6l4 2"/><circle cx="9" cy="9" r="6"/></svg>',
     },
     {
+      id: "splicer",
       title: "Splicer",
       iconClass: "icon-teal",
       accent: "accent-teal",
@@ -28212,6 +28725,7 @@ function renderDemoShowcaseHome(){
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><path d="M3 9h12"/><path d="M6 5l-3 4 3 4"/><path d="M12 5l3 4-3 4"/></svg>',
     },
     {
+      id: "office",
       title: "Office",
       iconClass: "icon-blue",
       accent: "",
@@ -28221,6 +28735,7 @@ function renderDemoShowcaseHome(){
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5"><rect x="4" y="2.5" width="10" height="13" rx="1.5"/><path d="M6.5 6h5M6.5 9h5M6.5 12h3.5"/></svg>',
     },
     {
+      id: "dispatch",
       title: "Dispatch",
       iconClass: "icon-amber",
       accent: "accent-amber",
@@ -28230,6 +28745,7 @@ function renderDemoShowcaseHome(){
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#D39A44" stroke-width="1.5"><path d="M2 9h14"/><path d="M9 2v14"/><circle cx="9" cy="9" r="6"/></svg>',
     },
     {
+      id: "warehouse",
       title: "Warehouse",
       iconClass: "icon-teal",
       accent: "accent-teal",
@@ -28240,6 +28756,7 @@ function renderDemoShowcaseHome(){
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><rect x="3" y="3" width="12" height="12" rx="1.5"/><path d="M3 8h12"/></svg>',
     },
     {
+      id: "supervisor",
       title: "Supervisor",
       iconClass: "icon-purple",
       accent: "accent-purple",
@@ -28249,15 +28766,21 @@ function renderDemoShowcaseHome(){
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#A59CF4" stroke-width="1.5"><path d="M3 13l4-4 3 3 5-7"/><circle cx="13.5" cy="5" r="1.3" fill="#A59CF4" stroke="none"/></svg>',
     },
     {
+      id: "admin",
       title: "Admin",
       iconClass: "icon-coral",
       accent: "accent-coral",
-      summary: "User, project, and system control surfaces.",
-      chips: ["Users", "Projects", "System"],
+      summary: "Manage companies & users.",
+      chips: ["Companies", "Users", "Projects"],
       action: { type: "view", target: "viewAdmin" },
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#EE835D" stroke-width="1.5"><circle cx="9" cy="9" r="2.2"/><path d="M9 2.5v2M9 13.5v2M2.5 9h2M13.5 9h2M4.2 4.2l1.4 1.4M12.4 12.4l1.4 1.4M13.8 4.2l-1.4 1.4M5.6 12.4l-1.4 1.4"/></svg>',
+      visibleTo: ["root", "admin"],
     },
   ];
+  const visibleWorkspaces = workspaces.filter((workspace) => {
+    if (!Array.isArray(workspace.visibleTo) || !workspace.visibleTo.length) return true;
+    return workspace.visibleTo.includes(getAppUserRole());
+  });
 
   wrap.style.display = "";
   wrap.innerHTML = `
@@ -28298,10 +28821,10 @@ function renderDemoShowcaseHome(){
     </div>
     <div class="section-label">Workspaces</div>
     <div class="ws-grid">
-      ${workspaces.map((workspace) => `
+      ${visibleWorkspaces.map((workspace) => `
         <article class="ws-card ${workspace.accent}">
           <div class="ws-icon ${workspace.iconClass}">${workspace.iconSvg}</div>
-          <div class="ws-title">${escapeHtml(workspace.title)}</div>
+          <div class="ws-title">${escapeHtml(workspace.title)}${workspace.id === "admin" ? ' <span class="status-pill" style="margin-left:8px; background:rgba(238,131,93,0.18); color:#EE835D; border:1px solid rgba(238,131,93,0.35);">Admin</span>' : ""}</div>
           <div class="ws-desc">${escapeHtml(workspace.summary)}</div>
           <div class="ws-tags">${workspace.chips.map((chip) => `<span class="ws-tag">${escapeHtml(chip)}</span>`).join("")}</div>
           <div class="ws-footer">
@@ -29195,7 +29718,7 @@ async function loadProfile(client, userId){
   }
 
   // Expect a public.profiles row keyed by auth.uid()
-  let profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id, avatar_url";
+  let profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id, role, avatar_url";
   let { data, error } = await client
     .from("profiles")
     .select(profileSelect)
@@ -29205,7 +29728,7 @@ async function loadProfile(client, userId){
   if (error){
     const message = String(error.message || "").toLowerCase();
     if (message.includes("avatar_url") && message.includes("does not exist")){
-      profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id";
+      profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id, role";
       ({ data, error } = await client
         .from("profiles")
         .select(profileSelect)
@@ -29214,7 +29737,7 @@ async function loadProfile(client, userId){
     } else if (message.includes("does not exist")){
       ({ data, error } = await client
         .from("profiles")
-        .select("display_name, org_id")
+        .select("display_name, org_id, role")
         .eq("id", userId)
         .maybeSingle());
     }
@@ -29255,7 +29778,17 @@ async function loadProfile(client, userId){
   if (state.profile && !Object.prototype.hasOwnProperty.call(state.profile, "avatar_url")){
     state.profile.avatar_url = null;
   }
+  if (state.profile && !state.profile.role){
+    state.profile.role = "member";
+  }
   window.currentUserProfile = state.profile;
+  window.currentUser = {
+    ...(window.currentUser || {}),
+    id: state.user?.id || userId,
+    email: state.user?.email || "",
+    role: String(state.profile?.role || "member").trim().toLowerCase(),
+    orgId: state.profile?.org_id || null,
+  };
   await initializeOrgContext({ attemptRepair: true });
   if (state.profile?.preferred_language){
     setPreferredLanguage(state.profile.preferred_language);
@@ -30212,6 +30745,73 @@ function wireUI(){
   const btnAdminInvite = $("btnAdminInviteUser");
   if (btnAdminInvite){
     btnAdminInvite.addEventListener("click", () => inviteAdminUserAccount());
+  }
+  const adminWorkspace = $("admin-workspace");
+  if (adminWorkspace){
+    adminWorkspace.addEventListener("click", async (e) => {
+      const tabBtn = e.target.closest("[data-admin-tab]");
+      if (tabBtn){
+        const nextTab = tabBtn.dataset.adminTab || "companies";
+        if ((nextTab === "users" || nextTab === "projects") && !isAppRoot()){
+          toast("Not allowed", "Only root can access that admin tab.", "error");
+          return;
+        }
+        setAdminWorkspaceTab(nextTab);
+        return;
+      }
+      const actionBtn = e.target.closest("[data-admin-action]");
+      if (!actionBtn) return;
+      const action = String(actionBtn.dataset.adminAction || "");
+      if (action === "add-company"){
+        openAdminCompanyModal();
+      } else if (action === "edit-company"){
+        const orgId = String(actionBtn.dataset.orgId || "");
+        const company = (state.adminWorkspace.companies || []).find((row) => String(row.id) === orgId) || null;
+        openAdminCompanyModal(company);
+      } else if (action === "view-company-users"){
+        const orgId = String(actionBtn.dataset.orgId || "");
+        if (!isAppRoot()){
+          toast("Not allowed", "Only root can view user membership.", "error");
+          return;
+        }
+        state.adminWorkspace.companyUsersOrgId = orgId;
+        state.adminWorkspace.userOrgFilter = orgId || "all";
+        setAdminWorkspaceTab("users");
+      } else if (action === "open-invite"){
+        openAdminInviteModal(state.adminWorkspace.userOrgFilter !== "all" ? state.adminWorkspace.userOrgFilter : "");
+      } else if (action === "save-user"){
+        const userId = String(actionBtn.dataset.userId || "");
+        if (userId) await saveAdminUserAccess(userId);
+      }
+    });
+    adminWorkspace.addEventListener("change", (e) => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.id === "adminUsersOrgFilter"){
+        state.adminWorkspace.userOrgFilter = target.value || "all";
+        state.adminWorkspace.companyUsersOrgId = state.adminWorkspace.userOrgFilter === "all" ? null : state.adminWorkspace.userOrgFilter;
+        renderAdminWorkspace();
+      } else if (target.id === "adminProjectsOrgFilter"){
+        state.adminWorkspace.projectOrgFilter = target.value || "all";
+        renderAdminWorkspace();
+      }
+    });
+  }
+  const adminCompanyCancelBtn = $("btnAdminCompanyCancel");
+  if (adminCompanyCancelBtn){
+    adminCompanyCancelBtn.addEventListener("click", () => closeAdminCompanyModal());
+  }
+  const adminCompanySaveBtn = $("btnAdminCompanySave");
+  if (adminCompanySaveBtn){
+    adminCompanySaveBtn.addEventListener("click", () => { void saveAdminCompany(); });
+  }
+  const adminInviteCancelBtn = $("btnAdminInviteCancel");
+  if (adminInviteCancelBtn){
+    adminInviteCancelBtn.addEventListener("click", () => closeAdminInviteModal());
+  }
+  const adminInviteSaveBtn = $("btnAdminInviteSave");
+  if (adminInviteSaveBtn){
+    adminInviteSaveBtn.addEventListener("click", () => { void sendAdminInvite(); });
   }
   const adminInventoryTable = $("adminInventoryTable");
   if (adminInventoryTable){
