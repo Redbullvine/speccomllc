@@ -3570,6 +3570,17 @@ SpecCom.helpers.openInvoiceAgentModal = async function(){
   SpecCom.helpers.renderBidImportPreview();
 };
 
+SpecCom.helpers.openCopperBidWorkbookFlow = async function(){
+  await SpecCom.helpers.openInvoiceAgentModal();
+  const bidBtn = $("btnBidImport");
+  if (bidBtn){
+    bidBtn.classList.add("pulse-once");
+    bidBtn.scrollIntoView({ block: "center", behavior: "smooth" });
+    setTimeout(() => bidBtn.classList.remove("pulse-once"), 1800);
+    bidBtn.focus();
+  }
+};
+
 SpecCom.helpers.closeInvoiceAgentModal = function(){
   const modal = $("invoiceAgentModal");
   if (!modal) return;
@@ -11561,6 +11572,10 @@ function setRoleUI(){
   const invoiceAgentBtn = $("btnInvoiceAgent");
   if (invoiceAgentBtn){
     invoiceAgentBtn.style.display = SpecCom.helpers.isInvoiceAgentAllowed() ? "" : "none";
+  }
+  const officeBidWorkbookBtn = $("btnOfficeBidWorkbook");
+  if (officeBidWorkbookBtn){
+    officeBidWorkbookBtn.style.display = SpecCom.helpers.isInvoiceAgentAllowed() ? "" : "none";
   }
   document.querySelectorAll(".no-pay-banner").forEach((el) => {
     el.style.display = BUILD_MODE ? "none" : "";
@@ -31516,6 +31531,12 @@ function wireUI(){
   const invoiceAgentBtn = $("btnInvoiceAgent");
   if (invoiceAgentBtn){
     invoiceAgentBtn.addEventListener("click", () => SpecCom.helpers.openInvoiceAgentModal());
+  }
+  const officeBidWorkbookBtn = $("btnOfficeBidWorkbook");
+  if (officeBidWorkbookBtn){
+    officeBidWorkbookBtn.addEventListener("click", () => {
+      void SpecCom.helpers.openCopperBidWorkbookFlow();
+    });
   }
   const siteList = $("siteList");
   if (siteList){
