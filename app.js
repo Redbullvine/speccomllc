@@ -179,6 +179,7 @@ const state = {
     busy: false,
     siteMap: new Map(),
     importPreview: null,
+    bidImportPreview: null,
     billingWindow: null,
   },
   workCodes: [],
@@ -3508,6 +3509,7 @@ SpecCom.helpers.resetInvoiceAgentState = function(){
   state.invoiceAgent.busy = false;
   state.invoiceAgent.siteMap = new Map();
   state.invoiceAgent.importPreview = null;
+  state.invoiceAgent.bidImportPreview = null;
   state.invoiceAgent.billingWindow = null;
 };
 
@@ -3534,6 +3536,7 @@ SpecCom.helpers.openInvoiceAgentModal = async function(){
   SpecCom.helpers.renderInvoiceAgentModal();
   await SpecCom.helpers.loadInvoiceAgentCandidates();
   SpecCom.helpers.renderInvoiceImportPreview();
+  SpecCom.helpers.renderBidImportPreview();
 };
 
 SpecCom.helpers.closeInvoiceAgentModal = function(){
@@ -10999,6 +11002,114 @@ SpecCom.helpers.parseInvoiceSpreadsheet = async function(file){
   });
 };
 
+SpecCom.helpers.parseCopperBidWorkbook = async function(file){
+  if (!file) throw new Error("No file selected.");
+  const name = String(file.name || "").toLowerCase();
+  if (!name.endsWith(".xlsx") && !name.endsWith(".xls")){
+    throw new Error("Unsupported file type. Upload .xlsx or .xls.");
+  }
+  if (!window.XLSX){
+    throw new Error("XLSX parser unavailable. Refresh and try again.");
+  }
+  const data = await file.arrayBuffer();
+  const workbook = window.XLSX.read(data, { type: "array" });
+  const preferredSheet = workbook.SheetNames?.find((sheetName) => String(sheetName || "").trim().toLowerCase() === "sheet1");
+  const sheetName = preferredSheet || workbook.SheetNames?.[0];
+  if (!sheetName) throw new Error("Workbook does not contain any sheets.");
+  const sheet = workbook.Sheets[sheetName];
+  const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: "" });
+  if (!rows.length) throw new Error("Workbook is empty.");
+
+  const headerIndex = rows.findIndex((row) => {
+    const normalized = (row || []).map((cell) => SpecCom.helpers.normalizeImportHeader(cell));
+    return normalized.includes("unit") && normalized.includes("qty") && normalized.includes("cost") && normalized.includes("total");
+  });
+  if (headerIndex < 0){
+    throw new Error("Could not find the bid summary header row.");
+  }
+
+  const items = [];
+  let subtotal = null;
+  let opAmount = null;
+  let bidTotal = null;
+  let insuranceTerm = "";
+
+  for (let rowIndex = headerIndex + 1; rowIndex < rows.length; rowIndex += 1){
+    const row = rows[rowIndex] || [];
+    const description = String(row[1] ?? "").trim();
+    const unit = String(row[2] ?? "").trim();
+    const quantity = Number(row[3] ?? 0);
+    const unitCost = Number(row[4] ?? 0);
+    const lineTotal = Number(row[5] ?? 0);
+    const duration = row[6] === "" ? null : Number(row[6]);
+    const totalDuration = row[7] === "" ? null : Number(row[7]);
+    const normalizedDescription = description.toLowerCase();
+
+    if (!description){
+      continue;
+    }
+
+    if (normalizedDescription === "subtotal"){
+      subtotal = lineTotal;
+      continue;
+    }
+    if (normalizedDescription.startsWith("o&p")){
+      opAmount = lineTotal;
+      continue;
+    }
+    if (normalizedDescription === "total"){
+      bidTotal = lineTotal;
+      continue;
+    }
+
+    if (!unit){
+      continue;
+    }
+
+    if (!Number.isFinite(quantity) || !Number.isFinite(unitCost) || !Number.isFinite(lineTotal)){
+      continue;
+    }
+
+    if (!insuranceTerm && normalizedDescription.includes("insurance")){
+      insuranceTerm = String(row[9] ?? row[8] ?? "").trim();
+    }
+
+    items.push({
+      itemNumber: items.length + 1,
+      description,
+      unit,
+      qty: quantity,
+      unitRate: unitCost,
+      total: lineTotal,
+      duration: Number.isFinite(duration) ? duration : null,
+      totalDuration: Number.isFinite(totalDuration) ? totalDuration : null,
+    });
+  }
+
+  if (!items.length){
+    throw new Error("No bid line items were found in the workbook.");
+  }
+
+  const computedSubtotal = roundInvoiceCurrency(items.reduce((sum, item) => sum + Number(item.total || 0), 0));
+  subtotal = Number.isFinite(Number(subtotal)) && subtotal > 0 ? Number(subtotal) : computedSubtotal;
+  opAmount = Number.isFinite(Number(opAmount)) ? Number(opAmount) : roundInvoiceCurrency(subtotal * 0.10);
+  bidTotal = Number.isFinite(Number(bidTotal)) && bidTotal > 0 ? Number(bidTotal) : roundInvoiceCurrency(subtotal + opAmount);
+  const maxDuration = items.reduce((max, item) => Math.max(max, Number(item.totalDuration || 0)), 0);
+  const summedDurations = items.reduce((sum, item) => sum + Number(item.duration || 0), 0);
+  const estimatedWorkingDays = maxDuration > 0 ? maxDuration : roundInvoiceCurrency(summedDurations);
+
+  return {
+    sourceFileName: String(file.name || "bid-workbook.xlsx"),
+    sheetName,
+    items,
+    subtotal,
+    opAmount,
+    bidTotal,
+    estimatedWorkingDays,
+    insuranceTerm: insuranceTerm || "",
+  };
+};
+
 SpecCom.helpers.prepareInvoiceImportPreview = function(rows){
   const siteMap = new Map((state.projectSites || []).map((s) => [String(s.name || "").trim().toLowerCase(), s]));
   const preview = [];
@@ -11065,6 +11176,34 @@ SpecCom.helpers.renderInvoiceImportPreview = function(){
   }
   if (exportBtn) exportBtn.style.display = total ? "" : "none";
   if (applyBtn) applyBtn.style.display = total ? "" : "none";
+};
+
+SpecCom.helpers.renderBidImportPreview = function(){
+  const summary = $("bidImportSummary");
+  const list = $("bidImportList");
+  const applyBtn = $("btnBidImportApply");
+  const data = state.invoiceAgent.bidImportPreview;
+  if (!summary || !list) return;
+  if (!data){
+    summary.textContent = "";
+    list.innerHTML = "";
+    if (applyBtn) applyBtn.style.display = "none";
+    return;
+  }
+  summary.textContent = `${data.items.length} line items parsed from ${data.sourceFileName}. Subtotal ${formatMoney(data.subtotal)} | O&P ${formatMoney(data.opAmount)} | Total ${formatMoney(data.bidTotal)}${data.estimatedWorkingDays ? ` | ${data.estimatedWorkingDays} working days` : ""}`;
+  list.innerHTML = data.items.slice(0, 20).map((item) => (
+    `<div class="muted small">Item ${item.itemNumber}: ${escapeHtml(item.description)} | ${escapeHtml(item.unit)} | Qty ${escapeHtml(String(item.qty))} | Rate ${escapeHtml(formatMoney(item.unitRate))} | Total ${escapeHtml(formatMoney(item.total))}</div>`
+  )).join("");
+  if (data.items.length > 20){
+    list.innerHTML += `<div class="muted small">... ${data.items.length - 20} more items</div>`;
+  }
+  if (data.insuranceTerm){
+    list.innerHTML += `<div class="muted small">Insurance term from workbook: ${escapeHtml(data.insuranceTerm)}</div>`;
+  }
+  if (!state.activeProject?.id){
+    list.innerHTML += `<div class="muted small" style="color:#b45309;">Select or create the copper project before creating the draft bid.</div>`;
+  }
+  if (applyBtn) applyBtn.style.display = "" ;
 };
 
 SpecCom.helpers.exportInvoiceImportCsv = function(){
@@ -11175,6 +11314,75 @@ SpecCom.helpers.generateProjectInvoiceFromImport = async function(){
     }
   }
   toast("Invoice draft created", "Project invoice generated.");
+};
+
+SpecCom.helpers.applyCopperBidImport = function(){
+  const data = state.invoiceAgent.bidImportPreview;
+  if (!data){
+    toast("No data", "Import a copper bid workbook first.");
+    return;
+  }
+  if (!state.activeProject){
+    toast("Project required", "Create or select the copper project first.");
+    return;
+  }
+
+  ensureOfficeInvoiceStateLoaded();
+  const lineItems = data.items.map((item, index) => ({
+    id: `office-line-${Date.now()}-${index}-${Math.random().toString(16).slice(2, 6)}`,
+    code: `BID-${String(index + 1).padStart(3, "0")}`,
+    description: `${item.description}${item.unit ? ` (${item.unit})` : ""}`,
+    qty: item.qty,
+    unit_rate: item.unitRate,
+  }));
+  if (Number(data.opAmount || 0) > 0){
+    lineItems.push({
+      id: `office-line-${Date.now()}-op`,
+      code: "BID-O&P",
+      description: "O&P @ 10%",
+      qty: 1,
+      unit_rate: data.opAmount,
+    });
+  }
+
+  const projectName = String(state.activeProject?.name || "Copper Splicing Project").trim();
+  const projectDescription = String(state.activeProject?.description || "").trim();
+  const noteLines = [
+    `Imported from workbook: ${data.sourceFileName}`,
+    "Work type: Copper splicing in manholes on a government facility.",
+    `Project: ${projectName}`,
+    projectDescription ? `Project description: ${projectDescription}` : "",
+    `Bid subtotal: ${formatMoney(data.subtotal)}`,
+    `O&P @ 10%: ${formatMoney(data.opAmount)}`,
+    `Bid total: ${formatMoney(data.bidTotal)}`,
+    data.estimatedWorkingDays ? `Estimated working days: ${data.estimatedWorkingDays}` : "",
+    data.insuranceTerm ? `Insurance term: ${data.insuranceTerm}` : "",
+  ].filter(Boolean);
+
+  state.officeInvoices.routeInvoiceNumber = "";
+  clearInvoiceDeepLinkUrl();
+  state.officeInvoices.draft = {
+    id: `office-invoice-${Date.now()}`,
+    company_creating_invoice: state.officeInvoices.recents?.company?.[0] || "",
+    bill_to: state.officeInvoices.recents?.billTo?.[0] || "Government Facility",
+    invoice_number: getNextOfficeInvoiceNumber(),
+    invoice_date: toLocalDateISO(new Date()),
+    week_ending: getWeekEndingSaturdayISO(new Date()),
+    job_number: String(state.activeProject?.job_number || "").trim(),
+    location: projectName,
+    notes: noteLines.join("\n"),
+    status: "Draft",
+    line_items: lineItems,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+  persistOfficeInvoiceState();
+  SpecCom.helpers.closeInvoiceAgentModal();
+  if (isViewAllowed("viewInvoices")){
+    setActiveView("viewInvoices");
+  }
+  renderInvoicePanel();
+  toast("Draft bid created", `Loaded ${lineItems.length} bid lines into Office & Billing.`);
 };
 
 function getNodeUnits(node){
@@ -30654,6 +30862,29 @@ function wireUI(){
   if (invoiceImportApply){
     invoiceImportApply.addEventListener("click", async () => {
       await SpecCom.helpers.applyInvoiceImport();
+    });
+  }
+  const bidImportBtn = $("btnBidImport");
+  const bidImportInput = $("bidImportInput");
+  if (bidImportBtn && bidImportInput){
+    bidImportBtn.addEventListener("click", () => bidImportInput.click());
+    bidImportInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0] || null;
+      try {
+        state.invoiceAgent.bidImportPreview = await SpecCom.helpers.parseCopperBidWorkbook(file);
+        SpecCom.helpers.renderBidImportPreview();
+      } catch (err){
+        console.error(err);
+        toast("Bid import failed", err.message || "Bid import failed.");
+      } finally {
+        e.target.value = "";
+      }
+    });
+  }
+  const bidImportApply = $("btnBidImportApply");
+  if (bidImportApply){
+    bidImportApply.addEventListener("click", () => {
+      SpecCom.helpers.applyCopperBidImport();
     });
   }
   const invoiceAgentSelectAll = $("invoiceAgentSelectAll");
