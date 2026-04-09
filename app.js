@@ -20612,7 +20612,7 @@ function renderAdminProjectsTab(){
       <div style="overflow:auto; margin-top:12px;">
         <table class="table">
           <thead>
-            <tr><th>Project</th><th>Org</th><th>Job #</th><th>Location</th><th>Status</th></tr>
+            <tr><th>Project</th><th>Org</th><th>Job #</th><th>Location</th><th>Status</th><th>Members</th></tr>
           </thead>
           <tbody>
             ${rows.map((row) => `
@@ -20622,14 +20622,125 @@ function renderAdminProjectsTab(){
                 <td>${escapeHtml(row.job_number || "-")}</td>
                 <td>${escapeHtml(row.location || "-")}</td>
                 <td>${row.active === false ? '<span class="status-pill" style="background:rgba(239,68,68,0.14); color:#ef9a9a;">Inactive</span>' : '<span class="status-pill">Active</span>'}</td>
+                <td><button class="btn secondary small" type="button" data-admin-action="manage-members" data-project-id="${escapeHtml(row.id)}" data-project-name="${escapeHtml(row.name || "Project")}">Manage Members</button></td>
               </tr>
-            `).join("") || `<tr><td colspan="5" class="muted small">No projects found.</td></tr>`}
+            `).join("") || `<tr><td colspan="6" class="muted small">No projects found.</td></tr>`}
           </tbody>
         </table>
       </div>
     </div>
   `;
 }
+
+// ── Admin Manage Members ──────────────────────────────────────────────────────
+let _adminMembersProjectId = null;
+
+function ensureAdminMembersModal(){
+  if (document.getElementById("adminMembersModal")) return;
+  document.body.insertAdjacentHTML("beforeend", `
+<!-- Admin Manage Members Modal -->
+<div id="adminMembersModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center;">
+  <div class="card" style="width:480px; max-width:95vw; max-height:80vh; display:flex; flex-direction:column; gap:16px; overflow:hidden;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h3 style="margin:0;" id="adminMembersModalTitle">Project Members</h3>
+      <button class="btn ghost small" type="button" id="btnAdminMembersClose">✕</button>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <select id="adminMembersAddSelect" class="input" style="flex:1;">
+        <option value="">Select user to add...</option>
+      </select>
+      <button class="btn small" type="button" id="btnAdminMembersAdd">Add</button>
+    </div>
+    <div id="adminMembersList" style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:6px;">
+      <div class="muted small">Loading members...</div>
+    </div>
+  </div>
+</div>`);
+}
+
+async function openAdminMembersModal(projectId, projectName) {
+  _adminMembersProjectId = projectId;
+  const modal = document.getElementById("adminMembersModal");
+  const title = document.getElementById("adminMembersModalTitle");
+  if (title) title.textContent = `Members: ${projectName}`;
+  if (modal) modal.style.display = "flex";
+  await refreshAdminMembersList();
+  populateAdminMembersAddSelect();
+}
+
+function closeAdminMembersModal() {
+  const modal = document.getElementById("adminMembersModal");
+  if (modal) modal.style.display = "none";
+  _adminMembersProjectId = null;
+}
+
+function populateAdminMembersAddSelect() {
+  const select = document.getElementById("adminMembersAddSelect");
+  if (!select) return;
+  const allUsers = Array.isArray(state.adminWorkspace?.users) ? state.adminWorkspace.users : [];
+  const members = state.adminWorkspace._memberIds || [];
+  const nonMembers = allUsers.filter(u => !members.includes(u.id));
+  select.innerHTML = `<option value="">Select user to add...</option>` +
+    nonMembers.map(u => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.display_name || u.work_email || u.id)}</option>`).join("");
+}
+
+async function refreshAdminMembersList() {
+  const listEl = document.getElementById("adminMembersList");
+  if (!listEl || !_adminMembersProjectId || !state.client) return;
+  listEl.innerHTML = `<div class="muted small">Loading...</div>`;
+  const { data, error } = await state.client
+    .from("project_members")
+    .select("user_id")
+    .eq("project_id", _adminMembersProjectId);
+  if (error) {
+    listEl.innerHTML = `<div class="muted small" style="color:#ef9a9a;">Error: ${escapeHtml(error.message)}</div>`;
+    return;
+  }
+  const memberIds = (data || []).map(r => r.user_id);
+  state.adminWorkspace._memberIds = memberIds;
+  const allUsers = Array.isArray(state.adminWorkspace?.users) ? state.adminWorkspace.users : [];
+  if (!memberIds.length) {
+    listEl.innerHTML = `<div class="muted small">No members assigned to this project yet.</div>`;
+    populateAdminMembersAddSelect();
+    return;
+  }
+  const rows = memberIds.map(uid => {
+    const profile = allUsers.find(u => u.id === uid);
+    const label = profile ? (profile.display_name || profile.work_email || uid) : uid;
+    return `<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 8px; background:rgba(255,255,255,0.04); border-radius:6px;">
+      <span>${escapeHtml(label)}</span>
+      <button class="btn secondary small" type="button" data-admin-action="remove-member" data-user-id="${escapeHtml(uid)}">Remove</button>
+    </div>`;
+  });
+  listEl.innerHTML = rows.join("");
+  populateAdminMembersAddSelect();
+}
+
+async function addAdminProjectMember() {
+  const select = document.getElementById("adminMembersAddSelect");
+  const userId = select?.value;
+  if (!userId || !_adminMembersProjectId || !state.client) return;
+  const { error } = await state.client
+    .from("project_members")
+    .insert({ project_id: _adminMembersProjectId, user_id: userId });
+  if (error) { toast("Add failed", error.message, "error"); return; }
+  toast("Member added", "User added to project.");
+  if (select) select.value = "";
+  await refreshAdminMembersList();
+}
+
+async function removeAdminProjectMember(userId) {
+  if (!userId || !_adminMembersProjectId || !state.client) return;
+  const { error } = await state.client
+    .from("project_members")
+    .delete()
+    .eq("project_id", _adminMembersProjectId)
+    .eq("user_id", userId);
+  if (error) { toast("Remove failed", error.message, "error"); return; }
+  toast("Member removed", "User removed from project.");
+  await refreshAdminMembersList();
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function renderAdminWorkspace(){
   const wrap = $("adminWorkspaceBody");
@@ -31181,6 +31292,13 @@ function wireUI(){
       } else if (action === "save-user"){
         const userId = String(actionBtn.dataset.userId || "");
         if (userId) await saveAdminUserAccess(userId);
+      } else if (action === "manage-members"){
+        const projectId = String(actionBtn.dataset.projectId || "");
+        const projectName = String(actionBtn.dataset.projectName || "Project");
+        if (projectId) await openAdminMembersModal(projectId, projectName);
+      } else if (action === "remove-member"){
+        const userId = String(actionBtn.dataset.userId || "");
+        if (userId) await removeAdminProjectMember(userId);
       }
     });
     adminWorkspace.addEventListener("change", (e) => {
@@ -31208,6 +31326,18 @@ function wireUI(){
   if (adminInviteCancelBtn){
     adminInviteCancelBtn.addEventListener("click", () => closeAdminInviteModal());
   }
+  ensureAdminMembersModal();
+  const adminMembersCloseBtn = $("btnAdminMembersClose");
+  if (adminMembersCloseBtn){
+    adminMembersCloseBtn.addEventListener("click", () => closeAdminMembersModal());
+  }
+  const adminMembersAddBtn = $("btnAdminMembersAdd");
+  if (adminMembersAddBtn){
+    adminMembersAddBtn.addEventListener("click", () => { void addAdminProjectMember(); });
+  }
+  document.getElementById("adminMembersModal")?.addEventListener("click", (e) => {
+    if (e.target === document.getElementById("adminMembersModal")) closeAdminMembersModal();
+  });
   const adminInviteSaveBtn = $("btnAdminInviteSave");
   if (adminInviteSaveBtn){
     adminInviteSaveBtn.addEventListener("click", () => { void sendAdminInvite(); });
