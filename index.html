@@ -1321,6 +1321,9 @@
                   <div class="site-panel-title">Layers</div>
                   <button id="btnLayersHide" class="btn ghost small" type="button">Close</button>
                 </div>
+                <div class="row" style="margin-top:8px;">
+                  <input type="file" id="photoUpload" accept="image/*" multiple />
+                </div>
                 <div id="mapViewDropdown" class="map-view-dropdown">
                   <button
                     id="mapViewDropdownButton"
@@ -2176,6 +2179,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
   <script src="./env.generated.js"></script>
   <script type="module" src="./supabaseClient.js"></script>
   <script type="module" src="./app.js"></script>

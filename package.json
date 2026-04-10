@@ -5,6 +5,7 @@
     "@supabase/supabase-js": "^2.97.0",
     "busboy": "^1.6.0",
     "csv-parse": "^5.5.3",
+    "exif-js": "^2.3.0",
     "papaparse": "^5.4.1",
     "pdfjs-dist": "^4.10.38",
     "xlsx": "^0.18.5"

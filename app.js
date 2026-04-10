@@ -106,7 +106,6 @@ const state = {
   authResolved: false,
   profile: null, // {role, display_name}
   activeOrgId: null,
-  supportConsoleOrgOverride: null,
   orgContextRequired: false,
   orgContextPromptShown: false,
   activeProject: null,
@@ -123,7 +122,23 @@ const state = {
   },
   orgs: [],
   invoices: [],
-  ruidosoInvoices: [],
+  ruidosoInvoices: [
+    { id:"TDS_001", node:"23", loc:"1635EA_03", date:"01/19/2026", total:4733.00,   paid:true  },
+    { id:"TDS_002", node:"54", loc:"1635CA_02", date:"01/19/2026", total:3475.75,   paid:true  },
+    { id:"TDS_003", node:"9",  loc:"1635_01",   date:"01/24/2026", total:1643.00,   paid:true  },
+    { id:"TDS_004", node:"9",  loc:"1635BA_02", date:"01/24/2026", total:1877.75,   paid:true  },
+    { id:"TDS_005", node:"9",  loc:"1635BA_02", date:"01/31/2026", total:698.00,    paid:true  },
+    { id:"TDS_006", node:"9",  loc:"1635BA_01", date:"01/31/2026", total:1536.00,   paid:true  },
+    { id:"TDS_007", node:"54", loc:"1635CA_04", date:"02/07/2026", total:3595.00,   paid:true  },
+    { id:"TDS_008", node:"9",  loc:"1635BA_01", date:"02/07/2026", total:1536.00,   paid:true  },
+    { id:"TDS_009", node:"54", loc:"1635CA_04", date:"02/15/2026", total:4826.75,   paid:true  },
+    { id:"TDS_003A",node:"23", loc:"1635EA_03", date:"01/19/2026", total:3940.75,   paid:false },
+    { id:"TDS_010", node:"54", loc:"1635CA_03", date:"02/15/2026", total:1674.50,   paid:false },
+    { id:"TDS_011", node:"9",  loc:"1635BA_01", date:"02/15/2026", total:325.00,    paid:false },
+    { id:"TDS_012", node:"54", loc:"1635CA_03", date:"02/22/2026", total:1415.50,   paid:false },
+    { id:"TDS_013", node:"9",  loc:"1635BA_01", date:"02/22/2026", total:1968.00,   paid:false },
+    { id:"TDS_014", node:"54", loc:"1635CA_04", date:"02/22/2026", total:5009.00,   paid:false },
+  ],
   ruidosoInvoiceModal: { open: false, mode: "add", targetId: null },
   officeInvoices: {
     records: [],
@@ -164,7 +179,6 @@ const state = {
     busy: false,
     siteMap: new Map(),
     importPreview: null,
-    bidImportPreview: null,
     billingWindow: null,
   },
   workCodes: [],
@@ -217,18 +231,6 @@ const state = {
     projectId: null,
     reportDate: null,
     metrics: null,
-  },
-  adminWorkspace: {
-    tab: "companies",
-    companies: [],
-    companiesLoaded: false,
-    loadingCompanies: false,
-    users: [],
-    projects: [],
-    companyEditId: null,
-    userOrgFilter: "all",
-    projectOrgFilter: "all",
-    companyUsersOrgId: null,
   },
   adminProfiles: [],
   materialAdminRows: [],
@@ -456,41 +458,9 @@ function resolveProvisionedRoleCode(identity){
   return AUTHENTICATED_ACCESS_CODE;
 }
 
-function getAppUserRole(){
-  if (!state.user) return null;
-  const raw = String(state.profile?.role || window.currentUser?.role || "").trim().toLowerCase();
-  if (raw === "root" || raw === "admin" || raw === "member") return raw;
-  if (raw === "owner" || raw === "support") return "root";
-  if (raw === "project_manager") return "admin";
-  return "member";
-}
-
-function isAppRoot(){
-  return getAppUserRole() === "root";
-}
-
-function isAppAdmin(){
-  const role = getAppUserRole();
-  return role === "root" || role === "admin";
-}
-
-function formatAppRoleLabel(role){
-  const normalized = String(role || "").trim().toLowerCase();
-  if (normalized === "root") return "Root";
-  if (normalized === "admin") return "Admin";
-  return "Member";
-}
-
-function mapAppRoleToInviteCode(role){
-  const normalized = String(role || "").trim().toLowerCase();
-  if (normalized === "root") return "ROOT";
-  if (normalized === "admin") return "ADMIN";
-  return "USER_LEVEL_1";
-}
-
 function getRoleCode(member = state.profile){
   if (!state.user) return null;
-  return getAppUserRole() || AUTHENTICATED_ACCESS_CODE;
+  return AUTHENTICATED_ACCESS_CODE;
 }
 
 function isTechnician(x){
@@ -511,7 +481,7 @@ function isTds(x){
 
 function formatRoleLabel(roleCode){
   if (!state.user) return "-";
-  return formatAppRoleLabel(roleCode);
+  return "Authenticated";
 }
 
 const I18N = {
@@ -847,15 +817,15 @@ const I18N = {
     locationSharingOn: "Live location sharing enabled.",
   },
   es: {
-    brandSubtitle: "Verificación en campo, documentación y control de facturación",
-    authTitle: "Inicia sesión en SpecCom",
+    brandSubtitle: "VerificaciÃ³n en campo, documentaciÃ³n y control de facturaciÃ³n",
+    authTitle: "Inicia sesiÃ³n en SpecCom",
     authSubtitle: "Bienvenido de nuevo.",
     emailPlaceholder: "correo",
-    passwordPlaceholder: "contraseña",
-    signIn: "Iniciar sesión",
-    magicLink: "Restablecer contraseña",
+    passwordPlaceholder: "contraseÃ±a",
+    signIn: "Iniciar sesiÃ³n",
+    magicLink: "Restablecer contraseÃ±a",
     createUser: "Crear cuenta",
-    authConfigNote: "Inicio de sesión no disponible.",
+    authConfigNote: "Inicio de sesiÃ³n no disponible.",
     rolesTitle: "",
     rolesSubtitle: "",
     liveSetupTitle: "",
@@ -870,7 +840,7 @@ const I18N = {
     projectSummaryNone: "Sin proyecto seleccionado",
     projectsEmpty: "Aun no hay proyectos. Crea un proyecto o pide acceso a tu administrador.",
     projectsEmptyTitle: "Aun no hay proyectos",
-    projectsEmptyBody: "Crea un proyecto para empezar a rastrear sitios y documentación, o pide a tu administrador que te agregue a un proyecto existente.",
+    projectsEmptyBody: "Crea un proyecto para empezar a rastrear sitios y documentaciÃ³n, o pide a tu administrador que te agregue a un proyecto existente.",
     projectsEmptyCta: "Crear proyecto",
     createProject: "Crear proyecto",
     messagesEmpty: "Aun no hay mensajes.",
@@ -916,14 +886,14 @@ const I18N = {
     navDispatch: "Despacho / Planificador",
     navNodes: "Sitios",
     navPhotos: "Fotos",
-    navBilling: "Facturación",
+    navBilling: "FacturaciÃ³n",
     navLabor: "Mano de obra",
     navInvoices: "Facturas",
       navMap: "Mapa de sitios",
-    navCatalog: "Catálogo",
+    navCatalog: "CatÃ¡logo",
     navAlerts: "Alertas",
     navAdmin: "Operations",
-    navSettings: "Configuración",
+    navSettings: "ConfiguraciÃ³n",
     timesheetNav: "Hoja de tiempo",
     techClockTitle: "Registro de tiempo",
     techClockIn: "Entrada",
@@ -951,7 +921,7 @@ const I18N = {
     techWorkOrdersTitle: "Ordenes de trabajo",
     techWorkOrdersSubtitle: "Instalaciones y tickets asignados",
     techTodayTitle: "Hoy",
-    techTomorrowTitle: "Mañana",
+    techTomorrowTitle: "MaÃ±ana",
     woNoOrders: "Sin ordenes.",
     woActionEnRoute: "En ruta",
     woActionOnSite: "En sitio",
@@ -972,7 +942,7 @@ const I18N = {
     laborTechLabel: "Tecnico",
     laborDateLabel: "Fecha",
     laborPaidHoursLabel: "Horas pagadas",
-    jobSubtitle: "Reconstrucción FTTH Ruidoso (flujo por sitio)",
+    jobSubtitle: "ReconstrucciÃ³n FTTH Ruidoso (flujo por sitio)",
     photosOptionalBadge: "Fotos opcionales para el MVP",
     activeNodeTitle: "Sitio activo",
     kpiNode: "Sitio",
@@ -981,65 +951,65 @@ const I18N = {
     pricingHidden: "Precios ocultos en vista restringida",
     alertsTitle: "Alertas",
     allowedQuantitiesTitle: "Cantidades permitidas",
-    catalogQuickSearchTitle: "Búsqueda rápida del catálogo",
-    catalogSearchPlaceholder: "Buscar parte Millennium, SKU MFG, descripción",
+    catalogQuickSearchTitle: "BÃºsqueda rÃ¡pida del catÃ¡logo",
+    catalogSearchPlaceholder: "Buscar parte Millennium, SKU MFG, descripciÃ³n",
     nodesTitle: "Espacio de sitios",
     nodesSubtitle: "Solo un sitio ACTIVO a la vez. Termina el empalme antes de pasar al siguiente.",
-    nodeNumberPlaceholder: "Ingresa número de sitio (ej: SITE-1001)",
+    nodeNumberPlaceholder: "Ingresa nÃºmero de sitio (ej: SITE-1001)",
     openNode: "Abrir sitio",
     createNode: "Crear sitio",
     spliceLocationsTitle: "Ubicaciones de empalme",
     spliceLocationsSubtitle: "Las fotos son opcionales para facturar en este MVP.",
-    addSpliceLocation: "Agregar ubicación",
+    addSpliceLocation: "Agregar ubicaciÃ³n",
     inventoryTitle: "Checklist de inventario",
-    inventorySubtitle: "Lo usado en este sitio. Empalmadores ven ítems y checklist, no precios.",
+    inventorySubtitle: "Lo usado en este sitio. Empalmadores ven Ã­tems y checklist, no precios.",
     photoChecklistTitle: "Checklist de fotos",
     photosOptionalBanner: "Fotos opcionales para el MVP",
     capturePhotosTitle: "Capturar fotos",
-    capturePhotosSubtitle: "Solo cámara. GPS requerido al capturar. Sin galería.",
-    startCamera: "Iniciar cámara",
+    capturePhotosSubtitle: "Solo cÃ¡mara. GPS requerido al capturar. Sin galerÃ­a.",
+    startCamera: "Iniciar cÃ¡mara",
     captureUsagePhoto: "Capturar foto de uso",
-    photoStatusNone: "No se capturó foto",
-    invoiceActionsTitle: "Acciones de facturación",
+    photoStatusNone: "No se capturÃ³ foto",
+    invoiceActionsTitle: "Acciones de facturaciÃ³n",
     invoicesUngatedBanner: "Facturas disponibles sin pruebas en el MVP",
-    invoiceActionsSubtitle: "La carga de facturación está disponible en este MVP.",
+    invoiceActionsSubtitle: "La carga de facturaciÃ³n estÃ¡ disponible en este MVP.",
     markNodeReady: "Marcar sitio LISTO para facturar",
-    createInvoice: "Crear factura (según rol)",
+    createInvoice: "Crear factura (segÃºn rol)",
     invoicesPrivacyTitle: "Facturas y privacidad",
     billingLocationsTitle: "Ubicaciones",
-    billingTitle: "Facturación",
+    billingTitle: "FacturaciÃ³n",
     importUsage: "Importar uso",
     exportCsv: "Exportar CSV",
     print: "Imprimir",
-    billingSelectLocation: "Selecciona una ubicación para iniciar facturación.",
+    billingSelectLocation: "Selecciona una ubicaciÃ³n para iniciar facturaciÃ³n.",
       mapTitle: "Mapa de sitios",
-      mapSubtitle: "Coloca un pin para crear un sitio y agregar documentación.",
-      mapActiveOnly: "Solo activos (últimos 10 min)",
+      mapSubtitle: "Coloca un pin para crear un sitio y agregar documentaciÃ³n.",
+      mapActiveOnly: "Solo activos (Ãºltimos 10 min)",
       mapSearchPlaceholder: "Buscar ubicaciones (nombre, direccion, ID, o lat,lng)",
       dropPin: "Colocar pin",
-      dropPinNamePlaceholder: "Nombre de ubicación",
+      dropPinNamePlaceholder: "Nombre de ubicaciÃ³n",
       siteListTitle: "Sitios",
-      siteNameTitle: "Nombre de ubicación",
-      siteNameSubtitle: "Nombra esta ubicación para encontrarla fácilmente después.",
-      siteNamePlaceholder: "Nombre de ubicación",
+      siteNameTitle: "Nombre de ubicaciÃ³n",
+      siteNameSubtitle: "Nombra esta ubicaciÃ³n para encontrarla fÃ¡cilmente despuÃ©s.",
+      siteNamePlaceholder: "Nombre de ubicaciÃ³n",
       sitePanelTitle: "Panel del sitio",
-      noSiteSelected: "Ningún sitio seleccionado.",
-      siteStatusPending: "Sincronización pendiente",
+      noSiteSelected: "NingÃºn sitio seleccionado.",
+      siteStatusPending: "SincronizaciÃ³n pendiente",
       mapStatusNoProject: "Selecciona un proyecto para ver sitios.",
-      mapStatusNoSites: "Aún no hay sitios. Coloca un pin para agregar uno.",
+      mapStatusNoSites: "AÃºn no hay sitios. Coloca un pin para agregar uno.",
       mapStatusSites: "{count} sitios",
       pinMissingGps: "GPS no disponible",
-      pinMissingGpsBody: "Se requiere ubicación para colocar un pin.",
-      pinAccuracyWarnTitle: "Precisión baja",
-      pinAccuracyWarnBody: "La precisión es baja. El pin se guardó.",
+      pinMissingGpsBody: "Se requiere ubicaciÃ³n para colocar un pin.",
+      pinAccuracyWarnTitle: "PrecisiÃ³n baja",
+      pinAccuracyWarnBody: "La precisiÃ³n es baja. El pin se guardÃ³.",
       pinDroppedTitle: "Pin guardado",
     pinDroppedBody: "Sitio creado desde un pin del mapa.",
       pinQueuedTitle: "Pin en cola",
-      pinQueuedBody: "Pin sin conexión guardado. Se sincronizará al estar en línea.",
+      pinQueuedBody: "Pin sin conexiÃ³n guardado. Se sincronizarÃ¡ al estar en lÃ­nea.",
       importLocations: "Importar ubicaciones (KMZ)",
-      invoiceAgentAction: "Agente de facturación",
-      invoiceAgentTitle: "Agente de facturación",
-      invoiceAgentSubtitle: "Genera facturas borrador desde ubicaciones completas con entradas de facturación.",
+      invoiceAgentAction: "Agente de facturaciÃ³n",
+      invoiceAgentTitle: "Agente de facturaciÃ³n",
+      invoiceAgentSubtitle: "Genera facturas borrador desde ubicaciones completas con entradas de facturaciÃ³n.",
       invoiceAgentFromLabel: "Empresa emisora",
       invoiceAgentToLabel: "Empresa receptora",
       invoiceAgentSelectAll: "Seleccionar elegibles",
@@ -1047,39 +1017,39 @@ const I18N = {
       invoiceAgentGenerate: "Generar borradores",
       invoiceAgentNoProject: "Selecciona un proyecto para generar facturas.",
       invoiceAgentNoEligible: "No hay ubicaciones elegibles.",
-      invoiceAgentResultsTitle: "Resultados del agente de facturación",
+      invoiceAgentResultsTitle: "Resultados del agente de facturaciÃ³n",
       invoiceAgentExportCsv: "Exportar CSV",
       invoiceAgentExportPdf: "Exportar PDF",
       yourInvoicesTitle: "Tus facturas",
-      yourInvoicesEmpty: "Aún no hay facturas.",
+      yourInvoicesEmpty: "AÃºn no hay facturas.",
       issuerLabel: "Emisor",
       recipientLabel: "Receptor",
       mediaTitle: "Media",
-      mediaSubtitle: "Agrega imágenes desde cámara o galería.",
+      mediaSubtitle: "Agrega imÃ¡genes desde cÃ¡mara o galerÃ­a.",
       addMedia: "Agregar media",
-      codesTitle: "Códigos de facturación",
-      codesSubtitle: "Agrega los códigos de facturación usados en esta ubicación.",
+      codesTitle: "CÃ³digos de facturaciÃ³n",
+      codesSubtitle: "Agrega los cÃ³digos de facturaciÃ³n usados en esta ubicaciÃ³n.",
       entriesTitle: "Entradas",
       entriesSubtitle: "Agrega entradas neutrales con cantidad opcional.",
       addEntry: "Agregar",
       notesTitle: "Notas",
       notesSubtitle: "Notas opcionales para este sitio.",
-      entryDescriptionPlaceholder: "Descripción de entrada",
+      entryDescriptionPlaceholder: "DescripciÃ³n de entrada",
       entryQuantityPlaceholder: "Cant. (opcional)",
       notesPlaceholder: "Agregar notas",
-    catalogTitle: "Catálogo de materiales",
+    catalogTitle: "CatÃ¡logo de materiales",
     clear: "Limpiar",
     alertsFeedTitle: "Feed de alertas",
     adminNotesTitle: "Notas de admin",
-    userManagementTitle: "Gestión de usuarios",
+    userManagementTitle: "GestiÃ³n de usuarios",
     userManagementSubtitle: "Invita por correo y gestiona perfiles.",
     adminUserIdPlaceholder: "ID de usuario auth (opcional)",
     adminUserEmailPlaceholder: "Correo (requerido para invitaciones)",
     createProfile: "Crear perfil",
-    settingsTitle: "Configuración",
+    settingsTitle: "ConfiguraciÃ³n",
     languageLabel: "Idioma",
-    languageOptionEnglish: "Inglés",
-    languageOptionSpanish: "Español",
+    languageOptionEnglish: "InglÃ©s",
+    languageOptionSpanish: "EspaÃ±ol",
     languageOptionPortuguese: "Portugues",
     languageHelp: "Los cambios aplican al instante y se guardan en tu perfil.",
     saveLanguage: "Guardar idioma",
@@ -1093,24 +1063,24 @@ const I18N = {
     deleteLabel: "Eliminar",
     deletingLabel: "Eliminando...",
     noProfilesFound: "No hay perfiles.",
-    noLocationsYet: "No hay ubicaciones aún.",
+    noLocationsYet: "No hay ubicaciones aÃºn.",
     openNodePrompt: "Abre un sitio para ver ubicaciones.",
-    noInventoryItems: "Aún no hay ítems de inventario. En Supabase vienen del maestro + checklist del sitio.",
+    noInventoryItems: "AÃºn no hay Ã­tems de inventario. En Supabase vienen del maestro + checklist del sitio.",
     billingStatusLocations: "{count} ubicaciones",
     noLocations: "Sin ubicaciones",
-    billingOpen: "Abrir facturación",
+    billingOpen: "Abrir facturaciÃ³n",
     proofNotRequired: "Prueba: No requerida",
     proofProgress: "Prueba: {uploaded}/{required}",
     ok: "OK",
     locked: "BLOQUEADO",
-    pricingVisible: "Precios visibles (según rol)",
+    pricingVisible: "Precios visibles (segÃºn rol)",
     pricingHiddenLabel: "Precios ocultos",
     subInvoicesLabel: "Facturas de campo:",
     tdsInvoicesLabel: "Facturas prioritarias:",
     visible: "visible",
     hidden: "oculto",
-    openNodeInvoices: "Abre un sitio para ver acciones de facturación.",
-    billingGateTitle: "Estado de facturación",
+    openNodeInvoices: "Abre un sitio para ver acciones de facturaciÃ³n.",
+    billingGateTitle: "Estado de facturaciÃ³n",
     billingGateBypass: "Las facturas no se bloquean por pruebas en este MVP.",
     statusLabel: "Estado",
     eligibleLabel: "ELEGIBLE",
@@ -1118,64 +1088,64 @@ const I18N = {
     nodeLabel: "Sitio",
     rateCardLabel: "Tarifa",
     notesLabel: "Notas",
-    workCodeLabel: "Código",
-    descriptionLabel: "Descripción",
+    workCodeLabel: "CÃ³digo",
+    descriptionLabel: "DescripciÃ³n",
     unitLabel: "Unidad",
     qtyLabel: "Cant.",
     rateLabel: "Tarifa",
-    addLineItemLabel: "Agregar línea",
+    addLineItemLabel: "Agregar lÃ­nea",
     subtotalLabel: "Subtotal",
     taxLabel: "Impuesto",
     totalLabel: "Total",
     openNodeAllowedQuantities: "Abre un sitio para ver cantidades permitidas.",
     openNodePhotoRequirements: "Abre un sitio para ver requisitos de fotos.",
     noNodeSelected: "No hay sitio seleccionado.",
-    spliceLocationLabel: "Ubicación de empalme",
-    codesUsedTitle: "Códigos usados",
-    briefDescriptionTitle: "Descripción breve",
+    spliceLocationLabel: "UbicaciÃ³n de empalme",
+    codesUsedTitle: "CÃ³digos usados",
+    briefDescriptionTitle: "DescripciÃ³n breve",
     editCodesLabel: "Editar",
     saveLabel: "Guardar",
     closeLabel: "Cerrar",
     cancelLabel: "Cancelar",
     noneLabel: "Ninguno",
-    codesPlaceholder: "Ingresa códigos separados por comas",
-    descriptionPlaceholder: "Descripción breve (máx 400 caracteres)",
+    codesPlaceholder: "Ingresa cÃ³digos separados por comas",
+    descriptionPlaceholder: "DescripciÃ³n breve (mÃ¡x 400 caracteres)",
     demoEnvBadge: "ENTORNO DEMO",
     demoLogin: "Acceso demo",
-    demoLoginNote: "Sesión demo (solo lectura)",
-    availableInProduction: "Disponible en Producción",
-    noInvoices: "Aún no hay facturas.",
+    demoLoginNote: "SesiÃ³n demo (solo lectura)",
+    availableInProduction: "Disponible en ProducciÃ³n",
+    noInvoices: "AÃºn no hay facturas.",
     fromLabel: "De",
     toLabel: "Para",
     amountLabel: "Monto",
     invoiceNumberLabel: "Factura #",
-    locationLabel: "Ubicación",
-    selectLocationToBill: "Selecciona una ubicación para iniciar facturación.",
+    locationLabel: "UbicaciÃ³n",
+    selectLocationToBill: "Selecciona una ubicaciÃ³n para iniciar facturaciÃ³n.",
     billingNotesPlaceholder: "Notas",
     translated: "Traducido",
     viewOriginal: "Ver original",
-    viewTranslation: "Ver traducción",
-    lastSeen: "Última vez: hace {minutes} min",
-    lastSeenJustNow: "Última vez: justo ahora",
-    mapStatusNoData: "Aún no hay ubicaciones disponibles.",
-    mapStatusSelfOnly: "Mostrando solo tu ubicación.",
+    viewTranslation: "Ver traducciÃ³n",
+    lastSeen: "Ãšltima vez: hace {minutes} min",
+    lastSeenJustNow: "Ãšltima vez: justo ahora",
+    mapStatusNoData: "AÃºn no hay ubicaciones disponibles.",
+    mapStatusSelfOnly: "Mostrando solo tu ubicaciÃ³n.",
     mapStatusAll: "Mostrando ubicaciones del equipo.",
-      mapStatusSignin: "Inicia sesión para ver sitios.",
-    you: "Tú",
+      mapStatusSignin: "Inicia sesiÃ³n para ver sitios.",
+    you: "TÃº",
     crew: "Equipo",
-    signedOut: "Sesión cerrada",
-    signedIn: "Sesión iniciada",
+    signedOut: "SesiÃ³n cerrada",
+    signedIn: "SesiÃ³n iniciada",
     signedInDemo: "Signed in (Demo mode)",
-    signOut: "Cerrar sesión",
+    signOut: "Cerrar sesiÃ³n",
     roleLabel: "Acceso",
     pricingHiddenSplicer: "Precios ocultos (vista restringida)",
     pricingProtected: "Precios protegidos",
     gpsMissing: "Sin GPS",
-    gpsMissingBody: "Este navegador/dispositivo no soporta geolocalización.",
+    gpsMissingBody: "Este navegador/dispositivo no soporta geolocalizaciÃ³n.",
     gpsCaptured: "GPS capturado",
     gpsError: "Error de GPS",
     gpsRequired: "El GPS es requerido para el pago.",
-    locationSharingOn: "Compartir ubicación en vivo activado.",
+    locationSharingOn: "Compartir ubicaciÃ³n en vivo activado.",
   },
 };
 
@@ -1710,10 +1680,9 @@ async function initializeOrgContext({ attemptRepair = true } = {}){
     return null;
   }
   let orgId = String(
-    state.supportConsoleOrgOverride
-    || state.activeProject?.org_id
-    || state.activeOrgId
+    state.activeProject?.org_id
     || state.profile?.org_id
+    || state.activeOrgId
     || getSavedActiveOrgPreference()
     || ""
   ).trim() || null;
@@ -2071,6 +2040,7 @@ function initMapWorkspaceUi(){
       if (isMobileViewport()) setDrawerOpen(false);
     }
   });
+  bindMapPhotoUploadInput();
   initDrawerResizer();
 }
 
@@ -2894,12 +2864,6 @@ function setActiveView(viewId, { syncHash = true } = {}){
     applySignedOutUi("set-active-view-blocked");
     return;
   }
-  if (!CONTROL_CENTER_DEV_MODE && !isViewAllowed(viewId)){
-    if (viewId !== getDefaultView()){
-      setActiveView(getDefaultView(), { syncHash });
-    }
-    return;
-  }
   if (viewId !== "viewWarehouseScan"){
     stopWarehouseScanCamera();
   }
@@ -2915,7 +2879,8 @@ function setActiveView(viewId, { syncHash = true } = {}){
   });
   syncMobileBottomNav(viewId);
   if (viewId === "viewAdmin"){
-    loadAdminWorkspaceData();
+    loadAdminProfiles();
+    loadAdminMaterialSettings();
   }
   if (viewId === "viewTechnician"){
     if (state.features.labor) loadTechnicianTimesheet();
@@ -3544,7 +3509,6 @@ SpecCom.helpers.resetInvoiceAgentState = function(){
   state.invoiceAgent.busy = false;
   state.invoiceAgent.siteMap = new Map();
   state.invoiceAgent.importPreview = null;
-  state.invoiceAgent.bidImportPreview = null;
   state.invoiceAgent.billingWindow = null;
 };
 
@@ -3571,18 +3535,6 @@ SpecCom.helpers.openInvoiceAgentModal = async function(){
   SpecCom.helpers.renderInvoiceAgentModal();
   await SpecCom.helpers.loadInvoiceAgentCandidates();
   SpecCom.helpers.renderInvoiceImportPreview();
-  SpecCom.helpers.renderBidImportPreview();
-};
-
-SpecCom.helpers.openCopperBidWorkbookFlow = async function(){
-  await SpecCom.helpers.openInvoiceAgentModal();
-  const bidBtn = $("btnBidImport");
-  if (bidBtn){
-    bidBtn.classList.add("pulse-once");
-    bidBtn.scrollIntoView({ block: "center", behavior: "smooth" });
-    setTimeout(() => bidBtn.classList.remove("pulse-once"), 1800);
-    bidBtn.focus();
-  }
 };
 
 SpecCom.helpers.closeInvoiceAgentModal = function(){
@@ -3729,7 +3681,7 @@ SpecCom.helpers.renderInvoiceAgentModal = function(){
           <input type="checkbox" data-site-id="${c.id}" ${selected ? "checked" : ""} ${disabled ? "disabled" : ""} />
           <div>
             <div style="font-weight:700;">${escapeHtml(c.name)}</div>
-            <div class="muted small">${statusLabel} â€¢ ${entryLabel}</div>
+            <div class="muted small">${statusLabel} Ã¢â‚¬Â¢ ${entryLabel}</div>
           </div>
         </label>
       `;
@@ -3778,7 +3730,7 @@ SpecCom.helpers.renderInvoiceAgentResults = function(){
         <div class="row" style="justify-content:space-between; align-items:center;">
           <div>
             <div style="font-weight:700;">${escapeHtml(siteName)}</div>
-            <div class="muted small">Draft â€¢ ${formatMoney(total)}</div>
+            <div class="muted small">Draft Ã¢â‚¬Â¢ ${formatMoney(total)}</div>
           </div>
           <div class="row">
             <button class="btn ghost small" data-action="invoiceAgentExportCsv" data-invoice-id="${inv.invoice_id}" data-site-id="${inv.site_id}">${t("invoiceAgentExportCsv")}</button>
@@ -6019,7 +5971,7 @@ function renderRedlineList(){
     const pendingCount = overageMarkers.filter((m) => (m.approval_status || "pending") === "pending").length;
     html += `
       <div class="overage-section-header">
-        <span>⚠️ Splice Overage Requests</span>
+        <span>âš ï¸ Splice Overage Requests</span>
         ${pendingCount ? `<span class="overage-pending-count">${pendingCount} pending K&S approval</span>` : ""}
       </div>
     `;
@@ -6033,26 +5985,26 @@ function renderRedlineList(){
             ${getOverageApprovalBadge(marker)}
           </div>
           <div class="overage-qty-row">
-            <span class="overage-qty-cell"><span class="muted small">Design</span><b>${marker.design_qty ?? "—"}</b></span>
-            <span class="overage-arrow">→</span>
-            <span class="overage-qty-cell"><span class="muted small">Field</span><b>${marker.field_qty ?? "—"}</b></span>
-            <span class="overage-arrow">→</span>
+            <span class="overage-qty-cell"><span class="muted small">Design</span><b>${marker.design_qty ?? "â€”"}</b></span>
+            <span class="overage-arrow">â†’</span>
+            <span class="overage-qty-cell"><span class="muted small">Field</span><b>${marker.field_qty ?? "â€”"}</b></span>
+            <span class="overage-arrow">â†’</span>
             <span class="overage-qty-cell overage-extra"><span class="muted small">Extra</span><b>+${extra}</b></span>
           </div>
           <div class="muted small overage-meta">
-            📋 ${escapeHtml(marker.staking_sheet || "—")}
-            ${marker.field_date ? ` &nbsp;·&nbsp; 📅 ${escapeHtml(marker.field_date)}` : ""}
-            ${marker.tech_name ? ` &nbsp;·&nbsp; 👷 ${escapeHtml(marker.tech_name)}` : ""}
+            ðŸ“‹ ${escapeHtml(marker.staking_sheet || "â€”")}
+            ${marker.field_date ? ` &nbsp;Â·&nbsp; ðŸ“… ${escapeHtml(marker.field_date)}` : ""}
+            ${marker.tech_name ? ` &nbsp;Â·&nbsp; ðŸ‘· ${escapeHtml(marker.tech_name)}` : ""}
           </div>
           <div class="muted small overage-justification">
-            💡 ${escapeHtml(getJustificationLabel(marker.justification_category))}
+            ðŸ’¡ ${escapeHtml(getJustificationLabel(marker.justification_category))}
           </div>
           ${marker.notes ? `<div class="muted small overage-notes">${escapeHtml(String(marker.notes).slice(0, 150))}</div>` : ""}
-          ${marker.approval_note ? `<div class="muted small overage-approval-note">📝 K&S note: ${escapeHtml(marker.approval_note)}</div>` : ""}
+          ${marker.approval_note ? `<div class="muted small overage-approval-note">ðŸ“ K&S note: ${escapeHtml(marker.approval_note)}</div>` : ""}
           <div class="redline-item-actions">
             <button type="button" class="btn ghost small" data-redline-action="edit" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">Edit</button>
-            <button type="button" class="btn secondary small" data-overage-action="approve" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">✅ Mark Approved</button>
-            <button type="button" class="btn ghost small" data-overage-action="deny" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">❌ Deny</button>
+            <button type="button" class="btn secondary small" data-overage-action="approve" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">âœ… Mark Approved</button>
+            <button type="button" class="btn ghost small" data-overage-action="deny" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">âŒ Deny</button>
             ${canManage ? `<button type="button" class="btn danger small" data-redline-action="delete" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">Delete</button>` : ""}
           </div>
         </article>
@@ -6102,7 +6054,7 @@ function renderRedlineList(){
 function getOverageApprovalBadge(marker){
   if (!marker.overage_request) return "";
   const s = String(marker.approval_status || "pending");
-  const map = { pending: ["⏳", "overage-pending"], approved: ["✅", "overage-approved"], denied: ["❌", "overage-denied"] };
+  const map = { pending: ["â³", "overage-pending"], approved: ["âœ…", "overage-approved"], denied: ["âŒ", "overage-denied"] };
   const [icon, cls] = map[s] || map.pending;
   return `<span class="overage-badge ${cls}">${icon} K&S ${s.charAt(0).toUpperCase()+s.slice(1)}</span>`;
 }
@@ -6116,7 +6068,7 @@ function getJustificationLabel(cat){
     not_on_print: "Not on staking print",
     other: "Other",
   };
-  return labels[cat] || cat || "—";
+  return labels[cat] || cat || "â€”";
 }
 
 async function handleOverageApprovalAction(markerId, action){
@@ -9471,6 +9423,72 @@ function ensureMapPanes(){
   });
 }
 
+function exifPartToNumber(value){
+  if (typeof value === "number") return value;
+  if (!value || typeof value !== "object") return Number(value);
+  const numerator = Number(value.numerator);
+  const denominator = Number(value.denominator);
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return NaN;
+  return numerator / denominator;
+}
+
+function convertExifDmsToDecimal(dms, ref){
+  if (!Array.isArray(dms) || dms.length < 3) return NaN;
+  const deg = exifPartToNumber(dms[0]);
+  const min = exifPartToNumber(dms[1]);
+  const sec = exifPartToNumber(dms[2]);
+  if (![deg, min, sec].every(Number.isFinite)) return NaN;
+  let decimal = deg + (min / 60) + (sec / 3600);
+  if (ref === "S" || ref === "W") decimal *= -1;
+  return decimal;
+}
+
+function bindMapPhotoUploadInput(){
+  const input = $("photoUpload");
+  if (!input || input.dataset.bound === "1") return;
+  input.dataset.bound = "1";
+  input.addEventListener("change", (e) => {
+    const files = Array.from(e?.target?.files || []);
+    if (!files.length) return;
+    if (!state.map.instance) ensureMap();
+    if (!state.map.instance || !window.L) return;
+    if (!window.EXIF){
+      console.warn("EXIF library not loaded.");
+      return;
+    }
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          window.EXIF.getData(img, function (){
+            const lat = window.EXIF.getTag(this, "GPSLatitude");
+            const lon = window.EXIF.getTag(this, "GPSLongitude");
+            const latRef = window.EXIF.getTag(this, "GPSLatitudeRef");
+            const lonRef = window.EXIF.getTag(this, "GPSLongitudeRef");
+            if (!lat || !lon){
+              console.warn("No GPS data found in image:", file.name);
+              return;
+            }
+            const latitude = convertExifDmsToDecimal(lat, latRef);
+            const longitude = convertExifDmsToDecimal(lon, lonRef);
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)){
+              console.warn("Invalid GPS data in image:", file.name);
+              return;
+            }
+            window.L.marker([latitude, longitude], { pane: MAP_PANES.photos })
+              .addTo(state.map.instance)
+              .bindPopup(`<b>${escapeHtml(file.name)}</b><br>Lat: ${latitude.toFixed(6)}<br>Lon: ${longitude.toFixed(6)}`);
+          });
+        };
+        img.src = event?.target?.result || "";
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = "";
+  });
+}
+
 function ensureMap(){
   if (state.map.instance || !window.L) return;
   const mapEl = $("liveMap");
@@ -9955,15 +9973,15 @@ function isDemoUser(){
 }
 
 SpecCom.helpers.isRoot = function(){
-  return isAppRoot();
+  return Boolean(state.user);
 };
 
 SpecCom.helpers.isSupport = function(){
-  return String(state.profile?.role || "").trim().toLowerCase() === "support";
+  return Boolean(state.user);
 };
 
 SpecCom.helpers.isPlatformAdmin = function(){
-  return isAppAdmin() || SpecCom.helpers.isSupport();
+  return SpecCom.helpers.isRoot() || SpecCom.helpers.isSupport();
 };
 
 function isBillingManager(){
@@ -9971,11 +9989,11 @@ function isBillingManager(){
 }
 
 function isOwner(){
-  return isAppAdmin();
+  return Boolean(state.user);
 }
 
 function isOwnerOrAdmin(){
-  return isAppAdmin();
+  return Boolean(state.user);
 }
 
 function isPrivilegedRole(roleCode = getRoleCode()){
@@ -9989,11 +10007,10 @@ function isFieldRole(roleCode = getRoleCode()){
 function getShowcaseAccountEmails(){
   const env = getRuntimeEnv();
   const raw = String(env?.LIVE_SHOWCASE_EMAILS || env?.DEMO_SHOWCASE_EMAILS || "").trim();
-  const list = ["demo.version@speccom.llc"]
-    .concat(raw
+  const list = raw
     .split(/[,\s;]+/)
     .map((item) => normalizeEmail(item))
-    .filter(Boolean));
+    .filter(Boolean);
   const demoBootstrapEmail = normalizeEmail(env?.DEMO_BOOTSTRAP_EMAIL || env?.["DEMO_" + "AD" + "MIN_EMAIL"]);
   if (demoBootstrapEmail) list.push(demoBootstrapEmail);
   return new Set(list);
@@ -10007,16 +10024,15 @@ function isShowcaseAccountUser(){
 }
 
 function isDemoShowcaseMode(){
+  if (String(appMode || "").toLowerCase() === "demo") return true;
   const env = getRuntimeEnv();
-  const enabled = String(appMode || "").toLowerCase() === "demo"
-    || parseBooleanFlag(env?.DEMO_SHOWCASE_ENABLED)
-    || parseBooleanFlag(env?.DEMO_SHOWCASE_ACCOUNT_ENABLED);
-  if (!enabled) return false;
-  if (state.user){
-    if (isAppRoot()) return false;
-    return isShowcaseAccountUser();
+  if (parseBooleanFlag(env?.DEMO_SHOWCASE_ENABLED)){
+    return true;
   }
-  return true;
+  if (parseBooleanFlag(env?.DEMO_SHOWCASE_ACCOUNT_ENABLED) && isShowcaseAccountUser()){
+    return true;
+  }
+  return false;
 }
 
 function canShowModule(moduleKey){
@@ -10068,13 +10084,8 @@ function initSplash() {
     dismissSplash("#login");
   });
 
-  demoBtn.addEventListener("click", async () => {
-    try {
-      await demoLogin({ routeToDemo: true, dismissSplashOnSuccess: true, dismissSplash });
-    } catch (error){
-      console.warn("[demo] splash login failed", error);
-      toast("Demo login failed", error?.message || "Unable to start demo session.");
-    }
+  demoBtn.addEventListener("click", () => {
+    dismissSplash("#demo");
   });
 }
 
@@ -10478,7 +10489,6 @@ function isViewAllowed(viewId){
   }
   const allowed = getProductionAllowedViews();
   if (!allowed.has(viewId)) return false;
-  if (viewId === "viewAdmin") return isAppAdmin();
   if (viewId === "viewLabor") return canViewLabor();
   if (viewId === "viewDispatch") return canViewDispatch();
   if (viewId === "viewSupervisor") return canViewDispatch();
@@ -10610,15 +10620,6 @@ function clearAuthenticatedWorkspaceState(){
   state.pendingPreferredLanguage = "";
   state.orgContextRequired = false;
   state.orgContextPromptShown = false;
-  state.supportConsoleOrgOverride = null;
-  state.adminWorkspace.companies = [];
-  state.adminWorkspace.companiesLoaded = false;
-  state.adminWorkspace.loadingCompanies = false;
-  state.adminWorkspace.users = [];
-  state.adminWorkspace.projects = [];
-  state.adminWorkspace.tab = "companies";
-  state.adminWorkspace.companyUsersOrgId = null;
-  window.currentUser = null;
   document.querySelectorAll(".modal").forEach((modal) => {
     if (modal instanceof HTMLElement){
       modal.style.display = "none";
@@ -11065,114 +11066,6 @@ SpecCom.helpers.parseInvoiceSpreadsheet = async function(file){
   });
 };
 
-SpecCom.helpers.parseCopperBidWorkbook = async function(file){
-  if (!file) throw new Error("No file selected.");
-  const name = String(file.name || "").toLowerCase();
-  if (!name.endsWith(".xlsx") && !name.endsWith(".xls")){
-    throw new Error("Unsupported file type. Upload .xlsx or .xls.");
-  }
-  if (!window.XLSX){
-    throw new Error("XLSX parser unavailable. Refresh and try again.");
-  }
-  const data = await file.arrayBuffer();
-  const workbook = window.XLSX.read(data, { type: "array" });
-  const preferredSheet = workbook.SheetNames?.find((sheetName) => String(sheetName || "").trim().toLowerCase() === "sheet1");
-  const sheetName = preferredSheet || workbook.SheetNames?.[0];
-  if (!sheetName) throw new Error("Workbook does not contain any sheets.");
-  const sheet = workbook.Sheets[sheetName];
-  const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: "" });
-  if (!rows.length) throw new Error("Workbook is empty.");
-
-  const headerIndex = rows.findIndex((row) => {
-    const normalized = (row || []).map((cell) => SpecCom.helpers.normalizeImportHeader(cell));
-    return normalized.includes("unit") && normalized.includes("qty") && normalized.includes("cost") && normalized.includes("total");
-  });
-  if (headerIndex < 0){
-    throw new Error("Could not find the bid summary header row.");
-  }
-
-  const items = [];
-  let subtotal = null;
-  let opAmount = null;
-  let bidTotal = null;
-  let insuranceTerm = "";
-
-  for (let rowIndex = headerIndex + 1; rowIndex < rows.length; rowIndex += 1){
-    const row = rows[rowIndex] || [];
-    const description = String(row[1] ?? "").trim();
-    const unit = String(row[2] ?? "").trim();
-    const quantity = Number(row[3] ?? 0);
-    const unitCost = Number(row[4] ?? 0);
-    const lineTotal = Number(row[5] ?? 0);
-    const duration = row[6] === "" ? null : Number(row[6]);
-    const totalDuration = row[7] === "" ? null : Number(row[7]);
-    const normalizedDescription = description.toLowerCase();
-
-    if (!description){
-      continue;
-    }
-
-    if (normalizedDescription === "subtotal"){
-      subtotal = lineTotal;
-      continue;
-    }
-    if (normalizedDescription.startsWith("o&p")){
-      opAmount = lineTotal;
-      continue;
-    }
-    if (normalizedDescription === "total"){
-      bidTotal = lineTotal;
-      continue;
-    }
-
-    if (!unit){
-      continue;
-    }
-
-    if (!Number.isFinite(quantity) || !Number.isFinite(unitCost) || !Number.isFinite(lineTotal)){
-      continue;
-    }
-
-    if (!insuranceTerm && normalizedDescription.includes("insurance")){
-      insuranceTerm = String(row[9] ?? row[8] ?? "").trim();
-    }
-
-    items.push({
-      itemNumber: items.length + 1,
-      description,
-      unit,
-      qty: quantity,
-      unitRate: unitCost,
-      total: lineTotal,
-      duration: Number.isFinite(duration) ? duration : null,
-      totalDuration: Number.isFinite(totalDuration) ? totalDuration : null,
-    });
-  }
-
-  if (!items.length){
-    throw new Error("No bid line items were found in the workbook.");
-  }
-
-  const computedSubtotal = roundInvoiceCurrency(items.reduce((sum, item) => sum + Number(item.total || 0), 0));
-  subtotal = Number.isFinite(Number(subtotal)) && subtotal > 0 ? Number(subtotal) : computedSubtotal;
-  opAmount = Number.isFinite(Number(opAmount)) ? Number(opAmount) : roundInvoiceCurrency(subtotal * 0.10);
-  bidTotal = Number.isFinite(Number(bidTotal)) && bidTotal > 0 ? Number(bidTotal) : roundInvoiceCurrency(subtotal + opAmount);
-  const maxDuration = items.reduce((max, item) => Math.max(max, Number(item.totalDuration || 0)), 0);
-  const summedDurations = items.reduce((sum, item) => sum + Number(item.duration || 0), 0);
-  const estimatedWorkingDays = maxDuration > 0 ? maxDuration : roundInvoiceCurrency(summedDurations);
-
-  return {
-    sourceFileName: String(file.name || "bid-workbook.xlsx"),
-    sheetName,
-    items,
-    subtotal,
-    opAmount,
-    bidTotal,
-    estimatedWorkingDays,
-    insuranceTerm: insuranceTerm || "",
-  };
-};
-
 SpecCom.helpers.prepareInvoiceImportPreview = function(rows){
   const siteMap = new Map((state.projectSites || []).map((s) => [String(s.name || "").trim().toLowerCase(), s]));
   const preview = [];
@@ -11230,7 +11123,7 @@ SpecCom.helpers.renderInvoiceImportPreview = function(){
     : "No matching sites found.";
   list.innerHTML = data.preview.slice(0, 60).map((row) => {
     const codes = row.items.map(i => `${i.code} (${i.qty})`).join(", ");
-    return `<div class="muted small">Row ${row.rowNumber}: ${escapeHtml(row.location_name)} → ${escapeHtml(codes || "No items")}</div>`;
+    return `<div class="muted small">Row ${row.rowNumber}: ${escapeHtml(row.location_name)} â†’ ${escapeHtml(codes || "No items")}</div>`;
   }).join("");
   if (missing){
     list.innerHTML += data.missing.slice(0, 20).map((row) => (
@@ -11239,34 +11132,6 @@ SpecCom.helpers.renderInvoiceImportPreview = function(){
   }
   if (exportBtn) exportBtn.style.display = total ? "" : "none";
   if (applyBtn) applyBtn.style.display = total ? "" : "none";
-};
-
-SpecCom.helpers.renderBidImportPreview = function(){
-  const summary = $("bidImportSummary");
-  const list = $("bidImportList");
-  const applyBtn = $("btnBidImportApply");
-  const data = state.invoiceAgent.bidImportPreview;
-  if (!summary || !list) return;
-  if (!data){
-    summary.textContent = "";
-    list.innerHTML = "";
-    if (applyBtn) applyBtn.style.display = "none";
-    return;
-  }
-  summary.textContent = `${data.items.length} line items parsed from ${data.sourceFileName}. Subtotal ${formatMoney(data.subtotal)} | O&P ${formatMoney(data.opAmount)} | Total ${formatMoney(data.bidTotal)}${data.estimatedWorkingDays ? ` | ${data.estimatedWorkingDays} working days` : ""}`;
-  list.innerHTML = data.items.slice(0, 20).map((item) => (
-    `<div class="muted small">Item ${item.itemNumber}: ${escapeHtml(item.description)} | ${escapeHtml(item.unit)} | Qty ${escapeHtml(String(item.qty))} | Rate ${escapeHtml(formatMoney(item.unitRate))} | Total ${escapeHtml(formatMoney(item.total))}</div>`
-  )).join("");
-  if (data.items.length > 20){
-    list.innerHTML += `<div class="muted small">... ${data.items.length - 20} more items</div>`;
-  }
-  if (data.insuranceTerm){
-    list.innerHTML += `<div class="muted small">Insurance term from workbook: ${escapeHtml(data.insuranceTerm)}</div>`;
-  }
-  if (!state.activeProject?.id){
-    list.innerHTML += `<div class="muted small" style="color:#b45309;">Select or create the copper project before creating the draft bid.</div>`;
-  }
-  if (applyBtn) applyBtn.style.display = "" ;
 };
 
 SpecCom.helpers.exportInvoiceImportCsv = function(){
@@ -11379,75 +11244,6 @@ SpecCom.helpers.generateProjectInvoiceFromImport = async function(){
   toast("Invoice draft created", "Project invoice generated.");
 };
 
-SpecCom.helpers.applyCopperBidImport = function(){
-  const data = state.invoiceAgent.bidImportPreview;
-  if (!data){
-    toast("No data", "Import a copper bid workbook first.");
-    return;
-  }
-  if (!state.activeProject){
-    toast("Project required", "Create or select the copper project first.");
-    return;
-  }
-
-  ensureOfficeInvoiceStateLoaded();
-  const lineItems = data.items.map((item, index) => ({
-    id: `office-line-${Date.now()}-${index}-${Math.random().toString(16).slice(2, 6)}`,
-    code: `BID-${String(index + 1).padStart(3, "0")}`,
-    description: `${item.description}${item.unit ? ` (${item.unit})` : ""}`,
-    qty: item.qty,
-    unit_rate: item.unitRate,
-  }));
-  if (Number(data.opAmount || 0) > 0){
-    lineItems.push({
-      id: `office-line-${Date.now()}-op`,
-      code: "BID-O&P",
-      description: "O&P @ 10%",
-      qty: 1,
-      unit_rate: data.opAmount,
-    });
-  }
-
-  const projectName = String(state.activeProject?.name || "Copper Splicing Project").trim();
-  const projectDescription = String(state.activeProject?.description || "").trim();
-  const noteLines = [
-    `Imported from workbook: ${data.sourceFileName}`,
-    "Work type: Copper splicing in manholes on a government facility.",
-    `Project: ${projectName}`,
-    projectDescription ? `Project description: ${projectDescription}` : "",
-    `Bid subtotal: ${formatMoney(data.subtotal)}`,
-    `O&P @ 10%: ${formatMoney(data.opAmount)}`,
-    `Bid total: ${formatMoney(data.bidTotal)}`,
-    data.estimatedWorkingDays ? `Estimated working days: ${data.estimatedWorkingDays}` : "",
-    data.insuranceTerm ? `Insurance term: ${data.insuranceTerm}` : "",
-  ].filter(Boolean);
-
-  state.officeInvoices.routeInvoiceNumber = "";
-  clearInvoiceDeepLinkUrl();
-  state.officeInvoices.draft = {
-    id: `office-invoice-${Date.now()}`,
-    company_creating_invoice: state.officeInvoices.recents?.company?.[0] || "",
-    bill_to: state.officeInvoices.recents?.billTo?.[0] || "Government Facility",
-    invoice_number: getNextOfficeInvoiceNumber(),
-    invoice_date: toLocalDateISO(new Date()),
-    week_ending: getWeekEndingSaturdayISO(new Date()),
-    job_number: String(state.activeProject?.job_number || "").trim(),
-    location: projectName,
-    notes: noteLines.join("\n"),
-    status: "Draft",
-    line_items: lineItems,
-    created_at: nowISO(),
-    updated_at: nowISO(),
-  };
-  persistOfficeInvoiceState();
-  SpecCom.helpers.closeInvoiceAgentModal();
-  if (isViewAllowed("viewInvoices")){
-    setActiveView("viewInvoices");
-  }
-  renderInvoicePanel();
-  toast("Draft bid created", `Loaded ${lineItems.length} bid lines into Office & Billing.`);
-};
-
 function getNodeUnits(node){
   const allowed = node.units_allowed ?? node.allowed_units ?? 0;
   const used = node.units_used ?? node.used_units ?? 0;
@@ -11554,17 +11350,11 @@ SpecCom.helpers.loadYourInvoices = async function(projectId){
     return;
   }
   if (!state.client) return;
-  let query = state.client
+  const { data, error } = await state.client
     .from("invoices")
     .select("id, invoice_number, status, total, site_id, billed_by_org_id, billed_to_org_id, created_at")
-    .eq("project_id", projectId);
-  if (isDemoUser()){
-    const demoOrgId = state.profile?.org_id || state.activeOrgId || state.activeProject?.org_id || null;
-    if (demoOrgId){
-      query = query.eq("billed_by_org_id", demoOrgId);
-    }
-  }
-  const { data, error } = await query.order("created_at", { ascending: false });
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
   if (error){
     toast("Invoices load error", error.message);
     return;
@@ -11592,10 +11382,6 @@ function setRoleUI(){
   const invoiceAgentBtn = $("btnInvoiceAgent");
   if (invoiceAgentBtn){
     invoiceAgentBtn.style.display = SpecCom.helpers.isInvoiceAgentAllowed() ? "" : "none";
-  }
-  const officeBidWorkbookBtn = $("btnOfficeBidWorkbook");
-  if (officeBidWorkbookBtn){
-    officeBidWorkbookBtn.style.display = SpecCom.helpers.isInvoiceAgentAllowed() ? "" : "none";
   }
   document.querySelectorAll(".no-pay-banner").forEach((el) => {
     el.style.display = BUILD_MODE ? "none" : "";
@@ -11687,11 +11473,11 @@ function useTechnicianDaySimulation(){
 }
 
 const TECH_SHIFT_TEMPLATE = [
-  { id: "vehicle_start", kind: "inspection", title: "Vehicle Inspection — Start of Day", subtitle: "Start of Day", plannedMinutes: 15 },
+  { id: "vehicle_start", kind: "inspection", title: "Vehicle Inspection â€” Start of Day", subtitle: "Start of Day", plannedMinutes: 15 },
   {
     id: "service_job_1",
     kind: "service",
-    title: "Service Order — Job 1",
+    title: "Service Order â€” Job 1",
     subtitle: "Install Fiber Service",
     plannedMinutes: 120,
     customer: "Joe Smith",
@@ -11705,7 +11491,7 @@ const TECH_SHIFT_TEMPLATE = [
   {
     id: "trouble_job_2",
     kind: "trouble",
-    title: "Trouble Ticket — Job 2",
+    title: "Trouble Ticket â€” Job 2",
     subtitle: "Called-in Low Speeds",
     plannedMinutes: 120,
     customer: "Joe Smith",
@@ -11715,8 +11501,8 @@ const TECH_SHIFT_TEMPLATE = [
     priority: "Urgent",
   },
   { id: "break_2", kind: "break", title: "Break 2", subtitle: "15-minute break", plannedMinutes: 15 },
-  { id: "vehicle_end", kind: "inspection", title: "Vehicle Inspection — End of Day", subtitle: "End of Day", plannedMinutes: 15 },
-  { id: "eos", kind: "eos", title: "EOS — End of Shift / Clock Out", subtitle: "End of shift", plannedMinutes: 5 },
+  { id: "vehicle_end", kind: "inspection", title: "Vehicle Inspection â€” End of Day", subtitle: "End of Day", plannedMinutes: 15 },
+  { id: "eos", kind: "eos", title: "EOS â€” End of Shift / Clock Out", subtitle: "End of shift", plannedMinutes: 5 },
 ];
 
 function getShiftStatusLabel(item){
@@ -11833,7 +11619,7 @@ function loadTechnicianSimulation(){
   try {
     const saved = JSON.parse(raw);
     if (!saved || typeof saved !== "object") return;
-    // Only restore if saved today — don't carry over yesterday's shift
+    // Only restore if saved today â€” don't carry over yesterday's shift
     const savedDate = saved.savedAt ? new Date(saved.savedAt).toDateString() : null;
     if (savedDate && savedDate !== new Date().toDateString()) {
       safeLocalStorageSet(TECH_SIM_KEY, "");
@@ -12137,7 +11923,7 @@ function renderCurrentShiftActivity(){
   if (!currentWrap) return;
   const item = getCurrentShiftItem();
   const clockLabel = sim.clockedInAt
-    ? `Clocked in at ${formatTimeShort(sim.clockedInAt)}${sim.clockedOutAt ? ` • Clocked out at ${formatTimeShort(sim.clockedOutAt)}` : ""}`
+    ? `Clocked in at ${formatTimeShort(sim.clockedInAt)}${sim.clockedOutAt ? ` â€¢ Clocked out at ${formatTimeShort(sim.clockedOutAt)}` : ""}`
     : "Shift start preloaded for 8:00 AM. Clock in to begin.";
   if (statusEl) statusEl.textContent = clockLabel;
   if (stateEl){
@@ -12174,7 +11960,7 @@ function renderCurrentShiftActivity(){
       </div>
       <div class="muted small">Elapsed ${formatDurationMinutes(elapsed)} of planned ${formatDurationMinutes(item.plannedMinutes || 0)}</div>
       ${(item.kind === "service" || item.kind === "trouble") ? `
-        <div class="muted small">${escapeHtml(item.customer || "")} • ${escapeHtml(item.address || "")}</div>
+        <div class="muted small">${escapeHtml(item.customer || "")} â€¢ ${escapeHtml(item.address || "")}</div>
       ` : ""}
       ${appointmentWindow ? `<div class="muted small">${escapeHtml(appointmentWindow)}</div>` : ""}
       ${compliancePill ? `<div>${compliancePill}</div>` : ""}
@@ -12196,7 +11982,7 @@ function renderCurrentShiftActivity(){
         <button class="btn ghost small" type="button" data-tech-shift-action="addPhoto" data-tech-item-id="${item.id}">Photo</button>
       </div>
       <input id="techQuickPhotoInput" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" style="display:none;" />
-      ${notes.length ? `<div class="tech-note-list">${notes.map((n) => `<div class="tech-note-item">• ${escapeHtml(n)}</div>`).join("")}</div>` : ""}
+      ${notes.length ? `<div class="tech-note-list">${notes.map((n) => `<div class="tech-note-item">â€¢ ${escapeHtml(n)}</div>`).join("")}</div>` : ""}
       ${photos.length ? `<div class="muted small">Photos: ${escapeHtml(photos.join(", "))}</div>` : ""}
     </div>
   `;
@@ -12212,7 +11998,7 @@ function renderTodayShiftTimeline(){
     const compliancePill = complianceSource ? renderAppointmentCompliancePill(complianceSource) : "";
     const appointmentWindow = formatTechAppointmentWindow(item);
     const isCurrent = item.id === sim.activeItemId;
-    const focusBtnLabel = isCurrent ? (item.status === "ACTIVE" ? "Active ↑" : "Viewing ↑") : "Open";
+    const focusBtnLabel = isCurrent ? (item.status === "ACTIVE" ? "Active â†‘" : "Viewing â†‘") : "Open";
     const focusBtnClass = isCurrent ? "btn ghost small is-current-item" : "btn ghost small";
     return `
       <article class="tech-shift-item${isCurrent ? " is-current" : ""}">
@@ -12223,8 +12009,8 @@ function renderTodayShiftTimeline(){
           </div>
           <div class="status-pill ${getShiftStatusClass(item)}">${escapeHtml(getShiftStatusLabel(item))}</div>
         </div>
-        <div class="muted small">Planned ${formatDurationMinutes(item.plannedMinutes || 0)} • Elapsed ${formatDurationMinutes(elapsed)}</div>
-        ${(item.kind === "service" || item.kind === "trouble") ? `<div class="muted small">${escapeHtml(item.customer || "")} • ${escapeHtml(item.address || "")}</div>` : ""}
+        <div class="muted small">Planned ${formatDurationMinutes(item.plannedMinutes || 0)} â€¢ Elapsed ${formatDurationMinutes(elapsed)}</div>
+        ${(item.kind === "service" || item.kind === "trouble") ? `<div class="muted small">${escapeHtml(item.customer || "")} â€¢ ${escapeHtml(item.address || "")}</div>` : ""}
         ${appointmentWindow ? `<div class="muted small">${escapeHtml(appointmentWindow)}</div>` : ""}
         ${compliancePill ? `<div>${compliancePill}</div>` : ""}
         <div class="tech-shift-actions">
@@ -12627,7 +12413,7 @@ function renderTechnicianDashboard(){
       const projectName = state.projects.find(p => p.id === timesheet.project_id)?.name || "Project";
       const clockInText = t("techClockedInAt", { time: formatTimeShort(timesheet.clock_in_at) });
       const clockOutText = timesheet.clock_out_at ? t("techClockedOutAt", { time: formatTimeShort(timesheet.clock_out_at) }) : "";
-      clockStatus.textContent = `${clockInText}${clockOutText ? ` • ${clockOutText}` : ""} • ${projectName}`;
+      clockStatus.textContent = `${clockInText}${clockOutText ? ` â€¢ ${clockOutText}` : ""} â€¢ ${projectName}`;
     }
   }
 
@@ -12673,7 +12459,7 @@ function renderTechnicianDashboard(){
     } else {
       trailEl.innerHTML = trail.slice(-10).map(point => {
         const time = formatTimeShort(point.at);
-        return `<div>${time} • ${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}</div>`;
+        return `<div>${time} â€¢ ${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}</div>`;
       }).join("");
     }
   }
@@ -12689,7 +12475,7 @@ function renderTechnicianDashboard(){
         <div class="event-row">
           <div>
             <div class="event-title">${title}</div>
-            <div class="event-meta">${start}${end ? ` → ${end}` : ""}</div>
+            <div class="event-meta">${start}${end ? ` â†’ ${end}` : ""}</div>
           </div>
           <div class="event-meta">${durationLabel}</div>
         </div>
@@ -13597,7 +13383,7 @@ function renderDispatchAssignmentBoard(){
           </select>
           ${selectedJob ? `
             <div class="dispatch-assignment-detail" style="margin-top:8px;">
-              <div class="muted small">${escapeHtml(selectedJob.type || "Work Order")} • ${escapeHtml(formatWorkOrderStatusLabel(selectedJob.status))}</div>
+              <div class="muted small">${escapeHtml(selectedJob.type || "Work Order")} â€¢ ${escapeHtml(formatWorkOrderStatusLabel(selectedJob.status))}</div>
               <div class="muted small">${escapeHtml(selectedJob.address || "No address")}</div>
               ${renderAppointmentCompliancePill(selectedJob)}
             </div>
@@ -13702,7 +13488,7 @@ function handleDispatchAssignmentMapHook(){
   const worker = (state.workOrders.workforce || []).find((row) => row.user_id === workerUserId) || null;
   const jobLabel = job ? formatDispatchJobLabel(job) : "No job selected";
   const workerLabel = worker ? `${worker.worker_id} ${worker.display_name}` : "No worker selected";
-  toast("Dispatch map hook", `${workerLabel} • ${jobLabel}. Live map routing hook coming next.`);
+  toast("Dispatch map hook", `${workerLabel} â€¢ ${jobLabel}. Live map routing hook coming next.`);
 }
 
 function normalizeWorkforceStatus(status){
@@ -17125,9 +16911,8 @@ function renderProfileHomeCard(){
 
   const name = getProfileDisplayName();
   const photoUrl = getProfilePhotoUrl();
-  const roleLabel = formatAppRoleLabel(getAppUserRole());
   cardName.textContent = `Welcome back, ${name}`;
-  cardRole.textContent = `${roleLabel} access`;
+  cardRole.textContent = "Field verification, documentation, and billing control";
   const indicator = document.getElementById("profileProjectIndicator");
   const noProject = document.getElementById("profileNoProject");
   const projectLabel = document.getElementById("profileProjectLabel");
@@ -17153,7 +16938,6 @@ function renderProfileHomeCard(){
     {
       name,
       photoUrl,
-      roleLabel,
     },
     String(state.activeProject?.name || "").trim()
   );
@@ -17177,10 +16961,10 @@ function updateCommandHeader(user, projectName) {
     avatar.textContent = user.name.slice(0, 2).toUpperCase();
   }
   if (project) {
-    project.textContent = projectName || "— None —";
+    project.textContent = projectName || "â€” None â€”";
   }
   if (subtitle) {
-    subtitle.textContent = user?.roleLabel ? `${user.roleLabel} access` : "Field verification, documentation, and billing control";
+    subtitle.textContent = "Field verification, documentation, and billing control";
   }
   if (avatar && user?.photoUrl) {
     avatar.innerHTML = `<img src="${user.photoUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" alt="Profile photo" />`;
@@ -17273,7 +17057,7 @@ function renderBoardMessages(messages) {
   }
   feed.innerHTML = messages.map((m) => `
     <div class="msg-item">
-      ${m.pinned ? '<div class="msg-pin">📌 Pinned</div>' : ""}
+      ${m.pinned ? '<div class="msg-pin">ðŸ“Œ Pinned</div>' : ""}
       <div class="msg-item-header">
         <span class="msg-author">${escapeHtml(String(m.user_name || "User"))}</span>
         <span class="msg-time">${escapeHtml(formatMsgTime(m.created_at))}</span>
@@ -17352,15 +17136,15 @@ function wxCodeToText(code) {
 }
 
 function wxCodeToEmoji(code) {
-  if (code === 0) return "☀️";
-  if (code <= 2) return "⛅";
-  if (code === 3) return "☁️";
-  if (code <= 48) return "🌫️";
-  if (code <= 55) return "🌦️";
-  if (code <= 65) return "🌧️";
-  if (code <= 77) return "❄️";
-  if (code <= 82) return "🌨️";
-  return "⛈️";
+  if (code === 0) return "â˜€ï¸";
+  if (code <= 2) return "â›…";
+  if (code === 3) return "â˜ï¸";
+  if (code <= 48) return "ðŸŒ«ï¸";
+  if (code <= 55) return "ðŸŒ¦ï¸";
+  if (code <= 65) return "ðŸŒ§ï¸";
+  if (code <= 77) return "â„ï¸";
+  if (code <= 82) return "ðŸŒ¨ï¸";
+  return "â›ˆï¸";
 }
 
 async function loadWeather(cityName, projectRef) {
@@ -17369,7 +17153,7 @@ async function loadWeather(cityName, projectRef) {
     const projectEl = $("wx-proj-ref");
     if (!locationEl || !projectEl) return;
     locationEl.textContent = cityName || "Project location";
-    projectEl.textContent = `Active project — ${projectRef || "Unknown"}`;
+    projectEl.textContent = `Active project â€” ${projectRef || "Unknown"}`;
     if (!cityName) return;
     const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1`);
     const geoData = await geoRes.json();
@@ -17387,7 +17171,7 @@ async function loadWeather(cityName, projectRef) {
     $("wx-precip").textContent = `${Number(c.precipitation || 0).toFixed(2)} in`;
     if (Number(c.windgusts_10m || 0) >= 35){
       $("wx-alert-wrap").style.display = "block";
-      $("wx-alert-text").textContent = `Wind Advisory — gusts up to ${Math.round(Number(c.windgusts_10m || 0))} mph. Aerial work not recommended.`;
+      $("wx-alert-text").textContent = `Wind Advisory â€” gusts up to ${Math.round(Number(c.windgusts_10m || 0))} mph. Aerial work not recommended.`;
     } else {
       $("wx-alert-wrap").style.display = "none";
     }
@@ -17397,7 +17181,7 @@ async function loadWeather(cityName, projectRef) {
       const time = Array.isArray(wx?.daily?.time) ? wx.daily.time : [];
       forecastEl.innerHTML = time.map((dateStr, i) => {
         const d = new Date(dateStr);
-        return `<div class="wx-day"><div class="wx-day-name">${days[d.getDay()]}</div><div style="font-size:18px;">${wxCodeToEmoji(Number(wx?.daily?.weathercode?.[i]))}</div><div class="wx-day-hi">${Math.round(Number(wx?.daily?.temperature_2m_max?.[i] || 0))}°</div><div class="wx-day-lo">${Math.round(Number(wx?.daily?.temperature_2m_min?.[i] || 0))}°</div></div>`;
+        return `<div class="wx-day"><div class="wx-day-name">${days[d.getDay()]}</div><div style="font-size:18px;">${wxCodeToEmoji(Number(wx?.daily?.weathercode?.[i]))}</div><div class="wx-day-hi">${Math.round(Number(wx?.daily?.temperature_2m_max?.[i] || 0))}Â°</div><div class="wx-day-lo">${Math.round(Number(wx?.daily?.temperature_2m_min?.[i] || 0))}Â°</div></div>`;
       }).join("");
     }
   } catch (e) {
@@ -17805,7 +17589,6 @@ function renderProjectsList(){
     if (deleteBtn){
       deleteBtn.addEventListener("click", () => {
         setActiveProjectById(project.id);
-        closeProjectsModal();
         openDeleteProjectModal();
       });
     }
@@ -18948,7 +18731,6 @@ function openDeleteProjectModal(){
     toast("Not allowed", "Only authorized team members can delete projects.");
     return;
   }
-  closeProjectsModal();
   const modal = $("deleteProjectModal");
   if (!modal) return;
   const input = $("deleteProjectConfirm");
@@ -18968,35 +18750,6 @@ async function deleteProjectRpc(client, projectId) {
   });
 
   if (error) {
-    throw error;
-  }
-
-  return true;
-}
-
-async function deleteProjectFallback(client, projectId){
-  const { error } = await client
-    .from("projects")
-    .delete()
-    .eq("id", projectId);
-
-  if (error){
-    throw error;
-  }
-
-  return true;
-}
-
-async function softDeleteProjectFallback(client, projectId){
-  const { error } = await client
-    .from("projects")
-    .update({
-      active: false,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", projectId);
-
-  if (error){
     throw error;
   }
 
@@ -19024,23 +18777,9 @@ async function deleteProject(){
 
   const projectId = state.activeProject.id;
   try {
-    try {
-      await deleteProjectRpc(state.client, projectId);
-    } catch (err) {
-      if (isRpc404(err)){
-        try {
-          await deleteProjectFallback(state.client, projectId);
-        } catch (deleteErr) {
-          await softDeleteProjectFallback(state.client, projectId);
-        }
-      } else if (String(err?.message || "").toLowerCase().includes("role_code")) {
-        await softDeleteProjectFallback(state.client, projectId);
-      } else {
-        throw err;
-      }
-    }
+    await deleteProjectRpc(state.client, projectId);
     toast("Project deleted", "Project deleted.");
-    state.projects = (state.projects || []).filter((p) => String(p.id) !== String(projectId));
+    state.projects = (state.projects || []).filter(p => p.id !== projectId);
     state.activeProject = state.projects[0] || null;
     closeDeleteProjectModal();
     renderProjects();
@@ -19050,7 +18789,7 @@ async function deleteProject(){
     }
   } catch (err) {
     console.error("Delete failed", err);
-    toast("Delete failed", err?.message || "Delete failed.");
+    toast("Delete failed", "Delete failed.");
   }
 }
 
@@ -19177,7 +18916,7 @@ async function createProject(){
         closeCreateProjectModal();
         closeProjectsModal();
         refreshLocations();
-        toast("Project already exists", "Project already exists — opened it.");
+        toast("Project already exists", "Project already exists â€” opened it.");
         await loadProjects();
         return;
       }
@@ -19210,6 +18949,9 @@ async function fetchProjectByName(name, orgId){
     .select(baseSelect)
     .eq("name", name)
     .limit(1);
+  if (orgId){
+    query = query.eq("org_id", orgId);
+  }
   let { data, error } = await query;
   if (error && orgId){
     const message = String(error.message || "").toLowerCase();
@@ -19925,75 +19667,63 @@ async function loadProjects(){
     renderProjects();
     return;
   }
-  const orgId = state.supportConsoleOrgOverride
-    || await initializeOrgContext({ attemptRepair: true });
+  const orgId = await initializeOrgContext({ attemptRepair: true });
   const userId = state.user?.id || null;
   if (!orgId){
     console.warn("[projects] org undefined; attempting membership/creator fallback", { user_id: userId, org_id: null });
   }
-  const baseSelect = "id, org_id, name, description, created_at, location, job_number, is_demo, created_by, active";
+  const baseSelect = "id, org_id, name, description, created_at, location, job_number, is_demo, created_by";
   let projects = [];
 
-  if (isAppRoot()){
-    let query = state.client
-      .from("projects")
-      .select(baseSelect)
-      .order("name");
-    if (orgId){
-      query = query.eq("org_id", orgId);
-    }
-    const { data, error } = await query;
-    if (error){
-      toast("Projects load error", error.message);
-      return;
-    }
-    projects = data || [];
+  const { data: memberRows, error: memberError } = await state.client
+    .from("project_members")
+    .select(`
+      project_id,
+      projects (
+        ${baseSelect}
+      )
+    `)
+    .eq("user_id", state.user.id);
+  if (memberError){
+    toast("Projects load error", memberError.message);
+    return;
+  }
+  projects = (memberRows || [])
+    .map((row) => {
+      if (!row?.projects) return null;
+      return {
+        ...row.projects,
+      };
+    })
+    .filter(Boolean);
+
+  // Fallback: include projects created by the user (legacy rows missing membership)
+  let createdQuery = state.client
+    .from("projects")
+    .select(baseSelect)
+    .eq("created_by", state.user.id)
+    .order("name");
+  if (orgId){
+    createdQuery = createdQuery.eq("org_id", orgId);
+  }
+  const createdResp = await createdQuery;
+  if (!createdResp.error){
+    const existing = new Set(projects.map(p => p.id));
+    (createdResp.data || []).forEach((row) => {
+      if (!existing.has(row.id)) projects.push(row);
+    });
   } else {
-
-    const { data: memberRows, error: memberError } = await state.client
-      .from("project_members")
-      .select(`
-        project_id,
-        projects (
-          ${baseSelect}
-        )
-      `)
-      .eq("user_id", state.user.id);
-    if (memberError){
-      toast("Projects load error", memberError.message);
-      return;
-    }
-    projects = (memberRows || [])
-      .map((row) => {
-        if (!row?.projects) return null;
-        return {
-          ...row.projects,
-        };
-      })
-      .filter(Boolean);
-
-    // Fallback: include projects created by the user (legacy rows missing membership)
-    let createdQuery = state.client
-      .from("projects")
-      .select(baseSelect)
-      .eq("created_by", state.user.id)
-      .order("name");
-    const createdResp = await createdQuery;
-    if (!createdResp.error){
-      const existing = new Set(projects.map(p => p.id));
-      (createdResp.data || []).forEach((row) => {
-        if (!existing.has(row.id)) projects.push(row);
-      });
-    } else {
-      const message = String(createdResp.error.message || "").toLowerCase();
-      if (message.includes("created_by") && message.includes("does not exist")){
-        let fallbackQuery = state.client
-          .from("projects")
-          .select(baseSelect.replace(", created_by", ""))
-          .order("name");
-        const { data } = await fallbackQuery;
-        projects = data || projects;
+    const message = String(createdResp.error.message || "").toLowerCase();
+    if (message.includes("created_by") && message.includes("does not exist")){
+      let fallbackQuery = state.client
+        .from("projects")
+        .select(baseSelect.replace(", created_by", ""))
+        .order("name");
+      if (orgId){
+        fallbackQuery = fallbackQuery.eq("org_id", orgId);
       }
+      const { data } = await fallbackQuery;
+      projects = data || projects;
     }
   }
 
@@ -20001,7 +19731,7 @@ async function loadProjects(){
   const seen = new Set();
   (projects || []).forEach((row) => {
     const id = String(row?.id || "").trim();
-    if (!id || seen.has(id) || row?.active === false) return;
+    if (!id || seen.has(id)) return;
     seen.add(id);
     uniqueProjects.push(row);
   });
@@ -20299,594 +20029,6 @@ async function saveAdminSmsSettings(){
   syncAdminSmsInputs();
   setAdminInventoryStatus("SMS settings saved.");
   toast("SMS settings updated", smsEnabled ? "SMS notifications are enabled." : "SMS notifications are disabled.");
-}
-
-function getAdminWorkspaceTab(){
-  const tab = String(state.adminWorkspace?.tab || "companies").trim().toLowerCase();
-  if (tab === "users" || tab === "projects") return tab;
-  return "companies";
-}
-
-function setAdminWorkspaceTab(tab){
-  state.adminWorkspace.tab = String(tab || "companies").trim().toLowerCase() || "companies";
-  renderAdminWorkspace();
-}
-
-function getAdminUserRows(){
-  const rows = Array.isArray(state.adminWorkspace?.users) ? state.adminWorkspace.users : [];
-  if (!isAppRoot()) return [];
-  const filterOrgId = String(state.adminWorkspace?.userOrgFilter || state.adminWorkspace?.companyUsersOrgId || "all").trim();
-  if (!filterOrgId || filterOrgId === "all") return rows;
-  return rows.filter((row) => String(row.org_id || "") === filterOrgId);
-}
-
-function getAdminProjectRows(){
-  const rows = Array.isArray(state.adminWorkspace?.projects) ? state.adminWorkspace.projects : [];
-  if (!isAppRoot()) return [];
-  const filterOrgId = String(state.adminWorkspace?.projectOrgFilter || "all").trim();
-  if (!filterOrgId || filterOrgId === "all") return rows;
-  return rows.filter((row) => String(row.org_id || "") === filterOrgId);
-}
-
-function populateAdminInviteOrgOptions(selectedOrgId = ""){
-  const select = $("adminInviteOrg");
-  if (!select) return;
-  const orgs = state.orgs || [];
-  select.innerHTML = orgs.map((org) => (
-    `<option value="${escapeHtml(org.id)}">${escapeHtml(org.name || "Organization")}</option>`
-  )).join("");
-  if (selectedOrgId){
-    select.value = selectedOrgId;
-  } else if (state.profile?.org_id){
-    select.value = state.profile.org_id;
-  }
-}
-
-function openAdminCompanyModal(company = null){
-  if (!isAppAdmin()) return;
-  state.adminWorkspace.companyEditId = company?.id || null;
-  const modal = $("adminCompanyModal");
-  const title = $("adminCompanyModalTitle");
-  const name = $("adminCompanyName");
-  const role = $("adminCompanyRole");
-  if (!modal || !name || !role) return;
-  if (title) title.textContent = company ? "Edit company" : "Add company";
-  name.value = company?.name || "";
-  role.value = String(company?.role || "prime").toLowerCase();
-  modal.style.display = "";
-}
-
-function closeAdminCompanyModal(){
-  const modal = $("adminCompanyModal");
-  if (!modal) return;
-  modal.style.display = "none";
-  state.adminWorkspace.companyEditId = null;
-}
-
-function openAdminInviteModal(orgId = ""){
-  if (!isAppRoot()) return;
-  const modal = $("adminInviteModal");
-  if (!modal) return;
-  $("adminInviteEmail").value = "";
-  $("adminInviteName").value = "";
-  $("adminInviteRole").value = "member";
-  populateAdminInviteOrgOptions(orgId);
-  modal.style.display = "";
-}
-
-function closeAdminInviteModal(){
-  const modal = $("adminInviteModal");
-  if (!modal) return;
-  modal.style.display = "none";
-}
-
-async function loadAdminCompanies(){
-  if (!state.client || !isAppAdmin()){
-    state.adminWorkspace.companies = [];
-    state.adminWorkspace.companiesLoaded = false;
-    state.adminWorkspace.loadingCompanies = false;
-    return;
-  }
-  if (state.adminWorkspace.loadingCompanies) return;
-  state.adminWorkspace.loadingCompanies = true;
-  let { data, error } = await state.client
-    .from("orgs")
-    .select("id, name, role, created_at, profiles(count)")
-    .order("name");
-
-  if (error){
-    const baseRes = await state.client
-      .from("orgs")
-      .select("id, name, role, created_at")
-      .order("name");
-    data = baseRes.data || [];
-    error = baseRes.error || null;
-    if (!error){
-      const profilesRes = await state.client
-        .from("profiles")
-        .select("org_id");
-      const counts = new Map();
-      (profilesRes.data || []).forEach((row) => {
-        const key = String(row.org_id || "").trim();
-        if (!key) return;
-        counts.set(key, (counts.get(key) || 0) + 1);
-      });
-      data = (data || []).map((row) => ({
-        ...row,
-        profiles: [{ count: counts.get(String(row.id || "")) || 0 }],
-      }));
-    }
-  }
-
-  if (error){
-    state.adminWorkspace.loadingCompanies = false;
-    toast("Companies load error", error.message || "Unable to load companies.", "error");
-    return;
-  }
-
-  state.adminWorkspace.companies = (data || []).map((row) => ({
-    ...row,
-    user_count: Number(row?.profiles?.[0]?.count || row?.profiles?.count || 0),
-  }));
-  state.adminWorkspace.companiesLoaded = true;
-  state.adminWorkspace.loadingCompanies = false;
-  state.orgs = (data || []).map((row) => ({ id: row.id, name: row.name, role: row.role }));
-}
-
-async function loadAdminUsers(){
-  if (!state.client || !isAppRoot()){
-    state.adminWorkspace.users = [];
-    return;
-  }
-  let { data, error } = await state.client
-    .from("profiles")
-    .select("id, display_name, role, org_id, work_email, created_at, orgs(name)")
-    .order("created_at", { ascending: true });
-
-  if (error){
-    ({ data, error } = await state.client
-      .from("profiles")
-      .select("id, display_name, role, org_id, created_at")
-      .order("created_at", { ascending: true }));
-  }
-
-  if (error){
-    toast("Users load error", error.message || "Unable to load users.", "error");
-    return;
-  }
-
-  state.adminWorkspace.users = data || [];
-}
-
-async function loadAdminProjects(){
-  if (!state.client || !isAppRoot()){
-    state.adminWorkspace.projects = [];
-    return;
-  }
-  let { data, error } = await state.client
-    .from("projects")
-    .select("id, name, description, job_number, location, org_id, active, created_at, orgs(name)")
-    .order("created_at", { ascending: false });
-
-  if (error){
-    ({ data, error } = await state.client
-      .from("projects")
-      .select("id, name, description, job_number, location, org_id, active, created_at")
-      .order("created_at", { ascending: false }));
-  }
-
-  if (error){
-    toast("Projects load error", error.message || "Unable to load projects.", "error");
-    return;
-  }
-
-  state.adminWorkspace.projects = data || [];
-}
-
-async function loadAdminWorkspaceData(){
-  const notice = $("adminWorkspaceNotice");
-  if (!isAppAdmin()){
-    if (notice) notice.textContent = "Admin visibility is limited to root and admin accounts.";
-    renderAdminWorkspace();
-    return;
-  }
-  if (notice){
-    notice.textContent = isAppRoot()
-      ? "Root can manage companies, users, and projects across organizations."
-      : "Admin can manage companies. User and project administration is limited to root.";
-  }
-  await loadAdminCompanies();
-  if (isAppRoot()){
-    await loadAdminUsers();
-    await loadAdminProjects();
-  }
-  renderAdminWorkspace();
-}
-
-function renderAdminCompaniesTab(){
-  const companies = state.adminWorkspace.companies || [];
-  return `
-    <div class="card">
-      <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-        <div>
-          <h3 style="margin:0;">Companies</h3>
-          <div class="muted small">Manage organization records and access scope.</div>
-        </div>
-        <button class="btn" type="button" data-admin-action="add-company">Add Company</button>
-      </div>
-      <div style="overflow:auto; margin-top:12px;">
-        <table class="table">
-          <thead>
-            <tr><th>Company Name</th><th>Role</th><th># Users</th><th>Actions</th></tr>
-          </thead>
-          <tbody>
-            ${companies.map((row) => `
-              <tr>
-                <td>${escapeHtml(row.name || "-")}</td>
-                <td>${escapeHtml(String(row.role || "-").toUpperCase())}</td>
-                <td>${escapeHtml(String(row.user_count || 0))}</td>
-                <td>
-                  <div class="row" style="gap:8px; flex-wrap:wrap; justify-content:flex-end;">
-                    <button class="btn ghost small" type="button" data-admin-action="edit-company" data-org-id="${escapeHtml(row.id)}">Edit</button>
-                    ${isAppRoot() ? `<button class="btn secondary small" type="button" data-admin-action="view-company-users" data-org-id="${escapeHtml(row.id)}">View Users</button>` : ""}
-                  </div>
-                </td>
-              </tr>
-            `).join("") || `<tr><td colspan="4" class="muted small">No companies found.</td></tr>`}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-function renderAdminUsersTab(){
-  if (!isAppRoot()){
-    return `<div class="card"><div class="muted small">User administration is limited to root accounts.</div></div>`;
-  }
-  const rows = getAdminUserRows();
-  const orgOptions = [`<option value="all">All companies</option>`]
-    .concat((state.orgs || []).map((org) => `<option value="${escapeHtml(org.id)}">${escapeHtml(org.name || "Organization")}</option>`))
-    .join("");
-  return `
-    <div class="card">
-      <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-        <div>
-          <h3 style="margin:0;">Users</h3>
-          <div class="muted small">Manage company membership and app role visibility.</div>
-        </div>
-        <div class="row" style="gap:8px; flex-wrap:wrap;">
-          <select id="adminUsersOrgFilter" class="input" style="min-width:200px;">
-            ${orgOptions}
-          </select>
-          <button class="btn" type="button" data-admin-action="open-invite">Invite</button>
-        </div>
-      </div>
-      <div style="overflow:auto; margin-top:12px;">
-        <table class="table">
-          <thead>
-            <tr><th>Name</th><th>Email</th><th>Org</th><th>Role</th><th>Actions</th></tr>
-          </thead>
-          <tbody>
-            ${rows.map((row) => `
-              <tr>
-                <td>${escapeHtml(row.display_name || "-")}</td>
-                <td>${escapeHtml(row.work_email || row.id || "-")}</td>
-                <td>
-                  <select class="input compact" data-admin-user-field="org_id" data-user-id="${escapeHtml(row.id)}">
-                    ${(state.orgs || []).map((org) => `<option value="${escapeHtml(org.id)}" ${String(row.org_id || "") === String(org.id) ? "selected" : ""}>${escapeHtml(org.name || "Organization")}</option>`).join("")}
-                  </select>
-                </td>
-                <td>
-                  <select class="input compact" data-admin-user-field="role" data-user-id="${escapeHtml(row.id)}">
-                    ${["member", "admin", "root"].map((role) => `<option value="${role}" ${String(row.role || "").toLowerCase() === role ? "selected" : ""}>${formatAppRoleLabel(role)}</option>`).join("")}
-                  </select>
-                </td>
-                <td><button class="btn secondary small" type="button" data-admin-action="save-user" data-user-id="${escapeHtml(row.id)}">Save</button></td>
-              </tr>
-            `).join("") || `<tr><td colspan="5" class="muted small">No users found.</td></tr>`}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-function renderAdminProjectsTab(){
-  if (!isAppRoot()){
-    return `<div class="card"><div class="muted small">Project administration across organizations is limited to root accounts.</div></div>`;
-  }
-  const rows = getAdminProjectRows();
-  const orgOptions = [`<option value="all">All companies</option>`]
-    .concat((state.orgs || []).map((org) => `<option value="${escapeHtml(org.id)}">${escapeHtml(org.name || "Organization")}</option>`))
-    .join("");
-  return `
-    <div class="card">
-      <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-        <div>
-          <h3 style="margin:0;">Projects</h3>
-          <div class="muted small">All projects visible through root-level RLS access.</div>
-        </div>
-        <select id="adminProjectsOrgFilter" class="input" style="min-width:220px;">${orgOptions}</select>
-      </div>
-      <div style="overflow:auto; margin-top:12px;">
-        <table class="table">
-          <thead>
-            <tr><th>Project</th><th>Org</th><th>Job #</th><th>Location</th><th>Status</th><th>Members</th></tr>
-          </thead>
-          <tbody>
-            ${rows.map((row) => `
-              <tr>
-                <td>${escapeHtml(row.name || "-")}</td>
-                <td>${escapeHtml(row.orgs?.name || row.org_id || "-")}</td>
-                <td>${escapeHtml(row.job_number || "-")}</td>
-                <td>${escapeHtml(row.location || "-")}</td>
-                <td>${row.active === false ? '<span class="status-pill" style="background:rgba(239,68,68,0.14); color:#ef9a9a;">Inactive</span>' : '<span class="status-pill">Active</span>'}</td>
-                <td><button class="btn secondary small" type="button" data-admin-action="manage-members" data-project-id="${escapeHtml(row.id)}" data-project-name="${escapeHtml(row.name || "Project")}">Manage Members</button></td>
-              </tr>
-            `).join("") || `<tr><td colspan="6" class="muted small">No projects found.</td></tr>`}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-// ── Admin Manage Members ──────────────────────────────────────────────────────
-let _adminMembersProjectId = null;
-
-function ensureAdminMembersModal(){
-  if (document.getElementById("adminMembersModal")) return;
-  document.body.insertAdjacentHTML("beforeend", `
-<!-- Admin Manage Members Modal -->
-<div id="adminMembersModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center;">
-  <div class="card" style="width:480px; max-width:95vw; max-height:80vh; display:flex; flex-direction:column; gap:16px; overflow:hidden;">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <h3 style="margin:0;" id="adminMembersModalTitle">Project Members</h3>
-      <button class="btn ghost small" type="button" id="btnAdminMembersClose">✕</button>
-    </div>
-    <div style="display:flex; gap:8px;">
-      <select id="adminMembersAddSelect" class="input" style="flex:1;">
-        <option value="">Select user to add...</option>
-      </select>
-      <button class="btn small" type="button" id="btnAdminMembersAdd">Add</button>
-    </div>
-    <div id="adminMembersList" style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:6px;">
-      <div class="muted small">Loading members...</div>
-    </div>
-  </div>
-</div>`);
-}
-
-async function openAdminMembersModal(projectId, projectName) {
-  _adminMembersProjectId = projectId;
-  const modal = document.getElementById("adminMembersModal");
-  const title = document.getElementById("adminMembersModalTitle");
-  if (title) title.textContent = `Members: ${projectName}`;
-  if (modal) modal.style.display = "flex";
-  await refreshAdminMembersList();
-  populateAdminMembersAddSelect();
-}
-
-function closeAdminMembersModal() {
-  const modal = document.getElementById("adminMembersModal");
-  if (modal) modal.style.display = "none";
-  _adminMembersProjectId = null;
-}
-
-function populateAdminMembersAddSelect() {
-  const select = document.getElementById("adminMembersAddSelect");
-  if (!select) return;
-  const allUsers = Array.isArray(state.adminWorkspace?.users) ? state.adminWorkspace.users : [];
-  const members = state.adminWorkspace._memberIds || [];
-  const nonMembers = allUsers.filter(u => !members.includes(u.id));
-  select.innerHTML = `<option value="">Select user to add...</option>` +
-    nonMembers.map(u => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.display_name || u.work_email || u.id)}</option>`).join("");
-}
-
-async function refreshAdminMembersList() {
-  const listEl = document.getElementById("adminMembersList");
-  if (!listEl || !_adminMembersProjectId || !state.client) return;
-  listEl.innerHTML = `<div class="muted small">Loading...</div>`;
-  const { data, error } = await state.client
-    .from("project_members")
-    .select("user_id")
-    .eq("project_id", _adminMembersProjectId);
-  if (error) {
-    listEl.innerHTML = `<div class="muted small" style="color:#ef9a9a;">Error: ${escapeHtml(error.message)}</div>`;
-    return;
-  }
-  const memberIds = (data || []).map(r => r.user_id);
-  state.adminWorkspace._memberIds = memberIds;
-  const allUsers = Array.isArray(state.adminWorkspace?.users) ? state.adminWorkspace.users : [];
-  if (!memberIds.length) {
-    listEl.innerHTML = `<div class="muted small">No members assigned to this project yet.</div>`;
-    populateAdminMembersAddSelect();
-    return;
-  }
-  const rows = memberIds.map(uid => {
-    const profile = allUsers.find(u => u.id === uid);
-    const label = profile ? (profile.display_name || profile.work_email || uid) : uid;
-    return `<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 8px; background:rgba(255,255,255,0.04); border-radius:6px;">
-      <span>${escapeHtml(label)}</span>
-      <button class="btn secondary small" type="button" data-admin-action="remove-member" data-user-id="${escapeHtml(uid)}">Remove</button>
-    </div>`;
-  });
-  listEl.innerHTML = rows.join("");
-  populateAdminMembersAddSelect();
-}
-
-async function addAdminProjectMember() {
-  const select = document.getElementById("adminMembersAddSelect");
-  const userId = select?.value;
-  if (!userId || !_adminMembersProjectId || !state.client) return;
-  const { error } = await state.client
-    .from("project_members")
-    .insert({ project_id: _adminMembersProjectId, user_id: userId });
-  if (error) { toast("Add failed", error.message, "error"); return; }
-  toast("Member added", "User added to project.");
-  if (select) select.value = "";
-  await refreshAdminMembersList();
-}
-
-async function removeAdminProjectMember(userId) {
-  if (!userId || !_adminMembersProjectId || !state.client) return;
-  const { error } = await state.client
-    .from("project_members")
-    .delete()
-    .eq("project_id", _adminMembersProjectId)
-    .eq("user_id", userId);
-  if (error) { toast("Remove failed", error.message, "error"); return; }
-  toast("Member removed", "User removed from project.");
-  await refreshAdminMembersList();
-}
-// ─────────────────────────────────────────────────────────────────────────────
-
-function renderAdminWorkspace(){
-  const wrap = $("adminWorkspaceBody");
-  const tab = getAdminWorkspaceTab();
-  document.querySelectorAll("[data-admin-tab]").forEach((btn) => {
-    btn.classList.toggle("secondary", btn.dataset.adminTab === tab);
-    if (!isAppRoot() && (btn.dataset.adminTab === "users" || btn.dataset.adminTab === "projects")){
-      btn.style.display = "none";
-    } else {
-      btn.style.display = "";
-    }
-  });
-  if (!wrap) return;
-  if (!isAppAdmin()){
-    wrap.innerHTML = `<div class="card"><div class="muted small">Admin access is limited to root and admin roles.</div></div>`;
-    return;
-  }
-  if (tab === "users"){
-    wrap.innerHTML = renderAdminUsersTab();
-  } else if (tab === "projects"){
-    wrap.innerHTML = renderAdminProjectsTab();
-  } else {
-    wrap.innerHTML = renderAdminCompaniesTab();
-  }
-  const usersFilter = $("adminUsersOrgFilter");
-  if (usersFilter){
-    usersFilter.value = state.adminWorkspace.userOrgFilter || state.adminWorkspace.companyUsersOrgId || "all";
-  }
-  const projectsFilter = $("adminProjectsOrgFilter");
-  if (projectsFilter){
-    projectsFilter.value = state.adminWorkspace.projectOrgFilter || "all";
-  }
-}
-
-async function saveAdminCompany(){
-  if (!isAppAdmin()){
-    toast("Not allowed", "Only root and admin can manage companies.", "error");
-    return;
-  }
-  const name = String($("adminCompanyName")?.value || "").trim();
-  const role = String($("adminCompanyRole")?.value || "prime").trim().toLowerCase();
-  if (!name){
-    toast("Company name required", "Enter a company name.", "error");
-    return;
-  }
-  const payload = { name, role };
-  const companyId = state.adminWorkspace.companyEditId || null;
-  const query = companyId
-    ? state.client.from("orgs").update(payload).eq("id", companyId)
-    : state.client.from("orgs").insert(payload);
-  const { error } = await query;
-  if (error){
-    toast("Company save failed", error.message || "Unable to save company.", "error");
-    return;
-  }
-  closeAdminCompanyModal();
-  await loadAdminCompanies();
-  renderAdminWorkspace();
-  toast("Company saved", companyId ? "Company updated." : "Company created.");
-}
-
-async function saveAdminUserAccess(userId){
-  if (!isAppRoot()){
-    toast("Not allowed", "Only root can manage user access.", "error");
-    return;
-  }
-  const orgSelect = document.querySelector(`[data-admin-user-field="org_id"][data-user-id="${userId}"]`);
-  const roleSelect = document.querySelector(`[data-admin-user-field="role"][data-user-id="${userId}"]`);
-  if (!orgSelect || !roleSelect) return;
-  const { error } = await state.client
-    .from("profiles")
-    .update({
-      org_id: orgSelect.value || null,
-      role: roleSelect.value || "member",
-    })
-    .eq("id", userId);
-  if (error){
-    toast("User update failed", error.message || "Unable to update user.", "error");
-    return;
-  }
-  if (String(userId) === String(state.user?.id || "")){
-    state.profile = {
-      ...(state.profile || {}),
-      org_id: orgSelect.value || null,
-      role: roleSelect.value || "member",
-    };
-    window.currentUserProfile = state.profile;
-    window.currentUser = {
-      ...(window.currentUser || {}),
-      role: String(state.profile.role || "member").toLowerCase(),
-      orgId: state.profile.org_id || null,
-    };
-    setActiveOrgContext(state.profile.org_id || null);
-    setRoleUI();
-  }
-  await loadAdminUsers();
-  renderAdminWorkspace();
-  toast("User updated", "Organization and role saved.");
-}
-
-async function sendAdminInvite(){
-  if (!isAppRoot()){
-    toast("Not allowed", "Only root can invite users.", "error");
-    return;
-  }
-  const email = String($("adminInviteEmail")?.value || "").trim().toLowerCase();
-  const displayName = String($("adminInviteName")?.value || "").trim();
-  const orgId = String($("adminInviteOrg")?.value || "").trim();
-  const role = String($("adminInviteRole")?.value || "member").trim().toLowerCase();
-  if (!email || !email.includes("@")){
-    toast("Invite failed", "Enter a valid email address.", "error");
-    return;
-  }
-  if (!orgId){
-    toast("Invite failed", "Select a company for the invite.", "error");
-    return;
-  }
-  const { error: inviteRowError } = await state.client.rpc("fn_upsert_profile_invite", {
-    p_email: email,
-    p_role_code: mapAppRoleToInviteCode(role),
-    p_display_name: displayName || null,
-    p_org_id: orgId,
-  });
-  if (inviteRowError){
-    toast("Invite failed", inviteRowError.message || "Unable to save invite.", "error");
-    return;
-  }
-  let deliveryMessage = "Invite saved.";
-  let deliveryError = null;
-  if (typeof state.client.auth?.admin?.inviteUserByEmail === "function"){
-    const response = await state.client.auth.admin.inviteUserByEmail(email);
-    deliveryError = response?.error || null;
-  } else {
-    const response = await state.client.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: true },
-    });
-    deliveryError = response?.error || null;
-  }
-  if (deliveryError){
-    deliveryMessage = `Invite saved but email delivery failed: ${deliveryError.message}`;
-  } else {
-    deliveryMessage = "Invite saved and sign-in email sent.";
-  }
-  closeAdminInviteModal();
-  toast("Invite sent", deliveryMessage);
 }
 
 async function loadAdminProfiles(){
@@ -22180,8 +21322,8 @@ function renderSitePanel(){
       subtitle.textContent = t("noSiteSelected");
     } else {
       const when = site.created_at ? new Date(site.created_at).toLocaleString() : "-";
-      const pendingLabel = site.is_pending ? ` • ${t("siteStatusPending")}` : "";
-      subtitle.textContent = `${getSiteDisplayName(site)} • ${when}${pendingLabel}`;
+      const pendingLabel = site.is_pending ? ` â€¢ ${t("siteStatusPending")}` : "";
+      subtitle.textContent = `${getSiteDisplayName(site)} â€¢ ${when}${pendingLabel}`;
     }
   }
 
@@ -23267,6 +22409,9 @@ async function loadRateCards(projectId){
     .from("rate_cards")
     .select("id, name, project_id")
     .order("created_at", { ascending: false });
+  if (projectId){
+    query = query.or(`project_id.eq.${projectId},project_id.is.null`);
+  }
   const { data, error } = await query;
   if (error){
     toast("Rate cards error", error.message);
@@ -25241,12 +24386,6 @@ function persistKsInvoiceLocalFallback(){
 
 function ensureKsInvoiceLocalStateLoaded(){
   if (state.ksInvoices.loaded) return;
-  if (isDemoShowcaseMode() || isDemo){
-    state.ksInvoices.records = [];
-    state.ksInvoices.batches = [];
-    state.ksInvoices.loaded = true;
-    return;
-  }
   try {
     const rawRecords = safeLocalStorageGet(KS_INVOICE_RECORDS_KEY);
     if (rawRecords){
@@ -25270,118 +24409,6 @@ function ensureKsInvoiceLocalStateLoaded(){
 
 async function loadKsInvoiceWorkspace(projectId = state.activeProject?.id || null){
   ensureKsInvoiceLocalStateLoaded();
-  if (isDemoShowcaseMode() || isDemo){
-    state.ksInvoices.records = [
-      {
-        id: "demo-ks-001",
-        invoice_number: "DEMO_001",
-        invoice_key: "SpecCom_DEMO_001",
-        invoice_date: "01/10/2026",
-        week_ending: "01/10/2026",
-        project_name: "Showcase Rebuild",
-        node_name: "NODE-A1",
-        bill_to_company: "Acme Telecom",
-        customer_name: "Acme Telecom",
-        source_filename: "SpecCom_DEMO_001.pdf",
-        imported_at: nowISO(),
-        status: "imported",
-        line_items: [],
-        grand_total: 2900.00,
-        parse_status: "parsed",
-        parse_error: "",
-        warnings: [],
-        extracted_data: {},
-        source_file_url: "",
-      },
-      {
-        id: "demo-ks-002",
-        invoice_number: "DEMO_002",
-        invoice_key: "SpecCom_DEMO_002",
-        invoice_date: "01/17/2026",
-        week_ending: "01/17/2026",
-        project_name: "Showcase Rebuild",
-        node_name: "NODE-B3",
-        bill_to_company: "Acme Telecom",
-        customer_name: "Acme Telecom",
-        source_filename: "SpecCom_DEMO_002.pdf",
-        imported_at: nowISO(),
-        status: "imported",
-        line_items: [],
-        grand_total: 2060.00,
-        parse_status: "parsed",
-        parse_error: "",
-        warnings: [],
-        extracted_data: {},
-        source_file_url: "",
-      },
-      {
-        id: "demo-ks-003",
-        invoice_number: "DEMO_003",
-        invoice_key: "SpecCom_DEMO_003",
-        invoice_date: "01/24/2026",
-        week_ending: "01/24/2026",
-        project_name: "Showcase Rebuild",
-        node_name: "NODE-C2",
-        bill_to_company: "Acme Telecom",
-        customer_name: "Acme Telecom",
-        source_filename: "SpecCom_DEMO_003.pdf",
-        imported_at: nowISO(),
-        status: "imported",
-        line_items: [],
-        grand_total: 3315.00,
-        parse_status: "parsed",
-        parse_error: "",
-        warnings: [],
-        extracted_data: {},
-        source_file_url: "",
-      },
-      {
-        id: "demo-ks-004",
-        invoice_number: "DEMO_004",
-        invoice_key: "SpecCom_DEMO_004",
-        invoice_date: "01/31/2026",
-        week_ending: "01/31/2026",
-        project_name: "Showcase Rebuild",
-        node_name: "NODE-A2",
-        bill_to_company: "Acme Telecom",
-        customer_name: "Acme Telecom",
-        source_filename: "SpecCom_DEMO_004.pdf",
-        imported_at: nowISO(),
-        status: "imported",
-        line_items: [],
-        grand_total: 1730.00,
-        parse_status: "parsed",
-        parse_error: "",
-        warnings: [],
-        extracted_data: {},
-        source_file_url: "",
-      },
-      {
-        id: "demo-ks-005",
-        invoice_number: "DEMO_005",
-        invoice_key: "SpecCom_DEMO_005",
-        invoice_date: "02/07/2026",
-        week_ending: "02/07/2026",
-        project_name: "Showcase Rebuild",
-        node_name: "NODE-D1",
-        bill_to_company: "Acme Telecom",
-        customer_name: "Acme Telecom",
-        source_filename: "SpecCom_DEMO_005.pdf",
-        imported_at: nowISO(),
-        status: "imported",
-        line_items: [],
-        grand_total: 970.00,
-        parse_status: "parsed",
-        parse_error: "",
-        warnings: [],
-        extracted_data: {},
-        source_file_url: "",
-      },
-    ];
-    state.ksInvoices.batches = [];
-    renderInvoicePanel();
-    return;
-  }
   if (!state.client || !state.user){
     renderInvoicePanel();
     return;
@@ -26468,11 +25495,11 @@ function renderInvoiceDeepLinkWelcomeOverlay(){
           </div>
           <div class="invoice-intro-tagline">
             <span>Field</span>
-            <span class="invoice-intro-dot">•</span>
+            <span class="invoice-intro-dot">â€¢</span>
             <span>Dispatch</span>
-            <span class="invoice-intro-dot">•</span>
+            <span class="invoice-intro-dot">â€¢</span>
             <span>Documentation</span>
-            <span class="invoice-intro-dot">•</span>
+            <span class="invoice-intro-dot">â€¢</span>
             <span>Billing</span>
           </div>
         </div>
@@ -26665,7 +25692,7 @@ function renderInvoiceNavSidebar() {
   const ksRows = (state.ksInvoices.records || []).map((row) => {
     const ref   = String(row?.id || row?.invoice_number || "").trim();
     const title = String(row?.invoice_number || row?.invoice_key || ref || "K&S").trim();
-    const sub   = [row?.node_name, row?.project_name].filter(Boolean).join(" · ") || "K&S invoice";
+    const sub   = [row?.node_name, row?.project_name].filter(Boolean).join(" Â· ") || "K&S invoice";
     const amt   = Number.isFinite(Number(row?.grand_total)) ? formatMoney(row.grand_total) : "";
     const status = String(row?.parse_status || "").toLowerCase();
     const pillClass = /partial/.test(status) ? "partial" : /ready/.test(status) ? "ready" : "draft";
@@ -26678,7 +25705,7 @@ function renderInvoiceNavSidebar() {
   const officeRows = (state.officeInvoices.records || []).map((row) => {
     const ref   = String(row?.invoice_number || row?.id || "").trim();
     const title = String(row?.invoice_number || row?.id || "Office").trim();
-    const sub   = [row?.company_creating_invoice, row?.location].filter(Boolean).join(" · ") || "Office invoice";
+    const sub   = [row?.company_creating_invoice, row?.location].filter(Boolean).join(" Â· ") || "Office invoice";
     const amt   = Number.isFinite(Number(row?.total)) ? formatMoney(row.total) : "";
     const status = String(row?.status || "Draft").toLowerCase();
     const pillClass = /ready/.test(status) ? "ready" : "draft";
@@ -26738,38 +25765,8 @@ function persistRuidosoInvoices(){
 function loadRuidosoInvoices(){
   if (state._ruidosoLoaded) return;
   state._ruidosoLoaded = true;
-  if (isDemoShowcaseMode() || isDemo) {
-    if (state.ruidosoInvoices?.length) return;
-    state.ruidosoInvoices = [
-      { id:"DEMO_001", node:"NODE-A1", loc:"1635EA_03", date:"2026-01-10", total:2900.00, paid:true  },
-      { id:"DEMO_002", node:"NODE-B3", loc:"1635CA_02", date:"2026-01-17", total:2060.00, paid:true  },
-      { id:"DEMO_003", node:"NODE-C2", loc:"1635_01",   date:"2026-01-24", total:3315.00, paid:true  },
-      { id:"DEMO_004", node:"NODE-A2", loc:"1635BA_02", date:"2026-01-31", total:1730.00, paid:false },
-      { id:"DEMO_005", node:"NODE-D1", loc:"1635BA_01", date:"2026-02-07", total:970.00,  paid:false },
-    ];
-    return;
-  }
   const raw = safeLocalStorageGet(RUIDOSO_INVOICES_KEY);
-  if (!raw) {
-    state.ruidosoInvoices = [
-      { id:"TDS_001", node:"23", loc:"1635EA_03", date:"01/19/2026", total:4733.00,   paid:true  },
-      { id:"TDS_002", node:"54", loc:"1635CA_02", date:"01/19/2026", total:3475.75,   paid:true  },
-      { id:"TDS_003", node:"9",  loc:"1635_01",   date:"01/24/2026", total:1643.00,   paid:true  },
-      { id:"TDS_004", node:"9",  loc:"1635BA_02", date:"01/24/2026", total:1877.75,   paid:true  },
-      { id:"TDS_005", node:"9",  loc:"1635BA_02", date:"01/31/2026", total:698.00,    paid:true  },
-      { id:"TDS_006", node:"9",  loc:"1635BA_01", date:"01/31/2026", total:1536.00,   paid:true  },
-      { id:"TDS_007", node:"54", loc:"1635CA_04", date:"02/07/2026", total:3595.00,   paid:true  },
-      { id:"TDS_008", node:"9",  loc:"1635BA_01", date:"02/07/2026", total:1536.00,   paid:true  },
-      { id:"TDS_009", node:"54", loc:"1635CA_04", date:"02/15/2026", total:4826.75,   paid:true  },
-      { id:"TDS_003A",node:"23", loc:"1635EA_03", date:"01/19/2026", total:3940.75,   paid:false },
-      { id:"TDS_010", node:"54", loc:"1635CA_03", date:"02/15/2026", total:1674.50,   paid:false },
-      { id:"TDS_011", node:"9",  loc:"1635BA_01", date:"02/15/2026", total:325.00,    paid:false },
-      { id:"TDS_012", node:"54", loc:"1635CA_03", date:"02/22/2026", total:1415.50,   paid:false },
-      { id:"TDS_013", node:"9",  loc:"1635BA_01", date:"02/22/2026", total:1968.00,   paid:false },
-      { id:"TDS_014", node:"54", loc:"1635CA_04", date:"02/22/2026", total:5009.00,   paid:false },
-    ];
-    return;
-  }
+  if (!raw) return;
   try {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length) state.ruidosoInvoices = parsed;
@@ -26779,11 +25776,7 @@ function loadRuidosoInvoices(){
 function renderRuidosoBillingSummary(){
   loadRuidosoInvoices();
   const invoices = state.ruidosoInvoices || [];
-  const isShowcase = isDemoShowcaseMode() || isDemo;
-  const PROJECT_LABEL = isShowcase ? "Showcase City, ST — Demo Rebuild Billing Summary" : "Ruidoso, NM — Fire Rebuild Billing Summary";
-  const PROJECT_META  = isShowcase ? "Acme Telecom | Demo Mode" : "K & S Electric | March 27, 2026";
-  const KS_PAID = isShowcase ? 8275.00 : 21824.00;
-  const KS_PAID_LABEL = isShowcase ? "Client Paid" : "K&S Paid";
+  const KS_PAID  = 21824.00;
   const TOTAL    = invoices.reduce((s,r) => s + r.total, 0);
   const BALANCE  = TOTAL - KS_PAID;
   const paid     = invoices.filter(r => r.paid);
@@ -26830,11 +25823,11 @@ function renderRuidosoBillingSummary(){
       <!-- Top bar -->
       <div style="background:#1a3a6b;color:#fff;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
         <div>
-          <div style="font-size:13px;font-weight:700;letter-spacing:.03em;">${PROJECT_LABEL}</div>
-          <div style="font-size:11px;opacity:.65;margin-top:2px;">${PROJECT_META}</div>
+          <div style="font-size:13px;font-weight:700;letter-spacing:.03em;">Ruidoso, NM â€” Fire Rebuild Billing Summary</div>
+          <div style="font-size:11px;opacity:.65;margin-top:2px;">WBS: TC-241635027 &nbsp;|&nbsp; K &amp; S Electric &nbsp;|&nbsp; March 27, 2026</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <button type="button" data-office-action="ruidosoAddInvoice" style="background:#00b050;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:'Manrope',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">＋ Add Invoice</button>
+          <button type="button" data-office-action="ruidosoAddInvoice" style="background:#00b050;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:'Manrope',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">ï¼‹ Add Invoice</button>
           <button type="button" data-office-action="ruidosoUploadInvoice" style="background:#0ea5e9;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:'Manrope',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">Upload Invoice</button>
           <button onclick="document.getElementById('btnMenuOpenRedline')?.click()" style="background:#e63946;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-family:'Manrope',sans-serif;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(230,57,70,.35);">
             <span style="width:8px;height:8px;background:#fff;border-radius:50%;display:inline-block;animation:bs-pulse 1.4s ease-in-out infinite;"></span>
@@ -26851,14 +25844,14 @@ function renderRuidosoBillingSummary(){
           <div style="font-size:10px;opacity:.5;margin-top:2px;">All ${invoices.length} invoice${invoices.length!==1?"s":""}</div>
         </div>
         <div style="background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.15);border-radius:9px;padding:11px 14px;color:#fff;">
-          <div style="font-size:10px;font-weight:600;opacity:.6;letter-spacing:.07em;text-transform:uppercase;">${KS_PAID_LABEL}</div>
+          <div style="font-size:10px;font-weight:600;opacity:.6;letter-spacing:.07em;text-transform:uppercase;">K&amp;S Paid</div>
           <div style="font-size:20px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums;color:#4ade80;">${fmt(KS_PAID)}</div>
-          <div style="font-size:10px;opacity:.5;margin-top:2px;">${paid.length} invoice${paid.length!==1?"s":""} · confirmed</div>
+          <div style="font-size:10px;opacity:.5;margin-top:2px;">${paid.length} invoice${paid.length!==1?"s":""} Â· confirmed</div>
         </div>
         <div style="background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.15);border-radius:9px;padding:11px 14px;color:#fff;">
           <div style="font-size:10px;font-weight:600;opacity:.6;letter-spacing:.07em;text-transform:uppercase;">Balance Owed</div>
           <div style="font-size:20px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums;color:#f87171;">${fmt(BALANCE)}</div>
-          <div style="font-size:10px;opacity:.5;margin-top:2px;">${unpaid.length} invoice${unpaid.length!==1?"s":""} · pending</div>
+          <div style="font-size:10px;opacity:.5;margin-top:2px;">${unpaid.length} invoice${unpaid.length!==1?"s":""} Â· pending</div>
         </div>
       </div>
 
@@ -26867,8 +25860,8 @@ function renderRuidosoBillingSummary(){
 
         <!-- Paid -->
         <div style="display:flex;align-items:center;gap:8px;padding:14px 0 8px;font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#166534;">
-          ✅ Paid Invoices
-          <span style="padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:#dcfce7;color:#166534;">${paid.length} invoice${paid.length!==1?"s":""} · ${fmt(paidTotal)}</span>
+          âœ… Paid Invoices
+          <span style="padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:#dcfce7;color:#166534;">${paid.length} invoice${paid.length!==1?"s":""} Â· ${fmt(paidTotal)}</span>
         </div>
         <div style="border-radius:9px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);">
           <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
@@ -26879,8 +25872,8 @@ function renderRuidosoBillingSummary(){
 
         <!-- Unpaid -->
         <div style="display:flex;align-items:center;gap:8px;padding:14px 0 8px;font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#991b1b;">
-          ⚠️ Outstanding Invoices
-          <span style="padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b;">${unpaid.length} invoice${unpaid.length!==1?"s":""} · ${fmt(unpaidTotal)} due</span>
+          âš ï¸ Outstanding Invoices
+          <span style="padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b;">${unpaid.length} invoice${unpaid.length!==1?"s":""} Â· ${fmt(unpaidTotal)} due</span>
         </div>
         <div style="border-radius:9px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);">
           <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
@@ -26916,7 +25909,7 @@ function openRuidosoInvoiceModal(mode, targetId = null){
   overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;font-family:'Manrope',sans-serif;";
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:12px;padding:28px 30px;width:440px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.4);position:relative;">
-      <button type="button" id="ruidosoModalClose" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:22px;cursor:pointer;color:#666;">×</button>
+      <button type="button" id="ruidosoModalClose" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:22px;cursor:pointer;color:#666;">Ã—</button>
       <h2 style="font-size:15px;font-weight:800;color:#1a3a6b;margin-bottom:18px;">${mode==="replace"?"Edit Invoice: "+escapeHtml(targetId||""):"Add Invoice"}</h2>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div style="display:flex;flex-direction:column;gap:4px;">
@@ -26950,21 +25943,21 @@ function openRuidosoInvoiceModal(mode, targetId = null){
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:#555;">Upload Invoice File (optional)</label>
           <label style="display:flex;align-items:center;gap:8px;border:2px dashed #0070c0;border-radius:6px;padding:10px 14px;cursor:pointer;background:#f0f7ff;">
             <input id="ri_file" type="file" accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg" style="display:none;">
-            <span style="font-size:20px;">📎</span>
+            <span style="font-size:20px;">ðŸ“Ž</span>
             <span id="ri_file_label" style="font-size:12px;color:#0070c0;font-weight:600;">Click to attach file</span>
           </label>
         </div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
         <button type="button" id="ruidosoModalCancel" style="background:#eee;color:#333;border:none;border-radius:6px;padding:8px 18px;font-size:13px;cursor:pointer;font-family:'Manrope',sans-serif;">Cancel</button>
-        <button type="button" id="ruidosoModalSave"   style="background:#1a3a6b;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif;">💾 Save Invoice</button>
+        <button type="button" id="ruidosoModalSave"   style="background:#1a3a6b;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif;">ðŸ’¾ Save Invoice</button>
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
   overlay.querySelector("#ri_file").addEventListener("change", (e) => {
     const f = e.target.files?.[0];
-    overlay.querySelector("#ri_file_label").textContent = f ? "📄 " + f.name : "Click to attach file";
+    overlay.querySelector("#ri_file_label").textContent = f ? "ðŸ“„ " + f.name : "Click to attach file";
   });
   overlay.querySelector("#ruidosoModalClose").addEventListener("click",  closeRuidosoInvoiceModal);
   overlay.querySelector("#ruidosoModalCancel").addEventListener("click", closeRuidosoInvoiceModal);
@@ -27270,6 +26263,9 @@ async function loadInvoiceFiles(projectId = state.activeProject?.id || null){
     .eq("org_id", orgId)
     .order("created_at", { ascending: false })
     .limit(200);
+  if (projectId){
+    query = query.or(`project_id.is.null,project_id.eq.${projectId}`);
+  }
   const { data, error } = await query;
   if (error){
     const message = String(error?.message || "").toLowerCase();
@@ -28738,7 +27734,7 @@ function renderWarehouseScanView(){
   if (status){
     const modeLabel = state.warehouseScan.mode === "out" ? "Scan Out mode (-1)" : "Scan In mode (+1)";
     status.textContent = state.warehouseScan.lastScannedValue
-      ? `Last scan: ${state.warehouseScan.lastScannedValue} • ${modeLabel}`
+      ? `Last scan: ${state.warehouseScan.lastScannedValue} â€¢ ${modeLabel}`
       : `Ready to scan. ${modeLabel}`;
   }
   renderWarehouseModeUi();
@@ -29002,196 +27998,9 @@ function runShowcaseAction(action){
   toast("Control Center", "Opening Projects.");
 }
 
-function renderSupportConsoleBar(){
-  if (!isAppRoot()) return "";
-  const orgs = state.adminWorkspace?.companies || [];
-  const activeOrgId = state.supportConsoleOrgOverride || state.activeOrgId || state.profile?.org_id || "";
-  const activeOrg = orgs.find((org) => String(org.id || "") === String(activeOrgId || ""));
-  const orgOptions = orgs.map((org) => `
-      <option value="${escapeHtml(org.id)}" ${String(org.id || "") === String(activeOrgId || "") ? "selected" : ""}>
-        ${escapeHtml(org.name || "Organization")}
-      </option>
-    `).join("");
-
-  return `
-    <div id="support-console-bar" style="
-      background:linear-gradient(135deg,#1a0a2e,#2d1054);
-      border-bottom:2px solid #7c3aed;
-      padding:10px 20px;
-      display:flex;
-      align-items:center;
-      gap:14px;
-      flex-wrap:wrap;
-      border-radius:18px;
-      margin:0 0 18px;
-    ">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span style="
-          background:#7c3aed;color:#fff;font-size:9px;font-weight:800;
-          letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;
-          border-radius:4px;
-        ">⚡ Support Console</span>
-        <span style="color:#a78bfa;font-size:11px;">Viewing as:</span>
-      </div>
-      <select id="supportConsoleOrgSelect"
-        onchange="switchSupportConsoleOrg(this.value)"
-        style="
-          background:#2d1054;color:#e9d5ff;border:1px solid #7c3aed;
-          border-radius:6px;padding:6px 12px;font-size:13px;font-weight:600;
-          cursor:pointer;min-width:200px;
-        ">
-        ${orgOptions || `<option value="">No companies loaded</option>`}
-      </select>
-      <div style="color:#a78bfa;font-size:11px;" id="supportConsoleOrgMeta">
-        ${activeOrg ? `${escapeHtml(activeOrg.name || "")} · ${escapeHtml(activeOrg.role || "")}` : ""}
-      </div>
-      <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;">
-        <button type="button" onclick="navigateTo('admin')"
-          style="background:#4c1d95;color:#e9d5ff;border:1px solid #7c3aed;
-          border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;">
-          🛡 Admin Panel
-        </button>
-        <button type="button" onclick="openSupportQuickFix()"
-          style="background:#dc2626;color:#fff;border:none;
-          border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;">
-          🚨 Quick Fix
-        </button>
-      </div>
-    </div>
-  `;
-}
-
-async function switchSupportConsoleOrg(orgId){
-  const nextOrgId = String(orgId || "").trim();
-  if (!isAppRoot() || !nextOrgId) return;
-  state.supportConsoleOrgOverride = nextOrgId;
-  setActiveOrgContext(nextOrgId);
-  if (state.profile){
-    state.profile.support_console_active = true;
-  }
-  if (window.currentUser){
-    window.currentUser.orgId = nextOrgId;
-    window.currentUser.supportConsoleActive = true;
-  }
-  state.projects = [];
-  state.activeProject = null;
-  state.projectNodes = [];
-  state.projectSites = [];
-  state.activeNode = null;
-  state.activeSite = null;
-  state.ksInvoices.loaded = false;
-  state.ksInvoices.records = [];
-  state.ksInvoices.batches = [];
-  state._ruidosoLoaded = false;
-  state.ruidosoInvoices = [];
-  await loadProjects();
-  await loadAdminCompanies();
-  renderDemoShowcaseHome();
-  const orgs = state.adminWorkspace?.companies || [];
-  const org = orgs.find((row) => String(row.id || "") === nextOrgId);
-  toast("Company switched", `Now viewing: ${org?.name || nextOrgId}`, "info");
-}
-
-window.switchSupportConsoleOrg = switchSupportConsoleOrg;
-
-function openSupportQuickFix(){
-  if (!isAppRoot()) return;
-  document.getElementById("quickFixModal")?.remove();
-  const activeOrg = (state.adminWorkspace?.companies || [])
-    .find((org) => String(org.id || "") === String(state.activeOrgId || state.supportConsoleOrgOverride || ""));
-  const orgName = activeOrg?.name || "Selected Company";
-  const project = state.activeProject;
-
-  const modal = document.createElement("div");
-  modal.id = "quickFixModal";
-  modal.style.cssText = `
-    position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;
-    display:flex;align-items:center;justify-content:center;padding:20px;
-  `;
-  modal.innerHTML = `
-    <div style="background:#0f0f1a;border:1px solid #7c3aed;border-radius:14px;
-      padding:28px;max-width:520px;width:100%;color:#e2e8f0;font-family:'Manrope',sans-serif;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
-        <div>
-          <div style="font-size:16px;font-weight:800;color:#f1f5f9;">🚨 Quick Fix Console</div>
-          <div style="font-size:12px;color:#a78bfa;margin-top:2px;">
-            ${escapeHtml(orgName)} ${project ? "· " + escapeHtml(project.name || "") : ""}
-          </div>
-        </div>
-        <button onclick="document.getElementById('quickFixModal')?.remove()"
-          style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;">✕</button>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <button onclick="navigateTo('map');document.getElementById('quickFixModal')?.remove();"
-          style="background:#1e3a5f;border:1px solid #3b82f6;border-radius:8px;
-          padding:14px;text-align:left;cursor:pointer;color:#e2e8f0;">
-          <div style="font-size:18px;">🗺</div>
-          <div style="font-weight:700;font-size:13px;margin-top:6px;">Open Map</div>
-          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">View all sites & nodes</div>
-        </button>
-
-        <button onclick="navigateTo('office');document.getElementById('quickFixModal')?.remove();"
-          style="background:#1e3a5f;border:1px solid #3b82f6;border-radius:8px;
-          padding:14px;text-align:left;cursor:pointer;color:#e2e8f0;">
-          <div style="font-size:18px;">📄</div>
-          <div style="font-weight:700;font-size:13px;margin-top:6px;">Open Invoices</div>
-          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Review billing & payments</div>
-        </button>
-
-        <button onclick="navigateTo('projects');document.getElementById('quickFixModal')?.remove();"
-          style="background:#1e3a5f;border:1px solid #3b82f6;border-radius:8px;
-          padding:14px;text-align:left;cursor:pointer;color:#e2e8f0;">
-          <div style="font-size:18px;">📁</div>
-          <div style="font-weight:700;font-size:13px;margin-top:6px;">Switch Project</div>
-          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Change active project</div>
-        </button>
-
-        <button onclick="navigateTo('admin');document.getElementById('quickFixModal')?.remove();"
-          style="background:#3b0764;border:1px solid #7c3aed;border-radius:8px;
-          padding:14px;text-align:left;cursor:pointer;color:#e2e8f0;">
-          <div style="font-size:18px;">🛡</div>
-          <div style="font-weight:700;font-size:13px;margin-top:6px;">Admin Panel</div>
-          <div style="font-size:11px;color:#a78bfa;margin-top:2px;">Users, orgs, permissions</div>
-        </button>
-
-        <button onclick="SpecCom.helpers.unlockAllBilling?.();toast('Billing unlocked','All nodes unlocked for this project.','info');document.getElementById('quickFixModal')?.remove();"
-          style="background:#1c1917;border:1px solid #f59e0b;border-radius:8px;
-          padding:14px;text-align:left;cursor:pointer;color:#e2e8f0;">
-          <div style="font-size:18px;">🔓</div>
-          <div style="font-weight:700;font-size:13px;margin-top:6px;">Unlock Billing</div>
-          <div style="font-size:11px;color:#fbbf24;margin-top:2px;">Force unlock active project</div>
-        </button>
-
-        <button onclick="loadProjects().then(()=>{renderDemoShowcaseHome();});document.getElementById('quickFixModal')?.remove();"
-          style="background:#1c1917;border:1px solid #10b981;border-radius:8px;
-          padding:14px;text-align:left;cursor:pointer;color:#e2e8f0;">
-          <div style="font-size:18px;">🔄</div>
-          <div style="font-weight:700;font-size:13px;margin-top:6px;">Force Reload</div>
-          <div style="font-size:11px;color:#6ee7b7;margin-top:2px;">Refresh all project data</div>
-        </button>
-      </div>
-
-      <div style="margin-top:16px;padding:12px;background:#1e1e2e;border-radius:8px;
-        font-size:11px;color:#64748b;line-height:1.6;">
-        🔐 Root access active · All RLS bypassed · Changes affect live data
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-  modal.addEventListener("click", (event) => {
-    if (event.target === modal) modal.remove();
-  });
-}
-
-window.openSupportQuickFix = openSupportQuickFix;
-
 function renderDemoShowcaseHome(){
   const wrap = $("demoShowcaseHome");
   if (!wrap) return;
-  if (isAppRoot() && !state.adminWorkspace.companiesLoaded && !state.adminWorkspace.loadingCompanies){
-    void loadAdminCompanies().then(() => renderDemoShowcaseHome());
-  }
   renderProfileHomeCard();
   const legacyIds = ["dashboardJobCard","dashboardActiveSiteCard","dashboardActivityCard","dashboardFeatureHubCard","dashboardAllowedQtyCard","dashboardCatalogQuickCard"];
   const profileCard = $("dashboardProfileCard");
@@ -29199,7 +28008,6 @@ function renderDemoShowcaseHome(){
   legacyIds.forEach((id) => { const el = $(id); if (el) el.style.display = "none"; });
   const workspaces = [
     {
-      id: "technician",
       title: "Technician",
       iconClass: "icon-blue",
       accent: "",
@@ -29209,7 +28017,6 @@ function renderDemoShowcaseHome(){
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5"><path d="M9 2v6l4 2"/><circle cx="9" cy="9" r="6"/></svg>',
     },
     {
-      id: "splicer",
       title: "Splicer",
       iconClass: "icon-teal",
       accent: "accent-teal",
@@ -29219,7 +28026,6 @@ function renderDemoShowcaseHome(){
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><path d="M3 9h12"/><path d="M6 5l-3 4 3 4"/><path d="M12 5l3 4-3 4"/></svg>',
     },
     {
-      id: "office",
       title: "Office",
       iconClass: "icon-blue",
       accent: "",
@@ -29229,7 +28035,6 @@ function renderDemoShowcaseHome(){
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5"><rect x="4" y="2.5" width="10" height="13" rx="1.5"/><path d="M6.5 6h5M6.5 9h5M6.5 12h3.5"/></svg>',
     },
     {
-      id: "dispatch",
       title: "Dispatch",
       iconClass: "icon-amber",
       accent: "accent-amber",
@@ -29239,7 +28044,6 @@ function renderDemoShowcaseHome(){
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#D39A44" stroke-width="1.5"><path d="M2 9h14"/><path d="M9 2v14"/><circle cx="9" cy="9" r="6"/></svg>',
     },
     {
-      id: "warehouse",
       title: "Warehouse",
       iconClass: "icon-teal",
       accent: "accent-teal",
@@ -29250,7 +28054,6 @@ function renderDemoShowcaseHome(){
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><rect x="3" y="3" width="12" height="12" rx="1.5"/><path d="M3 8h12"/></svg>',
     },
     {
-      id: "supervisor",
       title: "Supervisor",
       iconClass: "icon-purple",
       accent: "accent-purple",
@@ -29260,25 +28063,18 @@ function renderDemoShowcaseHome(){
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#A59CF4" stroke-width="1.5"><path d="M3 13l4-4 3 3 5-7"/><circle cx="13.5" cy="5" r="1.3" fill="#A59CF4" stroke="none"/></svg>',
     },
     {
-      id: "admin",
       title: "Admin",
       iconClass: "icon-coral",
       accent: "accent-coral",
-      summary: "Manage companies & users.",
-      chips: ["Companies", "Users", "Projects"],
+      summary: "User, project, and system control surfaces.",
+      chips: ["Users", "Projects", "System"],
       action: { type: "view", target: "viewAdmin" },
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#EE835D" stroke-width="1.5"><circle cx="9" cy="9" r="2.2"/><path d="M9 2.5v2M9 13.5v2M2.5 9h2M13.5 9h2M4.2 4.2l1.4 1.4M12.4 12.4l1.4 1.4M13.8 4.2l-1.4 1.4M5.6 12.4l-1.4 1.4"/></svg>',
-      visibleTo: ["root", "admin"],
     },
   ];
-  const visibleWorkspaces = workspaces.filter((workspace) => {
-    if (!Array.isArray(workspace.visibleTo) || !workspace.visibleTo.length) return true;
-    return workspace.visibleTo.includes(getAppUserRole());
-  });
 
   wrap.style.display = "";
   wrap.innerHTML = `
-    ${renderSupportConsoleBar()}
     <div id="command-header">
       <div class="cmd-left">
         <div class="cmd-avatar" id="cmd-avatar" onclick="showProfilePage()">SU</div>
@@ -29287,7 +28083,7 @@ function renderDemoShowcaseHome(){
           <div class="cmd-role" id="cmd-role">Field verification, documentation, and billing control</div>
           <div class="cmd-project" id="cmd-project">
             <span class="cmd-proj-label">Active Project</span>
-            <span class="cmd-proj-badge" id="cmd-proj-badge">— None —</span>
+            <span class="cmd-proj-badge" id="cmd-proj-badge">â€” None â€”</span>
           </div>
         </div>
       </div>
@@ -29316,10 +28112,10 @@ function renderDemoShowcaseHome(){
     </div>
     <div class="section-label">Workspaces</div>
     <div class="ws-grid">
-      ${visibleWorkspaces.map((workspace) => `
+      ${workspaces.map((workspace) => `
         <article class="ws-card ${workspace.accent}">
           <div class="ws-icon ${workspace.iconClass}">${workspace.iconSvg}</div>
-          <div class="ws-title">${escapeHtml(workspace.title)}${workspace.id === "admin" ? ' <span class="status-pill" style="margin-left:8px; background:rgba(238,131,93,0.18); color:#EE835D; border:1px solid rgba(238,131,93,0.35);">Admin</span>' : ""}</div>
+          <div class="ws-title">${escapeHtml(workspace.title)}</div>
           <div class="ws-desc">${escapeHtml(workspace.summary)}</div>
           <div class="ws-tags">${workspace.chips.map((chip) => `<span class="ws-tag">${escapeHtml(chip)}</span>`).join("")}</div>
           <div class="ws-footer">
@@ -29370,7 +28166,7 @@ function renderDemoShowcaseHome(){
             </div>
           </div>
           <div style="text-align:right;">
-            <div><span class="wx-temp" id="wx-temp">--</span><span class="wx-unit">°F</span></div>
+            <div><span class="wx-temp" id="wx-temp">--</span><span class="wx-unit">Â°F</span></div>
             <div class="wx-condition" id="wx-condition">Fetching weather...</div>
           </div>
         </div>
@@ -30213,7 +29009,7 @@ async function loadProfile(client, userId){
   }
 
   // Expect a public.profiles row keyed by auth.uid()
-  let profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id, role, avatar_url, support_console_active";
+  let profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id, avatar_url";
   let { data, error } = await client
     .from("profiles")
     .select(profileSelect)
@@ -30223,7 +29019,7 @@ async function loadProfile(client, userId){
   if (error){
     const message = String(error.message || "").toLowerCase();
     if (message.includes("avatar_url") && message.includes("does not exist")){
-      profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id, role, support_console_active";
+      profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id";
       ({ data, error } = await client
         .from("profiles")
         .select(profileSelect)
@@ -30232,7 +29028,7 @@ async function loadProfile(client, userId){
     } else if (message.includes("does not exist")){
       ({ data, error } = await client
         .from("profiles")
-        .select("display_name, org_id, role, support_console_active")
+        .select("display_name, org_id")
         .eq("id", userId)
         .maybeSingle());
     }
@@ -30273,18 +29069,7 @@ async function loadProfile(client, userId){
   if (state.profile && !Object.prototype.hasOwnProperty.call(state.profile, "avatar_url")){
     state.profile.avatar_url = null;
   }
-  if (state.profile && !state.profile.role){
-    state.profile.role = "member";
-  }
   window.currentUserProfile = state.profile;
-  window.currentUser = {
-    ...(window.currentUser || {}),
-    id: state.user?.id || userId,
-    email: state.user?.email || "",
-    role: String(state.profile?.role || "member").trim().toLowerCase(),
-    orgId: state.profile?.org_id || null,
-    supportConsoleActive: Boolean(state.profile?.support_console_active),
-  };
   await initializeOrgContext({ attemptRepair: true });
   if (state.profile?.preferred_language){
     setPreferredLanguage(state.profile.preferred_language);
@@ -30299,14 +29084,10 @@ async function loadProfile(client, userId){
   renderLocations();
 }
 
-async function demoLogin(options = {}){
-  const { routeToDemo = false, dismissSplashOnSuccess = false, dismissSplash = null } = options || {};
-  if (isDemo){
-    if (dismissSplashOnSuccess && typeof dismissSplash === "function"){
-      dismissSplash(routeToDemo ? "#demo" : undefined);
-    } else if (routeToDemo){
-      window.location.hash = "#demo";
-    }
+async function demoLogin(){
+  if (isDemo) return;
+  if (isDemoBootstrapEnabled()){
+    await handleSignIn();
     return;
   }
   const creds = getDemoCredentials();
@@ -30318,11 +29099,6 @@ async function demoLogin(options = {}){
     toast("Demo login unavailable", "Set DEMO_PASSWORD to enable demo login.");
     return;
   }
-  try {
-    await state.client.auth.signOut({ scope: "global" });
-  } catch (signOutError){
-    console.warn("[demo] pre-login sign out failed", signOutError);
-  }
   const { error } = await state.client.auth.signInWithPassword({
     email: creds.email,
     password: creds.password,
@@ -30330,11 +29106,6 @@ async function demoLogin(options = {}){
   if (error){
     toast("Demo login failed", error.message);
   } else {
-    if (dismissSplashOnSuccess && typeof dismissSplash === "function"){
-      dismissSplash(routeToDemo ? "#demo" : undefined);
-    } else if (routeToDemo){
-      window.location.hash = "#demo";
-    }
     toast("Demo session", t("demoLoginNote"));
   }
 }
@@ -31256,92 +30027,6 @@ function wireUI(){
   if (btnAdminInvite){
     btnAdminInvite.addEventListener("click", () => inviteAdminUserAccount());
   }
-  const adminWorkspace = $("admin-workspace");
-  if (adminWorkspace){
-    adminWorkspace.addEventListener("click", async (e) => {
-      const tabBtn = e.target.closest("[data-admin-tab]");
-      if (tabBtn){
-        const nextTab = tabBtn.dataset.adminTab || "companies";
-        if ((nextTab === "users" || nextTab === "projects") && !isAppRoot()){
-          toast("Not allowed", "Only root can access that admin tab.", "error");
-          return;
-        }
-        setAdminWorkspaceTab(nextTab);
-        return;
-      }
-      const actionBtn = e.target.closest("[data-admin-action]");
-      if (!actionBtn) return;
-      const action = String(actionBtn.dataset.adminAction || "");
-      if (action === "add-company"){
-        openAdminCompanyModal();
-      } else if (action === "edit-company"){
-        const orgId = String(actionBtn.dataset.orgId || "");
-        const company = (state.adminWorkspace.companies || []).find((row) => String(row.id) === orgId) || null;
-        openAdminCompanyModal(company);
-      } else if (action === "view-company-users"){
-        const orgId = String(actionBtn.dataset.orgId || "");
-        if (!isAppRoot()){
-          toast("Not allowed", "Only root can view user membership.", "error");
-          return;
-        }
-        state.adminWorkspace.companyUsersOrgId = orgId;
-        state.adminWorkspace.userOrgFilter = orgId || "all";
-        setAdminWorkspaceTab("users");
-      } else if (action === "open-invite"){
-        openAdminInviteModal(state.adminWorkspace.userOrgFilter !== "all" ? state.adminWorkspace.userOrgFilter : "");
-      } else if (action === "save-user"){
-        const userId = String(actionBtn.dataset.userId || "");
-        if (userId) await saveAdminUserAccess(userId);
-      } else if (action === "manage-members"){
-        const projectId = String(actionBtn.dataset.projectId || "");
-        const projectName = String(actionBtn.dataset.projectName || "Project");
-        if (projectId) await openAdminMembersModal(projectId, projectName);
-      } else if (action === "remove-member"){
-        const userId = String(actionBtn.dataset.userId || "");
-        if (userId) await removeAdminProjectMember(userId);
-      }
-    });
-    adminWorkspace.addEventListener("change", (e) => {
-      const target = e.target;
-      if (!(target instanceof HTMLElement)) return;
-      if (target.id === "adminUsersOrgFilter"){
-        state.adminWorkspace.userOrgFilter = target.value || "all";
-        state.adminWorkspace.companyUsersOrgId = state.adminWorkspace.userOrgFilter === "all" ? null : state.adminWorkspace.userOrgFilter;
-        renderAdminWorkspace();
-      } else if (target.id === "adminProjectsOrgFilter"){
-        state.adminWorkspace.projectOrgFilter = target.value || "all";
-        renderAdminWorkspace();
-      }
-    });
-  }
-  const adminCompanyCancelBtn = $("btnAdminCompanyCancel");
-  if (adminCompanyCancelBtn){
-    adminCompanyCancelBtn.addEventListener("click", () => closeAdminCompanyModal());
-  }
-  const adminCompanySaveBtn = $("btnAdminCompanySave");
-  if (adminCompanySaveBtn){
-    adminCompanySaveBtn.addEventListener("click", () => { void saveAdminCompany(); });
-  }
-  const adminInviteCancelBtn = $("btnAdminInviteCancel");
-  if (adminInviteCancelBtn){
-    adminInviteCancelBtn.addEventListener("click", () => closeAdminInviteModal());
-  }
-  ensureAdminMembersModal();
-  const adminMembersCloseBtn = $("btnAdminMembersClose");
-  if (adminMembersCloseBtn){
-    adminMembersCloseBtn.addEventListener("click", () => closeAdminMembersModal());
-  }
-  const adminMembersAddBtn = $("btnAdminMembersAdd");
-  if (adminMembersAddBtn){
-    adminMembersAddBtn.addEventListener("click", () => { void addAdminProjectMember(); });
-  }
-  document.getElementById("adminMembersModal")?.addEventListener("click", (e) => {
-    if (e.target === document.getElementById("adminMembersModal")) closeAdminMembersModal();
-  });
-  const adminInviteSaveBtn = $("btnAdminInviteSave");
-  if (adminInviteSaveBtn){
-    adminInviteSaveBtn.addEventListener("click", () => { void sendAdminInvite(); });
-  }
   const adminInventoryTable = $("adminInventoryTable");
   if (adminInventoryTable){
     adminInventoryTable.addEventListener("input", (e) => {
@@ -31533,905 +30218,4 @@ function wireUI(){
   const menuBtn = $("btnMenu");
   const togglePlacesDrawer = () => {
     if (!isMapViewActive()){
-      setActiveView("viewMap");
-    }
-    setDrawerOpen(state.map.drawerOpen === false);
-    if (state.map.drawerOpen !== false && !["data", "legend"].includes(state.map.drawerTab)){
-      setDrawerTab("data", { open: true });
-    }
-  };
-  if (menuBtn){
-    menuBtn.addEventListener("click", () => openMenuModal());
-  }
-  const mapSidebarToggleBtn = $("mapSidebarToggle");
-  if (mapSidebarToggleBtn){
-    mapSidebarToggleBtn.addEventListener("click", togglePlacesDrawer);
-  }
-  const placesHideBtn = $("btnPlacesHide");
-  if (placesHideBtn){
-    placesHideBtn.addEventListener("click", () => setDrawerOpen(false));
-  }
-  // Mobile sidebar backdrop — tap outside to close
-  const sidebarBackdrop = document.createElement("div");
-  sidebarBackdrop.id = "gisSidebarBackdrop";
-  sidebarBackdrop.style.cssText = "position:fixed;inset:0;z-index:3998;display:none;";
-  sidebarBackdrop.addEventListener("click", () => setDrawerOpen(false));
-  document.body.appendChild(sidebarBackdrop);
-  const _origSetDrawerOpen = window.setDrawerOpen;
-  window.__updateSidebarBackdrop = function(open){
-    sidebarBackdrop.style.display = (open && isMobileViewport()) ? "block" : "none";
-  };
-  const layersHideBtn = $("btnLayersHide");
-  if (layersHideBtn){
-    layersHideBtn.addEventListener("click", () => setLayersPanelOpen(false));
-  }
-  const layersShowBtn = $("btnLayersShow");
-  if (layersShowBtn){
-    layersShowBtn.addEventListener("click", () => setLayersPanelOpen(true));
-  }
-  const menuCloseBtn = $("btnMenuClose");
-  if (menuCloseBtn){
-    menuCloseBtn.addEventListener("click", () => closeMenuModal());
-  }
-  const menuMessagesBtn = $("btnMenuMessages");
-  if (menuMessagesBtn){
-    menuMessagesBtn.addEventListener("click", () => {
-      closeMenuModal();
-      openDemoFeature("messages");
-    });
-  }
-  const menuOpenRedlineBtn = $("btnMenuOpenRedline");
-  if (menuOpenRedlineBtn){
-    menuOpenRedlineBtn.addEventListener("click", () => {
-      void launchRedlineFromMenu();
-    });
-  }
-  const menuAddSpliceDetailsBtn = $("btnMenuAddSpliceDetails");
-  if (menuAddSpliceDetailsBtn){
-    menuAddSpliceDetailsBtn.addEventListener("click", async () => {
-      closeMenuModal();
-      if (!isMapViewActive()){
-        setActiveView("viewMap");
-      }
-      const siteId = await openOrCreateSpliceAtCurrentLocation({ center: true, hidePanel: true });
-      if (siteId){
-        toast("Splice ready", "Location pin opened. Add photos, codes, material, and notes.");
-      }
-    });
-  }
-  const menuSignOutBtn = $("btnMenuSignOut");
-  if (menuSignOutBtn){
-    menuSignOutBtn.addEventListener("click", async () => {
-      closeMenuModal();
-      await SpecCom.helpers.handleSignOut();
-    });
-  }
-  const menuSignInBtn = $("btnMenuSignIn");
-  if (menuSignInBtn){
-    menuSignInBtn.addEventListener("click", () => {
-      openSignInUi("menu");
-    });
-  }
-  const grantAccessBtn = $("btnGrantProjectAccess");
-  if (grantAccessBtn){
-    grantAccessBtn.addEventListener("click", () => {
-      closeMenuModal();
-      openGrantAccessModal();
-    });
-  }
-  const importPriceBtn = $("btnImportPriceSheet");
-  if (importPriceBtn){
-    importPriceBtn.addEventListener("click", () => {
-      closeMenuModal();
-      openPriceSheetModal();
-    });
-  }
-  const stakingProjectBtn = $("btnCreateProjectFromStaking");
-  if (stakingProjectBtn){
-    stakingProjectBtn.addEventListener("click", () => {
-      closeMenuModal();
-      openStakingProjectModal();
-    });
-  }
-  const testResultsBtn = $("btnImportTestResults");
-  if (testResultsBtn){
-    testResultsBtn.addEventListener("click", () => {
-      closeMenuModal();
-      openTestResultsModal();
-    });
-  }
-  document.querySelectorAll(".menu-link").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const viewId = btn.dataset.view;
-      if (!viewId) return;
-      if (!isViewAllowed(viewId)) return;
-      setActiveView(viewId);
-      closeMenuModal();
-    });
-  });
-  document.querySelectorAll("#menuModal .segmented-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const lang = btn.getAttribute("data-lang") || "en";
-      savePreferredLanguage(lang);
-      refreshLanguageSensitiveUI();
-      syncMenuLanguageToggle();
-    });
-  });
-
-  const createProjectCancelBtn = $("btnCreateProjectCancel");
-  if (createProjectCancelBtn){
-    createProjectCancelBtn.addEventListener("click", () => closeCreateProjectModal());
-  }
-  const createProjectSaveBtn = $("btnCreateProjectSave");
-  if (createProjectSaveBtn){
-    createProjectSaveBtn.addEventListener("click", () => createProject());
-  }
-  const deleteProjectCancelBtn = $("btnDeleteProjectCancel");
-  if (deleteProjectCancelBtn){
-    deleteProjectCancelBtn.addEventListener("click", () => closeDeleteProjectModal());
-  }
-  const deleteProjectConfirmBtn = $("btnDeleteProjectConfirm");
-  if (deleteProjectConfirmBtn){
-    deleteProjectConfirmBtn.addEventListener("click", () => deleteProject());
-  }
-  const dprProjectSelect = $("dprProjectSelect");
-  if (dprProjectSelect){
-    dprProjectSelect.addEventListener("change", () => loadDailyProgressReport());
-  }
-  const dprDate = $("dprDate");
-  if (dprDate){
-    if (!dprDate.value) dprDate.value = getTodayDate();
-    state.dpr.reportDate = dprDate.value;
-    dprDate.addEventListener("change", () => loadDailyProgressReport());
-  }
-  const dprRefreshBtn = $("btnDprRefresh");
-  if (dprRefreshBtn){
-    dprRefreshBtn.addEventListener("click", () => generateDailyProgressReport());
-  }
-  const dprSaveBtn = $("btnDprSave");
-  if (dprSaveBtn){
-    dprSaveBtn.addEventListener("click", () => saveDailyProgressComments());
-  }
-  const languageSelect = $("languageSelect");
-  if (languageSelect){
-    languageSelect.addEventListener("change", (e) => {
-      setPreferredLanguage(e.target.value);
-      refreshLanguageSensitiveUI();
-    });
-  }
-  const languageSelectTop = $("languageSelectTop");
-  if (languageSelectTop){
-    languageSelectTop.addEventListener("change", (e) => {
-      setPreferredLanguage(e.target.value);
-      refreshLanguageSensitiveUI();
-    });
-  }
-  const languageSelectMenu = $("languageSelectMenu");
-  if (languageSelectMenu){
-    languageSelectMenu.addEventListener("change", (e) => {
-      setPreferredLanguage(e.target.value);
-      refreshLanguageSensitiveUI();
-    });
-  }
-  const saveLanguageBtn = $("btnSaveLanguage");
-  if (saveLanguageBtn){
-    saveLanguageBtn.addEventListener("click", () => {
-      savePreferredLanguage($("languageSelect")?.value || "en");
-    });
-  }
-  const profileLanguageBtn = $("btnSaveProfileLanguage");
-  if (profileLanguageBtn){
-    profileLanguageBtn.addEventListener("click", async (e) => {
-      e.preventDefault();
-      const value = $("profileLanguageSelect")?.value || "en";
-      state.profileSetupDismissed = true;
-      showProfileSetupModal(false);
-      profileLanguageBtn.disabled = true;
-      try{
-        await savePreferredLanguage(value, { closeModal: true });
-      } finally {
-        profileLanguageBtn.disabled = false;
-      }
-      if (!hasPreferredLanguageChoice()){
-        state.profileSetupDismissed = false;
-        showProfileSetupModal(true);
-      }
-    });
-  }
-  const mapActiveOnly = $("mapActiveOnly");
-  if (mapActiveOnly){
-    mapActiveOnly.addEventListener("change", (e) => {
-      state.mapFilters.activeOnly = e.target.checked;
-      refreshLocations();
-    });
-  }
-  const mapSearch = $("mapSearch");
-  if (mapSearch){
-    mapSearch.addEventListener("input", (e) => {
-      state.mapFilters.search = e.target.value || "";
-      scheduleLocationSearchRefresh({ syncMap: true });
-    });
-    mapSearch.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter") return;
-      e.preventDefault();
-      focusFirstSearchResult();
-    });
-  }
-  const clearMapSearchBtn = $("btnClearMapSearch");
-  if (clearMapSearchBtn){
-    clearMapSearchBtn.addEventListener("click", () => clearLocationSearch());
-  }
-  registerMapUiBindings();
-  const dropPinBtn = $("btnDropPin");
-  if (dropPinBtn){
-    dropPinBtn.addEventListener("click", () => dropPin());
-  }
-  const useMyLocationBtn = $("btnMapUseMyLocation");
-  if (useMyLocationBtn){
-    useMyLocationBtn.addEventListener("click", async () => {
-      const siteId = await openOrCreateSpliceAtCurrentLocation({ center: true, hidePanel: true });
-      if (siteId){
-        toast("Splice ready", "Location pin opened. Add photos, codes, material, and notes.");
-      }
-    });
-  }
-  const mapFieldHideBtn = $("btnMapFieldHide");
-  if (mapFieldHideBtn){
-    mapFieldHideBtn.addEventListener("click", () => setMapFieldPanelVisible(false));
-  }
-  const mapFieldShowBtn = $("btnMapFieldShow");
-  if (mapFieldShowBtn){
-    mapFieldShowBtn.addEventListener("click", () => setMapFieldPanelVisible(true));
-  }
-  ["btnMapFieldCreateClose", "btnMapFieldDismissCreate", "btnMapFieldCancelCreate"].forEach((id) => {
-    const btn = $(id);
-    if (!btn) return;
-    ["pointerdown", "click"].forEach((evt) => {
-      btn.addEventListener(evt, (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setMapFieldCreateOpen(false);
-      });
-    });
-  });
-  document.addEventListener("pointerdown", (e) => {
-    const closeBtn = e.target?.closest?.("#btnMapFieldCreateClose, #btnMapFieldDismissCreate, #btnMapFieldCancelCreate");
-    if (!closeBtn) return;
-    e.preventDefault();
-    e.stopPropagation();
-    setMapFieldCreateOpen(false);
-  }, true);
-  const mapFieldPanel = $("mapFieldPanel");
-  if (mapFieldPanel){
-    mapFieldPanel.addEventListener("click", async (e) => {
-      const actionBtn = e.target.closest("[data-map-field-action]");
-      if (actionBtn){
-        const action = String(actionBtn.dataset.mapFieldAction || "");
-        const siteId = actionBtn.dataset.siteId;
-        if (!siteId) return;
-        if (action === "open"){
-          await openLocationForField(siteId, { center: true, forAdd: false });
-          return;
-        }
-        if (action === "note"){
-          await openLocationForField(siteId, { center: false, forAdd: true });
-          const noteInput = $("siteNotesInput");
-          if (noteInput){
-            noteInput.focus();
-          } else {
-            toast("Location opened", "Add note in location details.");
-          }
-          return;
-        }
-        if (action === "photo"){
-          await openLocationForField(siteId, { center: false, forAdd: true });
-          const mediaInput = $("siteMediaInput");
-          if (mediaInput){
-            mediaInput.click();
-          } else {
-            toast("Location opened", "Add photo in location details.");
-          }
-          return;
-        }
-        if (action === "complete"){
-          setSiteWorkflowStatus(siteId, MAP_FIELD_STATUS.COMPLETE);
-          toast("Status updated", "Location marked complete.");
-        }
-        return;
-      }
-      const id = e.target?.id;
-      if (id === "btnMapCaptureLocation"){
-        await requestMapCurrentLocation({ center: true, silent: false });
-        return;
-      }
-      if (id === "btnMapOpenNearbyLocation"){
-        if (state.map.nearestSiteId){
-          await openLocationForField(state.map.nearestSiteId, { center: true, forAdd: false });
-        }
-        return;
-      }
-      if (id === "btnMapAddToNearbyLocation"){
-        if (state.map.nearestSiteId){
-          await openLocationForField(state.map.nearestSiteId, { center: true, forAdd: true });
-        }
-        return;
-      }
-      if (id === "btnMapShowCreateLocation"){
-        if (Date.now() < Number(state.map.fieldCreateRecentlyClosedUntil || 0)) return;
-        setMapFieldCreateOpen(true);
-        return;
-      }
-      if (id === "btnMapFieldCancelCreate"){
-        setMapFieldCreateOpen(false);
-        return;
-      }
-      if (id === "btnMapFieldDismissCreate"){
-        setMapFieldCreateOpen(false);
-        return;
-      }
-      if (id === "btnMapFieldCreateClose"){
-        setMapFieldCreateOpen(false);
-        return;
-      }
-      if (id === "btnMapFieldCreateLocation"){
-        await createFieldLocationFromCurrentGps();
-      }
-    });
-    mapFieldPanel.addEventListener("change", (e) => {
-      const select = e.target.closest("#mapFieldStatusSelect");
-      if (!select) return;
-      const siteId = select.dataset.siteId;
-      if (!siteId) return;
-      setSiteWorkflowStatus(siteId, select.value);
-    });
-  }
-  const mapCanvas = $("mapCanvas");
-  if (mapCanvas){
-    mapCanvas.addEventListener("click", (e) => {
-      const createWrap = $("mapFieldCreateWrap");
-      if (!createWrap || createWrap.hidden) return;
-      if (e.target.closest("#mapFieldCreateWrap")) return;
-      setMapFieldCreateOpen(false);
-    });
-  }
-  const importLocationsBtn = $("btnImportLocations");
-  const importLocationsInput = $("importLocationsInput");
-  if (importLocationsBtn && importLocationsInput){
-    importLocationsBtn.addEventListener("click", () => {
-      importLocationsInput.click();
-    });
-    importLocationsInput.addEventListener("change", async (e) => {
-      const file = e.target.files?.[0] || null;
-      await handleLocationImport(file);
-      e.target.value = "";
-    });
-  }
-  const invoiceAgentBtn = $("btnInvoiceAgent");
-  if (invoiceAgentBtn){
-    invoiceAgentBtn.addEventListener("click", () => SpecCom.helpers.openInvoiceAgentModal());
-  }
-  const officeBidWorkbookBtn = $("btnOfficeBidWorkbook");
-  if (officeBidWorkbookBtn){
-    officeBidWorkbookBtn.addEventListener("click", () => {
-      void SpecCom.helpers.openCopperBidWorkbookFlow();
-    });
-  }
-  const siteList = $("siteList");
-  if (siteList){
-    siteList.addEventListener("click", async (e) => {
-      const btn = e.target.closest("[data-site-id]");
-      if (!btn) return;
-      const siteId = btn.dataset.siteId;
-      dlog("siteList click", { siteId });
-      await setActiveSite(siteId);
-      focusSiteOnMap(siteId);
-    });
-  }
-  const closePanelBtn = $("btnCloseSitePanel");
-  if (closePanelBtn){
-    closePanelBtn.addEventListener("click", () => closeSitePanel());
-  }
-  const importCloseBtn = $("btnImportLocationsClose");
-  if (importCloseBtn){
-    importCloseBtn.addEventListener("click", () => closeImportLocationsModal());
-  }
-  const importCancelBtn = $("btnImportLocationsCancel");
-  if (importCancelBtn){
-    importCancelBtn.addEventListener("click", () => closeImportLocationsModal());
-  }
-  const importConfirmBtn = $("btnImportLocationsConfirm");
-  if (importConfirmBtn){
-    importConfirmBtn.addEventListener("click", () => confirmImportLocations());
-  }
-  const importTemplateBtn = $("btnImportLocationsTemplate");
-  if (importTemplateBtn){
-    importTemplateBtn.addEventListener("click", () => downloadLocationImportTemplate());
-  }
-  const importBillingTemplateBtn = $("btnImportBillingTemplate");
-  if (importBillingTemplateBtn){
-    importBillingTemplateBtn.addEventListener("click", () => downloadBillingCsvTemplate());
-  }
-  const importErrorsBtn = $("btnImportLocationsErrors");
-  if (importErrorsBtn){
-    importErrorsBtn.addEventListener("click", () => downloadLocationImportErrorReport());
-  }
-  const grantAccessCloseBtn = $("btnGrantAccessClose");
-  if (grantAccessCloseBtn){
-    grantAccessCloseBtn.addEventListener("click", () => closeGrantAccessModal());
-  }
-  const grantAccessCancelBtn = $("btnGrantAccessCancel");
-  if (grantAccessCancelBtn){
-    grantAccessCancelBtn.addEventListener("click", () => closeGrantAccessModal());
-  }
-  const grantAccessConfirmBtn = $("btnGrantAccessConfirm");
-  if (grantAccessConfirmBtn){
-    grantAccessConfirmBtn.addEventListener("click", () => confirmGrantAccess());
-  }
-  const priceSheetCloseBtn = $("btnPriceSheetClose");
-  if (priceSheetCloseBtn){
-    priceSheetCloseBtn.addEventListener("click", () => closePriceSheetModal());
-  }
-  const priceSheetCancelBtn = $("btnPriceSheetCancel");
-  if (priceSheetCancelBtn){
-    priceSheetCancelBtn.addEventListener("click", () => closePriceSheetModal());
-  }
-  const priceSheetConfirmBtn = $("btnPriceSheetConfirm");
-  if (priceSheetConfirmBtn){
-    priceSheetConfirmBtn.addEventListener("click", () => confirmImportPriceSheet());
-  }
-  const stakingProjectCloseBtn = $("btnStakingProjectClose");
-  if (stakingProjectCloseBtn){
-    stakingProjectCloseBtn.addEventListener("click", () => closeStakingProjectModal());
-  }
-  const stakingProjectCancelBtn = $("btnStakingProjectCancel");
-  if (stakingProjectCancelBtn){
-    stakingProjectCancelBtn.addEventListener("click", () => closeStakingProjectModal());
-  }
-  const stakingProjectConfirmBtn = $("btnStakingProjectConfirm");
-  if (stakingProjectConfirmBtn){
-    stakingProjectConfirmBtn.addEventListener("click", () => confirmCreateProjectFromStaking());
-  }
-  const testResultsCloseBtn = $("btnTestResultsClose");
-  if (testResultsCloseBtn){
-    testResultsCloseBtn.addEventListener("click", () => closeTestResultsModal());
-  }
-  const testResultsCancelBtn = $("btnTestResultsCancel");
-  if (testResultsCancelBtn){
-    testResultsCancelBtn.addEventListener("click", () => closeTestResultsModal());
-  }
-  const testResultsConfirmBtn = $("btnTestResultsConfirm");
-  if (testResultsConfirmBtn){
-    testResultsConfirmBtn.addEventListener("click", () => confirmImportTestResults());
-  }
-  const invoiceAgentCloseBtn = $("btnInvoiceAgentClose");
-  if (invoiceAgentCloseBtn){
-    invoiceAgentCloseBtn.addEventListener("click", () => SpecCom.helpers.closeInvoiceAgentModal());
-  }
-  const invoiceAgentCancelBtn = $("btnInvoiceAgentCancel");
-  if (invoiceAgentCancelBtn){
-    invoiceAgentCancelBtn.addEventListener("click", () => SpecCom.helpers.closeInvoiceAgentModal());
-  }
-  const invoiceAgentConfirmBtn = $("btnInvoiceAgentConfirm");
-  if (invoiceAgentConfirmBtn){
-    invoiceAgentConfirmBtn.addEventListener("click", () => SpecCom.helpers.confirmInvoiceAgentGenerate());
-  }
-  const invoiceImportBtn = $("btnInvoiceImport");
-  const invoiceImportInput = $("invoiceImportInput");
-  if (invoiceImportBtn && invoiceImportInput){
-    invoiceImportBtn.addEventListener("click", () => invoiceImportInput.click());
-    invoiceImportInput.addEventListener("change", async (e) => {
-      const file = e.target.files?.[0] || null;
-      try{
-        const rows = await SpecCom.helpers.parseInvoiceSpreadsheet(file);
-        const { preview, missing } = SpecCom.helpers.prepareInvoiceImportPreview(rows);
-        state.invoiceAgent.importPreview = { preview, missing };
-        SpecCom.helpers.renderInvoiceImportPreview();
-      } catch (err){
-        console.error(err);
-        toast("Import failed", err.message || "Import failed.");
-      } finally {
-        e.target.value = "";
-      }
-    });
-  }
-  const invoiceImportExport = $("btnInvoiceImportExport");
-  if (invoiceImportExport){
-    invoiceImportExport.addEventListener("click", () => SpecCom.helpers.exportInvoiceImportCsv());
-  }
-  const invoiceImportApply = $("btnInvoiceImportApply");
-  if (invoiceImportApply){
-    invoiceImportApply.addEventListener("click", async () => {
-      await SpecCom.helpers.applyInvoiceImport();
-    });
-  }
-  const bidImportBtn = $("btnBidImport");
-  const bidImportInput = $("bidImportInput");
-  if (bidImportBtn && bidImportInput){
-    bidImportBtn.addEventListener("click", () => bidImportInput.click());
-    bidImportInput.addEventListener("change", async (e) => {
-      const file = e.target.files?.[0] || null;
-      try {
-        state.invoiceAgent.bidImportPreview = await SpecCom.helpers.parseCopperBidWorkbook(file);
-        SpecCom.helpers.renderBidImportPreview();
-      } catch (err){
-        console.error(err);
-        toast("Bid import failed", err.message || "Bid import failed.");
-      } finally {
-        e.target.value = "";
-      }
-    });
-  }
-  const bidImportApply = $("btnBidImportApply");
-  if (bidImportApply){
-    bidImportApply.addEventListener("click", () => {
-      SpecCom.helpers.applyCopperBidImport();
-    });
-  }
-  const invoiceAgentSelectAll = $("invoiceAgentSelectAll");
-  if (invoiceAgentSelectAll){
-    invoiceAgentSelectAll.addEventListener("change", (e) => {
-      const eligible = state.invoiceAgent.candidates.filter(c => c.eligible).map(c => c.id);
-      state.invoiceAgent.selectedIds = e.target.checked ? eligible : [];
-      SpecCom.helpers.renderInvoiceAgentModal();
-    });
-  }
-  const invoiceAgentFromOrg = $("invoiceAgentFromOrg");
-  if (invoiceAgentFromOrg){
-    invoiceAgentFromOrg.addEventListener("change", () => SpecCom.helpers.renderInvoiceAgentModal());
-  }
-  const invoiceAgentToOrg = $("invoiceAgentToOrg");
-  if (invoiceAgentToOrg){
-    invoiceAgentToOrg.addEventListener("change", () => SpecCom.helpers.renderInvoiceAgentModal());
-  }
-  const invoiceAgentAllowDuplicates = $("invoiceAgentAllowDuplicates");
-  if (invoiceAgentAllowDuplicates){
-    invoiceAgentAllowDuplicates.addEventListener("change", (e) => {
-      state.invoiceAgent.allowDuplicates = e.target.checked;
-    });
-  }
-  const invoiceAgentList = $("invoiceAgentList");
-  if (invoiceAgentList){
-    invoiceAgentList.addEventListener("change", (e) => {
-      const checkbox = e.target.closest("input[type='checkbox'][data-site-id]");
-      if (!checkbox) return;
-      const siteId = checkbox.dataset.siteId;
-      if (!siteId) return;
-      if (checkbox.checked){
-        if (!state.invoiceAgent.selectedIds.includes(siteId)){
-          state.invoiceAgent.selectedIds.push(siteId);
-        }
-      } else {
-        state.invoiceAgent.selectedIds = state.invoiceAgent.selectedIds.filter(id => id !== siteId);
-      }
-      SpecCom.helpers.renderInvoiceAgentModal();
-    });
-  }
-  const invoiceAgentResults = $("invoiceAgentResults");
-  if (invoiceAgentResults){
-    invoiceAgentResults.addEventListener("click", async (e) => {
-      const btn = e.target.closest("button[data-action]");
-      if (!btn) return;
-      const action = btn.dataset.action;
-      const invoiceId = btn.dataset.invoiceId;
-      const siteId = btn.dataset.siteId;
-      if (!invoiceId) return;
-      try{
-        const { invoice, items } = await SpecCom.helpers.loadInvoiceAgentExportData(invoiceId);
-        const site = state.invoiceAgent.siteMap.get(siteId) || null;
-        if (action === "invoiceAgentExportCsv"){
-          const csv = SpecCom.helpers.exportInvoiceAgentCsvPayload(invoice, site, items);
-          downloadFile(`invoice-${invoice.invoice_number || invoice.id}.csv`, csv, "text/csv");
-        }
-        if (action === "invoiceAgentExportPdf"){
-          SpecCom.helpers.printInvoiceAgentPayload(invoice, site, items);
-        }
-      } catch (err){
-        console.error(err);
-        toast("Export failed", err.message || "Unable to export invoice.");
-      }
-    });
-  }
-  const siteMediaInput = $("siteMediaInput");
-  if (siteMediaInput){
-    siteMediaInput.addEventListener("change", async (e) => {
-      const file = e.target.files?.[0] || null;
-      await addSiteMedia(file);
-      e.target.value = "";
-    });
-  }
-  const saveSiteNameBtn = $("btnSaveSiteName");
-  if (saveSiteNameBtn){
-    saveSiteNameBtn.addEventListener("click", () => saveSiteName());
-  }
-  const saveCodesBtn = $("btnSaveCodes");
-  if (saveCodesBtn){
-    saveCodesBtn.addEventListener("click", () => saveSiteCodes());
-  }
-  const addEntryBtn = $("btnAddEntry");
-  if (addEntryBtn){
-    addEntryBtn.addEventListener("click", () => addSiteEntry());
-  }
-  const saveNotesBtn = $("btnSaveNotes");
-  if (saveNotesBtn){
-    saveNotesBtn.addEventListener("click", () => saveSiteNotes());
-  }
-  const btnAddLocation = $("btnAddLocation");
-  if (btnAddLocation){
-    btnAddLocation.addEventListener("click", () => addSpliceLocation());
-  }
-
-  const startCameraBtn = $("btnStartCamera");
-  if (startCameraBtn){
-    startCameraBtn.addEventListener("click", () => startCamera());
-  }
-  const startCameraNodesBtn = $("btnStartCameraNodes");
-  if (startCameraNodesBtn){
-    startCameraNodesBtn.addEventListener("click", () => startCamera());
-  }
-
-  const photoBtn = $("btnCapturePhoto");
-  if (photoBtn){
-    photoBtn.addEventListener("click", () => captureUsageProof());
-  }
-
-  const backfillPortInput = $("backfillPortInput");
-  if (backfillPortInput){
-    backfillPortInput.addEventListener("change", async (e) => {
-      await handleBackfillPhotoUpload("port_test", e.target.files?.[0] || null);
-      e.target.value = "";
-    });
-  }
-  const backfillSpliceInput = $("backfillSpliceInput");
-  if (backfillSpliceInput){
-    backfillSpliceInput.addEventListener("change", async (e) => {
-      await handleBackfillPhotoUpload("splice_complete", e.target.files?.[0] || null);
-      e.target.value = "";
-    });
-  }
-
-  const btnMarkNodeReady = $("btnMarkNodeReady");
-  if (btnMarkNodeReady){
-    btnMarkNodeReady.addEventListener("click", () => markNodeReady());
-  }
-  const btnCreateInvoice = $("btnCreateInvoice");
-  if (btnCreateInvoice){
-    btnCreateInvoice.addEventListener("click", () => createInvoice());
-  }
-  const btnToggleSidebar = document.getElementById("btnToggleInvoiceSidebar");
-  if (btnToggleSidebar) {
-    btnToggleSidebar.addEventListener("click", () => {
-      const sidebar = document.getElementById("invoiceNavSidebar");
-      if (sidebar) sidebar.classList.toggle("collapsed");
-    });
-  }
-
-  const invoiceNavSearch = document.getElementById("invoiceNavSearch");
-  if (invoiceNavSearch) {
-    invoiceNavSearch.addEventListener("input", () => {
-      renderInvoiceNavSidebar();
-    });
-  }
-  const invoiceNavList = document.getElementById("invoiceNavList");
-  if (invoiceNavList) {
-    invoiceNavList.addEventListener("click", (e) => {
-      const btn = e.target.closest("button[data-office-action]");
-      if (!btn) return;
-      const action = String(btn.dataset.officeAction || "");
-      const invoiceNumber = String(btn.dataset.officeInvoiceNumber || "");
-      if (action === "openKsInvoice"){
-        openOfficeInvoiceByRouteRef(invoiceNumber, { syncUrl: true });
-      } else if (action === "openInvoiceDeepLink"){
-        openOfficeInvoiceByNumber(invoiceNumber, { syncUrl: true });
-      }
-    });
-  }
-  const invoicePanel = $("invoicePanel");
-  if (invoicePanel){
-    invoicePanel.addEventListener("click", (e) => {
-      const btn = e.target.closest("button[data-office-action]");
-      if (!btn){
-        const row = e.target.closest("tr[data-ruidoso-id]");
-        const rid = String(row?.dataset?.ruidosoId || "");
-        if (rid){
-          openRuidosoInvoiceModal("replace", rid);
-        }
-        return;
-      }
-      const action = String(btn.dataset.officeAction || "");
-      const invoiceId = String(btn.dataset.officeInvoiceId || "");
-      const invoiceNumber = String(btn.dataset.officeInvoiceNumber || "");
-      const lineId = String(btn.dataset.officeLineId || "");
-      if (action === "createInvoice"){
-        createOfficeInvoiceDraft();
-        return;
-      }
-      if (action === "openInvoiceDeepLink"){
-        openOfficeInvoiceByNumber(invoiceNumber, { syncUrl: true });
-        return;
-      }
-      if (action === "openKsInvoice"){
-        openOfficeInvoiceByRouteRef(invoiceNumber, { syncUrl: true });
-        return;
-      }
-      if (action === "openInvoice"){
-        openOfficeInvoiceDraft(invoiceId);
-        return;
-      }
-      if (action === "deleteInvoice"){
-        deleteOfficeInvoiceRecord(invoiceId);
-        return;
-      }
-      if (action === "backToInvoiceList"){
-        closeOfficeInvoiceDeepLink({ syncUrl: true });
-        return;
-      }
-      if (action === "copyKsInvoiceLink"){
-        copyKsInvoiceLink(invoiceNumber);
-        return;
-      }
-      if (action === "continueToPendingInvoiceOpen"){
-        continueToPendingInvoiceOpen();
-        return;
-      }
-      if (action === "skipPendingInvoiceOpen"){
-        skipPendingInvoiceOpen();
-        return;
-      }
-      if (action === "cancelPendingInvoiceOpen"){
-        cancelPendingInvoiceOpen();
-        return;
-      }
-      if (action === "resolveOrgContext"){
-        void initializeOrgContext({ attemptRepair: true });
-        openProjectsModal();
-        return;
-      }
-      if (action === "retryPendingInvoiceImport"){
-        if (!state.ksInvoices.pendingImportFile){
-          toast("No pending import", "Choose a ZIP file first.", "error");
-          return;
-        }
-        void handleKsInvoiceZipImport(state.ksInvoices.pendingImportFile);
-        return;
-      }
-      if (action === "addLineItem"){
-        addOfficeInvoiceLineItem();
-        return;
-      }
-      if (action === "removeLineItem"){
-        removeOfficeInvoiceLineItem(lineId);
-        return;
-      }
-      if (action === "saveDraft"){
-        saveOfficeInvoiceWithStatus("Draft");
-        return;
-      }
-      if (action === "readyForBilling"){
-        saveOfficeInvoiceWithStatus("Ready for Billing");
-        return;
-      }
-      if (action === "cancelDraft"){
-        state.officeInvoices.draft = null;
-        persistOfficeInvoiceState();
-        renderInvoicePanel();
-      }
-      if (action === "ruidosoDeleteInvoice"){
-        const rid = String(btn.dataset.ruidosoId || "");
-        if (!rid) return;
-        state.ruidosoInvoices = (state.ruidosoInvoices || []).filter(r => r.id !== rid);
-        persistRuidosoInvoices();
-        toast("Invoice removed", rid);
-        renderInvoicePanel();
-        return;
-      }
-      if (action === "ruidosoReplaceInvoice"){
-        const rid = String(btn.dataset.ruidosoId || "");
-        if (!rid) return;
-        openRuidosoInvoiceModal("replace", rid);
-        return;
-      }
-      if (action === "ruidosoAddInvoice"){
-        openRuidosoInvoiceModal("add");
-        return;
-      }
-      if (action === "ruidosoUploadInvoice"){
-        openRuidosoInvoiceModal("add");
-        return;
-      }
-    });
-    invoicePanel.addEventListener("input", (e) => {
-      const fieldEl = e.target.closest("[data-office-field]");
-      if (fieldEl){
-        updateOfficeInvoiceDraftField(fieldEl.dataset.officeField, fieldEl.value);
-        refreshOfficeInvoiceComputedFields();
-        return;
-      }
-      const lineEl = e.target.closest("[data-office-line-id][data-office-line-field]");
-      if (lineEl){
-        updateOfficeInvoiceLineField(lineEl.dataset.officeLineId, lineEl.dataset.officeLineField, lineEl.value);
-        refreshOfficeInvoiceComputedFields();
-      }
-    });
-    invoicePanel.addEventListener("change", (e) => {
-      if (e.target?.id === "ksInvoiceZipInput"){
-        const file = e.target.files?.[0] || null;
-        e.target.value = "";
-        if (!file) return;
-        void handleKsInvoiceZipImport(file);
-        return;
-      }
-      const fieldEl = e.target.closest("[data-office-field]");
-      if (fieldEl){
-        updateOfficeInvoiceDraftField(fieldEl.dataset.officeField, fieldEl.value);
-        persistOfficeInvoiceState();
-      }
-      const lineEl = e.target.closest("[data-office-line-id][data-office-line-field]");
-      if (lineEl){
-        updateOfficeInvoiceLineField(lineEl.dataset.officeLineId, lineEl.dataset.officeLineField, lineEl.value);
-        persistOfficeInvoiceState();
-      }
-    });
-  }
-  const btnInvoiceFilesRefresh = $("btnInvoiceFilesRefresh");
-  if (btnInvoiceFilesRefresh){
-    btnInvoiceFilesRefresh.addEventListener("click", () => {
-      void loadInvoiceFiles(state.activeProject?.id || null);
-    });
-  }
-  const invoiceFileInput = $("invoiceFileInput");
-  if (invoiceFileInput){
-    invoiceFileInput.addEventListener("change", async (e) => {
-      const file = e.target.files?.[0] || null;
-      e.target.value = "";
-      if (!file) return;
-      await uploadInvoiceFile(file);
-    });
-  }
-  const invoiceFilesList = $("invoiceFilesList");
-  if (invoiceFilesList){
-    invoiceFilesList.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-action='deleteInvoiceFile']");
-      if (!btn) return;
-      const id = String(btn.dataset.id || "").trim();
-      if (!id) return;
-      void deleteInvoiceFile(id);
-    });
-  }
-
-  document.body.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-action=\"toggleTranslation\"]");
-    if (!btn) return;
-    const block = btn.closest(".translated-text");
-    if (!block) return;
-    const valueEl = block.querySelector(".translated-value");
-    const translated = block.dataset.translatedText || "";
-    const source = block.getAttribute("data-source-text") || "";
-    if (!valueEl) return;
-    if (block.dataset.showing === "translated"){
-      valueEl.textContent = source;
-      block.dataset.showing = "original";
-      btn.textContent = t("viewTranslation");
-    } else {
-      valueEl.textContent = translated || source;
-      block.dataset.showing = "translated";
-      btn.textContent = t("viewOriginal");
-    }
-  });
-}
-
-startVisibilityWatch();
-function startApp(){
-  initSplash();
-  wireUI();
-  applyI18n();
-  syncLanguageControls();
-  initAuth();
-}
-
-if (document.readyState === "loading"){
-  window.addEventListener("DOMContentLoaded", startApp);
-} else {
-  startApp();
-}
-
-
+      setActiveVi
