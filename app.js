@@ -817,15 +817,15 @@ const I18N = {
     locationSharingOn: "Live location sharing enabled.",
   },
   es: {
-    brandSubtitle: "VerificaciÃ³n en campo, documentaciÃ³n y control de facturaciÃ³n",
-    authTitle: "Inicia sesiÃ³n en SpecCom",
+    brandSubtitle: "Verificación en campo, documentación y control de facturación",
+    authTitle: "Inicia sesión en SpecCom",
     authSubtitle: "Bienvenido de nuevo.",
     emailPlaceholder: "correo",
-    passwordPlaceholder: "contraseÃ±a",
-    signIn: "Iniciar sesiÃ³n",
-    magicLink: "Restablecer contraseÃ±a",
+    passwordPlaceholder: "contraseña",
+    signIn: "Iniciar sesión",
+    magicLink: "Restablecer contraseña",
     createUser: "Crear cuenta",
-    authConfigNote: "Inicio de sesiÃ³n no disponible.",
+    authConfigNote: "Inicio de sesión no disponible.",
     rolesTitle: "",
     rolesSubtitle: "",
     liveSetupTitle: "",
@@ -840,7 +840,7 @@ const I18N = {
     projectSummaryNone: "Sin proyecto seleccionado",
     projectsEmpty: "Aun no hay proyectos. Crea un proyecto o pide acceso a tu administrador.",
     projectsEmptyTitle: "Aun no hay proyectos",
-    projectsEmptyBody: "Crea un proyecto para empezar a rastrear sitios y documentaciÃ³n, o pide a tu administrador que te agregue a un proyecto existente.",
+    projectsEmptyBody: "Crea un proyecto para empezar a rastrear sitios y documentación, o pide a tu administrador que te agregue a un proyecto existente.",
     projectsEmptyCta: "Crear proyecto",
     createProject: "Crear proyecto",
     messagesEmpty: "Aun no hay mensajes.",
@@ -886,14 +886,14 @@ const I18N = {
     navDispatch: "Despacho / Planificador",
     navNodes: "Sitios",
     navPhotos: "Fotos",
-    navBilling: "FacturaciÃ³n",
+    navBilling: "Facturación",
     navLabor: "Mano de obra",
     navInvoices: "Facturas",
       navMap: "Mapa de sitios",
-    navCatalog: "CatÃ¡logo",
+    navCatalog: "Catálogo",
     navAlerts: "Alertas",
     navAdmin: "Operations",
-    navSettings: "ConfiguraciÃ³n",
+    navSettings: "Configuración",
     timesheetNav: "Hoja de tiempo",
     techClockTitle: "Registro de tiempo",
     techClockIn: "Entrada",
@@ -921,7 +921,7 @@ const I18N = {
     techWorkOrdersTitle: "Ordenes de trabajo",
     techWorkOrdersSubtitle: "Instalaciones y tickets asignados",
     techTodayTitle: "Hoy",
-    techTomorrowTitle: "MaÃ±ana",
+    techTomorrowTitle: "Mañana",
     woNoOrders: "Sin ordenes.",
     woActionEnRoute: "En ruta",
     woActionOnSite: "En sitio",
@@ -942,7 +942,7 @@ const I18N = {
     laborTechLabel: "Tecnico",
     laborDateLabel: "Fecha",
     laborPaidHoursLabel: "Horas pagadas",
-    jobSubtitle: "ReconstrucciÃ³n FTTH Ruidoso (flujo por sitio)",
+    jobSubtitle: "Reconstrucción FTTH Ruidoso (flujo por sitio)",
     photosOptionalBadge: "Fotos opcionales para el MVP",
     activeNodeTitle: "Sitio activo",
     kpiNode: "Sitio",
@@ -951,65 +951,65 @@ const I18N = {
     pricingHidden: "Precios ocultos en vista restringida",
     alertsTitle: "Alertas",
     allowedQuantitiesTitle: "Cantidades permitidas",
-    catalogQuickSearchTitle: "BÃºsqueda rÃ¡pida del catÃ¡logo",
-    catalogSearchPlaceholder: "Buscar parte Millennium, SKU MFG, descripciÃ³n",
+    catalogQuickSearchTitle: "Búsqueda rápida del catálogo",
+    catalogSearchPlaceholder: "Buscar parte Millennium, SKU MFG, descripción",
     nodesTitle: "Espacio de sitios",
     nodesSubtitle: "Solo un sitio ACTIVO a la vez. Termina el empalme antes de pasar al siguiente.",
-    nodeNumberPlaceholder: "Ingresa nÃºmero de sitio (ej: SITE-1001)",
+    nodeNumberPlaceholder: "Ingresa número de sitio (ej: SITE-1001)",
     openNode: "Abrir sitio",
     createNode: "Crear sitio",
     spliceLocationsTitle: "Ubicaciones de empalme",
     spliceLocationsSubtitle: "Las fotos son opcionales para facturar en este MVP.",
-    addSpliceLocation: "Agregar ubicaciÃ³n",
+    addSpliceLocation: "Agregar ubicación",
     inventoryTitle: "Checklist de inventario",
-    inventorySubtitle: "Lo usado en este sitio. Empalmadores ven Ã­tems y checklist, no precios.",
+    inventorySubtitle: "Lo usado en este sitio. Empalmadores ven ítems y checklist, no precios.",
     photoChecklistTitle: "Checklist de fotos",
     photosOptionalBanner: "Fotos opcionales para el MVP",
     capturePhotosTitle: "Capturar fotos",
-    capturePhotosSubtitle: "Solo cÃ¡mara. GPS requerido al capturar. Sin galerÃ­a.",
-    startCamera: "Iniciar cÃ¡mara",
+    capturePhotosSubtitle: "Solo cámara. GPS requerido al capturar. Sin galería.",
+    startCamera: "Iniciar cámara",
     captureUsagePhoto: "Capturar foto de uso",
-    photoStatusNone: "No se capturÃ³ foto",
-    invoiceActionsTitle: "Acciones de facturaciÃ³n",
+    photoStatusNone: "No se capturó foto",
+    invoiceActionsTitle: "Acciones de facturación",
     invoicesUngatedBanner: "Facturas disponibles sin pruebas en el MVP",
-    invoiceActionsSubtitle: "La carga de facturaciÃ³n estÃ¡ disponible en este MVP.",
+    invoiceActionsSubtitle: "La carga de facturación está disponible en este MVP.",
     markNodeReady: "Marcar sitio LISTO para facturar",
-    createInvoice: "Crear factura (segÃºn rol)",
+    createInvoice: "Crear factura (según rol)",
     invoicesPrivacyTitle: "Facturas y privacidad",
     billingLocationsTitle: "Ubicaciones",
-    billingTitle: "FacturaciÃ³n",
+    billingTitle: "Facturación",
     importUsage: "Importar uso",
     exportCsv: "Exportar CSV",
     print: "Imprimir",
-    billingSelectLocation: "Selecciona una ubicaciÃ³n para iniciar facturaciÃ³n.",
+    billingSelectLocation: "Selecciona una ubicación para iniciar facturación.",
       mapTitle: "Mapa de sitios",
-      mapSubtitle: "Coloca un pin para crear un sitio y agregar documentaciÃ³n.",
-      mapActiveOnly: "Solo activos (Ãºltimos 10 min)",
+      mapSubtitle: "Coloca un pin para crear un sitio y agregar documentación.",
+      mapActiveOnly: "Solo activos (últimos 10 min)",
       mapSearchPlaceholder: "Buscar ubicaciones (nombre, direccion, ID, o lat,lng)",
       dropPin: "Colocar pin",
-      dropPinNamePlaceholder: "Nombre de ubicaciÃ³n",
+      dropPinNamePlaceholder: "Nombre de ubicación",
       siteListTitle: "Sitios",
-      siteNameTitle: "Nombre de ubicaciÃ³n",
-      siteNameSubtitle: "Nombra esta ubicaciÃ³n para encontrarla fÃ¡cilmente despuÃ©s.",
-      siteNamePlaceholder: "Nombre de ubicaciÃ³n",
+      siteNameTitle: "Nombre de ubicación",
+      siteNameSubtitle: "Nombra esta ubicación para encontrarla fácilmente después.",
+      siteNamePlaceholder: "Nombre de ubicación",
       sitePanelTitle: "Panel del sitio",
-      noSiteSelected: "NingÃºn sitio seleccionado.",
-      siteStatusPending: "SincronizaciÃ³n pendiente",
+      noSiteSelected: "Ningún sitio seleccionado.",
+      siteStatusPending: "Sincronización pendiente",
       mapStatusNoProject: "Selecciona un proyecto para ver sitios.",
-      mapStatusNoSites: "AÃºn no hay sitios. Coloca un pin para agregar uno.",
+      mapStatusNoSites: "Aún no hay sitios. Coloca un pin para agregar uno.",
       mapStatusSites: "{count} sitios",
       pinMissingGps: "GPS no disponible",
-      pinMissingGpsBody: "Se requiere ubicaciÃ³n para colocar un pin.",
-      pinAccuracyWarnTitle: "PrecisiÃ³n baja",
-      pinAccuracyWarnBody: "La precisiÃ³n es baja. El pin se guardÃ³.",
+      pinMissingGpsBody: "Se requiere ubicación para colocar un pin.",
+      pinAccuracyWarnTitle: "Precisión baja",
+      pinAccuracyWarnBody: "La precisión es baja. El pin se guardó.",
       pinDroppedTitle: "Pin guardado",
     pinDroppedBody: "Sitio creado desde un pin del mapa.",
       pinQueuedTitle: "Pin en cola",
-      pinQueuedBody: "Pin sin conexiÃ³n guardado. Se sincronizarÃ¡ al estar en lÃ­nea.",
+      pinQueuedBody: "Pin sin conexión guardado. Se sincronizará al estar en línea.",
       importLocations: "Importar ubicaciones (KMZ)",
-      invoiceAgentAction: "Agente de facturaciÃ³n",
-      invoiceAgentTitle: "Agente de facturaciÃ³n",
-      invoiceAgentSubtitle: "Genera facturas borrador desde ubicaciones completas con entradas de facturaciÃ³n.",
+      invoiceAgentAction: "Agente de facturación",
+      invoiceAgentTitle: "Agente de facturación",
+      invoiceAgentSubtitle: "Genera facturas borrador desde ubicaciones completas con entradas de facturación.",
       invoiceAgentFromLabel: "Empresa emisora",
       invoiceAgentToLabel: "Empresa receptora",
       invoiceAgentSelectAll: "Seleccionar elegibles",
@@ -1017,39 +1017,39 @@ const I18N = {
       invoiceAgentGenerate: "Generar borradores",
       invoiceAgentNoProject: "Selecciona un proyecto para generar facturas.",
       invoiceAgentNoEligible: "No hay ubicaciones elegibles.",
-      invoiceAgentResultsTitle: "Resultados del agente de facturaciÃ³n",
+      invoiceAgentResultsTitle: "Resultados del agente de facturación",
       invoiceAgentExportCsv: "Exportar CSV",
       invoiceAgentExportPdf: "Exportar PDF",
       yourInvoicesTitle: "Tus facturas",
-      yourInvoicesEmpty: "AÃºn no hay facturas.",
+      yourInvoicesEmpty: "Aún no hay facturas.",
       issuerLabel: "Emisor",
       recipientLabel: "Receptor",
       mediaTitle: "Media",
-      mediaSubtitle: "Agrega imÃ¡genes desde cÃ¡mara o galerÃ­a.",
+      mediaSubtitle: "Agrega imágenes desde cámara o galería.",
       addMedia: "Agregar media",
-      codesTitle: "CÃ³digos de facturaciÃ³n",
-      codesSubtitle: "Agrega los cÃ³digos de facturaciÃ³n usados en esta ubicaciÃ³n.",
+      codesTitle: "Códigos de facturación",
+      codesSubtitle: "Agrega los códigos de facturación usados en esta ubicación.",
       entriesTitle: "Entradas",
       entriesSubtitle: "Agrega entradas neutrales con cantidad opcional.",
       addEntry: "Agregar",
       notesTitle: "Notas",
       notesSubtitle: "Notas opcionales para este sitio.",
-      entryDescriptionPlaceholder: "DescripciÃ³n de entrada",
+      entryDescriptionPlaceholder: "Descripción de entrada",
       entryQuantityPlaceholder: "Cant. (opcional)",
       notesPlaceholder: "Agregar notas",
-    catalogTitle: "CatÃ¡logo de materiales",
+    catalogTitle: "Catálogo de materiales",
     clear: "Limpiar",
     alertsFeedTitle: "Feed de alertas",
     adminNotesTitle: "Notas de admin",
-    userManagementTitle: "GestiÃ³n de usuarios",
+    userManagementTitle: "Gestión de usuarios",
     userManagementSubtitle: "Invita por correo y gestiona perfiles.",
     adminUserIdPlaceholder: "ID de usuario auth (opcional)",
     adminUserEmailPlaceholder: "Correo (requerido para invitaciones)",
     createProfile: "Crear perfil",
-    settingsTitle: "ConfiguraciÃ³n",
+    settingsTitle: "Configuración",
     languageLabel: "Idioma",
-    languageOptionEnglish: "InglÃ©s",
-    languageOptionSpanish: "EspaÃ±ol",
+    languageOptionEnglish: "Inglés",
+    languageOptionSpanish: "Español",
     languageOptionPortuguese: "Portugues",
     languageHelp: "Los cambios aplican al instante y se guardan en tu perfil.",
     saveLanguage: "Guardar idioma",
@@ -1063,24 +1063,24 @@ const I18N = {
     deleteLabel: "Eliminar",
     deletingLabel: "Eliminando...",
     noProfilesFound: "No hay perfiles.",
-    noLocationsYet: "No hay ubicaciones aÃºn.",
+    noLocationsYet: "No hay ubicaciones aún.",
     openNodePrompt: "Abre un sitio para ver ubicaciones.",
-    noInventoryItems: "AÃºn no hay Ã­tems de inventario. En Supabase vienen del maestro + checklist del sitio.",
+    noInventoryItems: "Aún no hay ítems de inventario. En Supabase vienen del maestro + checklist del sitio.",
     billingStatusLocations: "{count} ubicaciones",
     noLocations: "Sin ubicaciones",
-    billingOpen: "Abrir facturaciÃ³n",
+    billingOpen: "Abrir facturación",
     proofNotRequired: "Prueba: No requerida",
     proofProgress: "Prueba: {uploaded}/{required}",
     ok: "OK",
     locked: "BLOQUEADO",
-    pricingVisible: "Precios visibles (segÃºn rol)",
+    pricingVisible: "Precios visibles (según rol)",
     pricingHiddenLabel: "Precios ocultos",
     subInvoicesLabel: "Facturas de campo:",
     tdsInvoicesLabel: "Facturas prioritarias:",
     visible: "visible",
     hidden: "oculto",
-    openNodeInvoices: "Abre un sitio para ver acciones de facturaciÃ³n.",
-    billingGateTitle: "Estado de facturaciÃ³n",
+    openNodeInvoices: "Abre un sitio para ver acciones de facturación.",
+    billingGateTitle: "Estado de facturación",
     billingGateBypass: "Las facturas no se bloquean por pruebas en este MVP.",
     statusLabel: "Estado",
     eligibleLabel: "ELEGIBLE",
@@ -1088,64 +1088,64 @@ const I18N = {
     nodeLabel: "Sitio",
     rateCardLabel: "Tarifa",
     notesLabel: "Notas",
-    workCodeLabel: "CÃ³digo",
-    descriptionLabel: "DescripciÃ³n",
+    workCodeLabel: "Código",
+    descriptionLabel: "Descripción",
     unitLabel: "Unidad",
     qtyLabel: "Cant.",
     rateLabel: "Tarifa",
-    addLineItemLabel: "Agregar lÃ­nea",
+    addLineItemLabel: "Agregar línea",
     subtotalLabel: "Subtotal",
     taxLabel: "Impuesto",
     totalLabel: "Total",
     openNodeAllowedQuantities: "Abre un sitio para ver cantidades permitidas.",
     openNodePhotoRequirements: "Abre un sitio para ver requisitos de fotos.",
     noNodeSelected: "No hay sitio seleccionado.",
-    spliceLocationLabel: "UbicaciÃ³n de empalme",
-    codesUsedTitle: "CÃ³digos usados",
-    briefDescriptionTitle: "DescripciÃ³n breve",
+    spliceLocationLabel: "Ubicación de empalme",
+    codesUsedTitle: "Códigos usados",
+    briefDescriptionTitle: "Descripción breve",
     editCodesLabel: "Editar",
     saveLabel: "Guardar",
     closeLabel: "Cerrar",
     cancelLabel: "Cancelar",
     noneLabel: "Ninguno",
-    codesPlaceholder: "Ingresa cÃ³digos separados por comas",
-    descriptionPlaceholder: "DescripciÃ³n breve (mÃ¡x 400 caracteres)",
+    codesPlaceholder: "Ingresa códigos separados por comas",
+    descriptionPlaceholder: "Descripción breve (máx 400 caracteres)",
     demoEnvBadge: "ENTORNO DEMO",
     demoLogin: "Acceso demo",
-    demoLoginNote: "SesiÃ³n demo (solo lectura)",
-    availableInProduction: "Disponible en ProducciÃ³n",
-    noInvoices: "AÃºn no hay facturas.",
+    demoLoginNote: "Sesión demo (solo lectura)",
+    availableInProduction: "Disponible en Producción",
+    noInvoices: "Aún no hay facturas.",
     fromLabel: "De",
     toLabel: "Para",
     amountLabel: "Monto",
     invoiceNumberLabel: "Factura #",
-    locationLabel: "UbicaciÃ³n",
-    selectLocationToBill: "Selecciona una ubicaciÃ³n para iniciar facturaciÃ³n.",
+    locationLabel: "Ubicación",
+    selectLocationToBill: "Selecciona una ubicación para iniciar facturación.",
     billingNotesPlaceholder: "Notas",
     translated: "Traducido",
     viewOriginal: "Ver original",
-    viewTranslation: "Ver traducciÃ³n",
-    lastSeen: "Ãšltima vez: hace {minutes} min",
-    lastSeenJustNow: "Ãšltima vez: justo ahora",
-    mapStatusNoData: "AÃºn no hay ubicaciones disponibles.",
-    mapStatusSelfOnly: "Mostrando solo tu ubicaciÃ³n.",
+    viewTranslation: "Ver traducción",
+    lastSeen: "Última vez: hace {minutes} min",
+    lastSeenJustNow: "Última vez: justo ahora",
+    mapStatusNoData: "Aún no hay ubicaciones disponibles.",
+    mapStatusSelfOnly: "Mostrando solo tu ubicación.",
     mapStatusAll: "Mostrando ubicaciones del equipo.",
-      mapStatusSignin: "Inicia sesiÃ³n para ver sitios.",
-    you: "TÃº",
+      mapStatusSignin: "Inicia sesión para ver sitios.",
+    you: "Tú",
     crew: "Equipo",
-    signedOut: "SesiÃ³n cerrada",
-    signedIn: "SesiÃ³n iniciada",
+    signedOut: "Sesión cerrada",
+    signedIn: "Sesión iniciada",
     signedInDemo: "Signed in (Demo mode)",
-    signOut: "Cerrar sesiÃ³n",
+    signOut: "Cerrar sesión",
     roleLabel: "Acceso",
     pricingHiddenSplicer: "Precios ocultos (vista restringida)",
     pricingProtected: "Precios protegidos",
     gpsMissing: "Sin GPS",
-    gpsMissingBody: "Este navegador/dispositivo no soporta geolocalizaciÃ³n.",
+    gpsMissingBody: "Este navegador/dispositivo no soporta geolocalización.",
     gpsCaptured: "GPS capturado",
     gpsError: "Error de GPS",
     gpsRequired: "El GPS es requerido para el pago.",
-    locationSharingOn: "Compartir ubicaciÃ³n en vivo activado.",
+    locationSharingOn: "Compartir ubicación en vivo activado.",
   },
 };
 
@@ -3681,7 +3681,7 @@ SpecCom.helpers.renderInvoiceAgentModal = function(){
           <input type="checkbox" data-site-id="${c.id}" ${selected ? "checked" : ""} ${disabled ? "disabled" : ""} />
           <div>
             <div style="font-weight:700;">${escapeHtml(c.name)}</div>
-            <div class="muted small">${statusLabel} Ã¢â‚¬Â¢ ${entryLabel}</div>
+            <div class="muted small">${statusLabel} â€¢ ${entryLabel}</div>
           </div>
         </label>
       `;
@@ -3730,7 +3730,7 @@ SpecCom.helpers.renderInvoiceAgentResults = function(){
         <div class="row" style="justify-content:space-between; align-items:center;">
           <div>
             <div style="font-weight:700;">${escapeHtml(siteName)}</div>
-            <div class="muted small">Draft Ã¢â‚¬Â¢ ${formatMoney(total)}</div>
+            <div class="muted small">Draft â€¢ ${formatMoney(total)}</div>
           </div>
           <div class="row">
             <button class="btn ghost small" data-action="invoiceAgentExportCsv" data-invoice-id="${inv.invoice_id}" data-site-id="${inv.site_id}">${t("invoiceAgentExportCsv")}</button>
@@ -5971,7 +5971,7 @@ function renderRedlineList(){
     const pendingCount = overageMarkers.filter((m) => (m.approval_status || "pending") === "pending").length;
     html += `
       <div class="overage-section-header">
-        <span>âš ï¸ Splice Overage Requests</span>
+        <span>⚠️ Splice Overage Requests</span>
         ${pendingCount ? `<span class="overage-pending-count">${pendingCount} pending K&S approval</span>` : ""}
       </div>
     `;
@@ -5985,26 +5985,26 @@ function renderRedlineList(){
             ${getOverageApprovalBadge(marker)}
           </div>
           <div class="overage-qty-row">
-            <span class="overage-qty-cell"><span class="muted small">Design</span><b>${marker.design_qty ?? "â€”"}</b></span>
-            <span class="overage-arrow">â†’</span>
-            <span class="overage-qty-cell"><span class="muted small">Field</span><b>${marker.field_qty ?? "â€”"}</b></span>
-            <span class="overage-arrow">â†’</span>
+            <span class="overage-qty-cell"><span class="muted small">Design</span><b>${marker.design_qty ?? "—"}</b></span>
+            <span class="overage-arrow">→</span>
+            <span class="overage-qty-cell"><span class="muted small">Field</span><b>${marker.field_qty ?? "—"}</b></span>
+            <span class="overage-arrow">→</span>
             <span class="overage-qty-cell overage-extra"><span class="muted small">Extra</span><b>+${extra}</b></span>
           </div>
           <div class="muted small overage-meta">
-            ðŸ“‹ ${escapeHtml(marker.staking_sheet || "â€”")}
-            ${marker.field_date ? ` &nbsp;Â·&nbsp; ðŸ“… ${escapeHtml(marker.field_date)}` : ""}
-            ${marker.tech_name ? ` &nbsp;Â·&nbsp; ðŸ‘· ${escapeHtml(marker.tech_name)}` : ""}
+            📋 ${escapeHtml(marker.staking_sheet || "—")}
+            ${marker.field_date ? ` &nbsp;·&nbsp; 📅 ${escapeHtml(marker.field_date)}` : ""}
+            ${marker.tech_name ? ` &nbsp;·&nbsp; 👷 ${escapeHtml(marker.tech_name)}` : ""}
           </div>
           <div class="muted small overage-justification">
-            ðŸ’¡ ${escapeHtml(getJustificationLabel(marker.justification_category))}
+            💡 ${escapeHtml(getJustificationLabel(marker.justification_category))}
           </div>
           ${marker.notes ? `<div class="muted small overage-notes">${escapeHtml(String(marker.notes).slice(0, 150))}</div>` : ""}
-          ${marker.approval_note ? `<div class="muted small overage-approval-note">ðŸ“ K&S note: ${escapeHtml(marker.approval_note)}</div>` : ""}
+          ${marker.approval_note ? `<div class="muted small overage-approval-note">📝 K&S note: ${escapeHtml(marker.approval_note)}</div>` : ""}
           <div class="redline-item-actions">
             <button type="button" class="btn ghost small" data-redline-action="edit" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">Edit</button>
-            <button type="button" class="btn secondary small" data-overage-action="approve" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">âœ… Mark Approved</button>
-            <button type="button" class="btn ghost small" data-overage-action="deny" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">âŒ Deny</button>
+            <button type="button" class="btn secondary small" data-overage-action="approve" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">✅ Mark Approved</button>
+            <button type="button" class="btn ghost small" data-overage-action="deny" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">❌ Deny</button>
             ${canManage ? `<button type="button" class="btn danger small" data-redline-action="delete" data-redline-marker-id="${escapeHtml(String(marker.id || ""))}">Delete</button>` : ""}
           </div>
         </article>
@@ -6054,7 +6054,7 @@ function renderRedlineList(){
 function getOverageApprovalBadge(marker){
   if (!marker.overage_request) return "";
   const s = String(marker.approval_status || "pending");
-  const map = { pending: ["â³", "overage-pending"], approved: ["âœ…", "overage-approved"], denied: ["âŒ", "overage-denied"] };
+  const map = { pending: ["⏳", "overage-pending"], approved: ["✅", "overage-approved"], denied: ["❌", "overage-denied"] };
   const [icon, cls] = map[s] || map.pending;
   return `<span class="overage-badge ${cls}">${icon} K&S ${s.charAt(0).toUpperCase()+s.slice(1)}</span>`;
 }
@@ -6068,7 +6068,7 @@ function getJustificationLabel(cat){
     not_on_print: "Not on staking print",
     other: "Other",
   };
-  return labels[cat] || cat || "â€”";
+  return labels[cat] || cat || "—";
 }
 
 async function handleOverageApprovalAction(markerId, action){
@@ -11123,7 +11123,7 @@ SpecCom.helpers.renderInvoiceImportPreview = function(){
     : "No matching sites found.";
   list.innerHTML = data.preview.slice(0, 60).map((row) => {
     const codes = row.items.map(i => `${i.code} (${i.qty})`).join(", ");
-    return `<div class="muted small">Row ${row.rowNumber}: ${escapeHtml(row.location_name)} â†’ ${escapeHtml(codes || "No items")}</div>`;
+    return `<div class="muted small">Row ${row.rowNumber}: ${escapeHtml(row.location_name)} → ${escapeHtml(codes || "No items")}</div>`;
   }).join("");
   if (missing){
     list.innerHTML += data.missing.slice(0, 20).map((row) => (
@@ -11473,11 +11473,11 @@ function useTechnicianDaySimulation(){
 }
 
 const TECH_SHIFT_TEMPLATE = [
-  { id: "vehicle_start", kind: "inspection", title: "Vehicle Inspection â€” Start of Day", subtitle: "Start of Day", plannedMinutes: 15 },
+  { id: "vehicle_start", kind: "inspection", title: "Vehicle Inspection — Start of Day", subtitle: "Start of Day", plannedMinutes: 15 },
   {
     id: "service_job_1",
     kind: "service",
-    title: "Service Order â€” Job 1",
+    title: "Service Order — Job 1",
     subtitle: "Install Fiber Service",
     plannedMinutes: 120,
     customer: "Joe Smith",
@@ -11491,7 +11491,7 @@ const TECH_SHIFT_TEMPLATE = [
   {
     id: "trouble_job_2",
     kind: "trouble",
-    title: "Trouble Ticket â€” Job 2",
+    title: "Trouble Ticket — Job 2",
     subtitle: "Called-in Low Speeds",
     plannedMinutes: 120,
     customer: "Joe Smith",
@@ -11501,8 +11501,8 @@ const TECH_SHIFT_TEMPLATE = [
     priority: "Urgent",
   },
   { id: "break_2", kind: "break", title: "Break 2", subtitle: "15-minute break", plannedMinutes: 15 },
-  { id: "vehicle_end", kind: "inspection", title: "Vehicle Inspection â€” End of Day", subtitle: "End of Day", plannedMinutes: 15 },
-  { id: "eos", kind: "eos", title: "EOS â€” End of Shift / Clock Out", subtitle: "End of shift", plannedMinutes: 5 },
+  { id: "vehicle_end", kind: "inspection", title: "Vehicle Inspection — End of Day", subtitle: "End of Day", plannedMinutes: 15 },
+  { id: "eos", kind: "eos", title: "EOS — End of Shift / Clock Out", subtitle: "End of shift", plannedMinutes: 5 },
 ];
 
 function getShiftStatusLabel(item){
@@ -11619,7 +11619,7 @@ function loadTechnicianSimulation(){
   try {
     const saved = JSON.parse(raw);
     if (!saved || typeof saved !== "object") return;
-    // Only restore if saved today â€” don't carry over yesterday's shift
+    // Only restore if saved today — don't carry over yesterday's shift
     const savedDate = saved.savedAt ? new Date(saved.savedAt).toDateString() : null;
     if (savedDate && savedDate !== new Date().toDateString()) {
       safeLocalStorageSet(TECH_SIM_KEY, "");
@@ -11923,7 +11923,7 @@ function renderCurrentShiftActivity(){
   if (!currentWrap) return;
   const item = getCurrentShiftItem();
   const clockLabel = sim.clockedInAt
-    ? `Clocked in at ${formatTimeShort(sim.clockedInAt)}${sim.clockedOutAt ? ` â€¢ Clocked out at ${formatTimeShort(sim.clockedOutAt)}` : ""}`
+    ? `Clocked in at ${formatTimeShort(sim.clockedInAt)}${sim.clockedOutAt ? ` • Clocked out at ${formatTimeShort(sim.clockedOutAt)}` : ""}`
     : "Shift start preloaded for 8:00 AM. Clock in to begin.";
   if (statusEl) statusEl.textContent = clockLabel;
   if (stateEl){
@@ -11960,7 +11960,7 @@ function renderCurrentShiftActivity(){
       </div>
       <div class="muted small">Elapsed ${formatDurationMinutes(elapsed)} of planned ${formatDurationMinutes(item.plannedMinutes || 0)}</div>
       ${(item.kind === "service" || item.kind === "trouble") ? `
-        <div class="muted small">${escapeHtml(item.customer || "")} â€¢ ${escapeHtml(item.address || "")}</div>
+        <div class="muted small">${escapeHtml(item.customer || "")} • ${escapeHtml(item.address || "")}</div>
       ` : ""}
       ${appointmentWindow ? `<div class="muted small">${escapeHtml(appointmentWindow)}</div>` : ""}
       ${compliancePill ? `<div>${compliancePill}</div>` : ""}
@@ -11982,7 +11982,7 @@ function renderCurrentShiftActivity(){
         <button class="btn ghost small" type="button" data-tech-shift-action="addPhoto" data-tech-item-id="${item.id}">Photo</button>
       </div>
       <input id="techQuickPhotoInput" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" style="display:none;" />
-      ${notes.length ? `<div class="tech-note-list">${notes.map((n) => `<div class="tech-note-item">â€¢ ${escapeHtml(n)}</div>`).join("")}</div>` : ""}
+      ${notes.length ? `<div class="tech-note-list">${notes.map((n) => `<div class="tech-note-item">• ${escapeHtml(n)}</div>`).join("")}</div>` : ""}
       ${photos.length ? `<div class="muted small">Photos: ${escapeHtml(photos.join(", "))}</div>` : ""}
     </div>
   `;
@@ -11998,7 +11998,7 @@ function renderTodayShiftTimeline(){
     const compliancePill = complianceSource ? renderAppointmentCompliancePill(complianceSource) : "";
     const appointmentWindow = formatTechAppointmentWindow(item);
     const isCurrent = item.id === sim.activeItemId;
-    const focusBtnLabel = isCurrent ? (item.status === "ACTIVE" ? "Active â†‘" : "Viewing â†‘") : "Open";
+    const focusBtnLabel = isCurrent ? (item.status === "ACTIVE" ? "Active ↑" : "Viewing ↑") : "Open";
     const focusBtnClass = isCurrent ? "btn ghost small is-current-item" : "btn ghost small";
     return `
       <article class="tech-shift-item${isCurrent ? " is-current" : ""}">
@@ -12009,8 +12009,8 @@ function renderTodayShiftTimeline(){
           </div>
           <div class="status-pill ${getShiftStatusClass(item)}">${escapeHtml(getShiftStatusLabel(item))}</div>
         </div>
-        <div class="muted small">Planned ${formatDurationMinutes(item.plannedMinutes || 0)} â€¢ Elapsed ${formatDurationMinutes(elapsed)}</div>
-        ${(item.kind === "service" || item.kind === "trouble") ? `<div class="muted small">${escapeHtml(item.customer || "")} â€¢ ${escapeHtml(item.address || "")}</div>` : ""}
+        <div class="muted small">Planned ${formatDurationMinutes(item.plannedMinutes || 0)} • Elapsed ${formatDurationMinutes(elapsed)}</div>
+        ${(item.kind === "service" || item.kind === "trouble") ? `<div class="muted small">${escapeHtml(item.customer || "")} • ${escapeHtml(item.address || "")}</div>` : ""}
         ${appointmentWindow ? `<div class="muted small">${escapeHtml(appointmentWindow)}</div>` : ""}
         ${compliancePill ? `<div>${compliancePill}</div>` : ""}
         <div class="tech-shift-actions">
@@ -12413,7 +12413,7 @@ function renderTechnicianDashboard(){
       const projectName = state.projects.find(p => p.id === timesheet.project_id)?.name || "Project";
       const clockInText = t("techClockedInAt", { time: formatTimeShort(timesheet.clock_in_at) });
       const clockOutText = timesheet.clock_out_at ? t("techClockedOutAt", { time: formatTimeShort(timesheet.clock_out_at) }) : "";
-      clockStatus.textContent = `${clockInText}${clockOutText ? ` â€¢ ${clockOutText}` : ""} â€¢ ${projectName}`;
+      clockStatus.textContent = `${clockInText}${clockOutText ? ` • ${clockOutText}` : ""} • ${projectName}`;
     }
   }
 
@@ -12459,7 +12459,7 @@ function renderTechnicianDashboard(){
     } else {
       trailEl.innerHTML = trail.slice(-10).map(point => {
         const time = formatTimeShort(point.at);
-        return `<div>${time} â€¢ ${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}</div>`;
+        return `<div>${time} • ${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}</div>`;
       }).join("");
     }
   }
@@ -12475,7 +12475,7 @@ function renderTechnicianDashboard(){
         <div class="event-row">
           <div>
             <div class="event-title">${title}</div>
-            <div class="event-meta">${start}${end ? ` â†’ ${end}` : ""}</div>
+            <div class="event-meta">${start}${end ? ` → ${end}` : ""}</div>
           </div>
           <div class="event-meta">${durationLabel}</div>
         </div>
@@ -13383,7 +13383,7 @@ function renderDispatchAssignmentBoard(){
           </select>
           ${selectedJob ? `
             <div class="dispatch-assignment-detail" style="margin-top:8px;">
-              <div class="muted small">${escapeHtml(selectedJob.type || "Work Order")} â€¢ ${escapeHtml(formatWorkOrderStatusLabel(selectedJob.status))}</div>
+              <div class="muted small">${escapeHtml(selectedJob.type || "Work Order")} • ${escapeHtml(formatWorkOrderStatusLabel(selectedJob.status))}</div>
               <div class="muted small">${escapeHtml(selectedJob.address || "No address")}</div>
               ${renderAppointmentCompliancePill(selectedJob)}
             </div>
@@ -13488,7 +13488,7 @@ function handleDispatchAssignmentMapHook(){
   const worker = (state.workOrders.workforce || []).find((row) => row.user_id === workerUserId) || null;
   const jobLabel = job ? formatDispatchJobLabel(job) : "No job selected";
   const workerLabel = worker ? `${worker.worker_id} ${worker.display_name}` : "No worker selected";
-  toast("Dispatch map hook", `${workerLabel} â€¢ ${jobLabel}. Live map routing hook coming next.`);
+  toast("Dispatch map hook", `${workerLabel} • ${jobLabel}. Live map routing hook coming next.`);
 }
 
 function normalizeWorkforceStatus(status){
@@ -16961,7 +16961,7 @@ function updateCommandHeader(user, projectName) {
     avatar.textContent = user.name.slice(0, 2).toUpperCase();
   }
   if (project) {
-    project.textContent = projectName || "â€” None â€”";
+    project.textContent = projectName || "— None —";
   }
   if (subtitle) {
     subtitle.textContent = "Field verification, documentation, and billing control";
@@ -17057,7 +17057,7 @@ function renderBoardMessages(messages) {
   }
   feed.innerHTML = messages.map((m) => `
     <div class="msg-item">
-      ${m.pinned ? '<div class="msg-pin">ðŸ“Œ Pinned</div>' : ""}
+      ${m.pinned ? '<div class="msg-pin">📌 Pinned</div>' : ""}
       <div class="msg-item-header">
         <span class="msg-author">${escapeHtml(String(m.user_name || "User"))}</span>
         <span class="msg-time">${escapeHtml(formatMsgTime(m.created_at))}</span>
@@ -17136,15 +17136,15 @@ function wxCodeToText(code) {
 }
 
 function wxCodeToEmoji(code) {
-  if (code === 0) return "â˜€ï¸";
-  if (code <= 2) return "â›…";
-  if (code === 3) return "â˜ï¸";
-  if (code <= 48) return "ðŸŒ«ï¸";
-  if (code <= 55) return "ðŸŒ¦ï¸";
-  if (code <= 65) return "ðŸŒ§ï¸";
-  if (code <= 77) return "â„ï¸";
-  if (code <= 82) return "ðŸŒ¨ï¸";
-  return "â›ˆï¸";
+  if (code === 0) return "☀️";
+  if (code <= 2) return "⛅";
+  if (code === 3) return "☁️";
+  if (code <= 48) return "🌫️";
+  if (code <= 55) return "🌦️";
+  if (code <= 65) return "🌧️";
+  if (code <= 77) return "❄️";
+  if (code <= 82) return "🌨️";
+  return "⛈️";
 }
 
 async function loadWeather(cityName, projectRef) {
@@ -17153,7 +17153,7 @@ async function loadWeather(cityName, projectRef) {
     const projectEl = $("wx-proj-ref");
     if (!locationEl || !projectEl) return;
     locationEl.textContent = cityName || "Project location";
-    projectEl.textContent = `Active project â€” ${projectRef || "Unknown"}`;
+    projectEl.textContent = `Active project — ${projectRef || "Unknown"}`;
     if (!cityName) return;
     const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1`);
     const geoData = await geoRes.json();
@@ -17171,7 +17171,7 @@ async function loadWeather(cityName, projectRef) {
     $("wx-precip").textContent = `${Number(c.precipitation || 0).toFixed(2)} in`;
     if (Number(c.windgusts_10m || 0) >= 35){
       $("wx-alert-wrap").style.display = "block";
-      $("wx-alert-text").textContent = `Wind Advisory â€” gusts up to ${Math.round(Number(c.windgusts_10m || 0))} mph. Aerial work not recommended.`;
+      $("wx-alert-text").textContent = `Wind Advisory — gusts up to ${Math.round(Number(c.windgusts_10m || 0))} mph. Aerial work not recommended.`;
     } else {
       $("wx-alert-wrap").style.display = "none";
     }
@@ -17181,7 +17181,7 @@ async function loadWeather(cityName, projectRef) {
       const time = Array.isArray(wx?.daily?.time) ? wx.daily.time : [];
       forecastEl.innerHTML = time.map((dateStr, i) => {
         const d = new Date(dateStr);
-        return `<div class="wx-day"><div class="wx-day-name">${days[d.getDay()]}</div><div style="font-size:18px;">${wxCodeToEmoji(Number(wx?.daily?.weathercode?.[i]))}</div><div class="wx-day-hi">${Math.round(Number(wx?.daily?.temperature_2m_max?.[i] || 0))}Â°</div><div class="wx-day-lo">${Math.round(Number(wx?.daily?.temperature_2m_min?.[i] || 0))}Â°</div></div>`;
+        return `<div class="wx-day"><div class="wx-day-name">${days[d.getDay()]}</div><div style="font-size:18px;">${wxCodeToEmoji(Number(wx?.daily?.weathercode?.[i]))}</div><div class="wx-day-hi">${Math.round(Number(wx?.daily?.temperature_2m_max?.[i] || 0))}°</div><div class="wx-day-lo">${Math.round(Number(wx?.daily?.temperature_2m_min?.[i] || 0))}°</div></div>`;
       }).join("");
     }
   } catch (e) {
@@ -18916,7 +18916,7 @@ async function createProject(){
         closeCreateProjectModal();
         closeProjectsModal();
         refreshLocations();
-        toast("Project already exists", "Project already exists â€” opened it.");
+        toast("Project already exists", "Project already exists — opened it.");
         await loadProjects();
         return;
       }
@@ -21322,8 +21322,8 @@ function renderSitePanel(){
       subtitle.textContent = t("noSiteSelected");
     } else {
       const when = site.created_at ? new Date(site.created_at).toLocaleString() : "-";
-      const pendingLabel = site.is_pending ? ` â€¢ ${t("siteStatusPending")}` : "";
-      subtitle.textContent = `${getSiteDisplayName(site)} â€¢ ${when}${pendingLabel}`;
+      const pendingLabel = site.is_pending ? ` • ${t("siteStatusPending")}` : "";
+      subtitle.textContent = `${getSiteDisplayName(site)} • ${when}${pendingLabel}`;
     }
   }
 
@@ -25495,11 +25495,11 @@ function renderInvoiceDeepLinkWelcomeOverlay(){
           </div>
           <div class="invoice-intro-tagline">
             <span>Field</span>
-            <span class="invoice-intro-dot">â€¢</span>
+            <span class="invoice-intro-dot">•</span>
             <span>Dispatch</span>
-            <span class="invoice-intro-dot">â€¢</span>
+            <span class="invoice-intro-dot">•</span>
             <span>Documentation</span>
-            <span class="invoice-intro-dot">â€¢</span>
+            <span class="invoice-intro-dot">•</span>
             <span>Billing</span>
           </div>
         </div>
@@ -25692,7 +25692,7 @@ function renderInvoiceNavSidebar() {
   const ksRows = (state.ksInvoices.records || []).map((row) => {
     const ref   = String(row?.id || row?.invoice_number || "").trim();
     const title = String(row?.invoice_number || row?.invoice_key || ref || "K&S").trim();
-    const sub   = [row?.node_name, row?.project_name].filter(Boolean).join(" Â· ") || "K&S invoice";
+    const sub   = [row?.node_name, row?.project_name].filter(Boolean).join(" · ") || "K&S invoice";
     const amt   = Number.isFinite(Number(row?.grand_total)) ? formatMoney(row.grand_total) : "";
     const status = String(row?.parse_status || "").toLowerCase();
     const pillClass = /partial/.test(status) ? "partial" : /ready/.test(status) ? "ready" : "draft";
@@ -25705,7 +25705,7 @@ function renderInvoiceNavSidebar() {
   const officeRows = (state.officeInvoices.records || []).map((row) => {
     const ref   = String(row?.invoice_number || row?.id || "").trim();
     const title = String(row?.invoice_number || row?.id || "Office").trim();
-    const sub   = [row?.company_creating_invoice, row?.location].filter(Boolean).join(" Â· ") || "Office invoice";
+    const sub   = [row?.company_creating_invoice, row?.location].filter(Boolean).join(" · ") || "Office invoice";
     const amt   = Number.isFinite(Number(row?.total)) ? formatMoney(row.total) : "";
     const status = String(row?.status || "Draft").toLowerCase();
     const pillClass = /ready/.test(status) ? "ready" : "draft";
@@ -25823,11 +25823,11 @@ function renderRuidosoBillingSummary(){
       <!-- Top bar -->
       <div style="background:#1a3a6b;color:#fff;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
         <div>
-          <div style="font-size:13px;font-weight:700;letter-spacing:.03em;">Ruidoso, NM â€” Fire Rebuild Billing Summary</div>
+          <div style="font-size:13px;font-weight:700;letter-spacing:.03em;">Ruidoso, NM — Fire Rebuild Billing Summary</div>
           <div style="font-size:11px;opacity:.65;margin-top:2px;">WBS: TC-241635027 &nbsp;|&nbsp; K &amp; S Electric &nbsp;|&nbsp; March 27, 2026</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <button type="button" data-office-action="ruidosoAddInvoice" style="background:#00b050;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:'Manrope',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">ï¼‹ Add Invoice</button>
+          <button type="button" data-office-action="ruidosoAddInvoice" style="background:#00b050;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:'Manrope',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">＋ Add Invoice</button>
           <button type="button" data-office-action="ruidosoUploadInvoice" style="background:#0ea5e9;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:'Manrope',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">Upload Invoice</button>
           <button onclick="document.getElementById('btnMenuOpenRedline')?.click()" style="background:#e63946;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-family:'Manrope',sans-serif;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(230,57,70,.35);">
             <span style="width:8px;height:8px;background:#fff;border-radius:50%;display:inline-block;animation:bs-pulse 1.4s ease-in-out infinite;"></span>
@@ -25846,12 +25846,12 @@ function renderRuidosoBillingSummary(){
         <div style="background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.15);border-radius:9px;padding:11px 14px;color:#fff;">
           <div style="font-size:10px;font-weight:600;opacity:.6;letter-spacing:.07em;text-transform:uppercase;">K&amp;S Paid</div>
           <div style="font-size:20px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums;color:#4ade80;">${fmt(KS_PAID)}</div>
-          <div style="font-size:10px;opacity:.5;margin-top:2px;">${paid.length} invoice${paid.length!==1?"s":""} Â· confirmed</div>
+          <div style="font-size:10px;opacity:.5;margin-top:2px;">${paid.length} invoice${paid.length!==1?"s":""} · confirmed</div>
         </div>
         <div style="background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.15);border-radius:9px;padding:11px 14px;color:#fff;">
           <div style="font-size:10px;font-weight:600;opacity:.6;letter-spacing:.07em;text-transform:uppercase;">Balance Owed</div>
           <div style="font-size:20px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums;color:#f87171;">${fmt(BALANCE)}</div>
-          <div style="font-size:10px;opacity:.5;margin-top:2px;">${unpaid.length} invoice${unpaid.length!==1?"s":""} Â· pending</div>
+          <div style="font-size:10px;opacity:.5;margin-top:2px;">${unpaid.length} invoice${unpaid.length!==1?"s":""} · pending</div>
         </div>
       </div>
 
@@ -25860,8 +25860,8 @@ function renderRuidosoBillingSummary(){
 
         <!-- Paid -->
         <div style="display:flex;align-items:center;gap:8px;padding:14px 0 8px;font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#166534;">
-          âœ… Paid Invoices
-          <span style="padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:#dcfce7;color:#166534;">${paid.length} invoice${paid.length!==1?"s":""} Â· ${fmt(paidTotal)}</span>
+          ✅ Paid Invoices
+          <span style="padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:#dcfce7;color:#166534;">${paid.length} invoice${paid.length!==1?"s":""} · ${fmt(paidTotal)}</span>
         </div>
         <div style="border-radius:9px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);">
           <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
@@ -25872,8 +25872,8 @@ function renderRuidosoBillingSummary(){
 
         <!-- Unpaid -->
         <div style="display:flex;align-items:center;gap:8px;padding:14px 0 8px;font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#991b1b;">
-          âš ï¸ Outstanding Invoices
-          <span style="padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b;">${unpaid.length} invoice${unpaid.length!==1?"s":""} Â· ${fmt(unpaidTotal)} due</span>
+          ⚠️ Outstanding Invoices
+          <span style="padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b;">${unpaid.length} invoice${unpaid.length!==1?"s":""} · ${fmt(unpaidTotal)} due</span>
         </div>
         <div style="border-radius:9px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);">
           <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
@@ -25909,7 +25909,7 @@ function openRuidosoInvoiceModal(mode, targetId = null){
   overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;font-family:'Manrope',sans-serif;";
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:12px;padding:28px 30px;width:440px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.4);position:relative;">
-      <button type="button" id="ruidosoModalClose" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:22px;cursor:pointer;color:#666;">Ã—</button>
+      <button type="button" id="ruidosoModalClose" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:22px;cursor:pointer;color:#666;">×</button>
       <h2 style="font-size:15px;font-weight:800;color:#1a3a6b;margin-bottom:18px;">${mode==="replace"?"Edit Invoice: "+escapeHtml(targetId||""):"Add Invoice"}</h2>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div style="display:flex;flex-direction:column;gap:4px;">
@@ -25943,21 +25943,21 @@ function openRuidosoInvoiceModal(mode, targetId = null){
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:#555;">Upload Invoice File (optional)</label>
           <label style="display:flex;align-items:center;gap:8px;border:2px dashed #0070c0;border-radius:6px;padding:10px 14px;cursor:pointer;background:#f0f7ff;">
             <input id="ri_file" type="file" accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg" style="display:none;">
-            <span style="font-size:20px;">ðŸ“Ž</span>
+            <span style="font-size:20px;">📎</span>
             <span id="ri_file_label" style="font-size:12px;color:#0070c0;font-weight:600;">Click to attach file</span>
           </label>
         </div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
         <button type="button" id="ruidosoModalCancel" style="background:#eee;color:#333;border:none;border-radius:6px;padding:8px 18px;font-size:13px;cursor:pointer;font-family:'Manrope',sans-serif;">Cancel</button>
-        <button type="button" id="ruidosoModalSave"   style="background:#1a3a6b;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif;">ðŸ’¾ Save Invoice</button>
+        <button type="button" id="ruidosoModalSave"   style="background:#1a3a6b;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif;">💾 Save Invoice</button>
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
   overlay.querySelector("#ri_file").addEventListener("change", (e) => {
     const f = e.target.files?.[0];
-    overlay.querySelector("#ri_file_label").textContent = f ? "ðŸ“„ " + f.name : "Click to attach file";
+    overlay.querySelector("#ri_file_label").textContent = f ? "📄 " + f.name : "Click to attach file";
   });
   overlay.querySelector("#ruidosoModalClose").addEventListener("click",  closeRuidosoInvoiceModal);
   overlay.querySelector("#ruidosoModalCancel").addEventListener("click", closeRuidosoInvoiceModal);
@@ -27734,7 +27734,7 @@ function renderWarehouseScanView(){
   if (status){
     const modeLabel = state.warehouseScan.mode === "out" ? "Scan Out mode (-1)" : "Scan In mode (+1)";
     status.textContent = state.warehouseScan.lastScannedValue
-      ? `Last scan: ${state.warehouseScan.lastScannedValue} â€¢ ${modeLabel}`
+      ? `Last scan: ${state.warehouseScan.lastScannedValue} • ${modeLabel}`
       : `Ready to scan. ${modeLabel}`;
   }
   renderWarehouseModeUi();
@@ -28083,7 +28083,7 @@ function renderDemoShowcaseHome(){
           <div class="cmd-role" id="cmd-role">Field verification, documentation, and billing control</div>
           <div class="cmd-project" id="cmd-project">
             <span class="cmd-proj-label">Active Project</span>
-            <span class="cmd-proj-badge" id="cmd-proj-badge">â€” None â€”</span>
+            <span class="cmd-proj-badge" id="cmd-proj-badge">— None —</span>
           </div>
         </div>
       </div>
@@ -28166,7 +28166,7 @@ function renderDemoShowcaseHome(){
             </div>
           </div>
           <div style="text-align:right;">
-            <div><span class="wx-temp" id="wx-temp">--</span><span class="wx-unit">Â°F</span></div>
+            <div><span class="wx-temp" id="wx-temp">--</span><span class="wx-unit">°F</span></div>
             <div class="wx-condition" id="wx-condition">Fetching weather...</div>
           </div>
         </div>
@@ -30218,4 +30218,874 @@ function wireUI(){
   const menuBtn = $("btnMenu");
   const togglePlacesDrawer = () => {
     if (!isMapViewActive()){
-      setActiveVi
+      setActiveView("viewMap");
+    }
+    setDrawerOpen(state.map.drawerOpen === false);
+    if (state.map.drawerOpen !== false && !["data", "legend"].includes(state.map.drawerTab)){
+      setDrawerTab("data", { open: true });
+    }
+  };
+  if (menuBtn){
+    menuBtn.addEventListener("click", () => openMenuModal());
+  }
+  const mapSidebarToggleBtn = $("mapSidebarToggle");
+  if (mapSidebarToggleBtn){
+    mapSidebarToggleBtn.addEventListener("click", togglePlacesDrawer);
+  }
+  const placesHideBtn = $("btnPlacesHide");
+  if (placesHideBtn){
+    placesHideBtn.addEventListener("click", () => setDrawerOpen(false));
+  }
+  // Mobile sidebar backdrop — tap outside to close
+  const sidebarBackdrop = document.createElement("div");
+  sidebarBackdrop.id = "gisSidebarBackdrop";
+  sidebarBackdrop.style.cssText = "position:fixed;inset:0;z-index:3998;display:none;";
+  sidebarBackdrop.addEventListener("click", () => setDrawerOpen(false));
+  document.body.appendChild(sidebarBackdrop);
+  const _origSetDrawerOpen = window.setDrawerOpen;
+  window.__updateSidebarBackdrop = function(open){
+    sidebarBackdrop.style.display = (open && isMobileViewport()) ? "block" : "none";
+  };
+  const layersHideBtn = $("btnLayersHide");
+  if (layersHideBtn){
+    layersHideBtn.addEventListener("click", () => setLayersPanelOpen(false));
+  }
+  const layersShowBtn = $("btnLayersShow");
+  if (layersShowBtn){
+    layersShowBtn.addEventListener("click", () => setLayersPanelOpen(true));
+  }
+  const menuCloseBtn = $("btnMenuClose");
+  if (menuCloseBtn){
+    menuCloseBtn.addEventListener("click", () => closeMenuModal());
+  }
+  const menuMessagesBtn = $("btnMenuMessages");
+  if (menuMessagesBtn){
+    menuMessagesBtn.addEventListener("click", () => {
+      closeMenuModal();
+      openDemoFeature("messages");
+    });
+  }
+  const menuOpenRedlineBtn = $("btnMenuOpenRedline");
+  if (menuOpenRedlineBtn){
+    menuOpenRedlineBtn.addEventListener("click", () => {
+      void launchRedlineFromMenu();
+    });
+  }
+  const menuAddSpliceDetailsBtn = $("btnMenuAddSpliceDetails");
+  if (menuAddSpliceDetailsBtn){
+    menuAddSpliceDetailsBtn.addEventListener("click", async () => {
+      closeMenuModal();
+      if (!isMapViewActive()){
+        setActiveView("viewMap");
+      }
+      const siteId = await openOrCreateSpliceAtCurrentLocation({ center: true, hidePanel: true });
+      if (siteId){
+        toast("Splice ready", "Location pin opened. Add photos, codes, material, and notes.");
+      }
+    });
+  }
+  const menuSignOutBtn = $("btnMenuSignOut");
+  if (menuSignOutBtn){
+    menuSignOutBtn.addEventListener("click", async () => {
+      closeMenuModal();
+      await SpecCom.helpers.handleSignOut();
+    });
+  }
+  const menuSignInBtn = $("btnMenuSignIn");
+  if (menuSignInBtn){
+    menuSignInBtn.addEventListener("click", () => {
+      openSignInUi("menu");
+    });
+  }
+  const grantAccessBtn = $("btnGrantProjectAccess");
+  if (grantAccessBtn){
+    grantAccessBtn.addEventListener("click", () => {
+      closeMenuModal();
+      openGrantAccessModal();
+    });
+  }
+  const importPriceBtn = $("btnImportPriceSheet");
+  if (importPriceBtn){
+    importPriceBtn.addEventListener("click", () => {
+      closeMenuModal();
+      openPriceSheetModal();
+    });
+  }
+  const stakingProjectBtn = $("btnCreateProjectFromStaking");
+  if (stakingProjectBtn){
+    stakingProjectBtn.addEventListener("click", () => {
+      closeMenuModal();
+      openStakingProjectModal();
+    });
+  }
+  const testResultsBtn = $("btnImportTestResults");
+  if (testResultsBtn){
+    testResultsBtn.addEventListener("click", () => {
+      closeMenuModal();
+      openTestResultsModal();
+    });
+  }
+  document.querySelectorAll(".menu-link").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const viewId = btn.dataset.view;
+      if (!viewId) return;
+      if (!isViewAllowed(viewId)) return;
+      setActiveView(viewId);
+      closeMenuModal();
+    });
+  });
+  document.querySelectorAll("#menuModal .segmented-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const lang = btn.getAttribute("data-lang") || "en";
+      savePreferredLanguage(lang);
+      refreshLanguageSensitiveUI();
+      syncMenuLanguageToggle();
+    });
+  });
+
+  const createProjectCancelBtn = $("btnCreateProjectCancel");
+  if (createProjectCancelBtn){
+    createProjectCancelBtn.addEventListener("click", () => closeCreateProjectModal());
+  }
+  const createProjectSaveBtn = $("btnCreateProjectSave");
+  if (createProjectSaveBtn){
+    createProjectSaveBtn.addEventListener("click", () => createProject());
+  }
+  const deleteProjectCancelBtn = $("btnDeleteProjectCancel");
+  if (deleteProjectCancelBtn){
+    deleteProjectCancelBtn.addEventListener("click", () => closeDeleteProjectModal());
+  }
+  const deleteProjectConfirmBtn = $("btnDeleteProjectConfirm");
+  if (deleteProjectConfirmBtn){
+    deleteProjectConfirmBtn.addEventListener("click", () => deleteProject());
+  }
+  const dprProjectSelect = $("dprProjectSelect");
+  if (dprProjectSelect){
+    dprProjectSelect.addEventListener("change", () => loadDailyProgressReport());
+  }
+  const dprDate = $("dprDate");
+  if (dprDate){
+    if (!dprDate.value) dprDate.value = getTodayDate();
+    state.dpr.reportDate = dprDate.value;
+    dprDate.addEventListener("change", () => loadDailyProgressReport());
+  }
+  const dprRefreshBtn = $("btnDprRefresh");
+  if (dprRefreshBtn){
+    dprRefreshBtn.addEventListener("click", () => generateDailyProgressReport());
+  }
+  const dprSaveBtn = $("btnDprSave");
+  if (dprSaveBtn){
+    dprSaveBtn.addEventListener("click", () => saveDailyProgressComments());
+  }
+  const languageSelect = $("languageSelect");
+  if (languageSelect){
+    languageSelect.addEventListener("change", (e) => {
+      setPreferredLanguage(e.target.value);
+      refreshLanguageSensitiveUI();
+    });
+  }
+  const languageSelectTop = $("languageSelectTop");
+  if (languageSelectTop){
+    languageSelectTop.addEventListener("change", (e) => {
+      setPreferredLanguage(e.target.value);
+      refreshLanguageSensitiveUI();
+    });
+  }
+  const languageSelectMenu = $("languageSelectMenu");
+  if (languageSelectMenu){
+    languageSelectMenu.addEventListener("change", (e) => {
+      setPreferredLanguage(e.target.value);
+      refreshLanguageSensitiveUI();
+    });
+  }
+  const saveLanguageBtn = $("btnSaveLanguage");
+  if (saveLanguageBtn){
+    saveLanguageBtn.addEventListener("click", () => {
+      savePreferredLanguage($("languageSelect")?.value || "en");
+    });
+  }
+  const profileLanguageBtn = $("btnSaveProfileLanguage");
+  if (profileLanguageBtn){
+    profileLanguageBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const value = $("profileLanguageSelect")?.value || "en";
+      state.profileSetupDismissed = true;
+      showProfileSetupModal(false);
+      profileLanguageBtn.disabled = true;
+      try{
+        await savePreferredLanguage(value, { closeModal: true });
+      } finally {
+        profileLanguageBtn.disabled = false;
+      }
+      if (!hasPreferredLanguageChoice()){
+        state.profileSetupDismissed = false;
+        showProfileSetupModal(true);
+      }
+    });
+  }
+  const mapActiveOnly = $("mapActiveOnly");
+  if (mapActiveOnly){
+    mapActiveOnly.addEventListener("change", (e) => {
+      state.mapFilters.activeOnly = e.target.checked;
+      refreshLocations();
+    });
+  }
+  const mapSearch = $("mapSearch");
+  if (mapSearch){
+    mapSearch.addEventListener("input", (e) => {
+      state.mapFilters.search = e.target.value || "";
+      scheduleLocationSearchRefresh({ syncMap: true });
+    });
+    mapSearch.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      focusFirstSearchResult();
+    });
+  }
+  const clearMapSearchBtn = $("btnClearMapSearch");
+  if (clearMapSearchBtn){
+    clearMapSearchBtn.addEventListener("click", () => clearLocationSearch());
+  }
+  registerMapUiBindings();
+  const dropPinBtn = $("btnDropPin");
+  if (dropPinBtn){
+    dropPinBtn.addEventListener("click", () => dropPin());
+  }
+  const useMyLocationBtn = $("btnMapUseMyLocation");
+  if (useMyLocationBtn){
+    useMyLocationBtn.addEventListener("click", async () => {
+      const siteId = await openOrCreateSpliceAtCurrentLocation({ center: true, hidePanel: true });
+      if (siteId){
+        toast("Splice ready", "Location pin opened. Add photos, codes, material, and notes.");
+      }
+    });
+  }
+  const mapFieldHideBtn = $("btnMapFieldHide");
+  if (mapFieldHideBtn){
+    mapFieldHideBtn.addEventListener("click", () => setMapFieldPanelVisible(false));
+  }
+  const mapFieldShowBtn = $("btnMapFieldShow");
+  if (mapFieldShowBtn){
+    mapFieldShowBtn.addEventListener("click", () => setMapFieldPanelVisible(true));
+  }
+  ["btnMapFieldCreateClose", "btnMapFieldDismissCreate", "btnMapFieldCancelCreate"].forEach((id) => {
+    const btn = $(id);
+    if (!btn) return;
+    ["pointerdown", "click"].forEach((evt) => {
+      btn.addEventListener(evt, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setMapFieldCreateOpen(false);
+      });
+    });
+  });
+  document.addEventListener("pointerdown", (e) => {
+    const closeBtn = e.target?.closest?.("#btnMapFieldCreateClose, #btnMapFieldDismissCreate, #btnMapFieldCancelCreate");
+    if (!closeBtn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setMapFieldCreateOpen(false);
+  }, true);
+  const mapFieldPanel = $("mapFieldPanel");
+  if (mapFieldPanel){
+    mapFieldPanel.addEventListener("click", async (e) => {
+      const actionBtn = e.target.closest("[data-map-field-action]");
+      if (actionBtn){
+        const action = String(actionBtn.dataset.mapFieldAction || "");
+        const siteId = actionBtn.dataset.siteId;
+        if (!siteId) return;
+        if (action === "open"){
+          await openLocationForField(siteId, { center: true, forAdd: false });
+          return;
+        }
+        if (action === "note"){
+          await openLocationForField(siteId, { center: false, forAdd: true });
+          const noteInput = $("siteNotesInput");
+          if (noteInput){
+            noteInput.focus();
+          } else {
+            toast("Location opened", "Add note in location details.");
+          }
+          return;
+        }
+        if (action === "photo"){
+          await openLocationForField(siteId, { center: false, forAdd: true });
+          const mediaInput = $("siteMediaInput");
+          if (mediaInput){
+            mediaInput.click();
+          } else {
+            toast("Location opened", "Add photo in location details.");
+          }
+          return;
+        }
+        if (action === "complete"){
+          setSiteWorkflowStatus(siteId, MAP_FIELD_STATUS.COMPLETE);
+          toast("Status updated", "Location marked complete.");
+        }
+        return;
+      }
+      const id = e.target?.id;
+      if (id === "btnMapCaptureLocation"){
+        await requestMapCurrentLocation({ center: true, silent: false });
+        return;
+      }
+      if (id === "btnMapOpenNearbyLocation"){
+        if (state.map.nearestSiteId){
+          await openLocationForField(state.map.nearestSiteId, { center: true, forAdd: false });
+        }
+        return;
+      }
+      if (id === "btnMapAddToNearbyLocation"){
+        if (state.map.nearestSiteId){
+          await openLocationForField(state.map.nearestSiteId, { center: true, forAdd: true });
+        }
+        return;
+      }
+      if (id === "btnMapShowCreateLocation"){
+        if (Date.now() < Number(state.map.fieldCreateRecentlyClosedUntil || 0)) return;
+        setMapFieldCreateOpen(true);
+        return;
+      }
+      if (id === "btnMapFieldCancelCreate"){
+        setMapFieldCreateOpen(false);
+        return;
+      }
+      if (id === "btnMapFieldDismissCreate"){
+        setMapFieldCreateOpen(false);
+        return;
+      }
+      if (id === "btnMapFieldCreateClose"){
+        setMapFieldCreateOpen(false);
+        return;
+      }
+      if (id === "btnMapFieldCreateLocation"){
+        await createFieldLocationFromCurrentGps();
+      }
+    });
+    mapFieldPanel.addEventListener("change", (e) => {
+      const select = e.target.closest("#mapFieldStatusSelect");
+      if (!select) return;
+      const siteId = select.dataset.siteId;
+      if (!siteId) return;
+      setSiteWorkflowStatus(siteId, select.value);
+    });
+  }
+  const mapCanvas = $("mapCanvas");
+  if (mapCanvas){
+    mapCanvas.addEventListener("click", (e) => {
+      const createWrap = $("mapFieldCreateWrap");
+      if (!createWrap || createWrap.hidden) return;
+      if (e.target.closest("#mapFieldCreateWrap")) return;
+      setMapFieldCreateOpen(false);
+    });
+  }
+  const importLocationsBtn = $("btnImportLocations");
+  const importLocationsInput = $("importLocationsInput");
+  if (importLocationsBtn && importLocationsInput){
+    importLocationsBtn.addEventListener("click", () => {
+      importLocationsInput.click();
+    });
+    importLocationsInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0] || null;
+      await handleLocationImport(file);
+      e.target.value = "";
+    });
+  }
+  const invoiceAgentBtn = $("btnInvoiceAgent");
+  if (invoiceAgentBtn){
+    invoiceAgentBtn.addEventListener("click", () => SpecCom.helpers.openInvoiceAgentModal());
+  }
+  const siteList = $("siteList");
+  if (siteList){
+    siteList.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-site-id]");
+      if (!btn) return;
+      const siteId = btn.dataset.siteId;
+      dlog("siteList click", { siteId });
+      await setActiveSite(siteId);
+      focusSiteOnMap(siteId);
+    });
+  }
+  const closePanelBtn = $("btnCloseSitePanel");
+  if (closePanelBtn){
+    closePanelBtn.addEventListener("click", () => closeSitePanel());
+  }
+  const importCloseBtn = $("btnImportLocationsClose");
+  if (importCloseBtn){
+    importCloseBtn.addEventListener("click", () => closeImportLocationsModal());
+  }
+  const importCancelBtn = $("btnImportLocationsCancel");
+  if (importCancelBtn){
+    importCancelBtn.addEventListener("click", () => closeImportLocationsModal());
+  }
+  const importConfirmBtn = $("btnImportLocationsConfirm");
+  if (importConfirmBtn){
+    importConfirmBtn.addEventListener("click", () => confirmImportLocations());
+  }
+  const importTemplateBtn = $("btnImportLocationsTemplate");
+  if (importTemplateBtn){
+    importTemplateBtn.addEventListener("click", () => downloadLocationImportTemplate());
+  }
+  const importBillingTemplateBtn = $("btnImportBillingTemplate");
+  if (importBillingTemplateBtn){
+    importBillingTemplateBtn.addEventListener("click", () => downloadBillingCsvTemplate());
+  }
+  const importErrorsBtn = $("btnImportLocationsErrors");
+  if (importErrorsBtn){
+    importErrorsBtn.addEventListener("click", () => downloadLocationImportErrorReport());
+  }
+  const grantAccessCloseBtn = $("btnGrantAccessClose");
+  if (grantAccessCloseBtn){
+    grantAccessCloseBtn.addEventListener("click", () => closeGrantAccessModal());
+  }
+  const grantAccessCancelBtn = $("btnGrantAccessCancel");
+  if (grantAccessCancelBtn){
+    grantAccessCancelBtn.addEventListener("click", () => closeGrantAccessModal());
+  }
+  const grantAccessConfirmBtn = $("btnGrantAccessConfirm");
+  if (grantAccessConfirmBtn){
+    grantAccessConfirmBtn.addEventListener("click", () => confirmGrantAccess());
+  }
+  const priceSheetCloseBtn = $("btnPriceSheetClose");
+  if (priceSheetCloseBtn){
+    priceSheetCloseBtn.addEventListener("click", () => closePriceSheetModal());
+  }
+  const priceSheetCancelBtn = $("btnPriceSheetCancel");
+  if (priceSheetCancelBtn){
+    priceSheetCancelBtn.addEventListener("click", () => closePriceSheetModal());
+  }
+  const priceSheetConfirmBtn = $("btnPriceSheetConfirm");
+  if (priceSheetConfirmBtn){
+    priceSheetConfirmBtn.addEventListener("click", () => confirmImportPriceSheet());
+  }
+  const stakingProjectCloseBtn = $("btnStakingProjectClose");
+  if (stakingProjectCloseBtn){
+    stakingProjectCloseBtn.addEventListener("click", () => closeStakingProjectModal());
+  }
+  const stakingProjectCancelBtn = $("btnStakingProjectCancel");
+  if (stakingProjectCancelBtn){
+    stakingProjectCancelBtn.addEventListener("click", () => closeStakingProjectModal());
+  }
+  const stakingProjectConfirmBtn = $("btnStakingProjectConfirm");
+  if (stakingProjectConfirmBtn){
+    stakingProjectConfirmBtn.addEventListener("click", () => confirmCreateProjectFromStaking());
+  }
+  const testResultsCloseBtn = $("btnTestResultsClose");
+  if (testResultsCloseBtn){
+    testResultsCloseBtn.addEventListener("click", () => closeTestResultsModal());
+  }
+  const testResultsCancelBtn = $("btnTestResultsCancel");
+  if (testResultsCancelBtn){
+    testResultsCancelBtn.addEventListener("click", () => closeTestResultsModal());
+  }
+  const testResultsConfirmBtn = $("btnTestResultsConfirm");
+  if (testResultsConfirmBtn){
+    testResultsConfirmBtn.addEventListener("click", () => confirmImportTestResults());
+  }
+  const invoiceAgentCloseBtn = $("btnInvoiceAgentClose");
+  if (invoiceAgentCloseBtn){
+    invoiceAgentCloseBtn.addEventListener("click", () => SpecCom.helpers.closeInvoiceAgentModal());
+  }
+  const invoiceAgentCancelBtn = $("btnInvoiceAgentCancel");
+  if (invoiceAgentCancelBtn){
+    invoiceAgentCancelBtn.addEventListener("click", () => SpecCom.helpers.closeInvoiceAgentModal());
+  }
+  const invoiceAgentConfirmBtn = $("btnInvoiceAgentConfirm");
+  if (invoiceAgentConfirmBtn){
+    invoiceAgentConfirmBtn.addEventListener("click", () => SpecCom.helpers.confirmInvoiceAgentGenerate());
+  }
+  const invoiceImportBtn = $("btnInvoiceImport");
+  const invoiceImportInput = $("invoiceImportInput");
+  if (invoiceImportBtn && invoiceImportInput){
+    invoiceImportBtn.addEventListener("click", () => invoiceImportInput.click());
+    invoiceImportInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0] || null;
+      try{
+        const rows = await SpecCom.helpers.parseInvoiceSpreadsheet(file);
+        const { preview, missing } = SpecCom.helpers.prepareInvoiceImportPreview(rows);
+        state.invoiceAgent.importPreview = { preview, missing };
+        SpecCom.helpers.renderInvoiceImportPreview();
+      } catch (err){
+        console.error(err);
+        toast("Import failed", err.message || "Import failed.");
+      } finally {
+        e.target.value = "";
+      }
+    });
+  }
+  const invoiceImportExport = $("btnInvoiceImportExport");
+  if (invoiceImportExport){
+    invoiceImportExport.addEventListener("click", () => SpecCom.helpers.exportInvoiceImportCsv());
+  }
+  const invoiceImportApply = $("btnInvoiceImportApply");
+  if (invoiceImportApply){
+    invoiceImportApply.addEventListener("click", async () => {
+      await SpecCom.helpers.applyInvoiceImport();
+    });
+  }
+  const invoiceAgentSelectAll = $("invoiceAgentSelectAll");
+  if (invoiceAgentSelectAll){
+    invoiceAgentSelectAll.addEventListener("change", (e) => {
+      const eligible = state.invoiceAgent.candidates.filter(c => c.eligible).map(c => c.id);
+      state.invoiceAgent.selectedIds = e.target.checked ? eligible : [];
+      SpecCom.helpers.renderInvoiceAgentModal();
+    });
+  }
+  const invoiceAgentFromOrg = $("invoiceAgentFromOrg");
+  if (invoiceAgentFromOrg){
+    invoiceAgentFromOrg.addEventListener("change", () => SpecCom.helpers.renderInvoiceAgentModal());
+  }
+  const invoiceAgentToOrg = $("invoiceAgentToOrg");
+  if (invoiceAgentToOrg){
+    invoiceAgentToOrg.addEventListener("change", () => SpecCom.helpers.renderInvoiceAgentModal());
+  }
+  const invoiceAgentAllowDuplicates = $("invoiceAgentAllowDuplicates");
+  if (invoiceAgentAllowDuplicates){
+    invoiceAgentAllowDuplicates.addEventListener("change", (e) => {
+      state.invoiceAgent.allowDuplicates = e.target.checked;
+    });
+  }
+  const invoiceAgentList = $("invoiceAgentList");
+  if (invoiceAgentList){
+    invoiceAgentList.addEventListener("change", (e) => {
+      const checkbox = e.target.closest("input[type='checkbox'][data-site-id]");
+      if (!checkbox) return;
+      const siteId = checkbox.dataset.siteId;
+      if (!siteId) return;
+      if (checkbox.checked){
+        if (!state.invoiceAgent.selectedIds.includes(siteId)){
+          state.invoiceAgent.selectedIds.push(siteId);
+        }
+      } else {
+        state.invoiceAgent.selectedIds = state.invoiceAgent.selectedIds.filter(id => id !== siteId);
+      }
+      SpecCom.helpers.renderInvoiceAgentModal();
+    });
+  }
+  const invoiceAgentResults = $("invoiceAgentResults");
+  if (invoiceAgentResults){
+    invoiceAgentResults.addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-action]");
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const invoiceId = btn.dataset.invoiceId;
+      const siteId = btn.dataset.siteId;
+      if (!invoiceId) return;
+      try{
+        const { invoice, items } = await SpecCom.helpers.loadInvoiceAgentExportData(invoiceId);
+        const site = state.invoiceAgent.siteMap.get(siteId) || null;
+        if (action === "invoiceAgentExportCsv"){
+          const csv = SpecCom.helpers.exportInvoiceAgentCsvPayload(invoice, site, items);
+          downloadFile(`invoice-${invoice.invoice_number || invoice.id}.csv`, csv, "text/csv");
+        }
+        if (action === "invoiceAgentExportPdf"){
+          SpecCom.helpers.printInvoiceAgentPayload(invoice, site, items);
+        }
+      } catch (err){
+        console.error(err);
+        toast("Export failed", err.message || "Unable to export invoice.");
+      }
+    });
+  }
+  const siteMediaInput = $("siteMediaInput");
+  if (siteMediaInput){
+    siteMediaInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0] || null;
+      await addSiteMedia(file);
+      e.target.value = "";
+    });
+  }
+  const saveSiteNameBtn = $("btnSaveSiteName");
+  if (saveSiteNameBtn){
+    saveSiteNameBtn.addEventListener("click", () => saveSiteName());
+  }
+  const saveCodesBtn = $("btnSaveCodes");
+  if (saveCodesBtn){
+    saveCodesBtn.addEventListener("click", () => saveSiteCodes());
+  }
+  const addEntryBtn = $("btnAddEntry");
+  if (addEntryBtn){
+    addEntryBtn.addEventListener("click", () => addSiteEntry());
+  }
+  const saveNotesBtn = $("btnSaveNotes");
+  if (saveNotesBtn){
+    saveNotesBtn.addEventListener("click", () => saveSiteNotes());
+  }
+  const btnAddLocation = $("btnAddLocation");
+  if (btnAddLocation){
+    btnAddLocation.addEventListener("click", () => addSpliceLocation());
+  }
+
+  const startCameraBtn = $("btnStartCamera");
+  if (startCameraBtn){
+    startCameraBtn.addEventListener("click", () => startCamera());
+  }
+  const startCameraNodesBtn = $("btnStartCameraNodes");
+  if (startCameraNodesBtn){
+    startCameraNodesBtn.addEventListener("click", () => startCamera());
+  }
+
+  const photoBtn = $("btnCapturePhoto");
+  if (photoBtn){
+    photoBtn.addEventListener("click", () => captureUsageProof());
+  }
+
+  const backfillPortInput = $("backfillPortInput");
+  if (backfillPortInput){
+    backfillPortInput.addEventListener("change", async (e) => {
+      await handleBackfillPhotoUpload("port_test", e.target.files?.[0] || null);
+      e.target.value = "";
+    });
+  }
+  const backfillSpliceInput = $("backfillSpliceInput");
+  if (backfillSpliceInput){
+    backfillSpliceInput.addEventListener("change", async (e) => {
+      await handleBackfillPhotoUpload("splice_complete", e.target.files?.[0] || null);
+      e.target.value = "";
+    });
+  }
+
+  const btnMarkNodeReady = $("btnMarkNodeReady");
+  if (btnMarkNodeReady){
+    btnMarkNodeReady.addEventListener("click", () => markNodeReady());
+  }
+  const btnCreateInvoice = $("btnCreateInvoice");
+  if (btnCreateInvoice){
+    btnCreateInvoice.addEventListener("click", () => createInvoice());
+  }
+  const btnToggleSidebar = document.getElementById("btnToggleInvoiceSidebar");
+  if (btnToggleSidebar) {
+    btnToggleSidebar.addEventListener("click", () => {
+      const sidebar = document.getElementById("invoiceNavSidebar");
+      if (sidebar) sidebar.classList.toggle("collapsed");
+    });
+  }
+
+  const invoiceNavSearch = document.getElementById("invoiceNavSearch");
+  if (invoiceNavSearch) {
+    invoiceNavSearch.addEventListener("input", () => {
+      renderInvoiceNavSidebar();
+    });
+  }
+  const invoiceNavList = document.getElementById("invoiceNavList");
+  if (invoiceNavList) {
+    invoiceNavList.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-office-action]");
+      if (!btn) return;
+      const action = String(btn.dataset.officeAction || "");
+      const invoiceNumber = String(btn.dataset.officeInvoiceNumber || "");
+      if (action === "openKsInvoice"){
+        openOfficeInvoiceByRouteRef(invoiceNumber, { syncUrl: true });
+      } else if (action === "openInvoiceDeepLink"){
+        openOfficeInvoiceByNumber(invoiceNumber, { syncUrl: true });
+      }
+    });
+  }
+  const invoicePanel = $("invoicePanel");
+  if (invoicePanel){
+    invoicePanel.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-office-action]");
+      if (!btn){
+        const row = e.target.closest("tr[data-ruidoso-id]");
+        const rid = String(row?.dataset?.ruidosoId || "");
+        if (rid){
+          openRuidosoInvoiceModal("replace", rid);
+        }
+        return;
+      }
+      const action = String(btn.dataset.officeAction || "");
+      const invoiceId = String(btn.dataset.officeInvoiceId || "");
+      const invoiceNumber = String(btn.dataset.officeInvoiceNumber || "");
+      const lineId = String(btn.dataset.officeLineId || "");
+      if (action === "createInvoice"){
+        createOfficeInvoiceDraft();
+        return;
+      }
+      if (action === "openInvoiceDeepLink"){
+        openOfficeInvoiceByNumber(invoiceNumber, { syncUrl: true });
+        return;
+      }
+      if (action === "openKsInvoice"){
+        openOfficeInvoiceByRouteRef(invoiceNumber, { syncUrl: true });
+        return;
+      }
+      if (action === "openInvoice"){
+        openOfficeInvoiceDraft(invoiceId);
+        return;
+      }
+      if (action === "deleteInvoice"){
+        deleteOfficeInvoiceRecord(invoiceId);
+        return;
+      }
+      if (action === "backToInvoiceList"){
+        closeOfficeInvoiceDeepLink({ syncUrl: true });
+        return;
+      }
+      if (action === "copyKsInvoiceLink"){
+        copyKsInvoiceLink(invoiceNumber);
+        return;
+      }
+      if (action === "continueToPendingInvoiceOpen"){
+        continueToPendingInvoiceOpen();
+        return;
+      }
+      if (action === "skipPendingInvoiceOpen"){
+        skipPendingInvoiceOpen();
+        return;
+      }
+      if (action === "cancelPendingInvoiceOpen"){
+        cancelPendingInvoiceOpen();
+        return;
+      }
+      if (action === "resolveOrgContext"){
+        void initializeOrgContext({ attemptRepair: true });
+        openProjectsModal();
+        return;
+      }
+      if (action === "retryPendingInvoiceImport"){
+        if (!state.ksInvoices.pendingImportFile){
+          toast("No pending import", "Choose a ZIP file first.", "error");
+          return;
+        }
+        void handleKsInvoiceZipImport(state.ksInvoices.pendingImportFile);
+        return;
+      }
+      if (action === "addLineItem"){
+        addOfficeInvoiceLineItem();
+        return;
+      }
+      if (action === "removeLineItem"){
+        removeOfficeInvoiceLineItem(lineId);
+        return;
+      }
+      if (action === "saveDraft"){
+        saveOfficeInvoiceWithStatus("Draft");
+        return;
+      }
+      if (action === "readyForBilling"){
+        saveOfficeInvoiceWithStatus("Ready for Billing");
+        return;
+      }
+      if (action === "cancelDraft"){
+        state.officeInvoices.draft = null;
+        persistOfficeInvoiceState();
+        renderInvoicePanel();
+      }
+      if (action === "ruidosoDeleteInvoice"){
+        const rid = String(btn.dataset.ruidosoId || "");
+        if (!rid) return;
+        state.ruidosoInvoices = (state.ruidosoInvoices || []).filter(r => r.id !== rid);
+        persistRuidosoInvoices();
+        toast("Invoice removed", rid);
+        renderInvoicePanel();
+        return;
+      }
+      if (action === "ruidosoReplaceInvoice"){
+        const rid = String(btn.dataset.ruidosoId || "");
+        if (!rid) return;
+        openRuidosoInvoiceModal("replace", rid);
+        return;
+      }
+      if (action === "ruidosoAddInvoice"){
+        openRuidosoInvoiceModal("add");
+        return;
+      }
+      if (action === "ruidosoUploadInvoice"){
+        openRuidosoInvoiceModal("add");
+        return;
+      }
+    });
+    invoicePanel.addEventListener("input", (e) => {
+      const fieldEl = e.target.closest("[data-office-field]");
+      if (fieldEl){
+        updateOfficeInvoiceDraftField(fieldEl.dataset.officeField, fieldEl.value);
+        refreshOfficeInvoiceComputedFields();
+        return;
+      }
+      const lineEl = e.target.closest("[data-office-line-id][data-office-line-field]");
+      if (lineEl){
+        updateOfficeInvoiceLineField(lineEl.dataset.officeLineId, lineEl.dataset.officeLineField, lineEl.value);
+        refreshOfficeInvoiceComputedFields();
+      }
+    });
+    invoicePanel.addEventListener("change", (e) => {
+      if (e.target?.id === "ksInvoiceZipInput"){
+        const file = e.target.files?.[0] || null;
+        e.target.value = "";
+        if (!file) return;
+        void handleKsInvoiceZipImport(file);
+        return;
+      }
+      const fieldEl = e.target.closest("[data-office-field]");
+      if (fieldEl){
+        updateOfficeInvoiceDraftField(fieldEl.dataset.officeField, fieldEl.value);
+        persistOfficeInvoiceState();
+      }
+      const lineEl = e.target.closest("[data-office-line-id][data-office-line-field]");
+      if (lineEl){
+        updateOfficeInvoiceLineField(lineEl.dataset.officeLineId, lineEl.dataset.officeLineField, lineEl.value);
+        persistOfficeInvoiceState();
+      }
+    });
+  }
+  const btnInvoiceFilesRefresh = $("btnInvoiceFilesRefresh");
+  if (btnInvoiceFilesRefresh){
+    btnInvoiceFilesRefresh.addEventListener("click", () => {
+      void loadInvoiceFiles(state.activeProject?.id || null);
+    });
+  }
+  const invoiceFileInput = $("invoiceFileInput");
+  if (invoiceFileInput){
+    invoiceFileInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0] || null;
+      e.target.value = "";
+      if (!file) return;
+      await uploadInvoiceFile(file);
+    });
+  }
+  const invoiceFilesList = $("invoiceFilesList");
+  if (invoiceFilesList){
+    invoiceFilesList.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-action='deleteInvoiceFile']");
+      if (!btn) return;
+      const id = String(btn.dataset.id || "").trim();
+      if (!id) return;
+      void deleteInvoiceFile(id);
+    });
+  }
+
+  document.body.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-action=\"toggleTranslation\"]");
+    if (!btn) return;
+    const block = btn.closest(".translated-text");
+    if (!block) return;
+    const valueEl = block.querySelector(".translated-value");
+    const translated = block.dataset.translatedText || "";
+    const source = block.getAttribute("data-source-text") || "";
+    if (!valueEl) return;
+    if (block.dataset.showing === "translated"){
+      valueEl.textContent = source;
+      block.dataset.showing = "original";
+      btn.textContent = t("viewTranslation");
+    } else {
+      valueEl.textContent = translated || source;
+      block.dataset.showing = "translated";
+      btn.textContent = t("viewOriginal");
+    }
+  });
+}
+
+startVisibilityWatch();
+function startApp(){
+  initSplash();
+  wireUI();
+  applyI18n();
+  syncLanguageControls();
+  initAuth();
+}
+
+if (document.readyState === "loading"){
+  window.addEventListener("DOMContentLoaded", startApp);
+} else {
+  startApp();
+}
