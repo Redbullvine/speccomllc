@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SpecCom - Field Photos</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
+  <script src="../env.generated.js"></script>
+  <style>
+    :root{
+      --bg:#0f1720;
+      --panel:#162331;
+      --panel-2:#1b2b3a;
+      --text:#d8e4ee;
+      --muted:#8ea6b8;
+      --accent:#00bcd4;
+      --line:#294258;
+      --ok:#2ecc71;
+      --warn:#f4c430;
+      --err:#ff6b6b;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
+    .topbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:14px 18px;
+      border-bottom:1px solid var(--line);
+      background:#0d151d;
+    }
+    .brand{
+      font-weight:700;
+      letter-spacing:0.3px;
+    }
+    .brand b{ color:var(--accent); }
+    .back-link{
+      color:var(--accent);
+      text-decoration:none;
+      font-weight:600;
+    }
+    .page{
+      padding:14px;
+    }
+    .title{
+      margin:0 0 12px 0;
+      font-size:24px;
+      font-weight:700;
+    }
+    .layout{
+      display:grid;
+      grid-template-columns: 30% 70%;
+      gap:14px;
+      min-height:640px;
+    }
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:12px;
+    }
+    .label{
+      display:block;
+      margin-bottom:6px;
+      font-size:12px;
+      color:var(--muted);
+      font-weight:700;
+      letter-spacing:0.2px;
+    }
+    .input, .btn{
+      width:100%;
+      border-radius:8px;
+      border:1px solid var(--line);
+      background:var(--panel-2);
+      color:var(--text);
+      padding:10px;
+      font-size:14px;
+    }
+    .btn{
+      margin-top:10px;
+      background:linear-gradient(180deg, #09c9e1, #00a8bf);
+      color:#06222a;
+      font-weight:700;
+      border:none;
+      cursor:pointer;
+    }
+    .btn:disabled{
+      opacity:0.6;
+      cursor:not-allowed;
+    }
+    #uploadStatus{
+      margin-top:10px;
+      border:1px solid var(--line);
+      border-radius:8px;
+      padding:10px;
+      background:#111c27;
+      min-height:80px;
+      max-height:380px;
+      overflow:auto;
+      white-space:pre-wrap;
+      font-size:12px;
+      line-height:1.4;
+    }
+    .status-ok{ color:var(--ok); }
+    .status-warn{ color:var(--warn); }
+    .status-err{ color:var(--err); }
+    #map{
+      height:600px;
+      border-radius:10px;
+      border:1px solid var(--line);
+    }
+    @media (max-width:980px){
+      .layout{
+        grid-template-columns:1fr;
+      }
+      #map{
+        height:520px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><b>SpecCom</b> Workspace</div>
+    <a class="back-link" href="../index.html#map">Back to App</a>
+  </header>
+
+  <main class="page">
+    <h1 class="title">Field Photos</h1>
+    <section class="layout">
+      <aside class="panel">
+        <label class="label" for="projectSelect">Project</label>
+        <select id="projectSelect" class="input"></select>
+
+        <label class="label" for="photoInput" style="margin-top:12px;">Photos</label>
+        <input type="file" id="photoInput" class="input" accept="image/*" multiple />
+
+        <button id="uploadBtn" class="btn" type="button">Upload Photos</button>
+        <div id="uploadStatus"></div>
+      </aside>
+
+      <section class="panel">
+        <div id="map" style="height: 600px;"></div>
+      </section>
+    </section>
+  </main>
+
+  <script type="module">
+    import { makeClient } from "../supabaseClient.js";
+
+    const supabase = await makeClient();
+    const projectSelect = document.getElementById("projectSelect");
+    const photoInput = document.getElementById("photoInput");
+    const uploadBtn = document.getElementById("uploadBtn");
+    const uploadStatus = document.getElementById("uploadStatus");
+    const markers = [];
+
+    const map = L.map('map').setView([32.3, -86.9], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    function addStatus(message, cls = "") {
+      const line = document.createElement("div");
+      if (cls) line.className = cls;
+      line.textContent = message;
+      uploadStatus.appendChild(line);
+      uploadStatus.scrollTop = uploadStatus.scrollHeight;
+    }
+
+    function clearStatus() {
+      uploadStatus.innerHTML = "";
+    }
+
+    function extractMhNumber(filename) {
+      // Matches: MH_631, MH-631, MH631, mh_601, etc.
+      const match = filename.match(/MH[_\-\s]?(\d+)/i);
+      return match ? `MH ${match[1]}` : null;
+    }
+
+    async function getGpsFromFile(file) {
+      try {
+        const gps = await exifr.gps(file);
+        if (gps && gps.latitude && gps.longitude) {
+          return { lat: gps.latitude, lng: gps.longitude };
+        }
+      } catch (e) {
+        console.warn('No EXIF GPS in', file.name, e);
+      }
+      return null;
+    }
+
+    function addMarker(lat, lng, mhNumber, imageUrl) {
+      const label = mhNumber || 'Photo';
+      const popup = `
+        <div style="text-align:center; min-width:160px;">
+          <strong style="font-size:14px;">${label}</strong><br>
+          <img src="${imageUrl}" style="width:150px; margin-top:6px; border-radius:4px;" />
+        </div>
+      `;
+      const marker = L.marker([lat, lng])
+        .addTo(map)
+        .bindPopup(popup);
+      markers.push(marker);
+    }
+
+    function clearMarkers() {
+      markers.forEach((marker) => map.removeLayer(marker));
+      markers.length = 0;
+    }
+
+    function fitToMarkers() {
+      if (!markers.length) return;
+      const bounds = L.latLngBounds(markers.map((marker) => marker.getLatLng()));
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [24, 24], maxZoom: 17 });
+      }
+    }
+
+    async function loadProjects(activeProjectId = "") {
+      if (!supabase) {
+        projectSelect.innerHTML = `<option value="">Supabase client unavailable</option>`;
+        return;
+      }
+      const { data, error } = await supabase
+        .from("projects")
+        .select("id, name")
+        .order("name", { ascending: true });
+      if (error) {
+        projectSelect.innerHTML = `<option value="">Project load failed</option>`;
+        addStatus(`Project load failed: ${error.message}`, "status-err");
+        return;
+      }
+      const rows = Array.isArray(data) ? data : [];
+      projectSelect.innerHTML = rows.map((row) => (
+        `<option value="${row.id}">${row.name || row.id}</option>`
+      )).join("");
+      if (activeProjectId && rows.some((row) => row.id === activeProjectId)) {
+        projectSelect.value = activeProjectId;
+      }
+      if (!projectSelect.value && rows[0]?.id) {
+        projectSelect.value = rows[0].id;
+      }
+    }
+
+    async function loadExistingPhotos(activeProjectId) {
+      if (!supabase || !activeProjectId) return;
+      clearMarkers();
+      const { data, error } = await supabase
+        .from("field_photos")
+        .select("*")
+        .eq("project_id", activeProjectId)
+        .order("created_at", { ascending: false });
+      if (error) {
+        addStatus(`Load failed: ${error.message}`, "status-err");
+        return;
+      }
+      (data || []).forEach((row) => {
+        addMarker(row.latitude, row.longitude, row.mh_number, row.image_url);
+      });
+      fitToMarkers();
+    }
+
+    uploadBtn.addEventListener("click", async () => {
+      clearStatus();
+      const files = Array.from(photoInput.files || []);
+      const projectId = projectSelect.value;
+      if (!projectId) {
+        addStatus("Select a project before uploading.", "status-warn");
+        return;
+      }
+      if (!files.length) {
+        addStatus("Choose at least one photo.", "status-warn");
+        return;
+      }
+      if (!supabase) {
+        addStatus("Supabase client unavailable.", "status-err");
+        return;
+      }
+      uploadBtn.disabled = true;
+      try {
+        for (const file of files) {
+          const mhNumber = extractMhNumber(file.name);
+          const gps = await getGpsFromFile(file);
+          if (!gps) {
+            addStatus(`Skipped ${file.name}: no EXIF GPS`, "status-warn");
+            continue;
+          }
+          const path = `${projectId}/${Date.now()}_${file.name}`;
+          const { error: uploadError } = await supabase
+            .storage
+            .from("field-photos")
+            .upload(path, file);
+          if (uploadError) {
+            addStatus(`Upload failed for ${file.name}: ${uploadError.message}`, "status-err");
+            continue;
+          }
+          const { data: publicData } = supabase
+            .storage
+            .from("field-photos")
+            .getPublicUrl(path);
+          const imageUrl = publicData?.publicUrl || "";
+          const { error: insertError } = await supabase
+            .from("field_photos")
+            .insert([{
+              project_id: projectId,
+              file_name: file.name,
+              mh_number: mhNumber,
+              image_url: imageUrl,
+              latitude: gps.lat,
+              longitude: gps.lng
+            }]);
+          if (insertError) {
+            addStatus(`DB insert failed for ${file.name}: ${insertError.message}`, "status-err");
+            continue;
+          }
+          addMarker(gps.lat, gps.lng, mhNumber, imageUrl);
+          addStatus(`Uploaded ${file.name} (${mhNumber || "no MH tag"})`, "status-ok");
+        }
+        fitToMarkers();
+      } finally {
+        uploadBtn.disabled = false;
+      }
+    });
+
+    projectSelect.addEventListener("change", async () => {
+      clearStatus();
+      await loadExistingPhotos(projectSelect.value);
+    });
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      const projectFromUrl = new URLSearchParams(window.location.search).get("project_id") || "";
+      await loadProjects(projectFromUrl);
+      if (projectSelect.value) {
+        await loadExistingPhotos(projectSelect.value);
+      }
+    });
+  </script>
+</body>
+</html>

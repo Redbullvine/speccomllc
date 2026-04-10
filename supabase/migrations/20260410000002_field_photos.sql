@@ -4,6 +4,7 @@ create table if not exists public.field_photos (
   id uuid primary key default gen_random_uuid(),
   project_id uuid null references public.projects(id) on delete set null,
   file_name text not null,
+  mh_number text,
   image_url text not null,
   latitude double precision not null,
   longitude double precision not null,

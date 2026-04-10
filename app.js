@@ -65,6 +65,7 @@ const SHOWCASE_MODULES = [
   { key: "supervisor_dashboard", title: "Supervisor Oversight", group: "supervisor", chips: ["KPI status", "Blocked jobs", "Daily summary"], summary: "Supervisor progress tracking, escalations, and exception oversight.", action: { type: "view", target: "viewSupervisor" } },
   { key: "supervisor_photos", title: "Field Verification", group: "supervisor", chips: ["Field photos", "Proof checks", "Readiness"], summary: "Photo and proof validation workflows.", action: { type: "view", target: "viewPhotos" } },
   { key: "network_map", title: "Map Workspace", group: "network", chips: ["KMZ map", "Site pins", "Route points"], summary: "KMZ map and geospatial field tools.", action: { type: "view", target: "viewMap" } },
+  { key: "network_field_photos", title: "Field Photos", group: "network", chips: ["GPS EXIF", "Map markers", "Photo archive"], summary: "Upload GPS-tagged field photos and review map pins.", action: { type: "link", target: "./workspaces/field-photos.html" } },
   { key: "platform_messages", title: "Messaging", group: "network", chips: ["Main board", "Direct messages", "Team coordination"], summary: "Communication and updates.", action: { type: "modal", target: "messages" } },
 ];
 
@@ -28053,6 +28054,15 @@ function hasViewTarget(viewId){
 
 function runShowcaseAction(action){
   if (!action) return;
+  if (action.type === "link"){
+    const target = String(action.target || "").trim();
+    if (!target){
+      toast("Control Center", "Workspace link is missing.", "error");
+      return;
+    }
+    window.location.href = target;
+    return;
+  }
   if (action.type === "view"){
     const primaryTarget = String(action.target || "").trim();
     const candidateViews = [
@@ -28115,6 +28125,15 @@ function renderDemoShowcaseHome(){
       chips: ["Projects", "Closures", "Billing codes"],
       action: { type: "view", target: "viewMap", fallbackViews: ["viewNodes", "viewDashboard"] },
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><path d="M3 9h12"/><path d="M6 5l-3 4 3 4"/><path d="M12 5l3 4-3 4"/></svg>',
+    },
+    {
+      title: "Field Photos",
+      iconClass: "icon-teal",
+      accent: "accent-teal",
+      summary: "Upload GPS-tagged photos, auto-pin map markers, and review MH-tagged thumbnails.",
+      chips: ["GPS EXIF", "MH tags", "Photo map"],
+      action: { type: "link", target: "./workspaces/field-photos.html" },
+      iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#00bcd4" stroke-width="1.5"><rect x="2.5" y="3" width="13" height="11.5" rx="1.8"/><circle cx="6.2" cy="7" r="1.2"/><path d="M4.8 12l2.8-3 2.2 2.1 1.8-1.6 2 2.5"/></svg>',
     },
     {
       title: "Office",
