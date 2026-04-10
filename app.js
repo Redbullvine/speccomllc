@@ -336,6 +336,7 @@ const state = {
     siteWorkflowById: new Map(),
     lastFieldGpsCheckAt: 0,
     importPreviewMarkers: [],
+    fieldPhotos: [],
   },
   redline: {
     enabled: false,
@@ -9443,6 +9444,44 @@ function convertExifDmsToDecimal(dms, ref){
   return decimal;
 }
 
+async function savePhotoToSupabase(file, lat, lon){
+  const client = state.client || supabase;
+  if (!client){
+    console.error("Supabase client not ready.");
+    return null;
+  }
+  const projectId = state.activeProject?.id || null;
+  const safeName = String(file?.name || "photo.jpg").trim().replace(/[^a-zA-Z0-9._-]+/g, "_");
+  const filePath = `${projectId || "unassigned"}/${Date.now()}_${safeName}`;
+  const { error: uploadError } = await client
+    .storage
+    .from("field-photos")
+    .upload(filePath, file, { upsert: false, contentType: file?.type || "image/jpeg" });
+  if (uploadError){
+    console.error("Upload error:", uploadError);
+    return null;
+  }
+  const { data: urlData } = client.storage.from("field-photos").getPublicUrl(filePath);
+  const imageUrl = String(urlData?.publicUrl || "").trim();
+  const payload = {
+    project_id: projectId,
+    file_name: String(file?.name || safeName || "photo"),
+    image_url: imageUrl,
+    latitude: Number(lat),
+    longitude: Number(lon),
+  };
+  const { data, error: dbError } = await client
+    .from("field_photos")
+    .insert([payload])
+    .select("id, project_id, file_name, image_url, latitude, longitude, created_at")
+    .single();
+  if (dbError){
+    console.error("DB insert error:", dbError);
+    return null;
+  }
+  return data || null;
+}
+
 function bindMapPhotoUploadInput(){
   const input = $("photoUpload");
   if (!input || input.dataset.bound === "1") return;
@@ -9476,9 +9515,25 @@ function bindMapPhotoUploadInput(){
               console.warn("Invalid GPS data in image:", file.name);
               return;
             }
-            window.L.marker([latitude, longitude], { pane: MAP_PANES.photos })
-              .addTo(state.map.instance)
-              .bindPopup(`<b>${escapeHtml(file.name)}</b><br>Lat: ${latitude.toFixed(6)}<br>Lon: ${longitude.toFixed(6)}`);
+            void savePhotoToSupabase(file, latitude, longitude)
+              .then(async (saved) => {
+                if (!saved){
+                  toast("Upload failed", `Could not save ${file.name}.`, "error");
+                  return;
+                }
+                if (state.activeProject?.id){
+                  await loadProjectFieldPhotos(state.activeProject.id);
+                } else {
+                  state.map.fieldPhotos = [saved].concat(state.map.fieldPhotos || []);
+                }
+                renderDerivedMapLayers(getSiteSearchResultSet().rows);
+                state.map.instance.setView([latitude, longitude], Math.max(state.map.instance.getZoom() || 0, 17));
+                toast("Photo saved", `${file.name} pinned on map.`);
+              })
+              .catch((error) => {
+                console.error("Photo save error:", error);
+                toast("Upload failed", `Could not save ${file.name}.`, "error");
+              });
           });
         };
         img.src = event?.target?.result || "";
@@ -9793,6 +9848,21 @@ function renderDerivedMapLayers(rows){
         },
       };
       marker.on("click", () => handleMapFeatureSelection(feature));
+      photosLayer.addLayer(marker);
+    });
+    (state.map.fieldPhotos || []).forEach((row, idx) => {
+      const lat = Number(row?.latitude);
+      const lng = Number(row?.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      const marker = window.L.marker([lat, lng], { pane: MAP_PANES.photos, bubblingMouseEvents: false });
+      const imgUrl = String(row?.image_url || "").trim();
+      const fileLabel = String(row?.file_name || `Field photo ${idx + 1}`);
+      marker.bindPopup(`
+        <b>${escapeHtml(fileLabel)}</b><br>
+        Lat: ${lat.toFixed(6)}<br>
+        Lon: ${lng.toFixed(6)}
+        ${imgUrl ? `<br><a href="${escapeHtml(imgUrl)}" target="_blank" rel="noopener noreferrer">Open image</a>` : ""}
+      `);
       photosLayer.addLayer(marker);
     });
   }
@@ -20761,6 +20831,24 @@ function syncMapToSearchResults(resultSet){
   state.map.instance.fitBounds(window.L.latLngBounds(bounds), { padding: [24, 24], maxZoom: 16 });
 }
 
+async function loadProjectFieldPhotos(projectId){
+  if (isDemo || !state.client || !projectId){
+    state.map.fieldPhotos = [];
+    return;
+  }
+  const { data, error } = await state.client
+    .from("field_photos")
+    .select("id, project_id, file_name, image_url, latitude, longitude, created_at")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+  if (error){
+    console.error("field_photos load error:", error);
+    state.map.fieldPhotos = [];
+    return;
+  }
+  state.map.fieldPhotos = Array.isArray(data) ? data : [];
+}
+
 async function loadProjectSites(projectId){
   if (isDemo){
     state.projectSites = (state.demo.sites || []).filter(s => !projectId || s.project_id === projectId);
@@ -20768,6 +20856,7 @@ async function loadProjectSites(projectId){
     state.map.siteSearchIndex.clear();
     state.map.siteCodesBySiteId.clear();
     state.map.sitePhotosBySiteId.clear();
+    state.map.fieldPhotos = [];
     renderSiteList();
     return;
   }
@@ -20777,6 +20866,7 @@ async function loadProjectSites(projectId){
     state.map.siteSearchIndex.clear();
     state.map.siteCodesBySiteId.clear();
     state.map.sitePhotosBySiteId.clear();
+    state.map.fieldPhotos = [];
     renderSiteList();
     return;
   }
@@ -20790,6 +20880,7 @@ async function loadProjectSites(projectId){
   state.map.siteSearchIndex.clear();
   state.map.siteCodesBySiteId.clear();
   state.map.sitePhotosBySiteId.clear();
+  await loadProjectFieldPhotos(projectId);
   primeSitePopupCachesFromRuidosoEvidence(state.projectSites);
   const visibleIds = new Set(getVisibleSites().map((site) => toSiteIdKey(site?.id)));
   if (state.activeSite && !visibleIds.has(toSiteIdKey(state.activeSite.id))){
