@@ -10464,13 +10464,7 @@ function initSplash() {
   });
 
   demoBtn.addEventListener("click", () => {
-    armDemoCinematicIntro();
-    splash.classList.add("hide");
-    setTimeout(() => {
-      splash.remove();
-      window.location.hash = "#demo";
-      openDemoPlatform();
-    }, 600);
+    window.location.href = "./demo.html";
   });
 }
 
