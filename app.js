@@ -29489,7 +29489,7 @@ async function postLoginBootstrap(client, user){
     // instead of loading the full app or prompting them to create their own org
     const hasOrg = Boolean(state.profile?.org_id || state.activeOrgId);
     const canSelfSetup = isOwnerOrAdmin();
-    if (!hasOrg && !SpecCom.helpers.isRoot() && !canSelfSetup){
+    if (!hasOrg && !SpecCom.helpers.isRoot() && !canSelfSetup && !isDemo){
       showPendingAccountMessage();
       return;
     }
