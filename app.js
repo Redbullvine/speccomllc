@@ -10151,6 +10151,299 @@ function canCreateProjects(){
   return isPrivilegedRole();
 }
 
+const DEMO_CINEMATIC_SESSION_KEY = "speccom_demo_cinematic_intro";
+const DEMO_CINEMATIC_BEATS = [
+  { headline: "Booting Mission Control", caption: "Spinning up live operations layers." },
+  { headline: "Tracking Field Crews", caption: "Dispatch, technician timelines, and map intelligence online." },
+  { headline: "Verifying Work In Real Time", caption: "Photo proofs, billing checkpoints, and closeout automation." },
+];
+const DEMO_PLATFORM_SCENARIOS = [
+  {
+    key: "tech",
+    title: "Technician Workspace",
+    summary: "Start shift, run calls, close jobs with proof.",
+    target: "viewTechnician",
+    steps: [
+      "06:45 AM - Clock in and complete truck inspection.",
+      "08:10 AM - Run install ticket, capture photos, verify node details.",
+      "10:35 AM - Close trouble ticket and sync notes to dispatch.",
+      "12:20 PM - Lunch and route optimization update.",
+      "03:50 PM - Final QA check, clock out, and push day-end report.",
+    ],
+  },
+  {
+    key: "dispatch",
+    title: "Dispatch Control",
+    summary: "Assign crews and rebalance live workload.",
+    target: "viewDispatch",
+    steps: [
+      "Queue loads with SLA priority scoring.",
+      "Drag-and-drop assignment with ETA and risk indicators.",
+      "Real-time status and escalation alerts.",
+      "Close queue snapshot exported to supervisors.",
+    ],
+  },
+  {
+    key: "office",
+    title: "Office Billing",
+    summary: "Approve invoices, verify costs, close books.",
+    target: "viewInvoices",
+    steps: [
+      "Pending invoice wave enters review lane.",
+      "Cross-check labor, materials, and site proof.",
+      "Approve and export billing package.",
+      "Daily financial snapshot posted to leadership.",
+    ],
+  },
+  {
+    key: "map",
+    title: "Splicer Map Ops",
+    summary: "Walk map layers, closures, and redline context.",
+    target: "viewMap",
+    steps: [
+      "Open project map and auto-focus active segment.",
+      "Validate splice points and closure status.",
+      "Mark redlines and attach field notes.",
+      "Publish progress to team feed.",
+    ],
+  },
+];
+const demoPlatformRuntime = {
+  introTimer: null,
+  timelineTimer: null,
+  timelineIndex: -1,
+};
+
+function armDemoCinematicIntro(){
+  safeLocalStorageSet(DEMO_CINEMATIC_SESSION_KEY, "1");
+}
+
+function consumeDemoCinematicIntro(){
+  if (safeLocalStorageGet(DEMO_CINEMATIC_SESSION_KEY) !== "1") return false;
+  safeLocalStorageRemove(DEMO_CINEMATIC_SESSION_KEY);
+  return true;
+}
+
+function clearDemoPlatformTimers(){
+  if (demoPlatformRuntime.introTimer){
+    clearTimeout(demoPlatformRuntime.introTimer);
+    demoPlatformRuntime.introTimer = null;
+  }
+  if (demoPlatformRuntime.timelineTimer){
+    clearInterval(demoPlatformRuntime.timelineTimer);
+    demoPlatformRuntime.timelineTimer = null;
+  }
+}
+
+function ensureDemoPlatformStyles(){
+  if (document.getElementById("demo-platform-style")) return;
+  const style = document.createElement("style");
+  style.id = "demo-platform-style";
+  style.textContent = `
+    #demoPlatform{position:fixed;inset:0;z-index:1400;display:none;overflow:hidden;color:#dbe8ff;background:radial-gradient(circle at 18% 14%,rgba(31,123,220,.35),transparent 42%),radial-gradient(circle at 86% 6%,rgba(25,193,180,.2),transparent 34%),linear-gradient(160deg,#020711,#04182d 46%,#021126)}
+    #demoPlatform.is-active{display:block}
+    .dp-shell{position:relative;z-index:2;width:min(1180px,calc(100% - 30px));height:calc(100vh - 30px);margin:15px auto;padding:14px;border:1px solid rgba(122,184,250,.3);border-radius:18px;background:rgba(4,14,30,.78);box-shadow:0 25px 70px rgba(0,0,0,.5)}
+    .dp-topbar{display:flex;justify-content:space-between;align-items:center;gap:10px}
+    .dp-logo{height:30px;width:auto}
+    .dp-stage{display:none;height:calc(100% - 42px);overflow:auto;padding-top:14px}
+    .dp-stage.dp-stage-active{display:block}
+    .dp-title{font-size:clamp(1.7rem,4vw,3rem);margin:8px 0}
+    .dp-hub-title{margin:8px 0 10px}
+    .dp-subtitle{margin:0;color:rgba(189,218,247,.9)}
+    .dp-kicker{font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:#73c5ff}
+    .dp-cinematic{margin-top:14px;min-height:min(52vh,470px);border:1px solid rgba(122,184,250,.34);border-radius:14px;background:linear-gradient(150deg,#041327,#08213e 44%,#0a3253);display:flex;align-items:end;padding:20px;position:relative;overflow:hidden}
+    .dp-cinematic-track{position:absolute;inset:0;background:repeating-linear-gradient(105deg,transparent 0,transparent 24px,rgba(100,194,255,.12) 24px,rgba(100,194,255,.12) 25px)}
+    .dp-cinematic-overlay{position:relative;z-index:2;background:rgba(5,18,36,.64);border:1px solid rgba(120,205,255,.4);border-radius:10px;padding:14px}
+    .dp-cinematic-headline{font-size:clamp(1.08rem,2.2vw,1.6rem);font-weight:700}
+    .dp-cinematic-caption{margin-top:6px;color:rgba(194,226,255,.9)}
+    .dp-actions{margin-top:12px}
+    .dp-primary-btn,.dp-ghost-btn{border:1px solid rgba(120,185,255,.4);padding:10px 14px;border-radius:10px;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;font-weight:700;cursor:pointer}
+    .dp-primary-btn{background:linear-gradient(130deg,#2d79de,#2ac4d3);color:#fff}
+    .dp-primary-btn:disabled{opacity:.5;cursor:not-allowed}
+    .dp-ghost-btn{background:rgba(7,35,70,.42);color:#a8d0ff}
+    .dp-scenario-grid{margin-top:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+    .dp-scenario-btn{text-align:left;border:1px solid rgba(118,184,245,.3);background:rgba(9,34,64,.82);padding:10px;border-radius:10px;color:#d6ebff;cursor:pointer}
+    .dp-scenario-btn.is-active{border-color:rgba(118,232,245,.72);box-shadow:0 8px 24px rgba(16,108,168,.38)}
+    .dp-scenario-btn-title{display:block;font-weight:700}
+    .dp-scenario-btn-copy{display:block;font-size:.76rem;margin-top:5px;color:rgba(177,206,236,.92)}
+    .dp-player{margin-top:12px;border:1px solid rgba(120,188,245,.28);border-radius:12px;overflow:hidden;background:rgba(4,15,32,.8)}
+    .dp-player-media{min-height:220px;display:flex;align-items:end;position:relative;background:linear-gradient(150deg,#04122a,#061a34 44%,#09243d)}
+    .dp-player-copy{position:relative;z-index:2;padding:20px}
+    .dp-player-title{font-size:clamp(1.08rem,2.5vw,1.6rem);font-weight:700}
+    .dp-player-text{margin-top:6px;color:rgba(188,214,245,.94)}
+    .dp-player-bottom{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:12px}
+    .dp-timeline{display:grid;gap:8px;flex:1;min-width:min(450px,100%)}
+    .dp-timeline-item{border:1px solid rgba(110,188,246,.22);border-left:3px solid rgba(116,225,245,.66);border-radius:8px;padding:8px 10px;background:rgba(8,30,58,.7);font-size:.84rem}
+    .dp-timeline-item.is-active{border-color:rgba(116,225,245,.72);color:#fff}
+    @media (max-width:900px){.dp-shell{width:calc(100% - 12px);height:calc(100vh - 12px);margin:6px;padding:10px}.dp-topbar{flex-direction:column;align-items:stretch}.dp-primary-btn,.dp-ghost-btn{width:100%}}
+  `;
+  document.head.appendChild(style);
+}
+
+function setDemoPlatformStage(stage){
+  const intro = document.getElementById("demoIntroStage");
+  const hub = document.getElementById("demoHubStage");
+  if (!intro || !hub) return;
+  const introActive = stage === "intro";
+  intro.classList.toggle("dp-stage-active", introActive);
+  hub.classList.toggle("dp-stage-active", !introActive);
+}
+
+function closeDemoPlatform(){
+  clearDemoPlatformTimers();
+  const platform = document.getElementById("demoPlatform");
+  if (!platform) return;
+  platform.classList.remove("is-active");
+}
+
+function playDemoScenarioTimeline(scenario){
+  const player = document.getElementById("demoScenarioPlayer");
+  const title = document.getElementById("demoScenarioTitle");
+  const text = document.getElementById("demoScenarioText");
+  const timeline = document.getElementById("demoScenarioTimeline");
+  const launch = document.getElementById("demoLaunchWorkspace");
+  if (!player || !title || !text || !timeline || !launch) return;
+  clearDemoPlatformTimers();
+  title.textContent = scenario.title;
+  text.textContent = scenario.summary;
+  timeline.innerHTML = scenario.steps.map((step) => `<div class="dp-timeline-item">${escapeHtml(step)}</div>`).join("");
+  launch.disabled = false;
+  launch.dataset.targetView = scenario.target;
+  const items = Array.from(timeline.querySelectorAll(".dp-timeline-item"));
+  if (!items.length) return;
+  demoPlatformRuntime.timelineIndex = 0;
+  items[0].classList.add("is-active");
+  demoPlatformRuntime.timelineTimer = setInterval(() => {
+    demoPlatformRuntime.timelineIndex = (demoPlatformRuntime.timelineIndex + 1) % items.length;
+    items.forEach((node, index) => node.classList.toggle("is-active", index === demoPlatformRuntime.timelineIndex));
+  }, 1300);
+}
+
+function renderDemoPlatformScenarios(){
+  const grid = document.getElementById("demoScenarioGrid");
+  if (!grid) return;
+  grid.innerHTML = DEMO_PLATFORM_SCENARIOS.map((scenario) => `
+    <button class="dp-scenario-btn" type="button" data-demo-scenario="${escapeHtml(scenario.key)}">
+      <span class="dp-scenario-btn-title">${escapeHtml(scenario.title)}</span>
+      <span class="dp-scenario-btn-copy">${escapeHtml(scenario.summary)}</span>
+    </button>
+  `).join("");
+  grid.querySelectorAll(".dp-scenario-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const scenario = DEMO_PLATFORM_SCENARIOS.find((item) => item.key === btn.dataset.demoScenario);
+      if (!scenario) return;
+      grid.querySelectorAll(".dp-scenario-btn").forEach((node) => node.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      playDemoScenarioTimeline(scenario);
+    });
+  });
+  const first = grid.querySelector(".dp-scenario-btn");
+  if (first) first.click();
+}
+
+function ensureDemoPlatform(){
+  ensureDemoPlatformStyles();
+  let platform = document.getElementById("demoPlatform");
+  if (platform) return platform;
+  platform = document.createElement("section");
+  platform.id = "demoPlatform";
+  platform.innerHTML = `
+    <div class="dp-shell">
+      <div class="dp-topbar">
+        <img src="assets/speccom_logo_2.png" alt="SpecCom Demo Platform" class="dp-logo" />
+        <button id="demoPlatformExit" class="dp-ghost-btn" type="button">Exit Demo</button>
+      </div>
+      <div id="demoIntroStage" class="dp-stage dp-stage-active">
+        <div class="dp-kicker">Explore Demo Platform</div>
+        <h1 class="dp-title">SpecCom Operations Command</h1>
+        <p class="dp-subtitle">A cinematic walkthrough of field, dispatch, office, and warehouse workflows.</p>
+        <div class="dp-cinematic">
+          <div class="dp-cinematic-track"></div>
+          <div class="dp-cinematic-overlay">
+            <div id="demoIntroHeadline" class="dp-cinematic-headline">Booting Mission Control</div>
+            <div id="demoIntroCaption" class="dp-cinematic-caption">Spinning up live operations layers.</div>
+          </div>
+        </div>
+        <div class="dp-actions">
+          <button id="demoSkipIntro" class="dp-primary-btn" type="button">Skip to Interactive Tour</button>
+        </div>
+      </div>
+      <div id="demoHubStage" class="dp-stage">
+        <div class="dp-kicker">Interactive Demo</div>
+        <h2 class="dp-hub-title">Pick a workspace story</h2>
+        <p class="dp-subtitle">Each button launches a high-impact scenario reel, then hands off to the real app view.</p>
+        <div id="demoScenarioGrid" class="dp-scenario-grid"></div>
+        <article id="demoScenarioPlayer" class="dp-player" aria-live="polite">
+          <div class="dp-player-media">
+            <div class="dp-player-copy">
+              <div id="demoScenarioTitle" class="dp-player-title">Select a scenario</div>
+              <div id="demoScenarioText" class="dp-player-text">Choose a workspace to see the story timeline.</div>
+            </div>
+          </div>
+          <div class="dp-player-bottom">
+            <div id="demoScenarioTimeline" class="dp-timeline"></div>
+            <button id="demoLaunchWorkspace" class="dp-primary-btn" type="button" disabled>Launch Workspace</button>
+          </div>
+        </article>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(platform);
+  const exitBtn = document.getElementById("demoPlatformExit");
+  const skipBtn = document.getElementById("demoSkipIntro");
+  const launchBtn = document.getElementById("demoLaunchWorkspace");
+  if (exitBtn){
+    exitBtn.addEventListener("click", () => closeDemoPlatform());
+  }
+  if (skipBtn){
+    skipBtn.addEventListener("click", () => {
+      setDemoPlatformStage("hub");
+      renderDemoPlatformScenarios();
+    });
+  }
+  if (launchBtn){
+    launchBtn.addEventListener("click", () => {
+      const targetView = String(launchBtn.dataset.targetView || "viewInvoices").trim();
+      closeDemoPlatform();
+      if (isViewAllowed(targetView)){
+        setActiveView(targetView);
+        syncHashForView(targetView);
+      } else {
+        setActiveView("viewDashboard");
+        syncHashForView("viewDashboard");
+      }
+    });
+  }
+  return platform;
+}
+
+function openDemoPlatform(){
+  const platform = ensureDemoPlatform();
+  if (!platform) return;
+  clearDemoPlatformTimers();
+  platform.classList.add("is-active");
+  setDemoPlatformStage("intro");
+  const headline = document.getElementById("demoIntroHeadline");
+  const caption = document.getElementById("demoIntroCaption");
+  if (!headline || !caption) return;
+  let beatIndex = 0;
+  const updateBeat = () => {
+    const beat = DEMO_CINEMATIC_BEATS[beatIndex] || DEMO_CINEMATIC_BEATS[0];
+    headline.textContent = beat.headline;
+    caption.textContent = beat.caption;
+    beatIndex += 1;
+    if (beatIndex < DEMO_CINEMATIC_BEATS.length){
+      demoPlatformRuntime.introTimer = setTimeout(updateBeat, 1300);
+      return;
+    }
+    demoPlatformRuntime.introTimer = setTimeout(() => {
+      setDemoPlatformStage("hub");
+      renderDemoPlatformScenarios();
+    }, 1000);
+  };
+  updateBeat();
+}
+
 function initSplash() {
   const splash = document.getElementById("splash-screen");
   if (!splash) return;
@@ -10171,7 +10464,13 @@ function initSplash() {
   });
 
   demoBtn.addEventListener("click", () => {
-    dismissSplash("#demo");
+    armDemoCinematicIntro();
+    splash.classList.add("hide");
+    setTimeout(() => {
+      splash.remove();
+      window.location.hash = "#demo";
+      openDemoPlatform();
+    }, 600);
   });
 }
 
@@ -31444,6 +31743,9 @@ function startApp(){
   applyI18n();
   syncLanguageControls();
   initAuth();
+  if (consumeDemoCinematicIntro() && String(window.location.hash || "").toLowerCase().startsWith("#demo")){
+    queueMicrotask(() => openDemoPlatform());
+  }
 }
 
 if (document.readyState === "loading"){
