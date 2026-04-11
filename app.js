@@ -16833,7 +16833,7 @@ function showPendingAccountMessage(){
     <h2 style="margin:0 0 8px;">Account Pending Setup</h2>
     <p class="muted" style="margin:0 0 20px;">Your account has been created but hasn't been assigned to a company yet. A SpecCom administrator will activate your account shortly.</p>
     <p class="muted small">If you believe this is an error, contact your administrator.</p>
-    <button class="btn ghost small" style="margin-top:16px;" onclick="SpecCom.helpers.signOut()">Sign out</button>
+    <button class="btn ghost small" style="margin-top:16px;" onclick="SpecCom.helpers.handleSignOut()">Sign out</button>
   `;
   main.prepend(card);
 }
