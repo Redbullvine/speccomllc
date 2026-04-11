@@ -21129,6 +21129,13 @@ function setMapFieldCreateOpen(open){
   }
   if (open){
     $("mapFieldLocationName")?.focus();
+  } else {
+    // Clear queued photos when form closes
+    state.map._pendingPhotos = [];
+    const preview = $("mapFieldPhotoPreview");
+    if (preview) preview.innerHTML = "";
+    const photoInput = $("mapFieldPhotoInput");
+    if (photoInput) photoInput.value = "";
   }
   renderMapFieldPanel();
 }
@@ -21242,6 +21249,24 @@ async function createFieldLocationFromCurrentGps(){
     setSiteWorkflowStatus(createdSiteId, MAP_FIELD_STATUS.NOT_STARTED);
     setMapFieldSelectedSite(createdSiteId);
   }
+  // Upload any queued photos to the newly created site
+  const pendingPhotos = state.map._pendingPhotos || [];
+  if (pendingPhotos.length > 0 && state.activeSite){
+    const site = state.activeSite;
+    const photoGps = gps ? { lat: gps.lat, lng: gps.lng, accuracy: gps.accuracy } : null;
+    const capturedAt = gps?.captured_at || new Date().toISOString();
+    let uploaded = 0;
+    for (const file of pendingPhotos){
+      const result = await uploadSiteMediaForSite(file, site, photoGps, capturedAt);
+      if (result) uploaded++;
+    }
+    if (uploaded > 0){
+      toast("Photos uploaded", `${uploaded} photo${uploaded > 1 ? "s" : ""} attached to ${name || "location"}.`);
+    }
+  }
+  state.map._pendingPhotos = [];
+  const preview = $("mapFieldPhotoPreview");
+  if (preview) preview.innerHTML = "";
   setMapFieldCreateOpen(false);
   if ($("mapFieldLocationName")) $("mapFieldLocationName").value = "";
   if ($("mapFieldLocationType")) $("mapFieldLocationType").value = "Node";
@@ -31219,10 +31244,39 @@ function wireUI(){
     });
     mapFieldPanel.addEventListener("change", (e) => {
       const select = e.target.closest("#mapFieldStatusSelect");
-      if (!select) return;
-      const siteId = select.dataset.siteId;
-      if (!siteId) return;
-      setSiteWorkflowStatus(siteId, select.value);
+      if (select){
+        const siteId = select.dataset.siteId;
+        if (!siteId) return;
+        setSiteWorkflowStatus(siteId, select.value);
+        return;
+      }
+      const photoInput = e.target.closest("#mapFieldPhotoInput");
+      if (photoInput && photoInput.files.length){
+        const preview = $("mapFieldPhotoPreview");
+        if (!preview) return;
+        if (!state.map._pendingPhotos) state.map._pendingPhotos = [];
+        for (const file of photoInput.files){
+          state.map._pendingPhotos.push(file);
+          const thumb = document.createElement("div");
+          thumb.style.cssText = "width:56px;height:56px;border-radius:8px;overflow:hidden;position:relative;border:1px solid rgba(55,138,221,0.2);flex-shrink:0;";
+          const img = document.createElement("img");
+          img.style.cssText = "width:100%;height:100%;object-fit:cover;";
+          img.src = URL.createObjectURL(file);
+          thumb.appendChild(img);
+          const removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.style.cssText = "position:absolute;top:1px;right:1px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,0.7);border:none;color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;";
+          removeBtn.textContent = "\u00d7";
+          const fileRef = file;
+          removeBtn.addEventListener("click", () => {
+            state.map._pendingPhotos = (state.map._pendingPhotos || []).filter(f => f !== fileRef);
+            thumb.remove();
+          });
+          thumb.appendChild(removeBtn);
+          preview.appendChild(thumb);
+        }
+        photoInput.value = "";
+      }
     });
   }
   const mapCanvas = $("mapCanvas");
