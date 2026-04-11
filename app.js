@@ -446,7 +446,7 @@ const WORK_ORDER_STATUSES = ["NEW", "ASSIGNED", "EN_ROUTE", "ON_SITE", "IN_PROGR
 
 function normalizeRole(role){
   if (!state.user) return null;
-  return AUTHENTICATED_ACCESS_CODE;
+  return String(role || "").trim().toUpperCase() || AUTHENTICATED_ACCESS_CODE;
 }
 
 function isPrivilegedIdentity(value){
@@ -456,34 +456,40 @@ function isPrivilegedIdentity(value){
 }
 
 function resolveProvisionedRoleCode(identity){
-  if (!identity) return AUTHENTICATED_ACCESS_CODE;
-  return AUTHENTICATED_ACCESS_CODE;
+  if (!identity) return getRoleCode();
+  return getRoleCode();
 }
 
 function getRoleCode(member = state.profile){
   if (!state.user) return null;
-  return AUTHENTICATED_ACCESS_CODE;
+  const role = String(member?.role || "").trim().toUpperCase();
+  return role || AUTHENTICATED_ACCESS_CODE;
 }
 
 function isTechnician(x){
-  return Boolean(state.user);
+  return getRoleCode() === "TECHNICIAN";
 }
 
 function isSplicer(x){
-  return Boolean(state.user);
+  return getRoleCode() === "SPLICER";
 }
 
 function isPrime(x){
-  return Boolean(state.user);
+  return getRoleCode() === "PRIME";
 }
 
 function isTds(x){
-  return Boolean(state.user);
+  return getRoleCode() === "TDS";
 }
 
 function formatRoleLabel(roleCode){
   if (!state.user) return "-";
-  return "Authenticated";
+  const labels = {
+    ROOT: "Root", OWNER: "Owner", ADMIN: "Admin",
+    PRIME: "Prime", TDS: "TDS", SUB: "Sub",
+    SPLICER: "Splicer", TECHNICIAN: "Technician",
+  };
+  return labels[String(roleCode || "").toUpperCase()] || roleCode || "Authenticated";
 }
 
 const I18N = {
@@ -1731,6 +1737,15 @@ async function initializeOrgContext({ attemptRepair = true } = {}){
     console.warn("[org-context] undefined", {
       user_id: state.user?.id || null,
     });
+    // ROOT operates without an org_id — they switch context via the org switcher
+    if (SpecCom.helpers.isRoot()){
+      return null;
+    }
+    // Field-role users with no org are handled in postLoginBootstrap (pending message)
+    if (isFieldRole()){
+      return null;
+    }
+    // Admin/Owner tier: prompt to create/select org
     if (!state.orgContextPromptShown){
       state.orgContextPromptShown = true;
       toast("Organization required", "Select or create a project/org to continue.");
@@ -2317,7 +2332,7 @@ const SINGLE_PROOF_PHOTO_MODE = String(
   || ""
 ).toLowerCase() === "true";
 const MVP_UNGATED = true;
-const CONTROL_CENTER_DEV_MODE = true;
+const CONTROL_CENTER_DEV_MODE = false;
 
 function getSiteDisplayName(site){
   const raw = String(site?.name || "").trim();
@@ -2881,7 +2896,7 @@ function setActiveView(viewId, { syncHash = true } = {}){
   });
   syncMobileBottomNav(viewId);
   if (viewId === "viewAdmin"){
-    loadAdminProfiles();
+    renderAdminWorkspace(_activeAdminTab || "users");
     loadAdminMaterialSettings();
   }
   if (viewId === "viewTechnician"){
@@ -10044,11 +10059,11 @@ function isDemoUser(){
 }
 
 SpecCom.helpers.isRoot = function(){
-  return Boolean(state.user);
+  return getRoleCode() === "ROOT";
 };
 
 SpecCom.helpers.isSupport = function(){
-  return Boolean(state.user);
+  return ["ROOT", "ADMIN"].includes(getRoleCode());
 };
 
 SpecCom.helpers.isPlatformAdmin = function(){
@@ -10056,23 +10071,23 @@ SpecCom.helpers.isPlatformAdmin = function(){
 };
 
 function isBillingManager(){
-  return Boolean(state.user);
+  return ["ROOT", "OWNER", "ADMIN"].includes(getRoleCode());
 }
 
 function isOwner(){
-  return Boolean(state.user);
+  return ["ROOT", "OWNER", "ADMIN"].includes(getRoleCode());
 }
 
 function isOwnerOrAdmin(){
-  return Boolean(state.user);
+  return ["ROOT", "OWNER", "ADMIN"].includes(getRoleCode());
 }
 
 function isPrivilegedRole(roleCode = getRoleCode()){
-  return Boolean(state.user);
+  return ["ROOT", "OWNER", "ADMIN", "PRIME"].includes(String(roleCode || "").toUpperCase());
 }
 
 function isFieldRole(roleCode = getRoleCode()){
-  return Boolean(state.user);
+  return ["TDS", "SUB", "SPLICER", "TECHNICIAN"].includes(String(roleCode || "").toUpperCase());
 }
 
 function getShowcaseAccountEmails(){
@@ -16795,6 +16810,34 @@ function showAuth(show){
   console.info(show ? "[auth] auth UI shown" : "[auth] app UI shown", { source: "showAuth" });
 }
 
+function showPendingAccountMessage(){
+  // Show a holding screen for users whose account hasn't been assigned to a company yet
+  const el = document.getElementById("viewApp");
+  if (!el) return;
+  el.style.display = "";
+  // Hide nav and sidebar so they don't see broken empty state
+  ["viewNav", "navBar", "sideBar", "mainNav"].forEach((id) => {
+    const node = document.getElementById(id);
+    if (node) node.style.display = "none";
+  });
+  // Find the main content area and render a pending card
+  const main = document.getElementById("mainContent") || document.getElementById("appContent") || el;
+  const existing = document.getElementById("pendingAccountCard");
+  if (existing) return;
+  const card = document.createElement("div");
+  card.id = "pendingAccountCard";
+  card.className = "card";
+  card.style.cssText = "max-width:480px;margin:80px auto;text-align:center;padding:32px 24px;";
+  card.innerHTML = `
+    <div style="font-size:2rem;margin-bottom:12px;">⏳</div>
+    <h2 style="margin:0 0 8px;">Account Pending Setup</h2>
+    <p class="muted" style="margin:0 0 20px;">Your account has been created but hasn't been assigned to a company yet. A SpecCom administrator will activate your account shortly.</p>
+    <p class="muted small">If you believe this is an error, contact your administrator.</p>
+    <button class="btn ghost small" style="margin-top:16px;" onclick="SpecCom.helpers.signOut()">Sign out</button>
+  `;
+  main.prepend(card);
+}
+
 function openSignInUi(source = "unknown"){
   console.info("[auth] signIn button clicked", { source });
   closeMenuModal();
@@ -19746,6 +19789,33 @@ async function loadProjects(){
   const baseSelect = "id, org_id, name, description, created_at, location, job_number, is_demo, created_by";
   let projects = [];
 
+  // ROOT sees all projects across all orgs
+  if (SpecCom.helpers.isRoot()){
+    const { data: allProjects, error: rootErr } = await state.client
+      .from("projects")
+      .select(baseSelect)
+      .order("name");
+    if (!rootErr){
+      projects = allProjects || [];
+    }
+    // Skip membership/creator queries — fall through to dedup + render
+    const uniqueProjectsRoot = [];
+    const seenRoot = new Set();
+    (projects || []).forEach((row) => {
+      const id = String(row?.id || "").trim();
+      if (!id || seenRoot.has(id)) return;
+      seenRoot.add(id);
+      uniqueProjectsRoot.push(row);
+    });
+    uniqueProjectsRoot.sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
+    state.projects = uniqueProjectsRoot;
+    const savedId = String(state.activeProject?.id || state.profile?.current_project_id || "").trim();
+    state.activeProject = uniqueProjectsRoot.find(p => p.id === savedId) || uniqueProjectsRoot[0] || null;
+    renderProjects();
+    loadMessages();
+    return;
+  }
+
   const { data: memberRows, error: memberError } = await state.client
     .from("project_members")
     .select(`
@@ -20105,7 +20175,7 @@ async function saveAdminSmsSettings(){
 async function loadAdminProfiles(){
   const gate = $("adminBuildGate");
   const panel = $("adminUsersPanel");
-  const allowed = SpecCom.helpers.isRoot() || (BUILD_MODE && isOwner());
+  const allowed = SpecCom.helpers.isRoot() || isOwnerOrAdmin();
   if (gate) gate.style.display = allowed ? "none" : "";
   if (panel) panel.style.display = allowed ? "" : "none";
   if (!allowed) return;
@@ -20115,10 +20185,15 @@ async function loadAdminProfiles(){
     renderAdminProfiles();
     return;
   }
-  const { data, error } = await state.client
+  let profilesQuery = state.client
     .from("profiles")
-    .select("id, display_name, created_at")
+    .select("id, display_name, role, work_email, org_id, created_at")
     .order("created_at", { ascending: true });
+  // Non-ROOT users only see profiles within their own org
+  if (!SpecCom.helpers.isRoot() && state.profile?.org_id){
+    profilesQuery = profilesQuery.eq("org_id", state.profile.org_id);
+  }
+  const { data, error } = await profilesQuery;
   if (error){
     toast("Profiles load error", error.message);
     return;
@@ -20130,7 +20205,7 @@ async function loadAdminProfiles(){
 function renderAdminProfiles(){
   const wrap = $("adminUsersList");
   if (!wrap) return;
-  if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
+  if (!SpecCom.helpers.isRoot() && !isOwnerOrAdmin()){
     wrap.innerHTML = "";
     return;
   }
@@ -20139,28 +20214,45 @@ function renderAdminProfiles(){
     wrap.innerHTML = `<div class="muted small">${t("noProfilesFound")}</div>`;
     return;
   }
+  const isRoot = SpecCom.helpers.isRoot();
+  const ALL_ROLES = ["SPLICER","TECHNICIAN","SUB","TDS","PRIME","ADMIN","OWNER"];
+  if (isRoot) ALL_ROLES.push("ROOT");
+
+  // Build org name lookup from state.orgs
+  const orgMap = {};
+  (state.orgs || []).forEach((o) => { orgMap[o.id] = o.name; });
+
   wrap.innerHTML = `
     <table class="table">
       <thead>
         <tr>
-          <th>User id</th>
           <th>Name</th>
-          <th>Created</th>
+          <th>Email</th>
+          <th>Role</th>
+          ${isRoot ? "<th>Company</th>" : ""}
+          <th>Joined</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         ${rows.map((row) => `
           <tr>
-            <td class="muted small">${escapeHtml(row.id)}</td>
             <td>
-              <input class="input compact" data-field="display_name" data-id="${row.id}" value="${escapeHtml(row.display_name || "")}" />
+              <input class="input compact" data-field="display_name" data-id="${row.id}"
+                value="${escapeHtml(row.display_name || "")}" title="ID: ${escapeHtml(row.id)}" />
             </td>
-            <td class="muted small">${row.created_at ? new Date(row.created_at).toLocaleDateString() : "-"}</td>
+            <td class="muted small">${escapeHtml(row.work_email || "—")}</td>
+            <td>
+              <select class="input compact" data-field="role" data-id="${row.id}">
+                ${ALL_ROLES.map((r) => `<option value="${r}"${row.role === r ? " selected" : ""}>${formatRoleLabel(r)}</option>`).join("")}
+              </select>
+            </td>
+            ${isRoot ? `<td class="muted small">${escapeHtml(orgMap[row.org_id] || row.org_id || "—")}</td>` : ""}
+            <td class="muted small">${row.created_at ? new Date(row.created_at).toLocaleDateString() : "—"}</td>
             <td>
               <div class="row" style="justify-content:flex-end;">
                 <button class="btn secondary small" data-action="adminUpdateUser" data-id="${row.id}">Save</button>
-                <button class="btn danger small" data-action="adminDeleteUser" data-id="${row.id}">Delete</button>
+                <button class="btn danger small" data-action="adminDeleteUser" data-id="${row.id}">Remove</button>
               </div>
             </td>
           </tr>
@@ -20170,12 +20262,121 @@ function renderAdminProfiles(){
   `;
 }
 
+let _activeAdminTab = "users";
+
+function renderAdminWorkspace(tab){
+  _activeAdminTab = tab || _activeAdminTab || "users";
+  const body = $("adminWorkspaceBody");
+  if (!body) return;
+
+  // Highlight active tab button
+  document.querySelectorAll("[data-admin-tab]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.adminTab === _activeAdminTab);
+  });
+
+  const canManageUsers = SpecCom.helpers.isRoot() || isOwnerOrAdmin();
+  const isRoot = SpecCom.helpers.isRoot();
+
+  if (_activeAdminTab === "users"){
+    const ALL_ROLES_INVITE = ["SPLICER","TECHNICIAN","SUB","TDS","PRIME","ADMIN","OWNER"];
+    if (isRoot) ALL_ROLES_INVITE.push("ROOT");
+    body.innerHTML = `
+      ${!canManageUsers ? `<div id="adminBuildGate" class="card"><div class="muted small">Admin access required to manage users.</div></div>` : ""}
+      <div id="adminUsersPanel" style="${canManageUsers ? "" : "display:none;"}">
+        <div class="card">
+          <h3 style="margin:0 0 12px;">Invite User</h3>
+          <div class="field-stack">
+            <input id="adminUserEmail" class="input" placeholder="Email address" autocomplete="off" />
+            <input id="adminUserDisplayName" class="input" placeholder="Display name (optional)" autocomplete="off" />
+            <select id="adminUserRole" class="input">
+              ${ALL_ROLES_INVITE.map((r) => `<option value="${r}"${r === "SPLICER" ? " selected" : ""}>${formatRoleLabel(r)}</option>`).join("")}
+            </select>
+            <div class="row">
+              <button id="btnAdminInviteUser" class="btn" type="button">Send Invite</button>
+            </div>
+          </div>
+        </div>
+        <div id="adminUsersList"></div>
+      </div>
+    `;
+    // Wire invite button (dynamic, so bind directly after render)
+    const inviteBtn = $("btnAdminInviteUser");
+    if (inviteBtn) inviteBtn.addEventListener("click", () => inviteAdminUserAccount());
+    // Wire list actions via delegation
+    const listWrap = $("adminUsersList");
+    if (listWrap){
+      listWrap.addEventListener("click", (e) => {
+        const btn = e.target.closest("button");
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const id = btn.dataset.id;
+        if (!id) return;
+        if (action === "adminUpdateUser") updateAdminProfile(id);
+        else if (action === "adminDeleteUser") deleteAdminProfile(id);
+      });
+    }
+    loadAdminProfiles();
+  } else if (_activeAdminTab === "companies"){
+    body.innerHTML = `
+      <div class="card">
+        <h3 style="margin:0 0 12px;">Companies</h3>
+        <div id="adminCompaniesList" class="field-stack"></div>
+        ${isRoot ? `<div class="row" style="margin-top:12px;"><button class="btn secondary small" data-action="adminOpenCreateCompany" type="button">+ New Company</button></div>` : ""}
+      </div>
+    `;
+    renderAdminCompaniesList();
+  } else if (_activeAdminTab === "projects"){
+    body.innerHTML = `
+      <div class="card">
+        <h3 style="margin:0 0 12px;">Projects</h3>
+        <div id="adminProjectsList" class="field-stack"></div>
+        <div class="row" style="margin-top:12px;">
+          <button class="btn secondary small" data-action="openCreateProject" type="button">+ New Project</button>
+        </div>
+      </div>
+    `;
+    renderAdminProjectsList();
+  }
+}
+
+function renderAdminCompaniesList(){
+  const wrap = $("adminCompaniesList");
+  if (!wrap) return;
+  const orgs = state.orgs || [];
+  if (!orgs.length){
+    wrap.innerHTML = `<div class="muted small">No companies found.</div>`;
+    return;
+  }
+  wrap.innerHTML = orgs.map((o) => `
+    <div class="row" style="justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border,#e5e7eb);">
+      <span>${escapeHtml(o.name || o.id)}</span>
+      <span class="muted small">${escapeHtml(o.role || "")}</span>
+    </div>
+  `).join("");
+}
+
+function renderAdminProjectsList(){
+  const wrap = $("adminProjectsList");
+  if (!wrap) return;
+  const projects = state.projects || [];
+  if (!projects.length){
+    wrap.innerHTML = `<div class="muted small">No projects found.</div>`;
+    return;
+  }
+  wrap.innerHTML = projects.map((p) => `
+    <div class="row" style="justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border,#e5e7eb);">
+      <span>${escapeHtml(p.name || p.id)}</span>
+      <span class="muted small">${escapeHtml(p.job_number || "")}</span>
+    </div>
+  `).join("");
+}
+
 async function createAdminProfile(){
   if (isDemoUser()){
     toast("Demo restriction", t("availableInProduction"));
     return;
   }
-  if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
+  if (!SpecCom.helpers.isRoot() && !isOwnerOrAdmin()){
     toast("Not allowed", "Authorized access required.");
     return;
   }
@@ -20219,7 +20420,7 @@ async function inviteAdminUserAccount(){
     toast("Demo restriction", t("availableInProduction"));
     return;
   }
-  if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
+  if (!SpecCom.helpers.isRoot() && !isOwnerOrAdmin()){
     toast("Not allowed", "Authorized access required.");
     return;
   }
@@ -20229,8 +20430,27 @@ async function inviteAdminUserAccount(){
   }
   const email = String($("adminUserEmail")?.value || "").trim().toLowerCase();
   if (!email || !email.includes("@")){
-    toast("Email required", "Enter a valid email in Email or display name.");
+    toast("Email required", "Enter a valid email in the Email field.");
     return;
+  }
+  const displayName = String($("adminUserDisplayName")?.value || "").trim() || null;
+  const selectedRole = String($("adminUserRole")?.value || "SPLICER").toUpperCase();
+  // Block non-ROOT from assigning ROOT role
+  if (selectedRole === "ROOT" && !SpecCom.helpers.isRoot()){
+    toast("Not allowed", "Only ROOT can assign the ROOT role.");
+    return;
+  }
+  const orgId = state.profile?.org_id || null;
+  // Record the invite so the user picks up org + role on first login
+  if (orgId){
+    await state.client.rpc("fn_upsert_profile_invite", {
+      p_email: email,
+      p_role: selectedRole,
+      p_display_name: displayName,
+      p_org_id: orgId,
+    }).then(({ error: rpcErr }) => {
+      if (rpcErr) console.warn("[invite] fn_upsert_profile_invite failed:", rpcErr.message);
+    });
   }
   const { error: inviteError } = await state.client.auth.signInWithOtp({
     email,
@@ -20242,23 +20462,29 @@ async function inviteAdminUserAccount(){
   }
   const resolvedUserId = await resolveUserIdByIdentifier(email);
   if (!resolvedUserId){
-    toast("Invite sent", "Account invite sent.");
+    toast("Invite sent", `Invite sent to ${email} as ${formatRoleLabel(selectedRole)}.`);
+    if ($("adminUserEmail")) $("adminUserEmail").value = "";
+    if ($("adminUserDisplayName")) $("adminUserDisplayName").value = "";
     return;
   }
   const payload = {
     id: resolvedUserId,
-    display_name: email,
+    display_name: displayName || email,
+    role: selectedRole,
+    org_id: orgId,
   };
   const { error: upsertError } = await state.client
     .from("profiles")
     .upsert(payload, { onConflict: "id" });
   if (upsertError){
-    toast("Invite sent", `Invite delivered. Profile upsert failed: ${upsertError.message}`);
-    return;
+    toast("Invite sent", `Invite delivered. Profile note: ${upsertError.message}`);
+  } else {
+    toast("Invite sent", `${displayName || email} invited as ${formatRoleLabel(selectedRole)}.`);
   }
   if ($("adminUserId")) $("adminUserId").value = resolvedUserId;
+  if ($("adminUserEmail")) $("adminUserEmail").value = "";
+  if ($("adminUserDisplayName")) $("adminUserDisplayName").value = "";
   await loadAdminProfiles();
-  toast("Invite sent", "Account invite sent and profile created.");
 }
 
 async function updateAdminProfile(userId){
@@ -20266,20 +20492,29 @@ async function updateAdminProfile(userId){
     toast("Demo restriction", t("availableInProduction"));
     return;
   }
-  if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
+  if (!SpecCom.helpers.isRoot() && !isOwnerOrAdmin()){
     toast("Not allowed", "Authorized access required.");
     return;
   }
   const nameEl = document.querySelector(`[data-field="display_name"][data-id="${userId}"]`);
+  const roleEl = document.querySelector(`[data-field="role"][data-id="${userId}"]`);
   if (!nameEl) return;
   const nextName = String(nameEl.value || "").trim();
+  const nextRole = roleEl ? String(roleEl.value || "").toUpperCase() : null;
+  // Block non-ROOT from assigning ROOT role
+  if (nextRole === "ROOT" && !SpecCom.helpers.isRoot()){
+    toast("Not allowed", "Only ROOT can assign the ROOT role.");
+    return;
+  }
   if (isDemo){
     toast("Demo disabled", "Profiles are not available in demo mode.");
     return;
   }
+  const updatePayload = { display_name: nextName || null };
+  if (nextRole) updatePayload.role = nextRole;
   const { error } = await state.client
     .from("profiles")
-    .update({ display_name: nextName || null })
+    .update(updatePayload)
     .eq("id", userId);
   if (error){
     toast("Update failed", error.message);
@@ -20294,7 +20529,7 @@ async function deleteAdminProfile(userId){
     toast("Demo restriction", t("availableInProduction"));
     return;
   }
-  if (!SpecCom.helpers.isRoot() && (!BUILD_MODE || !isOwner())){
+  if (!SpecCom.helpers.isRoot() && !isOwnerOrAdmin()){
     toast("Not allowed", "Authorized access required.");
     return;
   }
@@ -22132,7 +22367,7 @@ function renderNodeCards(){
     wrap.innerHTML = `<div class="muted small">${t("selectProjectNodes")}</div>`;
     return;
   }
-  const showBuildControls = SpecCom.helpers.isRoot() || (BUILD_MODE && isOwner());
+  const showBuildControls = SpecCom.helpers.isRoot() || isOwnerOrAdmin();
   const activeNode = state.projectNodes.find(n => n.status === "ACTIVE");
   wrap.innerHTML = state.projectNodes.map((node) => {
     const status = node.status || "NOT_STARTED";
@@ -22481,10 +22716,15 @@ SpecCom.helpers.loadOrgs = async function(){
     state.orgs = state.demo.orgs || [];
     return;
   }
-  const { data, error } = await state.client
+  let orgsQuery = state.client
     .from("orgs")
     .select("id, name, role")
     .order("name");
+  // Non-ROOT users only see their own org
+  if (!SpecCom.helpers.isRoot() && state.profile?.org_id){
+    orgsQuery = orgsQuery.eq("id", state.profile.org_id);
+  }
+  const { data, error } = await orgsQuery;
   if (error){
     toast("Orgs error", error.message);
     return;
@@ -29119,7 +29359,7 @@ async function loadProfile(client, userId){
   }
 
   // Expect a public.profiles row keyed by auth.uid()
-  let profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id, avatar_url";
+  let profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id, avatar_url, role";
   let { data, error } = await client
     .from("profiles")
     .select(profileSelect)
@@ -29129,7 +29369,7 @@ async function loadProfile(client, userId){
   if (error){
     const message = String(error.message || "").toLowerCase();
     if (message.includes("avatar_url") && message.includes("does not exist")){
-      profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id";
+      profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id, role";
       ({ data, error } = await client
         .from("profiles")
         .select(profileSelect)
@@ -29244,6 +29484,16 @@ async function postLoginBootstrap(client, user){
       console.info("[auth-redirect] fallback to home");
     }
     showAuth(false);
+
+    // Non-ROOT users with no org assignment are pending — show a holding screen
+    // instead of loading the full app or prompting them to create their own org
+    const hasOrg = Boolean(state.profile?.org_id || state.activeOrgId);
+    const canSelfSetup = isOwnerOrAdmin();
+    if (!hasOrg && !SpecCom.helpers.isRoot() && !canSelfSetup){
+      showPendingAccountMessage();
+      return;
+    }
+
     await loadProjects();
     await resolveKsInvoiceDeepLinkProjectContext();
     await loadProjectNodes(state.activeProject?.id || null);
@@ -30129,14 +30379,16 @@ function wireUI(){
     btnNewNode.addEventListener("click", () => createNode($("nodeNumber").value));
   }
 
+  // Admin workspace tab buttons (static buttons in index.html)
+  document.querySelectorAll("[data-admin-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => renderAdminWorkspace(btn.dataset.adminTab));
+  });
+
   const btnAdminCreate = $("btnAdminCreateUser");
   if (btnAdminCreate){
     btnAdminCreate.addEventListener("click", () => createAdminProfile());
   }
-  const btnAdminInvite = $("btnAdminInviteUser");
-  if (btnAdminInvite){
-    btnAdminInvite.addEventListener("click", () => inviteAdminUserAccount());
-  }
+  // btnAdminInviteUser is rendered dynamically in renderAdminWorkspace — wired there
   const adminInventoryTable = $("adminInventoryTable");
   if (adminInventoryTable){
     adminInventoryTable.addEventListener("input", (e) => {
