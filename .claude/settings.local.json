@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import sys,json; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path',''))\" | { read -r f; [ -z \"$f\" ] && exit 0; root=$(git -C \"$(dirname \"$f\")\" rev-parse --show-toplevel 2>/dev/null) || exit 0; cd \"$root\" && git add \"$f\" && git diff --cached --quiet || (git commit -m \"Update $(basename \"$f\")\" && git push); } 2>/dev/null || true",
+            "statusMessage": "Committing and pushing...",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}
