@@ -29643,8 +29643,8 @@ async function initAuth(){
       persistDemoBootstrapSession(false);
       isDemo = false;
       appMode = "real";
-      await postLoginBootstrap(state.client, state.user);
       showAuth(false);
+      await postLoginBootstrap(state.client, state.user);
       setProofStatus();
       return;
     } else {
@@ -29798,6 +29798,7 @@ async function postLoginBootstrap(client, user){
   state.client = client;
   state.user = user || state.user;
   state.authResolved = true;
+  showAuth(false);
   const pendingRedirect = restorePostAuthRedirect();
   if (pendingRedirect){
     window.location.hash = pendingRedirect;
@@ -29809,7 +29810,6 @@ async function postLoginBootstrap(client, user){
     if (!pendingRedirect){
       console.info("[auth-redirect] fallback to home");
     }
-    showAuth(false);
 
     // Non-ROOT users with no org assignment are pending — show a holding screen
     // instead of loading the full app or prompting them to create their own org
