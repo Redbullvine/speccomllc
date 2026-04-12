@@ -17508,7 +17508,7 @@ window.switchMsgTab = function switchMsgTab(scope, el) {
   void loadBoardMessages(currentMsgTab);
 };
 
-window.postMessage = async function postMessage() {
+window.postBoardMessage = async function postBoardMessage() {
   const input = document.getElementById("msg-input");
   const body = String(input?.value || "").trim();
   if (!body || !state.user || !state.client) return;
@@ -28814,7 +28814,7 @@ function renderDemoShowcaseHome(){
         <div class="msg-feed" id="msg-feed-company"></div>
         <div class="msg-compose">
           <input class="msg-input" id="msg-input" type="text" placeholder="Post to company board..." />
-          <button class="msg-send" onclick="postMessage()">Post</button>
+          <button class="msg-send" onclick="postBoardMessage()">Post</button>
         </div>
       </div>
     </div>
@@ -29786,7 +29786,15 @@ function showToast(message){
   toast("Sign-in", message);
 }
 
+let _postLoginBootstrapRunning = false;
 async function postLoginBootstrap(client, user){
+  // Guard against duplicate concurrent calls (onAuthStateChange + handleSignIn both call this)
+  if (_postLoginBootstrapRunning){
+    console.warn("[auth] postLoginBootstrap already running — skipping duplicate call");
+    return;
+  }
+  _postLoginBootstrapRunning = true;
+  try {
   state.client = client;
   state.user = user || state.user;
   state.authResolved = true;
@@ -29807,7 +29815,10 @@ async function postLoginBootstrap(client, user){
     // instead of loading the full app or prompting them to create their own org
     const hasOrg = Boolean(state.profile?.org_id || state.activeOrgId);
     const canSelfSetup = isOwnerOrAdmin();
-    if (!hasOrg && !SpecCom.helpers.isRoot() && !canSelfSetup && !isDemo){
+    const profileRole = String(state.profile?.role || "").toUpperCase();
+    const isRootUser = SpecCom.helpers.isRoot() || profileRole === "ROOT";
+    console.info("[auth] pending check:", { hasOrg, isRootUser, canSelfSetup, isDemo, profileRole, profile: !!state.profile });
+    if (!hasOrg && !isRootUser && !canSelfSetup && !isDemo){
       showPendingAccountMessage();
       return;
     }
@@ -29854,6 +29865,9 @@ async function postLoginBootstrap(client, user){
     syncPendingSites();
   }
   setWhoami();
+  } finally {
+    _postLoginBootstrapRunning = false;
+  }
 }
 
 function navigateToApp(){
@@ -30484,7 +30498,7 @@ function wireUI(){
     });
   }
 
-  $("btnSignUp").addEventListener("click", async () => {
+  $("btnSignUp")?.addEventListener("click", async () => {
     if (isDemo) return;
     if (!ensureStorageAvailable()) return;
     const email = $("email").value.trim();
