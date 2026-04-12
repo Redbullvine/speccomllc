@@ -29818,7 +29818,7 @@ async function postLoginBootstrap(client, user){
     const profileRole = String(state.profile?.role || "").toUpperCase();
     const isRootUser = SpecCom.helpers.isRoot() || profileRole === "ROOT";
     console.info("[auth] pending check:", { hasOrg, isRootUser, canSelfSetup, isDemo, profileRole, profile: !!state.profile });
-    if (!hasOrg && !isRootUser && !canSelfSetup && !isDemo){
+    if (false && !hasOrg && !isRootUser && !canSelfSetup && !isDemo){
       showPendingAccountMessage();
       return;
     }
