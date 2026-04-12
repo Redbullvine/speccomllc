@@ -292,6 +292,32 @@
       color: rgba(55,138,221,0.9);
       background: rgba(55,138,221,0.08);
     }
+    #saveStatusBadge {
+      display: none;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      white-space: nowrap;
+      transition: opacity 0.4s;
+      flex-shrink: 0;
+    }
+    #saveStatusBadge.saving {
+      background: rgba(55,138,221,0.15);
+      border: 1px solid rgba(55,138,221,0.4);
+      color: rgba(160,200,255,0.9);
+    }
+    #saveStatusBadge.saved {
+      background: rgba(30,180,100,0.12);
+      border: 1px solid rgba(30,180,100,0.4);
+      color: rgba(80,220,140,0.9);
+    }
+    #saveStatusBadge.save-error {
+      background: rgba(220,60,60,0.12);
+      border: 1px solid rgba(220,60,60,0.4);
+      color: rgba(255,120,120,0.9);
+    }
 
     #command-header {
       margin: 20px 20px 0;
@@ -816,6 +842,7 @@
         </svg>
       </button>
     </div>
+    <span id="saveStatusBadge"></span>
   </nav>
   <div class="page container">
     <div class="spacer"></div>

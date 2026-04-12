@@ -2258,6 +2258,28 @@ function toast(title, body, variant){
   setTimeout(() => toastEl.classList.remove("show"), 4200);
 }
 
+let _saveStatusTimer = null;
+function showSaveStatus(status = "saved"){
+  const el = document.getElementById("saveStatusBadge");
+  if (!el) return;
+  clearTimeout(_saveStatusTimer);
+  if (status === "saving"){
+    el.textContent = "⏳ Saving...";
+    el.className = "saving";
+    el.style.display = "";
+  } else if (status === "saved"){
+    el.textContent = "✓ Saved";
+    el.className = "saved";
+    el.style.display = "";
+    _saveStatusTimer = setTimeout(() => { el.style.display = "none"; }, 3000);
+  } else if (status === "error"){
+    el.textContent = "⚠ Save failed";
+    el.className = "save-error";
+    el.style.display = "";
+    _saveStatusTimer = setTimeout(() => { el.style.display = "none"; }, 5000);
+  }
+}
+
 let errorDudeLeaveTimer = null;
 let errorDudeHideTimer = null;
 function showErrorDude(message){
@@ -14065,6 +14087,7 @@ async function saveDispatchWorkOrder(){
     toast("Demo restriction", t("availableInProduction"));
     return;
   }
+  showSaveStatus("saving");
   const payload = {
     project_id: state.activeProject.id,
     type: $("dispatchType").value,
@@ -14093,6 +14116,7 @@ async function saveDispatchWorkOrder(){
       .select("id")
       .maybeSingle();
     if (error){
+      showSaveStatus("error");
       toast("Create failed", error.message);
       return;
     }
@@ -14106,6 +14130,7 @@ async function saveDispatchWorkOrder(){
       .update(payload)
       .eq("id", workOrderId);
     if (error){
+      showSaveStatus("error");
       toast("Update failed", error.message);
       return;
     }
@@ -14127,6 +14152,7 @@ async function saveDispatchWorkOrder(){
       .eq("id", workOrderId);
   }
 
+  showSaveStatus("saved");
   closeDispatchModal();
   await loadDispatchWorkOrders();
 }
@@ -20131,7 +20157,23 @@ async function loadProjects(){
     })
     .filter(Boolean);
 
-  // Fallback: include projects created by the user (legacy rows missing membership)
+  // Fallback 2: include all projects in the user's org (catches projects where
+  // membership rows are missing but the user belongs to the org)
+  if (orgId){
+    const { data: orgProjects, error: orgErr } = await state.client
+      .from("projects")
+      .select(baseSelect)
+      .eq("org_id", orgId)
+      .order("name");
+    if (!orgErr && orgProjects){
+      const existing = new Set(projects.map(p => p.id));
+      orgProjects.forEach((row) => {
+        if (!existing.has(row.id)) projects.push(row);
+      });
+    }
+  }
+
+  // Fallback 3: include projects created by the user (legacy rows missing membership)
   let createdQuery = state.client
     .from("projects")
     .select(baseSelect)
@@ -22080,6 +22122,7 @@ async function saveSiteName(){
     toast("Site missing", "Site not found.");
     return;
   }
+  showSaveStatus("saving");
   const input = $("siteNameInput");
   const nextName = String(input?.value || "").trim() || "Pinned site";
 
@@ -22091,11 +22134,13 @@ async function saveSiteName(){
     state.activeSite = { ...site, name: nextName };
     renderSiteList();
     renderSitePanel();
+    showSaveStatus("saved");
     toast("Saved", "Location name updated.");
     return;
   }
 
   if (!state.client){
+    showSaveStatus("error");
     toast("Update failed", "Client not ready.");
     return;
   }
@@ -22104,6 +22149,7 @@ async function saveSiteName(){
     .update({ name: nextName })
     .eq("id", site.id);
   if (error){
+    showSaveStatus("error");
     toast("Update failed", error.message);
     return;
   }
@@ -22113,6 +22159,7 @@ async function saveSiteName(){
   state.activeSite = { ...site, name: nextName };
   renderSiteList();
   renderSitePanel();
+  showSaveStatus("saved");
   toast("Saved", "Location name updated.");
 }
 
@@ -22208,12 +22255,14 @@ async function saveSiteNotes(){
     toast("Permission denied", "Only authorized team members can manually edit GPS and progress notes.", "error");
     return;
   }
+  showSaveStatus("saving");
   const notes = $("siteNotesInput")?.value || "";
   if (isDemo){
     const demoSite = (state.demo.sites || []).find((row) => row.id === site.id);
     if (demoSite) demoSite.notes = notes;
     state.activeSite.notes = notes;
     renderSitePanel();
+    showSaveStatus("saved");
     return;
   }
   const { error } = await state.client
@@ -22221,6 +22270,7 @@ async function saveSiteNotes(){
     .update({ notes })
     .eq("id", site.id);
   if (error){
+    showSaveStatus("error");
     toast("Notes save error", error.message);
     return;
   }
@@ -22228,6 +22278,7 @@ async function saveSiteNotes(){
   if (match) match.notes = notes;
   state.activeSite = match || { ...site, notes };
   renderSitePanel();
+  showSaveStatus("saved");
 }
 
 function parseCodes(raw){
@@ -22241,6 +22292,7 @@ function parseCodes(raw){
 async function saveSiteCodes(){
   const site = state.activeSite;
   if (!site || site.is_pending) return;
+  showSaveStatus("saving");
   const raw = $("siteCodesInput")?.value || "";
   const codes = parseCodes(raw);
   if (isDemo){
@@ -22254,6 +22306,7 @@ async function saveSiteCodes(){
     state.siteCodes = state.demo.siteCodes.filter((row) => row.site_id === site.id);
     setCachedSiteCodes(site.id, state.siteCodes.map((row) => row.code));
     renderSitePanel();
+    showSaveStatus("saved");
     return;
   }
   await state.client.from("site_codes").delete().eq("site_id", site.id);
@@ -22261,12 +22314,14 @@ async function saveSiteCodes(){
     const payload = codes.map((code) => ({ site_id: site.id, code }));
     const { error } = await state.client.from("site_codes").insert(payload);
     if (error){
+      showSaveStatus("error");
       toast("Codes save error", error.message);
       return;
     }
   }
   await loadSiteCodes(site.id);
   renderSitePanel();
+  showSaveStatus("saved");
 }
 
 async function addSiteEntry(){
@@ -22283,6 +22338,7 @@ async function addSiteEntry(){
     toast("Quantity invalid", "Enter a valid quantity or leave it blank.");
     return;
   }
+  showSaveStatus("saving");
   if (isDemo){
     const row = {
       id: `demo-entry-${Date.now()}`,
@@ -22295,16 +22351,19 @@ async function addSiteEntry(){
     state.demo.siteEntries.unshift(row);
     state.siteEntries = state.demo.siteEntries.filter((item) => item.site_id === site.id);
     renderSitePanel();
+    showSaveStatus("saved");
   } else {
     const { error } = await state.client
       .from("site_entries")
       .insert({ site_id: site.id, description: desc, quantity });
     if (error){
+      showSaveStatus("error");
       toast("Entry save error", error.message);
       return;
     }
     await loadSiteEntries(site.id);
     renderSitePanel();
+    showSaveStatus("saved");
   }
   const descInput = $("siteEntryDescription");
   const qtyInput = $("siteEntryQuantity");
@@ -27370,11 +27429,13 @@ async function saveBillingInvoice(){
     toast("Billing locked", "Proof is incomplete for this site.");
     return;
   }
+  showSaveStatus("saving");
   const totals = computeInvoiceTotals(state.billingItems);
   const notes = $("billingNotes")?.value || "";
 
   if (isDemo){
     state.billingInvoice = { ...invoice, notes, ...totals };
+    showSaveStatus("saved");
     toast("Saved", "Invoice saved (demo).");
     renderBillingDetail();
     return;
@@ -27391,11 +27452,13 @@ async function saveBillingInvoice(){
     })
     .eq("id", invoice.id);
   if (invErr){
+    showSaveStatus("error");
     toast("Save failed", invErr.message);
     return;
   }
 
   await upsertInvoiceItems(invoice.id, state.billingItems || []);
+  showSaveStatus("saved");
   toast("Saved", "Invoice saved.");
   await loadBillingLocations(state.activeProject?.id || null);
 }
