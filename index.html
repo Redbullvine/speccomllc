@@ -841,6 +841,16 @@
           <line x1="5" y1="8" x2="11" y2="8"/>
         </svg>
       </button>
+      <button class="nav-util" id="nav-workpkg-btn" title="Export Work Package" type="button">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="2" y="2" width="9" height="11" rx="1.5"/>
+          <line x1="5" y1="5" x2="9" y2="5"/>
+          <line x1="5" y1="7.5" x2="9" y2="7.5"/>
+          <line x1="5" y1="10" x2="7" y2="10"/>
+          <polyline points="10,10 13,13 10,13" fill="none"/>
+          <line x1="13" y1="13" x2="13" y2="10"/>
+        </svg>
+      </button>
     </div>
     <span id="saveStatusBadge"></span>
   </nav>
@@ -2112,6 +2122,49 @@
         </select>
         <div class="row" style="justify-content:flex-end;">
           <button id="btnProfilePageSave" class="prof-save-btn" type="button">Save Profile</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Work Package Export Modal -->
+    <div id="workPackageBackdrop" class="modal-backdrop" style="display:none;">
+      <div id="workPackageModal" class="modal" style="max-width:480px;width:100%;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <h3 style="margin:0;font-size:1.05rem;">Export Work Package</h3>
+          <button id="btnWorkPkgClose" class="btn ghost small" type="button">✕</button>
+        </div>
+        <p style="margin:0 0 12px;font-size:.84rem;color:rgba(180,210,250,.85);">Bundle your invoices, photos, redlines, and work orders into a portable file you can download or share with anyone — no login required.</p>
+
+        <div style="margin-bottom:12px;">
+          <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.07em;color:#5aabdf;margin-bottom:8px;">Include in package</div>
+          <label style="display:flex;align-items:center;gap:8px;padding:7px 0;cursor:pointer;font-size:.88rem;">
+            <input type="checkbox" id="wpIncInvoices" checked /> Invoices &amp; Billing
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:7px 0;cursor:pointer;font-size:.88rem;">
+            <input type="checkbox" id="wpIncWorkOrders" checked /> Work Orders
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:7px 0;cursor:pointer;font-size:.88rem;">
+            <input type="checkbox" id="wpIncRedlines" checked /> Redlines
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:7px 0;cursor:pointer;font-size:.88rem;">
+            <input type="checkbox" id="wpIncPhotos" /> Photos <span style="font-size:.75rem;color:rgba(160,195,235,.7);margin-left:4px;">(may be large)</span>
+          </label>
+        </div>
+
+        <div id="wpStatusMsg" style="display:none;font-size:.82rem;padding:8px 10px;border-radius:8px;margin-bottom:10px;background:rgba(20,60,120,.45);border:1px solid rgba(80,155,235,.3);color:#a8d8ff;"></div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button id="btnWpDownload" class="btn" type="button" style="flex:1;">⬇ Download ZIP</button>
+          <button id="btnWpShare" class="btn ghost" type="button" style="flex:1;">🔗 Get Share Link</button>
+        </div>
+
+        <div id="wpShareResult" style="display:none;margin-top:12px;">
+          <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.07em;color:#5aabdf;margin-bottom:6px;">Share Link (expires in 7 days)</div>
+          <div style="display:flex;gap:6px;">
+            <input id="wpShareUrl" type="text" readonly style="flex:1;padding:7px 10px;background:rgba(8,25,52,.7);border:1px solid rgba(80,155,235,.3);border-radius:8px;color:#d0eaff;font-size:.8rem;" />
+            <button id="btnWpCopyLink" class="btn ghost small" type="button">Copy</button>
+          </div>
+          <button id="btnWpEmailLink" class="btn" type="button" style="width:100%;margin-top:8px;">✉ Open in Email</button>
         </div>
       </div>
     </div>

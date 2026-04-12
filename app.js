@@ -2246,6 +2246,7 @@ function toast(title, body, variant){
     const source = String(message || "").toLowerCase();
     return source.includes("item not found") || source.includes("no match");
   })();
+  if (errorLike) _pushErrorLog(message);
   if (errorLike){
     showErrorDude(message || "Something went wrong.");
     return;
@@ -10234,6 +10235,7 @@ const demoPlatformRuntime = {
   introTimer: null,
   timelineTimer: null,
   timelineIndex: -1,
+  isPaused: false,
 };
 
 function armDemoCinematicIntro(){
@@ -10254,6 +10256,29 @@ function clearDemoPlatformTimers(){
   if (demoPlatformRuntime.timelineTimer){
     clearInterval(demoPlatformRuntime.timelineTimer);
     demoPlatformRuntime.timelineTimer = null;
+  }
+}
+
+function resetDemoProgressBar(){
+  const fill = document.getElementById("demoProgressFill");
+  if (!fill) return;
+  fill.classList.remove("is-running");
+  void fill.offsetWidth;
+  fill.classList.add("is-running");
+}
+
+function toggleDemoPause(){
+  const btn = document.getElementById("demoPauseTimeline");
+  demoPlatformRuntime.isPaused = !demoPlatformRuntime.isPaused;
+  const fill = document.getElementById("demoProgressFill");
+  if (demoPlatformRuntime.isPaused){
+    if (btn) btn.textContent = "▶ Resume";
+    if (fill) fill.style.animationPlayState = "paused";
+  } else {
+    if (btn) btn.textContent = "⏸ Pause";
+    if (fill){
+      fill.style.animationPlayState = "running";
+    }
   }
 }
 
@@ -10297,6 +10322,11 @@ function ensureDemoPlatformStyles(){
     .dp-timeline{display:grid;gap:8px;flex:1;min-width:min(450px,100%)}
     .dp-timeline-item{border:1px solid rgba(110,188,246,.22);border-left:3px solid rgba(116,225,245,.66);border-radius:8px;padding:8px 10px;background:rgba(8,30,58,.7);font-size:.84rem}
     .dp-timeline-item.is-active{border-color:rgba(116,225,245,.72);color:#fff}
+    .dp-step-progress{height:3px;background:rgba(30,60,100,.4);border-radius:0 0 12px 12px;overflow:hidden;margin-bottom:0}
+    .dp-step-progress-fill{height:100%;width:0%;background:linear-gradient(90deg,#2ac4d3,#2d79de)}
+    .dp-step-progress-fill.is-running{animation:dp-fill-step 4s linear forwards}
+    @keyframes dp-fill-step{from{width:0%}to{width:100%}}
+    .dp-player-controls{display:flex;gap:8px;align-items:center;flex-shrink:0}
     @media (max-width:900px){.dp-shell{width:calc(100% - 12px);height:calc(100vh - 12px);margin:6px;padding:10px}.dp-topbar{flex-direction:column;align-items:stretch}.dp-primary-btn,.dp-ghost-btn{width:100%}}
   `;
   document.head.appendChild(style);
@@ -10334,11 +10364,17 @@ function playDemoScenarioTimeline(scenario){
   const items = Array.from(timeline.querySelectorAll(".dp-timeline-item"));
   if (!items.length) return;
   demoPlatformRuntime.timelineIndex = 0;
+  demoPlatformRuntime.isPaused = false;
+  const pauseBtn = document.getElementById("demoPauseTimeline");
+  if (pauseBtn) pauseBtn.textContent = "⏸ Pause";
   items[0].classList.add("is-active");
+  resetDemoProgressBar();
   demoPlatformRuntime.timelineTimer = setInterval(() => {
+    if (demoPlatformRuntime.isPaused) return;
     demoPlatformRuntime.timelineIndex = (demoPlatformRuntime.timelineIndex + 1) % items.length;
     items.forEach((node, index) => node.classList.toggle("is-active", index === demoPlatformRuntime.timelineIndex));
-  }, 1300);
+    resetDemoProgressBar();
+  }, 4000);
 }
 
 function renderDemoPlatformScenarios(){
@@ -10402,9 +10438,13 @@ function ensureDemoPlatform(){
               <div id="demoScenarioText" class="dp-player-text">Choose a workspace to see the story timeline.</div>
             </div>
           </div>
+          <div class="dp-step-progress"><div id="demoProgressFill" class="dp-step-progress-fill"></div></div>
           <div class="dp-player-bottom">
             <div id="demoScenarioTimeline" class="dp-timeline"></div>
-            <button id="demoLaunchWorkspace" class="dp-primary-btn" type="button" disabled>Launch Workspace</button>
+            <div class="dp-player-controls">
+              <button id="demoPauseTimeline" class="dp-ghost-btn" type="button">⏸ Pause</button>
+              <button id="demoLaunchWorkspace" class="dp-primary-btn" type="button" disabled>Launch Workspace</button>
+            </div>
           </div>
         </article>
       </div>
@@ -10414,8 +10454,12 @@ function ensureDemoPlatform(){
   const exitBtn = document.getElementById("demoPlatformExit");
   const skipBtn = document.getElementById("demoSkipIntro");
   const launchBtn = document.getElementById("demoLaunchWorkspace");
+  const pauseBtn = document.getElementById("demoPauseTimeline");
   if (exitBtn){
     exitBtn.addEventListener("click", () => closeDemoPlatform());
+  }
+  if (pauseBtn){
+    pauseBtn.addEventListener("click", () => toggleDemoPause());
   }
   if (skipBtn){
     skipBtn.addEventListener("click", () => {
@@ -10455,13 +10499,13 @@ function openDemoPlatform(){
     caption.textContent = beat.caption;
     beatIndex += 1;
     if (beatIndex < DEMO_CINEMATIC_BEATS.length){
-      demoPlatformRuntime.introTimer = setTimeout(updateBeat, 1300);
+      demoPlatformRuntime.introTimer = setTimeout(updateBeat, 3500);
       return;
     }
     demoPlatformRuntime.introTimer = setTimeout(() => {
       setDemoPlatformStage("hub");
       renderDemoPlatformScenarios();
-    }, 1000);
+    }, 1500);
   };
   updateBeat();
 }
@@ -31861,6 +31905,669 @@ function wireUI(){
   });
 }
 
+// ─── Help & Auto-Troubleshoot System ────────────────────────────────────────
+
+const _errorLogBuffer = [];
+const _ERROR_LOG_MAX = 10;
+
+function _pushErrorLog(message){
+  _errorLogBuffer.unshift({ msg: String(message || "").slice(0, 300), ts: new Date().toLocaleTimeString() });
+  if (_errorLogBuffer.length > _ERROR_LOG_MAX) _errorLogBuffer.length = _ERROR_LOG_MAX;
+}
+
+// Patch error reporting to capture into the log buffer
+(function patchErrorCapture(){
+  const origToast = window.toast;
+  if (typeof toast === "function"){
+    const _orig = toast;
+    // We patch via the module-level reference instead
+  }
+  // Use a simple global hook
+  window.addEventListener("unhandledrejection", (e) => {
+    _pushErrorLog(e.reason?.message || String(e.reason || "Unhandled promise rejection"));
+  });
+  window.addEventListener("error", (e) => {
+    _pushErrorLog(e.message || "JS error");
+  });
+})();
+
+const HELP_FAQ_ITEMS = [
+  {
+    q: "A close button or ✕ isn't working — I'm stuck on a screen",
+    a: "Press <strong>Escape</strong> on your keyboard to dismiss most panels. Or go to Help &gt; Auto-Diagnose and click <em>Force Close All Modals</em> to clear any stuck overlays instantly.",
+  },
+  {
+    q: "Invoice won't save — the save button does nothing",
+    a: "First check your internet connection. Then open Auto-Diagnose and run a scan — it will test your session and storage. If your session expired, use <em>Re-authenticate</em> to log back in without losing your work.",
+  },
+  {
+    q: "Photos aren't uploading",
+    a: "Supported formats: JPEG, PNG, WebP, HEIC/HEIF. Maximum file size is 10 MB per photo. If the format is correct, run a scan to check storage bucket access.",
+  },
+  {
+    q: "The map / KMZ layer won't load",
+    a: "KMZ files must be valid zipped KML. Very large files (>25 MB) can time out on slow connections. Try <em>Reset Map State</em> in Auto-Diagnose to clear cached map data and reload.",
+  },
+  {
+    q: "I'm seeing old or stale data that doesn't match reality",
+    a: "Use <em>Refresh Current View</em> in Auto-Diagnose to force a fresh data pull. If the problem persists, clear the relevant module cache from the repair actions list.",
+  },
+  {
+    q: "The app is slow or freezing",
+    a: "Large photo sets and KMZ files can strain the browser. Try closing other tabs. Run a scan to check connectivity — high latency to the database will slow everything down.",
+  },
+  {
+    q: "I can't log in / magic link isn't arriving",
+    a: "Check your spam folder. Magic links expire after 10 minutes — request a fresh one. If your org uses SSO or a specific email domain, make sure you're using the approved address.",
+  },
+  {
+    q: "A view or menu item is missing / grayed out",
+    a: "Access is role-based. If you expect to see a feature but can't, ask your Admin to check your role assignment. Technician and Splicer roles have a limited view set by design.",
+  },
+];
+
+const HELP_LS_KEYS_TO_CHECK = [
+  { key: OFFICE_INVOICE_RECORDS_KEY, label: "Invoice Records" },
+  { key: OFFICE_INVOICE_DRAFT_KEY, label: "Invoice Draft" },
+  { key: KS_INVOICE_RECORDS_KEY, label: "KS Invoice Records" },
+  { key: KS_INVOICE_BATCHES_KEY, label: "KS Invoice Batches" },
+  { key: WAREHOUSE_SCAN_ITEMS_KEY, label: "Warehouse Scan Items" },
+  { key: RUIDOSO_INVOICES_KEY, label: "Ruidoso Invoices" },
+  { key: TECH_SIM_KEY, label: "Tech Simulation State" },
+];
+
+function ensureHelpPanelStyles(){
+  if (document.getElementById("help-panel-style")) return;
+  const s = document.createElement("style");
+  s.id = "help-panel-style";
+  s.textContent = `
+    #helpFloatBtn{position:fixed;bottom:22px;right:22px;z-index:1300;width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#1c5fa8,#1a9fa8);border:1px solid rgba(120,200,255,.4);color:#fff;font-size:1.3rem;font-weight:700;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;transition:transform .2s}
+    #helpFloatBtn:hover{transform:scale(1.08)}
+    #helpPanel{position:fixed;bottom:80px;right:18px;z-index:1300;width:min(400px,calc(100vw - 24px));max-height:min(560px,80vh);display:none;flex-direction:column;background:rgba(5,16,34,.96);border:1px solid rgba(100,175,250,.28);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.55);overflow:hidden;color:#d6e9ff;font-size:.88rem}
+    #helpPanel.hp-open{display:flex}
+    .hp-header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px 10px;border-bottom:1px solid rgba(100,175,250,.18);flex-shrink:0}
+    .hp-header-title{font-weight:700;font-size:.95rem}
+    .hp-close-btn{background:none;border:none;color:#8ab8e0;cursor:pointer;font-size:1.1rem;padding:0 4px;line-height:1}
+    .hp-close-btn:hover{color:#fff}
+    .hp-tabs{display:flex;gap:6px;padding:10px 14px 0;flex-shrink:0}
+    .hp-tab{background:rgba(10,30,60,.6);border:1px solid rgba(90,160,240,.25);border-radius:8px;color:#8ab8e0;padding:6px 14px;font-size:.8rem;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.05em}
+    .hp-tab.hp-active{background:rgba(29,95,185,.45);border-color:rgba(90,210,240,.5);color:#d6f0ff}
+    .hp-tab-body{flex:1;overflow-y:auto;padding:12px 14px;display:none}
+    .hp-tab-body.hp-active{display:block}
+    .hp-faq-item{border-bottom:1px solid rgba(80,140,220,.15);padding:9px 0}
+    .hp-faq-item:last-child{border-bottom:none}
+    .hp-faq-q{font-weight:700;cursor:pointer;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;color:#b0d8ff}
+    .hp-faq-q .hp-faq-arrow{flex-shrink:0;font-size:.75rem;color:#5aabdf;transition:transform .2s}
+    .hp-faq-q.hp-open .hp-faq-arrow{transform:rotate(90deg)}
+    .hp-faq-a{display:none;margin-top:7px;color:rgba(195,220,248,.92);line-height:1.55}
+    .hp-faq-a.hp-open{display:block}
+    .hp-diag-intro{margin-bottom:10px;color:rgba(190,218,248,.85)}
+    .hp-symptom-wrap{margin-bottom:10px}
+    .hp-symptom-label{display:block;margin-bottom:5px;color:#8ab8e0;font-size:.8rem;text-transform:uppercase;letter-spacing:.06em}
+    .hp-symptom-input{width:100%;padding:8px 10px;background:rgba(8,25,52,.7);border:1px solid rgba(80,155,235,.3);border-radius:8px;color:#d0eaff;font-size:.86rem;resize:none;min-height:58px}
+    .hp-run-btn{background:linear-gradient(130deg,#1d5ec0,#1aa0b0);border:none;color:#fff;padding:9px 18px;border-radius:8px;font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;cursor:pointer;width:100%}
+    .hp-run-btn:disabled{opacity:.55;cursor:not-allowed}
+    #hpDiagResults{margin-top:12px;display:grid;gap:8px}
+    .hp-diag-card{border:1px solid rgba(80,155,235,.22);border-radius:10px;padding:10px 12px;background:rgba(8,25,52,.7)}
+    .hp-diag-card-header{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px}
+    .hp-diag-card-title{font-weight:700;font-size:.85rem}
+    .hp-diag-badge{font-size:.72rem;padding:2px 8px;border-radius:20px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+    .hp-badge-ok{background:rgba(20,160,90,.25);color:#5ee8a0;border:1px solid rgba(20,160,90,.4)}
+    .hp-badge-warn{background:rgba(210,140,10,.22);color:#f5cc50;border:1px solid rgba(210,140,10,.35)}
+    .hp-badge-fail{background:rgba(200,45,45,.2);color:#ff8a8a;border:1px solid rgba(200,45,45,.35)}
+    .hp-badge-info{background:rgba(40,110,200,.2);color:#7ec8f0;border:1px solid rgba(40,110,200,.35)}
+    .hp-diag-detail{font-size:.8rem;color:rgba(180,210,245,.85);line-height:1.45}
+    .hp-repair-btn{margin-top:7px;background:rgba(25,80,160,.45);border:1px solid rgba(80,180,240,.35);color:#a8d8ff;padding:5px 12px;border-radius:7px;font-size:.78rem;cursor:pointer;font-weight:600}
+    .hp-repair-btn:hover{background:rgba(30,100,190,.6)}
+    .hp-error-log-entry{font-size:.78rem;color:rgba(255,170,150,.9);padding:3px 0;border-bottom:1px solid rgba(200,80,80,.1)}
+    .hp-error-log-entry .hp-ts{color:rgba(160,190,220,.6);margin-right:6px}
+  `;
+  document.head.appendChild(s);
+}
+
+function ensureHelpPanel(){
+  ensureHelpPanelStyles();
+  if (document.getElementById("helpPanel")) return;
+
+  const floatBtn = document.createElement("button");
+  floatBtn.id = "helpFloatBtn";
+  floatBtn.title = "Help & Diagnostics";
+  floatBtn.textContent = "?";
+  document.body.appendChild(floatBtn);
+
+  const panel = document.createElement("div");
+  panel.id = "helpPanel";
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-label", "Help and Diagnostics");
+  panel.innerHTML = `
+    <div class="hp-header">
+      <span class="hp-header-title">Help &amp; Diagnostics</span>
+      <button class="hp-close-btn" id="helpPanelClose" aria-label="Close">✕</button>
+    </div>
+    <div class="hp-tabs">
+      <button class="hp-tab hp-active" data-hp-tab="faq">FAQ</button>
+      <button class="hp-tab" data-hp-tab="diagnose">Auto-Diagnose</button>
+    </div>
+    <div id="hpTabFaq" class="hp-tab-body hp-active">
+      ${HELP_FAQ_ITEMS.map((item) => `
+        <div class="hp-faq-item">
+          <div class="hp-faq-q"><span>${escapeHtml(item.q)}</span><span class="hp-faq-arrow">▶</span></div>
+          <div class="hp-faq-a">${item.a}</div>
+        </div>
+      `).join("")}
+    </div>
+    <div id="hpTabDiagnose" class="hp-tab-body">
+      <p class="hp-diag-intro">Describe what's broken (optional), then run a scan. The app will check connectivity, session health, stuck UI, and cached data — and offer one-click repairs.</p>
+      <div class="hp-symptom-wrap">
+        <label class="hp-symptom-label" for="hpSymptomInput">What's going wrong?</label>
+        <textarea id="hpSymptomInput" class="hp-symptom-input" placeholder="e.g. invoice won't save, close button is stuck, map won't load…"></textarea>
+      </div>
+      <button id="hpRunScan" class="hp-run-btn">Run Diagnostic Scan</button>
+      <div id="hpDiagResults"></div>
+    </div>
+  `;
+  document.body.appendChild(panel);
+
+  floatBtn.addEventListener("click", () => panel.classList.toggle("hp-open"));
+  document.getElementById("helpPanelClose").addEventListener("click", () => panel.classList.remove("hp-open"));
+
+  panel.querySelectorAll(".hp-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      panel.querySelectorAll(".hp-tab").forEach((t) => t.classList.remove("hp-active"));
+      panel.querySelectorAll(".hp-tab-body").forEach((b) => b.classList.remove("hp-active"));
+      tab.classList.add("hp-active");
+      const target = document.getElementById(`hpTab${tab.dataset.hpTab.charAt(0).toUpperCase() + tab.dataset.hpTab.slice(1)}`);
+      if (target) target.classList.add("hp-active");
+    });
+  });
+
+  panel.querySelectorAll(".hp-faq-q").forEach((q) => {
+    q.addEventListener("click", () => {
+      const a = q.nextElementSibling;
+      const isOpen = a.classList.contains("hp-open");
+      panel.querySelectorAll(".hp-faq-a").forEach((el) => el.classList.remove("hp-open"));
+      panel.querySelectorAll(".hp-faq-q").forEach((el) => el.classList.remove("hp-open"));
+      if (!isOpen){ a.classList.add("hp-open"); q.classList.add("hp-open"); }
+    });
+  });
+
+  document.getElementById("hpRunScan").addEventListener("click", () => runHelpDiagnostics());
+}
+
+function _hpCard(title, badge, badgeClass, detail, repairId, repairLabel){
+  const repairBtn = repairId
+    ? `<button class="hp-repair-btn" data-repair="${escapeHtml(repairId)}">${escapeHtml(repairLabel || "Fix")}</button>`
+    : "";
+  return `
+    <div class="hp-diag-card">
+      <div class="hp-diag-card-header">
+        <span class="hp-diag-card-title">${escapeHtml(title)}</span>
+        <span class="hp-diag-badge ${badgeClass}">${escapeHtml(badge)}</span>
+      </div>
+      <div class="hp-diag-detail">${detail}</div>
+      ${repairBtn}
+    </div>
+  `;
+}
+
+async function runHelpDiagnostics(){
+  const runBtn = document.getElementById("hpRunScan");
+  const resultsEl = document.getElementById("hpDiagResults");
+  if (!runBtn || !resultsEl) return;
+  runBtn.disabled = true;
+  runBtn.textContent = "Scanning…";
+  resultsEl.innerHTML = `<div class="hp-diag-detail" style="color:rgba(160,200,245,.7)">Running checks…</div>`;
+
+  const cards = [];
+
+  // 1. Network connectivity
+  try {
+    const t0 = Date.now();
+    await fetch(window.location.origin + "/", { method: "HEAD", cache: "no-store", signal: AbortSignal.timeout(5000) });
+    const ms = Date.now() - t0;
+    const badge = ms < 400 ? "Good" : ms < 1200 ? "Slow" : "Very Slow";
+    const cls = ms < 400 ? "hp-badge-ok" : ms < 1200 ? "hp-badge-warn" : "hp-badge-fail";
+    cards.push(_hpCard("Network Connectivity", badge, cls, `Response time: ${ms}ms.${ms >= 1200 ? " Slow connection may cause save failures and photo upload timeouts." : ""}`, null, null));
+  } catch {
+    cards.push(_hpCard("Network Connectivity", "Offline", "hp-badge-fail", "Cannot reach the server. Check your internet connection — saves and uploads will fail until restored.", null, null));
+  }
+
+  // 2. Auth session
+  try {
+    const sb = window.supabase;
+    if (sb){
+      const { data, error } = await sb.auth.getSession();
+      if (error || !data?.session){
+        cards.push(_hpCard("Auth Session", "Expired", "hp-badge-fail", "Your login session has expired. Saves and data loads will fail.", "reauth", "Re-authenticate"));
+      } else {
+        const exp = data.session.expires_at ? new Date(data.session.expires_at * 1000).toLocaleTimeString() : "unknown";
+        cards.push(_hpCard("Auth Session", "Valid", "hp-badge-ok", `Signed in as ${data.session.user?.email || "user"}. Session valid until ~${exp}.`, null, null));
+      }
+    } else {
+      cards.push(_hpCard("Auth Session", "Demo Mode", "hp-badge-info", "Running in demo mode — no live session required.", null, null));
+    }
+  } catch (e) {
+    cards.push(_hpCard("Auth Session", "Error", "hp-badge-fail", `Session check failed: ${getErrorMessage(e)}`, "reauth", "Re-authenticate"));
+  }
+
+  // 3. Stuck modals
+  const stuckBackdrops = Array.from(document.querySelectorAll(".modal-backdrop.show"));
+  const stuckRedline = (() => { const el = document.getElementById("redlineEditorBackdrop"); return el && !el.hidden; })();
+  const stuckWelcome = (() => { const el = document.querySelector(".ks-welcome-overlay"); return el && getComputedStyle(el).display !== "none"; })();
+  const stuckCount = stuckBackdrops.length + (stuckRedline ? 1 : 0) + (stuckWelcome ? 1 : 0);
+  if (stuckCount > 0){
+    cards.push(_hpCard("Stuck UI Overlays", `${stuckCount} Found`, "hp-badge-warn", `${stuckCount} overlay(s) appear to be stuck open and may be blocking buttons or interactions.`, "forceCloseModals", "Force Close All Overlays"));
+  } else {
+    cards.push(_hpCard("Stuck UI Overlays", "Clear", "hp-badge-ok", "No stuck overlays detected.", null, null));
+  }
+
+  // 4. LocalStorage integrity
+  const badKeys = [];
+  HELP_LS_KEYS_TO_CHECK.forEach(({ key, label }) => {
+    const raw = safeLocalStorageGet(key);
+    if (!raw) return;
+    try { JSON.parse(raw); } catch { badKeys.push(label); }
+  });
+  if (badKeys.length){
+    cards.push(_hpCard("Cached Data Integrity", `${badKeys.length} Corrupt`, "hp-badge-fail", `Corrupted cache found in: ${badKeys.join(", ")}. This can prevent features from loading.`, "clearCorruptCache", "Clear Corrupted Cache"));
+  } else {
+    cards.push(_hpCard("Cached Data Integrity", "OK", "hp-badge-ok", "All local caches are readable.", null, null));
+  }
+
+  // 5. Supabase storage access
+  if (window.supabase){
+    try {
+      const { error } = await window.supabase.storage.from(INVOICE_FILES_BUCKET).list("", { limit: 1 });
+      if (error){
+        cards.push(_hpCard("Storage Access", "Degraded", "hp-badge-warn", `Invoice file storage returned: ${getErrorMessage(error)}. Uploads or previews may fail.`, null, null));
+      } else {
+        cards.push(_hpCard("Storage Access", "OK", "hp-badge-ok", "Invoice file storage is reachable.", null, null));
+      }
+    } catch (e) {
+      cards.push(_hpCard("Storage Access", "Error", "hp-badge-fail", `Storage check failed: ${getErrorMessage(e)}`, null, null));
+    }
+  }
+
+  // 6. Recent error log
+  if (_errorLogBuffer.length){
+    const logHtml = _errorLogBuffer.map((e) => `<div class="hp-error-log-entry"><span class="hp-ts">${escapeHtml(e.ts)}</span>${escapeHtml(e.msg)}</div>`).join("");
+    cards.push(_hpCard("Recent Errors", `${_errorLogBuffer.length}`, "hp-badge-warn", logHtml, "clearErrorLog", "Clear Error Log"));
+  } else {
+    cards.push(_hpCard("Recent Errors", "None", "hp-badge-ok", "No errors recorded in this session.", null, null));
+  }
+
+  resultsEl.innerHTML = cards.join("");
+  resultsEl.querySelectorAll(".hp-repair-btn").forEach((btn) => {
+    btn.addEventListener("click", () => runHelpRepair(btn.dataset.repair, btn));
+  });
+
+  runBtn.disabled = false;
+  runBtn.textContent = "Run Diagnostic Scan";
+}
+
+function runHelpRepair(repairId, btn){
+  if (!repairId) return;
+  const done = (msg) => { if (btn) btn.textContent = msg; };
+  if (repairId === "forceCloseModals"){
+    document.querySelectorAll(".modal-backdrop.show").forEach((el) => el.classList.remove("show"));
+    const redline = document.getElementById("redlineEditorBackdrop");
+    if (redline) redline.hidden = true;
+    const welcome = document.querySelector(".ks-welcome-overlay");
+    if (welcome) welcome.style.display = "none";
+    done("Done — overlays cleared");
+  } else if (repairId === "clearCorruptCache"){
+    HELP_LS_KEYS_TO_CHECK.forEach(({ key }) => {
+      const raw = safeLocalStorageGet(key);
+      if (!raw) return;
+      try { JSON.parse(raw); } catch { safeLocalStorageRemove(key); }
+    });
+    done("Done — corrupt cache cleared");
+  } else if (repairId === "reauth"){
+    document.getElementById("helpPanel")?.classList.remove("hp-open");
+    const loginView = document.getElementById("viewLogin") || document.getElementById("loginView");
+    if (loginView) loginView.style.display = "";
+    try { window.supabase?.auth.signOut(); } catch {}
+    setTimeout(() => window.location.reload(), 600);
+    done("Redirecting…");
+  } else if (repairId === "clearErrorLog"){
+    _errorLogBuffer.length = 0;
+    done("Done — log cleared");
+  }
+}
+
+// ─── Work Package Export ─────────────────────────────────────────────────────
+
+function openWorkPackageModal(){
+  const backdrop = $("workPackageBackdrop");
+  if (!backdrop) return;
+  const shareResult = $("wpShareResult");
+  const statusMsg = $("wpStatusMsg");
+  if (shareResult) shareResult.style.display = "none";
+  if (statusMsg) statusMsg.style.display = "none";
+  const dlBtn = $("btnWpDownload");
+  const shareBtn = $("btnWpShare");
+  if (dlBtn){ dlBtn.disabled = false; dlBtn.textContent = "⬇ Download ZIP"; }
+  if (shareBtn){ shareBtn.disabled = false; shareBtn.textContent = "🔗 Get Share Link"; }
+  backdrop.style.display = "flex";
+}
+
+function closeWorkPackageModal(){
+  const backdrop = $("workPackageBackdrop");
+  if (backdrop) backdrop.style.display = "none";
+}
+
+function _wpSetStatus(msg, isError){
+  const el = $("wpStatusMsg");
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = msg ? "block" : "none";
+  el.style.color = isError ? "#ff9a9a" : "#a8d8ff";
+  el.style.borderColor = isError ? "rgba(200,60,60,.4)" : "rgba(80,155,235,.3)";
+}
+
+function _wpEscHtml(str){
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function generateWpSummaryHtml({ invoices, workOrders, redlines, projectName, contractorName, generatedAt }){
+  const invRows = invoices.map((inv) => `
+    <tr>
+      <td>${_wpEscHtml(inv.id || inv.invoice_number || "—")}</td>
+      <td>${_wpEscHtml(inv.location || inv.loc || inv.site_id || "—")}</td>
+      <td>${_wpEscHtml(inv.date || inv.created_at?.slice(0, 10) || "—")}</td>
+      <td style="text-align:right">${typeof inv.total === "number" ? "$" + inv.total.toFixed(2) : _wpEscHtml(String(inv.total || "—"))}</td>
+      <td>${_wpEscHtml(inv.status || (inv.paid ? "Paid" : "Unpaid") || "—")}</td>
+    </tr>`).join("");
+
+  const woRows = workOrders.map((wo) => `
+    <tr>
+      <td>${_wpEscHtml(wo.id?.toString().slice(0, 8) || "—")}</td>
+      <td>${_wpEscHtml(wo.title || wo.description?.slice(0, 60) || "—")}</td>
+      <td>${_wpEscHtml(wo.status || "—")}</td>
+      <td>${_wpEscHtml(wo.type || "—")}</td>
+      <td>${_wpEscHtml(wo.created_at?.slice(0, 10) || "—")}</td>
+    </tr>`).join("");
+
+  const rlRows = redlines.map((rl) => `
+    <tr>
+      <td>${_wpEscHtml(rl.title || "—")}</td>
+      <td>${_wpEscHtml((rl.change_type || "").replace(/_/g, " "))}</td>
+      <td>${_wpEscHtml(rl.status || "—")}</td>
+      <td>${_wpEscHtml(rl.old_value || "—")}</td>
+      <td>${_wpEscHtml(rl.new_value || "—")}</td>
+    </tr>`).join("");
+
+  const tableStyle = `border-collapse:collapse;width:100%;font-size:13px;margin-bottom:24px`;
+  const thStyle = `background:#1a3560;color:#a8d8ff;padding:8px 10px;text-align:left;border-bottom:2px solid #2d5fa0`;
+  const tdStyle = `padding:7px 10px;border-bottom:1px solid #1e3a5a;color:#d0e6fa`;
+  const trAltStyle = `background:#0d2040`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SpecCom Work Package — ${_wpEscHtml(projectName || "Work Summary")}</title>
+<style>
+  body{margin:0;padding:24px;font-family:system-ui,sans-serif;background:#061525;color:#d0e6fa}
+  h1{font-size:1.6rem;margin:0 0 4px}
+  h2{font-size:1.1rem;color:#7ec8f0;border-bottom:1px solid #1e3a5a;padding-bottom:6px;margin:28px 0 12px}
+  .meta{font-size:.85rem;color:#6a9bcc;margin-bottom:28px}
+  table{${tableStyle}}
+  th{${thStyle}}
+  td{${tdStyle}}
+  tr:nth-child(even){${trAltStyle}}
+  .empty{color:#5a7fa0;font-style:italic;padding:10px 0}
+  .footer{margin-top:40px;font-size:.78rem;color:#3a6080;border-top:1px solid #1e3a5a;padding-top:12px}
+</style>
+</head>
+<body>
+<h1>Work Package — ${_wpEscHtml(projectName || "Field Work Summary")}</h1>
+<div class="meta">
+  Prepared by: ${_wpEscHtml(contractorName || "Contractor")} &nbsp;|&nbsp; Generated: ${_wpEscHtml(generatedAt)} &nbsp;|&nbsp; SpecCom Platform
+</div>
+
+${invoices.length ? `<h2>Invoices (${invoices.length})</h2>
+<table><thead><tr><th>Invoice #</th><th>Location</th><th>Date</th><th>Total</th><th>Status</th></tr></thead>
+<tbody>${invRows || "<tr><td colspan='5' class='empty'>No invoices</td></tr>"}</tbody></table>` : ""}
+
+${workOrders.length ? `<h2>Work Orders (${workOrders.length})</h2>
+<table><thead><tr><th>ID</th><th>Description</th><th>Status</th><th>Type</th><th>Date</th></tr></thead>
+<tbody>${woRows || "<tr><td colspan='5' class='empty'>No work orders</td></tr>"}</tbody></table>` : ""}
+
+${redlines.length ? `<h2>Redlines / Field Changes (${redlines.length})</h2>
+<table><thead><tr><th>Title</th><th>Type</th><th>Status</th><th>Old Value</th><th>New Value</th></tr></thead>
+<tbody>${rlRows || "<tr><td colspan='5' class='empty'>No redlines</td></tr>"}</tbody></table>` : ""}
+
+<div class="footer">This package was exported from SpecCom — Field Operations &amp; Billing Platform. For questions contact the contractor who shared this package.</div>
+</body>
+</html>`;
+}
+
+function _wpInvoicesToCsv(invoices){
+  const headers = ["invoice_number", "location", "date", "total", "status"];
+  const rows = invoices.map((inv) => [
+    inv.id || inv.invoice_number || "",
+    inv.location || inv.loc || inv.site_id || "",
+    inv.date || inv.created_at?.slice(0, 10) || "",
+    inv.total ?? "",
+    inv.status || (inv.paid ? "Paid" : "Unpaid") || "",
+  ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
+  return [headers.join(","), ...rows].join("\r\n");
+}
+
+function _wpRedlinesToCsv(redlines){
+  const headers = ["title", "change_type", "status", "old_value", "new_value"];
+  const rows = redlines.map((rl) => [
+    rl.title || "", rl.change_type || "", rl.status || "", rl.old_value || "", rl.new_value || "",
+  ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
+  return [headers.join(","), ...rows].join("\r\n");
+}
+
+function _wpWorkOrdersToCsv(wos){
+  const headers = ["id", "title", "status", "type", "date"];
+  const rows = wos.map((wo) => [
+    wo.id || "", wo.title || wo.description?.slice(0, 80) || "", wo.status || "", wo.type || "", wo.created_at?.slice(0, 10) || "",
+  ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
+  return [headers.join(","), ...rows].join("\r\n");
+}
+
+async function buildWorkPackage({ includeInvoices, includeWorkOrders, includeRedlines, includePhotos }){
+  _wpSetStatus("Gathering data…", false);
+  const JSZip = await loadJsZip();
+  const zip = new JSZip();
+
+  const allInvoices = [];
+  if (includeInvoices){
+    const office = Array.isArray(state.officeInvoices?.records) ? state.officeInvoices.records : [];
+    const ks = Array.isArray(state.ksInvoices?.records) ? state.ksInvoices.records : [];
+    const ruidoso = Array.isArray(state.ruidosoInvoices) ? state.ruidosoInvoices : [];
+    const live = Array.isArray(state.invoices) ? state.invoices : [];
+    allInvoices.push(...office, ...ks, ...ruidoso, ...live);
+  }
+
+  const allWorkOrders = [];
+  if (includeWorkOrders){
+    const dispatch = Array.isArray(state.workOrders?.dispatch) ? state.workOrders.dispatch : [];
+    const assigned = Array.isArray(state.workOrders?.assigned) ? state.workOrders.assigned : [];
+    allWorkOrders.push(...dispatch, ...assigned);
+    const seen = new Set();
+    const deduped = allWorkOrders.filter((wo) => {
+      const k = String(wo.id || Math.random());
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    allWorkOrders.length = 0;
+    allWorkOrders.push(...deduped);
+  }
+
+  const allRedlines = [];
+  if (includeRedlines){
+    const markers = Array.isArray(state.redline?.markers) ? state.redline.markers : [];
+    allRedlines.push(...markers);
+  }
+
+  const contractorName = state.profile?.display_name || state.user?.email || "Contractor";
+  const projectName = state.activeProject?.name || state.activeProject?.title || "Work Summary";
+  const generatedAt = new Date().toLocaleString();
+
+  const summaryHtml = generateWpSummaryHtml({ invoices: allInvoices, workOrders: allWorkOrders, redlines: allRedlines, projectName, contractorName, generatedAt });
+  zip.file("summary_report.html", summaryHtml);
+
+  if (allInvoices.length){
+    zip.file("invoices/invoices.csv", _wpInvoicesToCsv(allInvoices));
+  }
+  if (allWorkOrders.length){
+    zip.file("work_orders/work_orders.csv", _wpWorkOrdersToCsv(allWorkOrders));
+  }
+  if (allRedlines.length){
+    zip.file("redlines/redlines.csv", _wpRedlinesToCsv(allRedlines));
+  }
+
+  if (includePhotos){
+    _wpSetStatus("Fetching photos… (this may take a moment)", false);
+    const photoEntries = [];
+    state.map.sitePhotosBySiteId.forEach((photos) => {
+      if (Array.isArray(photos)) photoEntries.push(...photos);
+    });
+    let fetched = 0;
+    for (const photo of photoEntries.slice(0, 40)){
+      const url = photo.url || photo.storage_url || photo.src;
+      if (!url) continue;
+      try {
+        const resp = await fetch(url, { mode: "cors" });
+        if (!resp.ok) continue;
+        const buf = await resp.arrayBuffer();
+        const ext = url.includes(".png") ? "png" : url.includes(".webp") ? "webp" : "jpg";
+        const fname = photo.id ? `${photo.id}.${ext}` : `photo_${fetched}.${ext}`;
+        zip.file(`photos/${fname}`, buf);
+        fetched += 1;
+      } catch {}
+    }
+    if (fetched) _wpSetStatus(`Bundled ${fetched} photo(s)…`, false);
+  }
+
+  _wpSetStatus("Building ZIP…", false);
+  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
+  _wpSetStatus("", false);
+  return blob;
+}
+
+async function handleWpDownload(){
+  const dlBtn = $("btnWpDownload");
+  if (dlBtn){ dlBtn.disabled = true; dlBtn.textContent = "Building…"; }
+  try {
+    const blob = await buildWorkPackage({
+      includeInvoices: $("wpIncInvoices")?.checked !== false,
+      includeWorkOrders: $("wpIncWorkOrders")?.checked !== false,
+      includeRedlines: $("wpIncRedlines")?.checked !== false,
+      includePhotos: $("wpIncPhotos")?.checked === true,
+    });
+    const projectSlug = (state.activeProject?.name || "work-package").replace(/[^a-z0-9]/gi, "-").toLowerCase();
+    const datePart = new Date().toISOString().slice(0, 10);
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `speccom-${projectSlug}-${datePart}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(link.href);
+    _wpSetStatus("ZIP downloaded successfully.", false);
+  } catch (e) {
+    _wpSetStatus(`Build failed: ${getErrorMessage(e)}`, true);
+  } finally {
+    if (dlBtn){ dlBtn.disabled = false; dlBtn.textContent = "⬇ Download ZIP"; }
+  }
+}
+
+async function handleWpShare(){
+  const shareBtn = $("btnWpShare");
+  if (shareBtn){ shareBtn.disabled = true; shareBtn.textContent = "Building…"; }
+  try {
+    const blob = await buildWorkPackage({
+      includeInvoices: $("wpIncInvoices")?.checked !== false,
+      includeWorkOrders: $("wpIncWorkOrders")?.checked !== false,
+      includeRedlines: $("wpIncRedlines")?.checked !== false,
+      includePhotos: $("wpIncPhotos")?.checked === true,
+    });
+
+    const sb = supabase || window.supabase;
+    if (!sb){
+      _wpSetStatus("Share link requires an active account. Download the ZIP instead.", true);
+      return;
+    }
+
+    const orgId = state.activeOrgId || "shared";
+    const projectSlug = (state.activeProject?.name || "package").replace(/[^a-z0-9]/gi, "-").toLowerCase().slice(0, 30);
+    const path = `${orgId}/${Date.now()}_${projectSlug}.zip`;
+
+    shareBtn.textContent = "Uploading…";
+    const { error: upErr } = await sb.storage.from("work-packages").upload(path, blob, { contentType: "application/zip", upsert: false });
+    if (upErr) throw upErr;
+
+    const { data: signedData, error: signErr } = await sb.storage.from("work-packages").createSignedUrl(path, 604800);
+    if (signErr) throw signErr;
+
+    const signedUrl = signedData?.signedUrl || "";
+    const urlInput = $("wpShareUrl");
+    const shareResult = $("wpShareResult");
+    if (urlInput) urlInput.value = signedUrl;
+    if (shareResult) shareResult.style.display = "block";
+    _wpSetStatus("Share link ready — valid for 7 days.", false);
+  } catch (e) {
+    _wpSetStatus(`Share failed: ${getErrorMessage(e)}`, true);
+  } finally {
+    if (shareBtn){ shareBtn.disabled = false; shareBtn.textContent = "🔗 Get Share Link"; }
+  }
+}
+
+function wireWorkPackageModal(){
+  const backdrop = $("workPackageBackdrop");
+  if (!backdrop) return;
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeWorkPackageModal(); });
+  const closeBtn = $("btnWorkPkgClose");
+  if (closeBtn) closeBtn.addEventListener("click", closeWorkPackageModal);
+  const dlBtn = $("btnWpDownload");
+  if (dlBtn) dlBtn.addEventListener("click", handleWpDownload);
+  const shareBtn = $("btnWpShare");
+  if (shareBtn) shareBtn.addEventListener("click", handleWpShare);
+  const copyBtn = $("btnWpCopyLink");
+  if (copyBtn){
+    copyBtn.addEventListener("click", () => {
+      const urlInput = $("wpShareUrl");
+      if (!urlInput?.value) return;
+      navigator.clipboard?.writeText(urlInput.value).then(() => {
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => { copyBtn.textContent = "Copy"; }, 2000);
+      }).catch(() => {
+        urlInput.select();
+        document.execCommand("copy");
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => { copyBtn.textContent = "Copy"; }, 2000);
+      });
+    });
+  }
+  const emailBtn = $("btnWpEmailLink");
+  if (emailBtn){
+    emailBtn.addEventListener("click", () => {
+      const urlInput = $("wpShareUrl");
+      const url = urlInput?.value || "";
+      const project = state.activeProject?.name || "Work Package";
+      const contractor = state.profile?.display_name || state.user?.email || "";
+      const subject = encodeURIComponent(`SpecCom Work Package — ${project}`);
+      const body = encodeURIComponent(`Hi,\n\nPlease find my work package for ${project} below. The link is valid for 7 days and does not require a login.\n\n${url}\n\nPrepared by: ${contractor}\nGenerated via SpecCom Platform`);
+      window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    });
+  }
+  const navBtn = $("nav-workpkg-btn");
+  if (navBtn) navBtn.addEventListener("click", openWorkPackageModal);
+}
+
 startVisibilityWatch();
 function startApp(){
   initSplash();
@@ -31868,6 +32575,8 @@ function startApp(){
   applyI18n();
   syncLanguageControls();
   initAuth();
+  ensureHelpPanel();
+  wireWorkPackageModal();
   if (consumeDemoCinematicIntro() && String(window.location.hash || "").toLowerCase().startsWith("#demo")){
     queueMicrotask(() => openDemoPlatform());
   }
