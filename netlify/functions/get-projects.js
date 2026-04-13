@@ -35,8 +35,8 @@ function json(statusCode, payload, extraHeaders = {}) {
 
 function getCacheHeaders() {
   return {
-    "Cache-Control": "public, max-age=0, s-maxage=30, stale-while-revalidate=120",
-    "Netlify-CDN-Cache-Control": "public, max-age=30, stale-while-revalidate=120",
+    "Cache-Control": "no-store",
+    "Pragma": "no-cache",
   };
 }
 
@@ -100,6 +100,14 @@ function applySafeFilters(query, params) {
 
     query.eq(config.column, value);
   });
+
+  const searchRaw = String(params.search || "").trim();
+  if (searchRaw) {
+    const escaped = searchRaw.replace(/[%_,]/g, (m) => `\\${m}`);
+    const pattern = `%${escaped}%`;
+    query.or(`customer_label.ilike.${pattern},address.ilike.${pattern}`);
+  }
+
   return { query, errors };
 }
 
@@ -134,9 +142,11 @@ exports.handler = async (event) => {
     return json(403, { error: "Profile not found or inaccessible" });
   }
 
-  const role = "admin";
-  const isRoot = true;
+  const role = "member";
   const orgId = profile.org_id || null;
+  if (!orgId) {
+    return json(403, { error: "Missing org context" });
+  }
 
   const qs = event.queryStringParameters || {};
   const pageSize = parsePageSize(qs.page_size);
@@ -156,30 +166,70 @@ exports.handler = async (event) => {
     .order("id", { ascending: false })
     .limit(pageSize + 1);
 
-  if (!isRoot) {
-    if (!orgId) return json(403, { error: "Missing org context" });
-    const { data: projectRows, error: projectError } = await supabase
-      .from("projects")
-      .select("id")
-      .eq("org_id", orgId);
-    if (projectError) {
-      const status = /permission|rls|forbidden|not authorized/i.test(String(projectError.message || "")) ? 403 : 500;
-      return json(status, { error: projectError.message || "Failed to resolve org projects" });
-    }
-    const projectIds = (projectRows || []).map((row) => row.id).filter(Boolean);
-    if (!projectIds.length) {
-      return json(200, {
-        ok: true,
-        role,
-        org_id: orgId,
-        page_size: pageSize,
-        has_more: false,
-        next_cursor: null,
-        data: [],
-      }, getCacheHeaders());
-    }
-    query = query.in("project_id", projectIds);
+  const linkedProjectIds = new Set();
+
+  const { data: ownedRows, error: ownedError } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("created_by", user.id);
+  if (ownedError) {
+    const status = /permission|rls|forbidden|not authorized/i.test(String(ownedError.message || "")) ? 403 : 500;
+    return json(status, { error: ownedError.message || "Failed to resolve owned projects" });
   }
+  (ownedRows || []).forEach((row) => row?.id && linkedProjectIds.add(row.id));
+
+  const { data: membershipRows, error: membershipError } = await supabase
+    .from("project_members")
+    .select("project_id")
+    .eq("user_id", user.id);
+  if (membershipError) {
+    const message = String(membershipError.message || "").toLowerCase();
+    const isMissingTable = message.includes("project_members") && (message.includes("does not exist") || message.includes("could not find the table"));
+    if (!isMissingTable) {
+      const status = /permission|rls|forbidden|not authorized/i.test(message) ? 403 : 500;
+      return json(status, { error: membershipError.message || "Failed to resolve project membership" });
+    }
+  } else {
+    (membershipRows || []).forEach((row) => row?.project_id && linkedProjectIds.add(row.project_id));
+  }
+
+  if (!linkedProjectIds.size) {
+    return json(200, {
+      ok: true,
+      role,
+      org_id: orgId,
+      page_size: pageSize,
+      has_more: false,
+      next_cursor: null,
+      data: [],
+    }, getCacheHeaders());
+  }
+
+  const { data: scopedProjects, error: scopedProjectsError } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("org_id", orgId)
+    .in("id", Array.from(linkedProjectIds));
+  if (scopedProjectsError) {
+    const status = /permission|rls|forbidden|not authorized/i.test(String(scopedProjectsError.message || "")) ? 403 : 500;
+    return json(status, { error: scopedProjectsError.message || "Failed to apply org scope" });
+  }
+
+  const accessibleProjectIds = (scopedProjects || []).map((row) => row.id).filter(Boolean);
+  if (!accessibleProjectIds.length) {
+    return json(200, {
+      ok: true,
+      role,
+      org_id: orgId,
+      page_size: pageSize,
+      has_more: false,
+      next_cursor: null,
+      data: [],
+    }, getCacheHeaders());
+  }
+
+  query = query.in("project_id", accessibleProjectIds);
 
   const filtered = applySafeFilters(query, qs);
   query = filtered.query;

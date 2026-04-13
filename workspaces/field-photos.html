@@ -154,18 +154,40 @@
 
   <script type="module">
     import { makeClient } from "../supabaseClient.js";
-
     const supabase = await makeClient();
     const projectSelect = document.getElementById("projectSelect");
     const photoInput = document.getElementById("photoInput");
     const uploadBtn = document.getElementById("uploadBtn");
     const uploadStatus = document.getElementById("uploadStatus");
     const markers = [];
+    let map = null;
 
-    const map = L.map('map').setView([32.3, -86.9], 10);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
+    function redirectToLogin() {
+      window.location.replace("../index.html");
+    }
+
+    async function requireAuthenticatedSession() {
+      if (!supabase) {
+        redirectToLogin();
+        return null;
+      }
+      const { data, error } = await supabase.auth.getSession();
+      const session = data?.session || null;
+      if (error || !session?.user) {
+        redirectToLogin();
+        return null;
+      }
+      return session;
+    }
+
+    function ensureMap() {
+      if (map) return map;
+      map = L.map('map').setView([32.3, -86.9], 10);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
+      return map;
+    }
 
     function addStatus(message, cls = "") {
       const line = document.createElement("div");
@@ -198,6 +220,7 @@
     }
 
     function addMarker(lat, lng, mhNumber, imageUrl) {
+      const activeMap = ensureMap();
       const label = mhNumber || 'Photo';
       const popup = `
         <div style="text-align:center; min-width:160px;">
@@ -206,17 +229,19 @@
         </div>
       `;
       const marker = L.marker([lat, lng])
-        .addTo(map)
+        .addTo(activeMap)
         .bindPopup(popup);
       markers.push(marker);
     }
 
     function clearMarkers() {
+      if (!map) return;
       markers.forEach((marker) => map.removeLayer(marker));
       markers.length = 0;
     }
 
     function fitToMarkers() {
+      if (!map) return;
       if (!markers.length) return;
       const bounds = L.latLngBounds(markers.map((marker) => marker.getLatLng()));
       if (bounds.isValid()) {
@@ -336,6 +361,9 @@
     });
 
     document.addEventListener("DOMContentLoaded", async () => {
+      const session = await requireAuthenticatedSession();
+      if (!session) return;
+      ensureMap();
       const projectFromUrl = new URLSearchParams(window.location.search).get("project_id") || "";
       await loadProjects(projectFromUrl);
       if (projectSelect.value) {

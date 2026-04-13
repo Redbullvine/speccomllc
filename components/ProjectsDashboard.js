@@ -70,6 +70,7 @@ export default function ProjectsDashboard({
           pageSize: PAGE_SIZE,
           status,
           technicianId,
+          search,
         },
         { signal: abortControllerRef.current.signal }
       );
@@ -100,7 +101,7 @@ export default function ProjectsDashboard({
         setLoadingMore(false);
       }
     }
-  }, [apiClient, status, technicianId]);
+  }, [apiClient, status, technicianId, search]);
 
   useEffect(() => {
     setRows([]);
@@ -132,15 +133,7 @@ export default function ProjectsDashboard({
     return () => observer.disconnect();
   }, [fetchProjects, hasMore, loading, loadingMore, nextCursor]);
 
-  const visibleRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((row) => {
-      const customer = String(row.customer_label || "").toLowerCase();
-      const address = String(row.address || "").toLowerCase();
-      return customer.includes(q) || address.includes(q);
-    });
-  }, [rows, search]);
+  const visibleRows = useMemo(() => rows, [rows]);
 
   const canFilterTechnician = role === "admin";
   const showNotesColumn = role !== "viewer";
@@ -170,7 +163,7 @@ export default function ProjectsDashboard({
           </label>
 
           <label>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Search (client-side)</div>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Search (server-side)</div>
             <input
               type="text"
               placeholder="Customer or address"
@@ -270,7 +263,7 @@ export default function ProjectsDashboard({
 
       <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
         <div style={{ fontSize: 12, opacity: 0.8 }}>
-          Showing {visibleRows.length} loaded row(s){search.trim() ? " (filtered)" : ""}.
+          Showing {visibleRows.length} loaded row(s).
         </div>
         {hasMore ? (
           <button

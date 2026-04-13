@@ -5933,6 +5933,7 @@ async function loadRedlineMarkers({ silent = false } = {}){
     const { data: overageData } = await state.client
       .from("redline_markers")
       .select("*")
+      .eq("project_id", source.project_id)
       .eq("overage_request", true)
       .order("created_at", { ascending: true });
     if (overageData && overageData.length){

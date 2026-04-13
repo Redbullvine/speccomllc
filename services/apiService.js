@@ -180,7 +180,7 @@ export function createApiClient({ authToken, apiBase = DEFAULT_API_BASE, fetchIm
   }
 
   async function getProjects(
-    { cursor = null, pageSize = 50, status = "", technicianId = "", siteId = "" } = {},
+    { cursor = null, pageSize = 50, status = "", technicianId = "", siteId = "", search = "" } = {},
     { signal } = {}
   ) {
     return request({
@@ -192,6 +192,7 @@ export function createApiClient({ authToken, apiBase = DEFAULT_API_BASE, fetchIm
         status,
         technician_id: technicianId,
         site_id: siteId,
+        search,
       },
       signal,
       retry: true,
