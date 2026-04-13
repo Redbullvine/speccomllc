@@ -19278,6 +19278,11 @@ async function createProject(){
     toast("Project name required", "Enter a project name.");
     return;
   }
+  // Defensively reload profile if it wasn't set — can happen if the modal
+  // was opened during a race condition or if the session was refreshed.
+  if (!state.profile && state.client && state.user?.id){
+    await loadProfile(state.client, state.user.id);
+  }
   const roleHints = [
     getRoleCode(),
     state.profile?.role,
