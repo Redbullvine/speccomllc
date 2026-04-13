@@ -2802,6 +2802,40 @@ body.map-create-open #mapSidebarToggle{
   color:rgba(241,245,249,0.6);
   font-size:12px;
 }
+#projectsModal .project-row{
+  background: rgba(15, 35, 65, 0.82);
+  border-color: rgba(55, 100, 180, 0.4);
+  color: #f1f5f9;
+}
+#projectsModal .project-row:hover{
+  background: rgba(20, 50, 95, 0.9);
+  border-color: rgba(80, 140, 255, 0.6);
+}
+#projectsModal .project-row-title{
+  color: #f1f5f9;
+  font-weight: 700;
+}
+#projectsModal .project-row-meta{
+  color: rgba(190, 210, 240, 0.8);
+}
+#projectsModal .project-row-select{
+  color: #f1f5f9;
+}
+#projectsModal .project-row.active{
+  background: rgba(212, 175, 55, 0.18);
+  border-color: rgba(212, 175, 55, 0.85);
+  color: #1f2937;
+}
+#projectsModal .project-row.active .project-row-title,
+#projectsModal .project-row.active .project-row-select{
+  color: #1f2937;
+}
+#projectsModal .project-row.active .project-row-meta{
+  color: #475569;
+}
+#projectsModal .modal-header h2{
+  color: #0f1f3d;
+}
 
 #viewAdmin .card{
   color:#1f2937;
