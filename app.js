@@ -18116,6 +18116,7 @@ function openProjectsModal(){
   const modal = $("projectsModal");
   if (!modal) return;
   renderProjectsList();
+  updateProjectScopedControls();
   modal.style.display = "";
 }
 
