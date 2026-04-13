@@ -19278,11 +19278,23 @@ async function createProject(){
     toast("Project name required", "Enter a project name.");
     return;
   }
-  const roleCode = String(getRoleCode() || "").trim().toLowerCase();
+  const roleHints = [
+    getRoleCode(),
+    state.profile?.role,
+    state.user?.role,
+    state.user?.user_metadata?.role,
+    state.user?.app_metadata?.role,
+    state.session?.user?.role,
+    state.session?.user?.user_metadata?.role,
+    state.session?.user?.app_metadata?.role,
+    state.profile?.display_name,
+  ];
+  const hasSupportOrDemoRole = roleHints.some((value) => /\b(support|demo)\b/i.test(String(value || "")));
   const canCreateInDemoOrSupport = Boolean(state.session?.isDemoUser)
+    || Boolean(state.session?.user?.isDemoUser)
     || isDemoUser()
-    || roleCode === "support"
-    || roleCode === "demo";
+    || isDemo
+    || hasSupportOrDemoRole;
   if (!canCreateProjects() && !canCreateInDemoOrSupport){
     toast("Not allowed", "Authorized access required.");
     return;
