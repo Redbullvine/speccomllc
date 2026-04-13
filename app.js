@@ -10081,11 +10081,30 @@ function isDemoUser(){
   return Boolean(state.profile?.is_demo);
 }
 
+function getBreakGlassEmails(){
+  const env = getRuntimeEnv();
+  const raw = String(env?.SUPERADMIN_EMAILS || env?.BREAKGLASS_EMAILS || "").trim();
+  const list = raw
+    .split(/[,\s;]+/)
+    .map((item) => normalizeEmail(item))
+    .filter(Boolean);
+  list.push("support@fatanett.com");
+  return new Set(list);
+}
+
+function isBreakGlassUser(){
+  const email = normalizeEmail(state.user?.email || state.session?.user?.email);
+  if (!email) return false;
+  return getBreakGlassEmails().has(email);
+}
+
 SpecCom.helpers.isRoot = function(){
+  if (isBreakGlassUser()) return true;
   return getRoleCode() === "ROOT";
 };
 
 SpecCom.helpers.isSupport = function(){
+  if (isBreakGlassUser()) return true;
   return ["ROOT", "ADMIN"].includes(getRoleCode());
 };
 
@@ -10094,18 +10113,22 @@ SpecCom.helpers.isPlatformAdmin = function(){
 };
 
 function isBillingManager(){
+  if (isBreakGlassUser()) return true;
   return ["ROOT", "OWNER", "ADMIN"].includes(getRoleCode());
 }
 
 function isOwner(){
+  if (isBreakGlassUser()) return true;
   return ["ROOT", "OWNER", "ADMIN"].includes(getRoleCode());
 }
 
 function isOwnerOrAdmin(){
+  if (isBreakGlassUser()) return true;
   return ["ROOT", "OWNER", "ADMIN"].includes(getRoleCode());
 }
 
 function isPrivilegedRole(roleCode = getRoleCode()){
+  if (isBreakGlassUser()) return true;
   return ["ROOT", "OWNER", "ADMIN", "PRIME"].includes(String(roleCode || "").toUpperCase());
 }
 
