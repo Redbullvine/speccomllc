@@ -2753,6 +2753,7 @@ body.map-create-open #mapSidebarToggle{
   border-radius:12px;
   padding:10px 12px;
   background: rgba(7,26,43,.5);
+  color:#f1f5f9;
   cursor:pointer;
   display:grid;
   gap:4px;
@@ -2798,7 +2799,7 @@ body.map-create-open #mapSidebarToggle{
   font-weight:800;
 }
 .project-row-meta{
-  color:var(--muted);
+  color:rgba(241,245,249,0.6);
   font-size:12px;
 }
 
