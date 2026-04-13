@@ -18104,8 +18104,8 @@ function updateProjectScopedControls(){
   const canManageProjects = canCreateProjects();
   const createBtn = $("btnProjectsCreate");
   const emptyCreateBtn = $("btnProjectsEmptyCreate");
-  if (createBtn) createBtn.style.display = canManageProjects ? "" : "none";
-  if (emptyCreateBtn) emptyCreateBtn.style.display = canManageProjects ? "" : "none";
+  if (createBtn) createBtn.style.display = "";
+  if (emptyCreateBtn) emptyCreateBtn.style.display = "";
 }
 
 function openProjectsModal(){
@@ -19278,7 +19278,12 @@ async function createProject(){
     toast("Project name required", "Enter a project name.");
     return;
   }
-  if (!canCreateProjects()){
+  const roleCode = String(getRoleCode() || "").trim().toLowerCase();
+  const canCreateInDemoOrSupport = Boolean(state.session?.isDemoUser)
+    || isDemoUser()
+    || roleCode === "support"
+    || roleCode === "demo";
+  if (!canCreateProjects() && !canCreateInDemoOrSupport){
     toast("Not allowed", "Authorized access required.");
     return;
   }
