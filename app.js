@@ -21354,6 +21354,133 @@ function setSiteWorkflowStatus(siteId, status){
   renderMapFieldPanel();
 }
 
+function formatMapFieldPendingDocSize(bytes){
+  const size = Number(bytes);
+  if (!Number.isFinite(size) || size < 0) return "";
+  if (size < 1024) return `${Math.round(size)} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = size;
+  let unitIndex = -1;
+  while (value >= 1024 && unitIndex < units.length - 1){
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const digits = value >= 10 ? 1 : 2;
+  return `${value.toFixed(digits)} ${units[Math.max(0, unitIndex)]}`;
+}
+
+function renderMapFieldPendingDocs(){
+  const preview = $("mapFieldDocPreview");
+  if (!preview) return;
+  preview.replaceChildren();
+  const pendingDocs = Array.isArray(state.map._pendingDocs) ? state.map._pendingDocs : [];
+  pendingDocs.forEach((file, index) => {
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.alignItems = "center";
+    row.style.justifyContent = "space-between";
+    row.style.gap = "8px";
+    row.style.padding = "6px 8px";
+    row.style.border = "1px solid rgba(255,255,255,0.12)";
+    row.style.borderRadius = "8px";
+
+    const details = document.createElement("div");
+    details.style.minWidth = "0";
+    details.style.display = "flex";
+    details.style.flexDirection = "column";
+    details.style.gap = "2px";
+
+    const nameEl = document.createElement("div");
+    nameEl.className = "small";
+    nameEl.style.wordBreak = "break-word";
+    nameEl.textContent = String(file?.name || `Attachment ${index + 1}`);
+
+    const metaEl = document.createElement("div");
+    metaEl.className = "muted small";
+    metaEl.textContent = formatMapFieldPendingDocSize(file?.size);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn ghost small";
+    removeBtn.dataset.mapFieldDocRemove = String(index);
+    removeBtn.setAttribute("aria-label", `Remove ${nameEl.textContent}`);
+    removeBtn.textContent = "x";
+
+    details.appendChild(nameEl);
+    if (metaEl.textContent){
+      details.appendChild(metaEl);
+    }
+    row.append(details, removeBtn);
+    preview.appendChild(row);
+  });
+}
+
+function parseMapFieldBillingCodeLines(raw){
+  return String(raw || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      let billingCode = line;
+      let quantity = 1;
+      const match = line.match(/^(.*\S)\s+(-?\d+(?:\.\d+)?)$/);
+      if (match){
+        billingCode = match[1].trim();
+        const parsedQty = Number(match[2]);
+        if (Number.isFinite(parsedQty) && parsedQty > 0){
+          quantity = parsedQty;
+        }
+      }
+      return {
+        billing_code: billingCode,
+        quantity,
+      };
+    })
+    .filter((row) => row.billing_code);
+}
+
+function applyMapFieldSiteNotes(siteId, nextNotes){
+  const siteKey = toSiteIdKey(siteId);
+  if (!siteKey) return;
+  const liveMatch = (state.projectSites || []).find((row) => toSiteIdKey(row.id) === siteKey);
+  if (liveMatch){
+    liveMatch.notes = nextNotes;
+  }
+  if (toSiteIdKey(state.activeSite?.id) === siteKey && state.activeSite){
+    state.activeSite.notes = nextNotes;
+    if (state.pinOverview.open){
+      SpecCom.helpers.renderPinOverview();
+    } else {
+      renderSitePanel();
+    }
+  }
+  if (Array.isArray(state.pendingSites) && state.pendingSites.length){
+    state.pendingSites = state.pendingSites.map((row) => (
+      toSiteIdKey(row.id) === siteKey ? { ...row, notes: nextNotes } : row
+    ));
+    savePendingSitesToStorage(state.pendingSites);
+  }
+}
+
+async function appendMapFieldBillingCodesToSiteNotes(site, billingRows){
+  if (!site?.id || !billingRows.length) return false;
+  const billingLine = `Billing: ${billingRows.map((row) => `${row.billing_code} x${row.quantity}`).join(", ")}`;
+  const existing = String(site.notes || "").trim();
+  const nextNotes = existing ? `${existing}\n${billingLine}` : billingLine;
+  if (state.client && !site.is_pending){
+    const { error } = await state.client
+      .from("sites")
+      .update({ notes: nextNotes })
+      .eq("id", site.id);
+    if (error){
+      return false;
+    }
+  }
+  site.notes = nextNotes;
+  applyMapFieldSiteNotes(site.id, nextNotes);
+  return true;
+}
+
 async function createFieldLocationFromCurrentGps(){
   if (!state.activeProject){
     toast("Project required", "Select a project before creating a new location.");
@@ -21366,7 +21493,7 @@ async function createFieldLocationFromCurrentGps(){
   const name = String($("mapFieldLocationName")?.value || "").trim() || "";
   const locationType = String($("mapFieldLocationType")?.value || "Other").trim();
   const notes = String($("mapFieldLocationNotes")?.value || "").trim();
-  await createSiteFromMapClick(
+  const newSiteId = await createSiteFromMapClick(
     { lat: gps.lat, lng: gps.lng },
     name,
     {
@@ -21376,7 +21503,16 @@ async function createFieldLocationFromCurrentGps(){
       createdAt: gps.captured_at || nowISO(),
     }
   );
-  const createdSiteId = toSiteIdKey(state.activeSite?.id);
+  const createdSiteId = toSiteIdKey(newSiteId || state.activeSite?.id);
+  let createdSite = createdSiteId && toSiteIdKey(state.activeSite?.id) === createdSiteId
+    ? state.activeSite
+    : (state.projectSites || []).find((row) => toSiteIdKey(row.id) === createdSiteId) || null;
+  if (!createdSite && createdSiteId && state.client){
+    const siteRes = await fetchSiteById(createdSiteId);
+    if (!siteRes.error && siteRes.data){
+      createdSite = siteRes.data;
+    }
+  }
   if (createdSiteId){
     setSiteWorkflowStatus(createdSiteId, MAP_FIELD_STATUS.NOT_STARTED);
     setMapFieldSelectedSite(createdSiteId);
@@ -21399,10 +21535,60 @@ async function createFieldLocationFromCurrentGps(){
   state.map._pendingPhotos = [];
   const preview = $("mapFieldPhotoPreview");
   if (preview) preview.innerHTML = "";
+  const capturedAt = gps.captured_at || nowISO();
+  const docGps = {
+    lat: gps.lat,
+    lng: gps.lng,
+    accuracy: gps.accuracy_m ?? gps.accuracy ?? null,
+  };
+  const pendingDocs = Array.isArray(state.map._pendingDocs) ? state.map._pendingDocs.slice() : [];
+  if (createdSite && pendingDocs.length){
+    for (const file of pendingDocs){
+      const uploadPath = await uploadSiteMediaForSite(file, createdSite, docGps, capturedAt);
+      if (uploadPath){
+        toast("File uploaded", `${file.name} attached to ${getSiteDisplayName(createdSite)}.`, "success");
+      }
+    }
+  }
+  state.map._pendingDocs = [];
+  renderMapFieldPendingDocs();
+
+  const billingInput = $("mapFieldBillingCodes");
+  const billingRows = parseMapFieldBillingCodeLines(billingInput?.value || "");
+  if (createdSite && billingRows.length){
+    const rows = billingRows.map((row) => ({
+      site_id: createdSite.id,
+      project_id: createdSite.project_id || state.activeProject?.id || null,
+      billing_code: row.billing_code,
+      quantity: row.quantity,
+      created_by: state.user?.id || null,
+      created_at: capturedAt,
+    }));
+    let billingSaved = false;
+    let billingInsertError = null;
+    if (state.client && !createdSite.is_pending){
+      const { error } = await state.client.from("site_billing_codes").insert(rows);
+      if (!error){
+        billingSaved = true;
+        toast("Billing saved", `${billingRows.length} billing code${billingRows.length === 1 ? "" : "s"} saved.`, "success");
+      } else {
+        billingInsertError = error;
+      }
+    }
+    if (!billingSaved){
+      const appended = await appendMapFieldBillingCodesToSiteNotes(createdSite, billingRows);
+      if (appended){
+        toast("Billing saved", "Billing codes were added to site notes.", "success");
+      } else {
+        toast("Billing save error", billingInsertError?.message || "Could not save billing codes for this location.", "error");
+      }
+    }
+  }
   setMapFieldCreateOpen(false);
   if ($("mapFieldLocationName")) $("mapFieldLocationName").value = "";
   if ($("mapFieldLocationType")) $("mapFieldLocationType").value = "Node";
   if ($("mapFieldLocationNotes")) $("mapFieldLocationNotes").value = "";
+  if (billingInput) billingInput.value = "";
   renderMapFieldPanel();
 }
 
@@ -31336,6 +31522,15 @@ function wireUI(){
   const mapFieldPanel = $("mapFieldPanel");
   if (mapFieldPanel){
     mapFieldPanel.addEventListener("click", async (e) => {
+      const removeDocBtn = e.target.closest("[data-map-field-doc-remove]");
+      if (removeDocBtn){
+        const index = Number(removeDocBtn.dataset.mapFieldDocRemove);
+        if (Number.isFinite(index) && Array.isArray(state.map._pendingDocs)){
+          state.map._pendingDocs.splice(index, 1);
+          renderMapFieldPendingDocs();
+        }
+        return;
+      }
       const actionBtn = e.target.closest("[data-map-field-action]");
       if (actionBtn){
         const action = String(actionBtn.dataset.mapFieldAction || "");
@@ -31410,6 +31605,19 @@ function wireUI(){
       }
     });
     mapFieldPanel.addEventListener("change", (e) => {
+      const docInput = e.target.closest("#mapFieldDocInput");
+      if (docInput){
+        const files = Array.from(docInput.files || []).filter(Boolean);
+        if (files.length){
+          if (!Array.isArray(state.map._pendingDocs)){
+            state.map._pendingDocs = [];
+          }
+          state.map._pendingDocs.push(...files);
+          renderMapFieldPendingDocs();
+        }
+        docInput.value = "";
+        return;
+      }
       const select = e.target.closest("#mapFieldStatusSelect");
       if (select){
         const siteId = select.dataset.siteId;
@@ -31451,7 +31659,7 @@ function wireUI(){
     mapCanvas.addEventListener("click", (e) => {
       const createWrap = $("mapFieldCreateWrap");
       if (!createWrap || createWrap.hidden) return;
-      if (e.target.closest("#mapFieldCreateWrap")) return;
+      if (e.target.closest("#mapFieldPanel")) return;
       setMapFieldCreateOpen(false);
     });
   }

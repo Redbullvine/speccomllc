@@ -1440,7 +1440,25 @@
                     <input id="mapFieldPhotoInput" type="file" accept="image/*" capture="environment" multiple hidden />
                     <div id="mapFieldPhotoPreview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>
                   </div>
-                  <div class="row" style="justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+                  <div style="margin-top:8px;border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;">
+                    <div class="muted small" style="margin-bottom:4px;">Attach Files</div>
+                    <label class="btn ghost small" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;" for="mapFieldDocInput">
+                      <svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M10 2H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6l-5-4z"/>
+                        <polyline points="10 2 10 6 14 6"/>
+                      </svg>
+                      Upload KMZ / PDF / ZIP / CSV
+                    </label>
+                    <input id="mapFieldDocInput" type="file" accept=".kmz,.kml,.pdf,.zip,.csv,.xlsx,.xls" multiple hidden />
+                    <div id="mapFieldDocPreview" style="display:flex;flex-direction:column;gap:4px;margin-top:6px;"></div>
+                  </div>
+                  <div style="margin-top:8px;border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;">
+                    <div class="muted small" style="margin-bottom:4px;">Billing Codes Used</div>
+                    <div style="color:rgba(255,255,255,0.5);font-size:11px;margin-bottom:6px;">One per line: CODE qty &nbsp;(e.g. FBSP-2 3)</div>
+                    <textarea id="mapFieldBillingCodes" class="input compact" rows="3"
+                      placeholder="e.g.&#10;FBSP-2 3&#10;FBOSC-12 1&#10;FBTERM 4"></textarea>
+                  </div>
+                  <div class="row" style="justify-content:flex-end; gap:8px; flex-wrap:wrap; margin-top:8px;">
                     <button id="btnMapFieldDismissCreate" class="btn ghost small" type="button">Close</button>
                     <button id="btnMapFieldCancelCreate" class="btn ghost small" type="button">Cancel</button>
                     <button id="btnMapFieldCreateLocation" class="btn secondary small" type="button">Create Location Here</button>
@@ -2274,5 +2292,4 @@
   <script type="module" src="./app.js"></script>
 </body>
 </html>
-
 
