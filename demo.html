@@ -331,12 +331,14 @@ function loadWS(ws){
   showScene(scenes[0],body);
 }
 
+var _sceneInterval=null;
 function showScene(sc,body){
+  if(_sceneInterval){clearInterval(_sceneInterval);_sceneInterval=null;}
   body.innerHTML="";
   var d=document.createElement("div");
   d.className="scene";
+  body.appendChild(d);  // append FIRST so getElementById works inside build()
   sc.build(d);
-  body.appendChild(d);
   body.scrollTop=0;
 }
 
@@ -401,7 +403,7 @@ function getScenes(ws){
         +'<div class="scs" style="margin-top:4px;">Session active · <span id="lp2"></span></div>'
         +'</div></div>';
       var clocked=false;
-      var iv=setInterval(function(){var n=new Date();$("lc").textContent=n.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});},1000);
+      var iv=_sceneInterval=setInterval(function(){var lc=$("lc");if(lc)lc.textContent=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});},1000);
       $("lc").textContent=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
       $("lb").addEventListener("click",function(){
         if(clocked)return;clocked=true;clearInterval(iv);
