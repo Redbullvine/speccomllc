@@ -199,7 +199,7 @@
 </div>
 
 <div id="toast"></div>
-<div class="dstatus"><div class="dsdot"></div><span class="dstxt">Demo Mode — No data is saved</span></div>
+<div class="dstatus"><div class="dsdot"></div><span class="dstxt">Demo Mode · No data is saved</span></div>
 
 <script>
 !function(){
@@ -243,7 +243,7 @@ function fireWarp(dur){
 
 /* ── WORKSPACES ── */
 var WS=[
-  {key:"technician",title:"Technician",a:"#378ADD",g:"rgba(55,138,221,.14)",ib:"rgba(55,138,221,.14)",sub:"Clock in, accept work orders, capture field photos",chips:["Clock In","Work Orders","Photos","Complete"],
+  {key:"technician",title:"Technician",a:"#378ADD",g:"rgba(55,138,221,.14)",ib:"rgba(55,138,221,.14)",sub:"Clock in, view daily schedule, inspect vehicle, capture field photos",chips:["Clock In","Daily Schedule","Vehicle Inspect","Capture Photo","Complete Job"],
    icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5"><circle cx="9" cy="9" r="6"/><path d="M9 5.5v3.5l2 2"/></svg>'},
   {key:"fieldmap",title:"Field Map",a:"#1D9E75",g:"rgba(29,158,117,.14)",ib:"rgba(29,158,117,.14)",sub:"Drop pins, name locations, capture GPS coordinates",chips:["Drop Pin","Name It","GPS Fix","Save"],
    icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><path d="M9 2C6.24 2 4 4.24 4 7c0 4 5 9 5 9s5-5 5-9c0-2.76-2.24-5-5-5z"/><circle cx="9" cy="7" r="2"/></svg>'},
@@ -380,81 +380,204 @@ function drawCheck(c){
   if(cp)setTimeout(function(){cp.classList.add("on");},750);
 }
 
-/* ════════════════════════════════════
+/* ────────────────────────────────────
    SCENES
-════════════════════════════════════ */
+──────────────────────────────────── */
 function getScenes(ws){
   var A=ws.a;
 
   /* TECHNICIAN */
   if(ws.key==="technician") return [
+    /* ── CLOCK IN ── */
     {label:"Clock In",build:function(c){
       c.innerHTML='<div class="stitle">Start Your Shift</div>'
         +'<div style="text-align:center;padding:16px 0;">'
         +'<div class="sclock" id="lc" style="color:'+A+';">—</div>'
         +'<div class="sclocksub" id="ls">Not clocked in</div></div>'
         +'<label class="slbl">Select Project</label>'
-        +'<select class="ssel" id="lp"><option>Ruidoso Fire Rebuild</option><option>Lincoln County Expansion</option><option>Mescalero Trunk Run</option></select>'
+        +'<select class="ssel" id="lp"><option>Somewhere, USA — Fiber Build</option><option>Somewhere, USA — Expansion</option><option>Somewhere, USA — Maintenance</option></select>'
         +'<button class="sbtn p pulse" id="lb" style="width:100%;padding:13px;font-size:14px;">⏱ Clock In</button>'
         +'<div id="lr" style="display:none;">'
         +'<div class="scard sel" style="text-align:center;padding:14px;">'
-        +'<div style="font-size:24px;margin-bottom:6px;">✅</div>'
+        +'<div style="font-size:24px;margin-bottom:6px;">✓</div>'
         +'<div style="font-weight:700;font-size:14px;color:'+A+';">Clocked In Successfully</div>'
         +'<div class="scs" style="margin-top:4px;">Session active · <span id="lp2"></span></div>'
         +'</div></div>';
       var clocked=false;
-      var iv=_sceneInterval=setInterval(function(){var lc=$("lc");if(lc)lc.textContent=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});},1000);
-      $("lc").textContent=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-      $("lb").addEventListener("click",function(){
+      var iv=_sceneInterval=setInterval(function(){var lc=document.getElementById("lc");if(lc)lc.textContent=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});},1000);
+      document.getElementById("lc").textContent=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+      document.getElementById("lb").addEventListener("click",function(){
         if(clocked)return;clocked=true;clearInterval(iv);
         this.classList.remove("pulse");this.disabled=true;this.style.opacity=".45";this.textContent="✓ Clocked In";
-        $("ls").textContent="Session active";
-        $("lp2").textContent=$("lp").value;
-        $("lr").style.display="block";
-        toast("✅ Clocked in! Have a safe shift.");
+        document.getElementById("ls").textContent="Session active";
+        document.getElementById("lp2").textContent=document.getElementById("lp").value;
+        document.getElementById("lr").style.display="block";
+        toast("✓ Clocked in! Have a safe shift.");
       });
     }},
-    {label:"Work Orders",build:function(c){
-      var wos=[
-        {id:"WO-4821",type:"Splice Closure",node:"MH-1635CA_03",area:"Ruidoso, NM",pri:"High",pc:"#D39A44"},
-        {id:"WO-4822",type:"Maintenance",node:"MH-1635EA_01",area:"Lincoln Co.",pri:"Normal",pc:A},
-        {id:"WO-4823",type:"Emergency Repair",node:"MH-1440BB_02",area:"Priority",pri:"Urgent",pc:"#EE835D"},
+    /* ── DAILY SCHEDULE ── */
+    {label:"Daily Schedule",build:function(c){
+      var jobs=[
+        {time:"0800–1000",id:"WO-5101",name:"Jon Doe",type:"No Internet OOS",tag:"Trouble",addr:"123 Fictitious St",color:"#D85A30",dot:"🔴",selected:false},
+        {time:"1000–1200",id:"WO-5102",name:"Jane Doe",type:"Service Order",tag:"Service",addr:"456 Fictitious Ave",color:"#1D9E75",dot:"🟢",selected:false},
+        {time:"1300–1400",id:"WO-5103",name:"Bob Smith",type:"Service Order",tag:"Service",addr:"745 Fictitious Blvd",color:"#1D9E75",dot:"🟢",selected:false},
+        {time:"1400–1600",id:"WO-5104",name:"James Devtest",type:"Slow Speeds",tag:"Trouble",addr:"444 Angel Dr",color:"#D85A30",dot:"🔴",selected:false},
       ];
-      c.innerHTML='<div class="stitle">Today\'s Work Orders</div><div class="shint">Tap a card to accept the work order</div><div id="wl" style="display:flex;flex-direction:column;gap:8px;"></div>';
-      var list=$("wl");
-      wos.forEach(function(wo,i){
-        var d=document.createElement("div");d.className="scard click";
+      c.innerHTML='<div class="stitle">Daily Schedule</div>'
+        +'<div class="shint">Tap a job to view details and actions</div>'
+        +'<div style="display:flex;flex-direction:column;gap:6px;" id="sched">'
+        /* Pre-Shift */
+        +'<div class="scard" style="background:rgba(55,138,221,.06);border-color:rgba(55,138,221,.18);padding:10px 14px;">'
+        +'<div class="srow" style="gap:10px;align-items:center;">'
+        +'<div style="font-size:18px;">🚚</div>'
+        +'<div><div class="sct" style="font-size:12px;">Pre-Shift</div>'
+        +'<div class="scs">Vehicle Inspection — required before leaving yard</div></div>'
+        +'</div></div>'
+        /* Jobs */
+        +'<div id="jlist" style="display:flex;flex-direction:column;gap:6px;"></div>'
+        /* Lunch */
+        +'<div class="scard" style="background:rgba(211,154,68,.06);border-color:rgba(211,154,68,.18);padding:10px 14px;">'
+        +'<div class="srow" style="gap:10px;align-items:center;">'
+        +'<div style="font-size:18px;">🍽</div>'
+        +'<div><div class="sct" style="font-size:12px;">Around Noon</div>'
+        +'<div class="scs">Lunch (flex card, tech\'s choice)</div></div>'
+        +'</div></div>'
+        +'</div>'
+        /* Detail panel */
+        +'<div id="jdetail" style="display:none;margin-top:10px;"></div>';
+
+      var jlist=document.getElementById("jlist");
+      var detail=document.getElementById("jdetail");
+      jobs.forEach(function(job,i){
+        var d=document.createElement("div");
+        d.className="scard click";
+        d.id="jcard"+i;
         d.innerHTML='<div class="srow" style="justify-content:space-between;align-items:flex-start;">'
-          +'<div><div class="sct">'+wo.id+' · '+wo.type+'</div><div class="scs">'+wo.node+' · '+wo.area+'</div></div>'
-          +'<span class="sbadge" style="background:'+wo.pc+'22;color:'+wo.pc+';">'+wo.pri+'</span></div>'
-          +'<div id="wa'+i+'" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid rgba(55,138,221,.07);">'
-          +'<div class="srow" style="gap:6px;">'
-          +'<button class="sbtn p" style="font-size:10px;padding:5px 12px;" data-a="accept" data-id="'+wo.id+'">Accept &amp; Navigate</button>'
-          +'<button class="sbtn g" style="font-size:10px;padding:5px 12px;" data-a="view" data-id="'+wo.id+'">View Details</button>'
-          +'</div></div>';
-        (function(idx,woid){
-          d.addEventListener("click",function(e){
-            if(e.target.closest("[data-a]"))return;
-            list.querySelectorAll(".scard").forEach(function(x){x.classList.remove("sel");});
-            list.querySelectorAll("[id^=wa]").forEach(function(x){x.style.display="none";});
+          +'<div style="flex:1;">'
+          +'<div class="srow" style="gap:6px;align-items:center;">'
+          +'<span style="font-size:13px;">'+job.dot+'</span>'
+          +'<div><div class="sct" style="font-size:12px;color:var(--dim);">'+job.time+'</div>'
+          +'<div class="sct">'+job.id+' · '+job.name+'</div>'
+          +'<div class="scs">'+job.type+' @ '+job.addr+'</div></div></div></div>'
+          +'<span class="sbadge" style="background:'+job.color+'22;color:'+job.color+';">'+job.tag+'</span>'
+          +'</div>';
+        (function(idx,j){
+          d.addEventListener("click",function(){
+            jlist.querySelectorAll(".scard").forEach(function(x){x.classList.remove("sel");});
             d.classList.add("sel");
-            document.getElementById("wa"+idx).style.display="block";
+            detail.style.display="block";
+            detail.innerHTML='<div class="scard sel" style="border-color:'+j.color+'44;">'
+              +'<div class="sct">'+j.id+' · '+j.name+'</div>'
+              +'<div class="scs" style="margin:2px 0;">'+j.type+' · '+j.addr+'</div>'
+              +'<div class="sdiv" style="margin:8px 0;"></div>'
+              +'<div class="srow" style="gap:7px;">'
+              +'<button class="sbtn p" style="flex:1;font-size:11px;padding:7px 10px;" id="btn-nav-'+idx+'">🗺 Navigate</button>'
+              +'<button class="sbtn g" style="flex:1;font-size:11px;padding:7px 10px;" id="btn-call-'+idx+'">📞 Call Customer</button>'
+              +'</div>'
+              +'<div style="margin-top:10px;">'
+              +'<label class="slbl">Update Status</label>'
+              +'<div class="srow" style="gap:6px;flex-wrap:wrap;">'
+              +'<button class="sbtn g" style="font-size:10px;padding:5px 10px;" data-st="En Route" data-id="'+j.id+'">En Route</button>'
+              +'<button class="sbtn g" style="font-size:10px;padding:5px 10px;" data-st="On Site" data-id="'+j.id+'">On Site</button>'
+              +'<button class="sbtn g" style="font-size:10px;padding:5px 10px;" data-st="In Progress" data-id="'+j.id+'">In Progress</button>'
+              +'<button class="sbtn g" style="font-size:10px;padding:5px 10px;" data-st="Complete" data-id="'+j.id+'">Complete</button>'
+              +'</div></div></div>';
+            document.getElementById("btn-nav-"+idx).addEventListener("click",function(){toast("🗺 Navigating to "+j.addr+"...");});
+            document.getElementById("btn-call-"+idx).addEventListener("click",function(){toast("📞 Calling "+j.name+"...");});
+            detail.querySelectorAll("[data-st]").forEach(function(btn){
+              btn.addEventListener("click",function(){toast("✓ "+btn.dataset.id+" status: "+btn.dataset.st);});
+            });
           });
-        })(i,wo.id);
-        list.appendChild(d);
+        })(i,job);
+        jlist.appendChild(d);
       });
-      list.addEventListener("click",function(e){
-        var b=e.target.closest("[data-a]");if(!b)return;
-        if(b.dataset.a==="accept")toast("✅ "+b.dataset.id+" accepted — navigate to job site");
-        if(b.dataset.a==="view")toast("📋 Opening "+b.dataset.id+" details...");
+      /* Breaks footer */
+      var breaks=document.createElement("div");
+      breaks.className="scard";
+      breaks.style.cssText="background:rgba(127,119,221,.06);border-color:rgba(127,119,221,.18);padding:10px 14px;";
+      breaks.innerHTML='<div class="srow" style="gap:10px;align-items:center;">'
+        +'<div style="font-size:18px;">☕</div>'
+        +'<div><div class="sct" style="font-size:12px;">Breaks (AM &amp; PM)</div>'
+        +'<div class="scs">Shown as flex cards — tech\'s choice</div></div>'
+        +'</div>';
+      document.getElementById("sched").appendChild(breaks);
+    }},
+    /* ── VEHICLE INSPECT ── */
+    {label:"Vehicle Inspect",build:function(c){
+      var sections=[
+        {label:"Exterior",icon:"🚗",items:["Lights (headlights, taillights, turn signals)","Tires — pressure & tread condition","Windshield & mirrors — no cracks or obstructions","Body damage — note any new damage","License plates secured & visible"]},
+        {label:"Under Hood",icon:"🔧",items:["Engine oil level","Coolant level","Brake fluid level","Battery connections secure","No visible leaks or worn belts"]},
+        {label:"Cab & Equipment",icon:"🪛",items:["Seatbelts functional","Fire extinguisher present & charged","First aid kit present","PPE — hard hat, vest, gloves on board","SpecCom tablet charged & connected"]},
+      ];
+      var total=0,checked=0;
+      sections.forEach(function(s){total+=s.items.length;});
+      c.innerHTML='<div class="stitle">Vehicle Inspection</div>'
+        +'<div class="shint">Complete all items before leaving the yard</div>'
+        +'<div class="scard" style="background:rgba(55,138,221,.05);padding:10px 14px;margin-bottom:4px;">'
+        +'<div class="srow" style="justify-content:space-between;align-items:center;">'
+        +'<div class="sct">Inspection Progress</div>'
+        +'<span id="vcount" style="font-size:13px;font-weight:700;color:'+A+';">0 / '+total+'</span>'
+        +'</div>'
+        +'<div class="spb" style="margin-top:8px;"><div class="spf" id="vpbar" style="width:0%;background:'+A+';transition:width .3s ease;"></div></div>'
+        +'</div>'
+        +'<div id="vsections" style="display:flex;flex-direction:column;gap:8px;"></div>'
+        +'<button class="sbtn p" id="vsubmit" style="width:100%;margin-top:4px;opacity:.4;pointer-events:none;">✓ Submit Vehicle Inspection</button>'
+        +'<div id="vdone" style="display:none;" class="sok">'
+        +'<div style="font-size:30px;">✅</div>'
+        +'<div style="font-family:var(--brand);font-size:16px;font-weight:700;color:'+A+';">VEHICLE CLEARED</div>'
+        +'<div style="font-size:11px;color:var(--muted);">Inspection complete · Safe to depart</div>'
+        +'</div>';
+      var vsec=document.getElementById("vsections");
+      sections.forEach(function(sec,si){
+        var wrap=document.createElement("div");
+        wrap.className="scard";
+        var itemsHtml=sec.items.map(function(item,ii){
+          return '<label style="display:flex;align-items:flex-start;gap:8px;font-size:11px;color:var(--muted);cursor:pointer;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04);">'
+            +'<input type="checkbox" class="vchk" style="accent-color:'+A+';margin-top:1px;flex-shrink:0;" data-si="'+si+'" data-ii="'+ii+'"/>'
+            +'<span>'+item+'</span></label>';
+        }).join("");
+        wrap.innerHTML='<div class="srow" style="gap:8px;margin-bottom:8px;align-items:center;">'
+          +'<span style="font-size:18px;">'+sec.icon+'</span>'
+          +'<div class="sct">'+sec.label+'</div>'
+          +'<span class="sbadge" id="sbadge-'+si+'" style="margin-left:auto;">0/'+sec.items.length+'</span>'
+          +'</div>'
+          +itemsHtml;
+        vsec.appendChild(wrap);
+      });
+      /* checkbox handler */
+      vsec.addEventListener("change",function(e){
+        if(!e.target.classList.contains("vchk"))return;
+        checked=vsec.querySelectorAll(".vchk:checked").length;
+        document.getElementById("vcount").textContent=checked+" / "+total;
+        document.getElementById("vpbar").style.width=Math.round(checked/total*100)+"%";
+        /* update per-section badges */
+        sections.forEach(function(sec,si){
+          var secChecked=vsec.querySelectorAll(".vchk:checked[data-si='"+si+"']").length;
+          var badge=document.getElementById("sbadge-"+si);
+          badge.textContent=secChecked+"/"+sec.items.length;
+          badge.className="sbadge "+(secChecked===sec.items.length?"bg":"");
+        });
+        var submit=document.getElementById("vsubmit");
+        if(checked===total){
+          submit.style.opacity="1";submit.style.pointerEvents="auto";
+        } else {
+          submit.style.opacity=".4";submit.style.pointerEvents="none";
+        }
+      });
+      document.getElementById("vsubmit").addEventListener("click",function(){
+        this.style.display="none";
+        var vd=document.getElementById("vdone");
+        vd.style.display="flex";vd.style.flexDirection="column";vd.style.alignItems="center";vd.style.gap="10px";
+        toast("✓ Vehicle inspection complete — cleared to depart!");
       });
     }},
+    /* ── CAPTURE PHOTO ── */
     {label:"Capture Photo",build:function(c){
       var emojis=["🔌","📦","🔧","🪛","⚡","🛠️","🔩","📡"];var photos=[];
       c.innerHTML='<div class="stitle">Capture Field Photos</div>'
         +'<div class="shint">Photos attach to your active work order with GPS coordinates</div>'
         +'<label class="slbl">Attached to</label>'
-        +'<select class="ssel"><option>WO-4821 · MH-1635CA_03</option><option>WO-4822 · MH-1635EA_01</option></select>'
+        +'<select class="ssel"><option>WO-5101 · 123 Fictitious St</option><option>WO-5102 · 456 Fictitious Ave</option><option>WO-5103 · 745 Fictitious Blvd</option><option>WO-5104 · 444 Angel Dr</option></select>'
         +'<div class="spz" id="cam">'
         +'<svg width="40" height="40" viewBox="0 0 48 48" fill="none" stroke="'+A+'" stroke-width="1.4"><rect x="4" y="10" width="40" height="30" rx="4"/><circle cx="24" cy="26" r="9"/><path d="M16 10l2.5-6h7L28 10"/><circle cx="39" cy="16" r="2.5" fill="'+A+'"/></svg>'
         +'<div style="font-size:12px;color:var(--dim);">Tap to take a photo</div></div>'
@@ -462,26 +585,38 @@ function getScenes(ws){
         +'<div class="srow" style="justify-content:space-between;">'
         +'<span style="font-size:11px;color:var(--muted);" id="pc2"></span>'
         +'<button class="sbtn g" id="pub" style="font-size:10px;padding:6px 14px;display:none;">Upload All</button></div>';
-      $("cam").addEventListener("click",function(){
+      document.getElementById("cam").addEventListener("click",function(){
         if(photos.length>=emojis.length){toast("All photos captured!");return;}
         var e2=emojis[photos.length];photos.push(e2);
         var t=document.createElement("div");t.className="spthumb";
         t.style.animationDelay=(photos.length*.05)+"s";
         t.innerHTML='<div style="font-size:20px;">'+e2+'</div><div style="font-size:8px;color:var(--dim);margin-top:3px;">IMG_48'+(20+photos.length)+'.jpg</div>';
-        $("pg").appendChild(t);
-        $("pc2").textContent=photos.length+" photo"+(photos.length>1?"s":"")+" ready";
-        $("pub").style.display="inline-flex";
+        document.getElementById("pg").appendChild(t);
+        document.getElementById("pc2").textContent=photos.length+" photo"+(photos.length>1?"s":"")+" ready";
+        document.getElementById("pub").style.display="inline-flex";
         toast("📷 Photo captured & GPS-tagged!");
       });
-      $("pub").addEventListener("click",function(){toast("✅ "+photos.length+" photos uploaded!");this.textContent="Uploaded ✓";this.disabled=true;});
+      document.getElementById("pub").addEventListener("click",function(){toast("✓ "+photos.length+" photos uploaded!");this.textContent="Uploaded ✓";this.disabled=true;});
     }},
+    /* ── COMPLETE JOB ── */
     {label:"Complete Job",build:function(c){
       c.innerHTML='<div class="stitle">Complete Work Order</div>'
-        +'<div class="scard" style="background:rgba(55,138,221,.05);"><div class="sct">WO-4821 · Splice Closure</div><div class="scs">MH-1635CA_03 · Ruidoso, NM</div></div>'
+        +'<label class="slbl">Select Work Order</label>'
+        +'<select class="ssel" id="cwo">'
+        +'<option>WO-5101 · Jon Doe — No Internet OOS</option>'
+        +'<option>WO-5102 · Jane Doe — Service Order</option>'
+        +'<option>WO-5103 · Bob Smith — Service Order</option>'
+        +'<option>WO-5104 · James Devtest — Slow Speeds</option>'
+        +'</select>'
         +'<label class="slbl">Completion Notes</label>'
         +'<textarea class="sin" rows="3" placeholder="Describe work performed, issues found..."></textarea>'
         +'<label class="slbl">Final Status</label>'
         +'<select class="ssel"><option>Complete</option><option>Needs Follow-up</option><option>Partially Complete</option></select>'
+        +'<label class="slbl">Customer Signature</label>'
+        +'<div class="scard" style="background:rgba(55,138,221,.04);text-align:center;padding:18px;cursor:pointer;" id="sigpad">'
+        +'<div style="font-size:11px;color:var(--dim);">Tap to capture signature</div>'
+        +'<div id="sigdone" style="display:none;font-size:20px;color:'+A+';">✓ Signature captured</div>'
+        +'</div>'
         +'<div style="display:flex;gap:16px;">'
         +'<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);cursor:pointer;"><input type="checkbox" style="accent-color:'+A+';"/> Photos attached</label>'
         +'<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);cursor:pointer;"><input type="checkbox" style="accent-color:'+A+';"/> Billing codes entered</label>'
@@ -494,10 +629,17 @@ function getScenes(ws){
         +'<path d="M19 32l9 9 16-19" fill="none" stroke="#4EC29A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="ckp"/>'
         +'</svg>'
         +'<div style="font-family:var(--brand);font-size:18px;font-weight:700;color:#4EC29A;letter-spacing:2px;">JOB COMPLETE</div>'
-        +'<div style="font-size:11px;color:var(--muted);">WO-4821 submitted · Billing queued</div></div>';
-      $("fin").addEventListener("click",function(){
+        +'<div style="font-size:11px;color:var(--muted);" id="wodonelbl">Work order submitted · Billing queued</div></div>';
+      document.getElementById("sigpad").addEventListener("click",function(){
+        document.getElementById("sigdone").style.display="block";
+        this.querySelector("div").style.display="none";
+        toast("✓ Signature captured!");
+      });
+      document.getElementById("fin").addEventListener("click",function(){
+        var wo=document.getElementById("cwo").value.split("·")[0].trim();
         this.style.display="none";
-        var r=$("finr");r.style.display="flex";r.style.flexDirection="column";
+        var r=document.getElementById("finr");r.style.display="flex";r.style.flexDirection="column";
+        document.getElementById("wodonelbl").textContent=wo+" submitted · Billing queued";
         drawCheck(c);toast("🎉 Work order submitted!");
       });
     }},
@@ -621,7 +763,7 @@ function getScenes(ws){
   /* FIELD PHOTOS */
   if(ws.key==="photos") return [
     {label:"Upload",build:function(c){
-      var ff=[{e:"📷",n:"IMG_4821.jpg"},{e:"🔌",n:"IMG_4822.jpg"},{e:"🔧",n:"IMG_4823.jpg"},{e:"⚡",n:"IMG_4824.jpg"},{e:"📦",n:"IMG_4825.jpg"},{e:"🛠️",n:"IMG_4826.jpg"}];var cnt=0;
+      var ff=[{e:"📷",n:"IMG_4821.jpg"},{e:"🌿",n:"IMG_4822.jpg"},{e:"🧰",n:"IMG_4823.jpg"},{e:"⚡",n:"IMG_4824.jpg"},{e:"📦",n:"IMG_4825.jpg"},{e:"🛠️",n:"IMG_4826.jpg"}];var cnt=0;
       c.innerHTML='<div class="stitle">Upload Field Photos</div>'
         +'<div class="shint">GPS coordinates are auto-extracted from photo EXIF data</div>'
         +'<div class="spz" id="dz">'
@@ -641,7 +783,7 @@ function getScenes(ws){
         $("phu").style.display="inline-flex";
         toast("Added "+f.n+" · GPS detected");
       });
-      $("phu").addEventListener("click",function(){toast("✅ "+cnt+" photos uploaded & geo-tagged!");this.textContent="Uploaded ✓";this.disabled=true;});
+      $("phu").addEventListener("click",function(){toast("✓ "+cnt+" photos uploaded & geo-tagged!");this.textContent="Uploaded ✓";this.disabled=true;});
     }},
     {label:"GPS Tags",build:function(c){
       var photos=[{n:"IMG_4821.jpg",lat:"33.3946°N",lng:"105.6731°W",alt:"6,942 ft",ok:true},{n:"IMG_4822.jpg",lat:"33.3951°N",lng:"105.6728°W",alt:"6,938 ft",ok:true},{n:"IMG_4823.jpg",lat:"33.3938°N",lng:"105.6745°W",alt:"6,951 ft",ok:true},{n:"IMG_4824.jpg",lat:"—",lng:"—",alt:"No GPS data",ok:false}];
@@ -662,7 +804,7 @@ function getScenes(ws){
         assigns.forEach(function(a,i){
           var d=document.createElement("div");d.className="scard";d.style.animationDelay=(i*.06)+"s";d.style.animation="fadeIn .25s ease both";
           var inner='<div class="srow" style="justify-content:space-between;align-items:flex-start;"><div style="flex:1;"><div class="sct">📷 '+a.p+'</div>';
-          if(a.ok){inner+='<div class="scs" style="color:'+A+';margin-top:3px;">→ '+a.n+'</div>';}
+          if(a.ok){inner+='<div class="scs" style="color:'+A+';margin-top:3px;">✓ '+a.n+'</div>';}
           else{inner+='<select class="ssel" style="margin-top:6px;padding:6px 10px;font-size:11px;" data-i="'+i+'"><option value="">-- Assign to node --</option>'+nodes.map(function(n){return '<option>'+n+'</option>';}).join("")+'</select>';}
           inner+='</div><span class="sbadge '+(a.ok?"bg":"ba")+'" style="margin-top:2px;">'+(a.ok?"Tagged ✓":"Untagged")+'</span></div>';
           d.innerHTML=inner;list.appendChild(d);
@@ -675,7 +817,7 @@ function getScenes(ws){
       }
       c.innerHTML='<div class="stitle">Assign MH Node Tags</div><div class="shint">Link each photo to its job site node</div><div style="display:flex;flex-direction:column;gap:7px;" id="tl"></div><button class="sbtn p" id="ata" style="width:100%;margin-top:2px;">⚡ Auto-Tag All from GPS</button>';
       render();
-      $("ata").addEventListener("click",function(){assigns.forEach(function(a,i){a.n=nodes[i%nodes.length];a.ok=true;});render();toast("✅ All photos auto-tagged!");this.textContent="✓ All Tagged";this.disabled=true;});
+      $("ata").addEventListener("click",function(){assigns.forEach(function(a,i){a.n=nodes[i%nodes.length];a.ok=true;});render();toast("✓ All photos auto-tagged!");this.textContent="✓ All Tagged";this.disabled=true;});
     }},
     {label:"Photo Map",build:function(c){
       c.innerHTML='<div class="stitle">Photo Map</div><div class="shint">Each photo pinned to its exact GPS location</div><div id="pmw"></div>'
@@ -769,7 +911,7 @@ function getScenes(ws){
         $("wof").style.display="none";
         var ws2=$("wos2");ws2.style.display="flex";ws2.style.flexDirection="column";ws2.style.alignItems="center";ws2.style.gap="10px";
         $("woid").textContent=id+" Dispatched";$("wod").textContent=type+" · "+node+" → "+a;
-        toast("✅ "+id+" sent to "+a);
+        toast("✓ "+id+" sent to "+a);
       });
       $("woan").addEventListener("click",function(){
         $("wos2").style.display="none";$("wof").style.display="flex";$("wof").style.flexDirection="column";$("wof").style.gap="9px";
@@ -804,7 +946,7 @@ function getScenes(ws){
         +'<div class="sdiv"></div><div class="scard" id="idc"></div>'
         +'<div class="srow" style="gap:7px;">'
         +'<button class="sbtn p" id="iap" style="flex:1;font-size:12px;">✓ Approve</button>'
-        +'<button class="sbtn g" id="irj" style="flex:1;font-size:12px;">✗ Send Back</button>'
+        +'<button class="sbtn g" id="irj" style="flex:1;font-size:12px;">↩ Send Back</button>'
         +'</div></div>';
       var selInv=null;
       invs.forEach(function(inv,i){
@@ -820,7 +962,7 @@ function getScenes(ws){
         }
         $("ib").appendChild(tr);
       });
-      $("iap").addEventListener("click",function(){if(selInv){toast("✅ "+selInv.id+" approved — queued for payment");$("id2").style.display="none";}});
+      $("iap").addEventListener("click",function(){if(selInv){toast("✓ "+selInv.id+" approved — queued for payment");$("id2").style.display="none";}});
       $("irj").addEventListener("click",function(){if(selInv){toast("↩ "+selInv.id+" sent back for corrections");$("id2").style.display="none";}});
     }},
     {label:"Reports",build:function(c){
@@ -834,7 +976,7 @@ function getScenes(ws){
           +'<button class="sbtn g" style="font-size:9px;padding:4px 10px;" data-rn="'+r.n+'">Generate</button></div>';
         $("rlist").appendChild(d);
       });
-      c.addEventListener("click",function(e){var b=e.target.closest("[data-rn]");if(b)toast("📄 Generating: "+b.dataset.rn+"...");});
+      c.addEventListener("click",function(e){var b=e.target.closest("[data-rn]");if(b)toast("📊 Generating: "+b.dataset.rn+"...");});
     }},
     {label:"Export",build:function(c){
       var exps=[{f:"PDF",d:"Full documentation packet",s:"~4.2 MB",i:"📄"},{f:"CSV",d:"Line items & billing codes",s:"~180 KB",i:"📊"},{f:"KMZ",d:"Route & node map file",s:"~820 KB",i:"🗺"},{f:"ZIP",d:"All photos + reports",s:"~240 MB",i:"📦"}];
