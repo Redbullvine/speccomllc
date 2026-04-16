@@ -21177,11 +21177,39 @@ function renderMapFieldPanel(){
       <button id="btnMapAddToNearbyLocation" class="btn ghost small" type="button">Add to This Location</button>
     `;
   } else {
-    const disabled = !state.activeProject ? "disabled" : "";
-    actionsWrap.innerHTML = `
-      <div class="muted small" style="width:100%;">No saved location within ${Math.round(state.map.nearbyRadiusM || 30)}m.</div>
-      <button id="btnMapShowCreateLocation" class="btn secondary small" type="button" ${disabled}>Create New Location Here</button>
-    `;
+    if (!state.activeProject) {
+      const projectOptions = (state.projects || []).map(p =>
+        `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`
+      ).join("");
+      actionsWrap.innerHTML = `
+        <div class="muted small" style="width:100%;">No saved location within ${Math.round(state.map.nearbyRadiusM || 30)}m.</div>
+        <div style="width:100%;background:rgba(55,138,221,0.08);border:1px solid rgba(55,138,221,0.2);border-radius:8px;padding:10px;margin-top:4px;">
+          <div class="muted small" style="margin-bottom:6px;color:rgba(55,138,221,0.9);">⚠ Select a project to create a location:</div>
+          ${projectOptions.length
+            ? `<select id="mapInlineProjectSelect" class="input compact" style="margin-bottom:8px;">
+                <option value="">-- Pick a project --</option>
+                ${projectOptions}
+               </select>
+               <button id="btnMapShowCreateLocation" class="btn secondary small" type="button" style="width:100%;">Create New Location Here</button>`
+            : `<div class="muted small" style="color:rgba(255,180,60,0.8);">No projects found. Create a project first from the Office workspace.</div>`
+          }
+        </div>
+      `;
+      // Wire inline project select — selecting sets activeProject then enables the button
+      const sel = actionsWrap.querySelector("#mapInlineProjectSelect");
+      if (sel) {
+        sel.addEventListener("change", () => {
+          const id = sel.value;
+          if (id) setActiveProjectById(id);
+          renderMapFieldPanel();
+        });
+      }
+    } else {
+      actionsWrap.innerHTML = `
+        <div class="muted small" style="width:100%;">No saved location within ${Math.round(state.map.nearbyRadiusM || 30)}m.</div>
+        <button id="btnMapShowCreateLocation" class="btn secondary small" type="button">Create New Location Here</button>
+      `;
+    }
   }
 
   const selected = createOpen ? null : (getMapFieldSelectedSite() || nearest || null);
