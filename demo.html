@@ -1,1225 +1,1002 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <title>SpecCom | Interactive Demo</title>
-  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg"/>
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Exo+2:wght@200;300;400;500&display=swap" rel="stylesheet">
   <style>
-    /* ===== RESET & VARIABLES ===== */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --app-bg: #050810;
-      --card-bg: rgba(13,22,42,0.92);
-      --card-border: rgba(55,138,221,0.12);
-      --accent-blue: #378ADD;
-      --accent-teal: #1D9E75;
-      --accent-amber: #BA7517;
-      --accent-purple: #7F77DD;
-      --accent-coral: #D85A30;
-      --accent-cyan: #00bcd4;
-      --text-primary: #ffffff;
-      --text-muted: rgba(140,175,210,0.6);
-      --text-dim: rgba(100,140,180,0.45);
-      --font-brand: "Rajdhani", sans-serif;
-      --font-ui: "Exo 2", sans-serif;
-    }
-    html, body { height: 100%; overflow: hidden; }
-    body {
-      background: var(--app-bg);
-      color: var(--text-primary);
-      font-family: var(--font-ui);
-      -webkit-font-smoothing: antialiased;
-    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    :root{--bg:#050810;--blue:#378ADD;--teal:#1D9E75;--text:#fff;--muted:rgba(140,175,210,0.6);--dim:rgba(100,140,180,0.45);--brand:"Rajdhani",sans-serif;--ui:"Exo 2",sans-serif;}
+    html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;}
+    #starfield{position:fixed;inset:0;z-index:0;}
+    .fiber-bg{position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;}
+    .sp-strand{fill:none;stroke-linecap:round;}
+    .sp-f1{stroke:rgba(55,138,221,.18);stroke-width:1.5;}
+    .sp-f2{stroke:rgba(29,158,117,.14);stroke-width:1;}
+    .sp-pulse{fill:none;stroke-linecap:round;stroke-dasharray:60 1000;stroke-dashoffset:1000;animation:spTravel 4s ease-in-out infinite;}
+    .sp-p1{stroke:rgba(180,220,255,.85);stroke-width:2;}
+    .sp-p2{stroke:rgba(100,220,180,.75);stroke-width:1.5;animation-delay:1.4s;}
+    .sp-p3{stroke:rgba(200,230,255,.65);stroke-width:1.5;animation-delay:2.6s;}
+    @keyframes spTravel{0%{stroke-dashoffset:1200;opacity:0}5%{opacity:1}85%{opacity:.8}100%{stroke-dashoffset:-200;opacity:0}}
+    .glow-orb{position:fixed;border-radius:50%;filter:blur(60px);pointer-events:none;z-index:1;}
+    .go1{width:320px;height:320px;background:rgba(55,138,221,.1);top:-80px;left:-80px;animation:orbFloat 9s ease-in-out infinite;}
+    .go2{width:260px;height:260px;background:rgba(29,158,117,.08);bottom:-60px;right:-60px;animation:orbFloat 11s ease-in-out infinite reverse;}
+    @keyframes orbFloat{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(20px,-15px) scale(1.08)}}
+    .cb{position:fixed;width:22px;height:22px;opacity:.35;z-index:2;}
+    .cb.tl{top:14px;left:14px;border-top:1px solid var(--blue);border-left:1px solid var(--blue);}
+    .cb.tr{top:14px;right:14px;border-top:1px solid var(--blue);border-right:1px solid var(--blue);}
+    .cb.bl{bottom:14px;left:14px;border-bottom:1px solid var(--blue);border-left:1px solid var(--blue);}
+    .cb.br{bottom:14px;right:14px;border-bottom:1px solid var(--blue);border-right:1px solid var(--blue);}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes slideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes scaleIn{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+    @keyframes dropPin{0%{opacity:0;transform:translate(-50%,-130%) scale(.5)}65%{transform:translate(-50%,-93%) scale(1.12)}100%{opacity:1;transform:translate(-50%,-100%) scale(1)}}
+    @keyframes ringPop{0%{transform:scale(1);opacity:.6}100%{transform:scale(3.5);opacity:0}}
+    @keyframes warpLine{0%{transform:scaleX(0);opacity:0}10%{opacity:1}100%{transform:scaleX(28);opacity:0}}
+    @keyframes btnPulse{0%,100%{box-shadow:0 0 0 0 rgba(55,138,221,.5)}70%{box-shadow:0 0 0 12px rgba(55,138,221,0)}}
+    @keyframes checkCircle{to{stroke-dashoffset:0}}
+    @keyframes checkPath{to{stroke-dashoffset:0}}
+    #warp{position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:0;}
+    #warp.on{opacity:1;}
+    .wl{position:absolute;height:1px;width:40px;transform-origin:center;transform:scaleX(0);}
+    .wl.on{animation:warpLine .5s ease-out forwards;}
+    .cbar{position:fixed;left:0;right:0;height:0;background:#000;z-index:9990;transition:height .65s cubic-bezier(.16,1,.3,1);}
+    .cbar.top{top:0;}.cbar.bot{bottom:0;}.cbar.on{height:42px;}
 
-    /* ===== STARFIELD CANVAS ===== */
-    #starfield { position: fixed; inset: 0; z-index: 0; }
+    /* SPLASH */
+    #splash{position:fixed;inset:0;z-index:8000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity .7s;}
+    #splash.out{opacity:0;pointer-events:none;}
+    .spl-logo{height:72px;filter:drop-shadow(0 0 36px rgba(55,138,221,.7));animation:scaleIn .9s cubic-bezier(.16,1,.3,1) .2s both;}
+    .spl-title{font-family:var(--brand);font-size:28px;font-weight:700;letter-spacing:5px;opacity:0;animation:slideUp .7s ease .7s forwards;}
+    .spl-sub{font-size:11px;color:var(--muted);letter-spacing:2.5px;opacity:0;animation:fadeIn .6s ease 1.2s forwards;}
+    .spl-btn{margin-top:10px;padding:13px 36px;border-radius:10px;background:var(--blue);border:none;color:#fff;font-family:var(--brand);font-size:15px;font-weight:700;letter-spacing:2px;cursor:pointer;opacity:0;animation:slideUp .5s ease 1.6s forwards;transition:all .2s;box-shadow:0 0 26px rgba(55,138,221,.3);}
+    .spl-btn:hover{background:#4a9de8;transform:translateY(-2px);box-shadow:0 0 46px rgba(55,138,221,.5);}
+    .spl-tag{font-size:10px;color:var(--dim);letter-spacing:2px;opacity:0;animation:fadeIn .5s ease 2.1s forwards;}
 
-    /* ===== FIBER BACKGROUND ===== */
-    .fiber-bg { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; opacity: 0.6; }
-    .sp-strand { fill: none; stroke-linecap: round; }
-    .sp-f1 { stroke: rgba(55,138,221,0.18); stroke-width: 1.5; }
-    .sp-f2 { stroke: rgba(29,158,117,0.14); stroke-width: 1; }
-    .sp-f3 { stroke: rgba(55,138,221,0.10); stroke-width: 2; }
-    .sp-f4 { stroke: rgba(120,180,255,0.12); stroke-width: 1; }
-    .sp-pulse { fill: none; stroke-linecap: round; stroke-dasharray: 60 1000; stroke-dashoffset: 1000; animation: spTravel 4s ease-in-out infinite; }
-    .sp-p1 { stroke: rgba(180,220,255,0.9); stroke-width: 2; animation-delay: 0s; }
-    .sp-p2 { stroke: rgba(100,220,180,0.8); stroke-width: 1.5; animation-delay: 1.2s; }
-    .sp-p3 { stroke: rgba(200,230,255,0.7); stroke-width: 1.5; animation-delay: 2.4s; }
-    .sp-p4 { stroke: rgba(55,180,255,0.85); stroke-width: 2; animation-delay: 0.7s; }
-    .sp-p5 { stroke: rgba(180,220,255,0.6); stroke-width: 1; animation-delay: 1.8s; }
-    @keyframes spTravel {
-      0%   { stroke-dashoffset: 1200; opacity: 0; }
-      5%   { opacity: 1; }
-      85%  { opacity: 0.8; }
-      100% { stroke-dashoffset: -200; opacity: 0; }
-    }
+    /* HUB */
+    #hub{position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;align-items:center;padding:20px 16px 60px;overflow-y:auto;opacity:0;pointer-events:none;transition:opacity .4s;}
+    #hub.on{opacity:1;pointer-events:auto;}
+    .hub-logo{height:36px;margin-bottom:8px;filter:drop-shadow(0 0 12px rgba(55,138,221,.4));}
+    .hub-h{font-family:var(--brand);font-size:20px;font-weight:700;letter-spacing:3px;text-align:center;margin-bottom:3px;}
+    .hub-s{font-size:11px;color:var(--muted);letter-spacing:1.5px;text-align:center;margin-bottom:22px;}
+    .hub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;width:100%;max-width:680px;}
+    .hcard{background:rgba(13,22,42,.92);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:15px 13px;cursor:pointer;transition:border-color .2s,transform .2s,box-shadow .2s;position:relative;overflow:hidden;}
+    .hcard:hover{transform:translateY(-3px);}
+    .hcard .hc-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:9px;}
+    .hcard .hc-title{font-family:var(--brand);font-size:14px;font-weight:700;margin-bottom:4px;}
+    .hcard .hc-sub{font-size:10px;color:var(--muted);line-height:1.5;}
+    .hcard .hc-chips{display:flex;flex-wrap:wrap;gap:3px;margin-top:7px;}
+    .hcard .hc-chip{font-size:9px;padding:2px 6px;border-radius:8px;background:rgba(255,255,255,.04);color:var(--dim);border:1px solid rgba(255,255,255,.05);}
 
-    .glow-orb { position: fixed; border-radius: 50%; filter: blur(60px); pointer-events: none; z-index: 1; }
-    .go1 { width: 300px; height: 300px; background: rgba(55,138,221,0.12); top: -80px; left: -80px; animation: orbFloat 8s ease-in-out infinite; }
-    .go2 { width: 250px; height: 250px; background: rgba(29,158,117,0.10); bottom: -60px; right: -60px; animation: orbFloat 10s ease-in-out infinite reverse; }
-    .go3 { width: 200px; height: 200px; background: rgba(127,119,221,0.08); top: 40%; left: 60%; animation: orbFloat 12s ease-in-out 2s infinite; }
-    .go4 { width: 180px; height: 180px; background: rgba(55,138,221,0.06); bottom: 30%; left: 10%; animation: orbFloat 9s ease-in-out 1s infinite; }
-    @keyframes orbFloat {
-      0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.6; }
-      33% { transform: translate(30px, -20px) scale(1.15); opacity: 0.9; }
-      66% { transform: translate(-20px, 15px) scale(0.95); opacity: 0.7; }
-    }
+    /* DEMO SHELL */
+    #shell{position:fixed;inset:0;z-index:600;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .35s;}
+    #shell.on{opacity:1;pointer-events:auto;}
+    .frame{width:min(420px,96vw);height:min(790px,90vh);background:#060d1a;border:1px solid rgba(55,138,221,.16);border-radius:24px;box-shadow:0 0 90px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04);overflow:hidden;display:flex;flex-direction:column;}
+    .ftopbar{height:50px;background:rgba(6,13,26,.98);border-bottom:1px solid rgba(55,138,221,.09);display:flex;align-items:center;padding:0 14px;gap:10px;flex-shrink:0;}
+    .ftopbar img{height:23px;filter:drop-shadow(0 0 7px rgba(55,138,221,.35));}
+    .ftopbar .flabel{flex:1;font-family:var(--brand);font-size:13px;font-weight:700;letter-spacing:1.5px;}
+    .ftopbar .fback{background:none;border:1px solid rgba(255,255,255,.1);color:var(--muted);font-size:10px;padding:5px 11px;border-radius:6px;cursor:pointer;transition:all .18s;}
+    .ftopbar .fback:hover{color:#fff;}
+    .ftabs{display:flex;padding:8px 10px 0;gap:4px;background:rgba(6,13,26,.7);border-bottom:1px solid rgba(55,138,221,.05);flex-shrink:0;overflow-x:auto;}
+    .ftabs::-webkit-scrollbar{display:none;}
+    .ftab{font-size:10px;font-weight:500;letter-spacing:.8px;text-transform:uppercase;padding:6px 10px;border-radius:6px 6px 0 0;border:none;background:transparent;color:var(--dim);cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0;}
+    .ftab.on{background:rgba(55,138,221,.1);color:var(--ws-a,var(--blue));border-bottom:2px solid var(--ws-a,var(--blue));}
+    .fbody{flex:1;overflow-y:auto;overflow-x:hidden;}
+    .fbody::-webkit-scrollbar{width:3px;}
+    .fbody::-webkit-scrollbar-thumb{background:rgba(55,138,221,.2);border-radius:2px;}
+    .scene{padding:14px;display:flex;flex-direction:column;gap:11px;animation:fadeIn .25s ease;}
 
-    /* ===== CORNER BRACKETS ===== */
-    .cb { position: fixed; width: 24px; height: 24px; opacity: 0.4; z-index: 2; }
-    .cb.tl { top:14px; left:14px; border-top:1px solid #378ADD; border-left:1px solid #378ADD; }
-    .cb.tr { top:14px; right:14px; border-top:1px solid #378ADD; border-right:1px solid #378ADD; }
-    .cb.bl { bottom:14px; left:14px; border-bottom:1px solid #378ADD; border-left:1px solid #378ADD; }
-    .cb.br { bottom:14px; right:14px; border-bottom:1px solid #378ADD; border-right:1px solid #378ADD; }
-
-    /* ===== GLOBAL KEYFRAMES ===== */
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
-    @keyframes slideUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes scaleIn { from { opacity: 0; transform: scale(0.7); } to { opacity: 1; transform: scale(1); } }
-    @keyframes stampIn { from { opacity:0; transform: scale(3) rotate(-20deg); } to { opacity:1; transform: scale(1) rotate(0deg); } }
-    @keyframes pingRing { 0% { transform: scale(1); opacity: 0.6; } 100% { transform: scale(3); opacity: 0; } }
-    @keyframes scanLine { 0% { top: 8%; } 100% { top: 88%; } }
-    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.15} }
-    @keyframes counterPulse { 0%,100%{ transform: scale(1); } 50%{ transform: scale(1.06); } }
-    @keyframes cardFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-
-    /* ===== HYPERSPACE WARP ===== */
-    @keyframes warpLine {
-      0% { transform: scaleX(0); opacity: 0; }
-      10% { opacity: 1; }
-      100% { transform: scaleX(30); opacity: 0; }
-    }
-    #warp-overlay {
-      position: fixed; inset: 0; z-index: 9999; pointer-events: none;
-      display: flex; align-items: center; justify-content: center;
-      opacity: 0; background: radial-gradient(circle, rgba(55,138,221,0.08) 0%, transparent 70%);
-    }
-    #warp-overlay.fire { opacity: 1; }
-    .warp-line {
-      position: absolute; height: 1px; width: 40px;
-      transform-origin: center; transform: scaleX(0);
-    }
-    .warp-line.fire { animation: warpLine 0.6s ease-out forwards; }
-
-    /* ===== LENS FLARE ===== */
-    @keyframes flareIn {
-      0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
-      50% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
-      100% { opacity: 0; transform: translate(-50%, -50%) scale(2); }
-    }
-    .lens-flare {
-      position: fixed; width: 300px; height: 300px; pointer-events: none; z-index: 9998;
-      background: radial-gradient(circle, rgba(180,220,255,0.4) 0%, rgba(55,138,221,0.15) 30%, transparent 70%);
-      border-radius: 50%; opacity: 0;
-    }
-    .lens-flare.fire { animation: flareIn 0.8s ease-out forwards; }
-    .lens-flare-streak {
-      position: fixed; height: 2px; pointer-events: none; z-index: 9998;
-      background: linear-gradient(90deg, transparent, rgba(180,220,255,0.6), rgba(255,255,255,0.9), rgba(180,220,255,0.6), transparent);
-      opacity: 0; left: 0; right: 0;
-    }
-    .lens-flare-streak.fire { animation: fadeIn 0.15s ease forwards, fadeOut 0.6s ease 0.2s forwards; }
-
-    /* ===== PARTICLE BURST ===== */
-    @keyframes particleFly {
-      0% { transform: translate(0,0) scale(1); opacity: 1; }
-      100% { transform: translate(var(--px), var(--py)) scale(0); opacity: 0; }
-    }
-    .particle {
-      position: absolute; width: 4px; height: 4px; border-radius: 50%;
-      pointer-events: none; z-index: 100;
-    }
-    .particle.fire { animation: particleFly var(--dur) ease-out forwards; }
-
-    /* ===== SHOCKWAVE RING ===== */
-    @keyframes shockwave {
-      0% { transform: translate(-50%,-50%) scale(0); opacity: 0.5; border-width: 3px; }
-      100% { transform: translate(-50%,-50%) scale(1); opacity: 0; border-width: 0.5px; }
-    }
-    .shockwave {
-      position: absolute; width: 500px; height: 500px; border-radius: 50%;
-      border: 3px solid rgba(55,138,221,0.5); pointer-events: none;
-      left: 50%; top: 50%; transform: translate(-50%,-50%) scale(0);
-    }
-    .shockwave.fire { animation: shockwave 0.8s ease-out forwards; }
-
-    /* ===== CINEMATIC BARS ===== */
-    .cine-bar {
-      position: fixed; left: 0; right: 0; height: 0; background: #000; z-index: 9990;
-      transition: height 0.8s cubic-bezier(0.16,1,0.3,1);
-    }
-    .cine-bar.top { top: 0; }
-    .cine-bar.bottom { bottom: 0; }
-    .cine-bar.active { height: 50px; }
-    @media (max-width: 720px) { .cine-bar.active { height: 30px; } }
-
-    /* ===== OPENING CRAWL ===== */
-    #crawl-container {
-      position: fixed; inset: 0; z-index: 9000;
-      display: flex; align-items: flex-end; justify-content: center;
-      perspective: 400px; overflow: hidden;
-      background: radial-gradient(ellipse at 50% 0%, rgba(55,138,221,0.05) 0%, transparent 60%);
-    }
-    #crawl-container.hidden { display: none; }
-    #crawl-text {
-      width: min(90vw, 600px); text-align: center; color: rgba(55,180,255,0.85);
-      font-family: var(--font-brand); font-size: 20px; font-weight: 600;
-      line-height: 2; letter-spacing: 2px;
-      transform: rotateX(25deg) translateY(100%);
-      animation: crawlScroll 16s linear forwards;
-    }
-    @keyframes crawlScroll {
-      0% { transform: rotateX(25deg) translateY(100%); }
-      100% { transform: rotateX(25deg) translateY(-250%); }
-    }
-    #crawl-text .crawl-title {
-      font-size: 38px; font-weight: 700; color: rgba(200,225,255,0.95);
-      margin-bottom: 20px; letter-spacing: 6px;
-      text-shadow: 0 0 30px rgba(55,138,221,0.5), 0 0 60px rgba(55,138,221,0.2);
-    }
-    #crawl-text .crawl-accent { color: rgba(78,194,154,0.9); }
-    @media (max-width: 720px) {
-      #crawl-text { font-size: 16px; }
-      #crawl-text .crawl-title { font-size: 28px; }
-    }
-
-    /* ===== TITLE CARD ===== */
-    #title-card {
-      position: fixed; inset: 0; z-index: 8000;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      opacity: 0; pointer-events: none;
-    }
-    #title-card.active { opacity: 1; }
-    .tc-logo {
-      height: 90px; margin-bottom: 16px; opacity: 0;
-      filter: drop-shadow(0 0 40px rgba(55,138,221,0.6)) drop-shadow(0 0 80px rgba(55,138,221,0.3));
-    }
-    .tc-logo.in { animation: scaleIn 1.2s cubic-bezier(0.16,1,0.3,1) forwards; }
-    @keyframes tcGlow {
-      0%, 100% { filter: drop-shadow(0 0 30px rgba(55,138,221,0.5)) drop-shadow(0 0 80px rgba(55,138,221,0.2)); }
-      50% { filter: drop-shadow(0 0 50px rgba(55,138,221,0.9)) drop-shadow(0 0 120px rgba(55,138,221,0.5)); }
-    }
-    .tc-logo.glow { animation: tcGlow 2s ease-in-out infinite; }
-    .tc-streak {
-      width: 400px; height: 2px; position: relative; margin-bottom: 24px; opacity: 0;
-    }
-    .tc-streak.in { animation: fadeIn 0.6s ease forwards; }
-    .tc-streak-line { width: 100%; height: 1px; background: linear-gradient(90deg, transparent, rgba(55,138,221,0.3) 15%, rgba(180,220,255,0.8) 50%, rgba(55,138,221,0.3) 85%, transparent); }
-    .tc-streak-pulse { position: absolute; top: 0; left: -40px; width: 80px; height: 2px; background: linear-gradient(90deg, transparent, #fff, transparent); animation: streakSweep 3s ease-in-out infinite; }
-    @keyframes streakSweep { 0%{left:-80px;opacity:0} 10%{opacity:1} 90%{opacity:1} 100%{left:calc(100% + 20px);opacity:0} }
-
-    .tc-tagline {
-      display: flex; align-items: center; gap: 10px; margin-bottom: 48px; opacity: 0;
-    }
-    .tc-tagline.in { animation: slideUp 0.8s cubic-bezier(0.16,1,0.3,1) forwards; }
-    .tc-tagline .sep { width: 30px; height: 1px; background: rgba(55,138,221,0.4); }
-    .tc-tagline .item {
-      font-family: var(--font-ui); font-size: 11px; font-weight: 300;
-      letter-spacing: 4px; text-transform: uppercase; color: rgba(160,200,240,0.7);
-      opacity: 0;
-    }
-    .tc-tagline .item.in { animation: fadeIn 0.5s ease forwards; }
-    .tc-tagline .dot { width: 3px; height: 3px; border-radius: 50%; background: rgba(55,138,221,0.6); }
-
-    .tc-subtitle {
-      font-family: var(--font-brand); font-size: 28px; font-weight: 700;
-      text-align: center; letter-spacing: 3px; color: rgba(200,225,255,0.9);
-      opacity: 0; max-width: 520px;
-      text-shadow: 0 0 20px rgba(55,138,221,0.3);
-    }
-    .tc-subtitle.in { animation: slideUp 1s cubic-bezier(0.16,1,0.3,1) forwards; }
-    .tc-subtitle-sub {
-      font-family: var(--font-ui); font-size: 14px; font-weight: 300;
-      color: var(--text-muted); margin-top: 12px; opacity: 0; text-align: center;
-      max-width: 480px; line-height: 1.7;
-    }
-    .tc-subtitle-sub.in { animation: fadeIn 0.8s ease forwards; }
-
-    /* ===== ICON EXPLOSION ===== */
-    #icon-stage {
-      position: fixed; inset: 0; z-index: 7000;
-      display: flex; align-items: center; justify-content: center;
-      opacity: 0; pointer-events: none;
-    }
-    #icon-stage.active { opacity: 1; }
-    .icon-orb {
-      position: absolute; width: 56px; height: 56px; border-radius: 14px;
-      display: flex; align-items: center; justify-content: center;
-      background: var(--card-bg); border: 1px solid var(--card-border);
-      backdrop-filter: blur(8px); box-shadow: 0 0 30px rgba(0,0,0,0.3);
-      opacity: 0; transform: scale(0);
-    }
-    .icon-orb svg { width: 26px; height: 26px; }
-    @keyframes orbExplodeIn {
-      0% { opacity: 0; transform: scale(0) rotate(-30deg); }
-      50% { opacity: 1; transform: scale(1.3) rotate(5deg); }
-      70% { transform: scale(0.95) rotate(-2deg); }
-      100% { opacity: 1; transform: scale(1) rotate(0deg); }
-    }
-    .icon-orb.explode { animation: orbExplodeIn 0.7s cubic-bezier(0.16,1,0.3,1) forwards; }
-    .icon-orb .orb-label {
-      position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%);
-      font-family: var(--font-brand); font-size: 11px; font-weight: 600;
-      letter-spacing: 1.5px; text-transform: uppercase; white-space: nowrap;
-      opacity: 0; transition: opacity 0.4s;
-    }
-    .icon-orb.labeled .orb-label { opacity: 1; }
-    .icon-orb .orb-ring {
-      position: absolute; inset: -6px; border-radius: 18px;
-      border: 1px solid transparent; transition: border-color 0.5s;
-    }
-    .icon-orb.ringed .orb-ring { border-color: var(--orb-accent); animation: blink 2s ease-in-out infinite; }
-
-    /* ===== HUB LAYER ===== */
-    #demo-app {
-      position: fixed; inset: 0; z-index: 5;
-      display: flex; align-items: center; justify-content: center;
-      overflow: hidden;
-    }
-    .hub-layer {
-      position: absolute; inset: 0; z-index: 10;
-      display: flex; flex-direction: column; align-items: center;
-      padding: 70px 24px 50px; overflow-y: auto;
-      opacity: 0; pointer-events: none;
-      transition: opacity 0.6s ease;
-    }
-    .hub-layer.active { opacity: 1; pointer-events: auto; }
-
-    .hub-header { text-align: center; margin-bottom: 36px; opacity: 0; }
-    .hub-layer.active .hub-header { animation: slideUp 0.8s cubic-bezier(0.16,1,0.3,1) 0.2s forwards; }
-    .hub-logo {
-      height: 48px; margin-bottom: 8px;
-      filter: drop-shadow(0 0 20px rgba(55,138,221,0.4));
-      animation: tcGlow 3s ease-in-out infinite;
-    }
-    .hub-title {
-      font-family: var(--font-brand); font-size: 20px; font-weight: 700;
-      letter-spacing: 3px; text-transform: uppercase;
-      color: rgba(200,225,255,0.9); margin-bottom: 4px;
-    }
-    .hub-subtitle { font-size: 12px; color: var(--text-muted); letter-spacing: 1px; }
-
-    .hub-grid {
-      display: grid; grid-template-columns: repeat(4, 1fr);
-      gap: 16px; max-width: 880px; width: 100%;
-    }
-    @media (max-width: 960px) { .hub-grid { grid-template-columns: repeat(2, 1fr); } }
-    @media (max-width: 480px) { .hub-grid { grid-template-columns: 1fr; max-width: 360px; } }
-
-    .hub-card {
-      background: var(--card-bg); border: 1px solid var(--card-border);
-      border-radius: 14px; padding: 20px; display: flex; flex-direction: column;
-      gap: 8px; position: relative; overflow: hidden; cursor: pointer;
-      transition: all 0.35s cubic-bezier(0.16,1,0.3,1); opacity: 0;
-      backdrop-filter: blur(6px);
-    }
-    .hub-card::before {
-      content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-      background: transparent; transition: background 0.4s;
-    }
-    .hub-card::after {
-      content: ""; position: absolute; inset: 0; opacity: 0;
-      background: radial-gradient(circle at 50% 0%, var(--card-glow, rgba(55,138,221,0.08)) 0%, transparent 70%);
-      transition: opacity 0.4s;
-    }
-    .hub-card:hover { transform: translateY(-4px) scale(1.02); border-color: var(--card-accent, rgba(55,138,221,0.4)); }
-    .hub-card:hover::before { background: linear-gradient(90deg, transparent, var(--card-accent, rgba(55,138,221,0.6)), transparent); }
-    .hub-card:hover::after { opacity: 1; }
-    .hub-card:hover { box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 0 30px var(--card-glow, rgba(55,138,221,0.1)); }
-    .hub-layer.active .hub-card { animation: slideUp 0.7s cubic-bezier(0.16,1,0.3,1) forwards; }
-
-    .hub-card-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; position: relative; z-index: 1; }
-    .hub-card-icon svg { width: 20px; height: 20px; }
-    .hub-card-title { font-family: var(--font-brand); font-size: 17px; font-weight: 700; color: #fff; letter-spacing: 0.5px; position: relative; z-index: 1; }
-    .hub-card-desc { font-size: 11px; color: var(--text-muted); line-height: 1.5; position: relative; z-index: 1; }
-    .hub-card-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; position: relative; z-index: 1; }
-    .hub-card-chip {
-      font-size: 9px; color: rgba(140,180,220,0.6);
-      background: rgba(55,138,221,0.06); border: 1px solid rgba(55,138,221,0.10);
-      border-radius: 4px; padding: 2px 8px;
-    }
-    .hub-card-footer { display: flex; align-items: center; justify-content: flex-end; margin-top: auto; padding-top: 6px; position: relative; z-index: 1; }
-    .hub-card-cta {
-      font-family: var(--font-brand); font-size: 11px; font-weight: 600;
-      letter-spacing: 2px; text-transform: uppercase;
-      color: var(--card-accent, rgba(55,138,221,0.7));
-      background: none; border: none; cursor: pointer;
-      display: flex; align-items: center; gap: 6px; transition: all 0.3s;
-    }
-    .hub-card:hover .hub-card-cta { color: #fff; text-shadow: 0 0 10px var(--card-accent); }
-    .hub-card:hover .cta-arrow { transform: translateX(5px); }
-    .cta-arrow { display: inline-block; transition: transform 0.3s; }
-
-    .hub-back-row { margin-top: 28px; opacity: 0; }
-    .hub-layer.active .hub-back-row { animation: fadeIn 0.6s ease 1.2s forwards; }
-    .hub-back-btn {
-      font-family: var(--font-brand); font-size: 11px; font-weight: 600;
-      letter-spacing: 2px; text-transform: uppercase;
-      color: var(--text-muted); background: rgba(55,138,221,0.04); border: 1px solid rgba(255,255,255,0.08);
-      padding: 10px 28px; border-radius: 3px; cursor: pointer;
-      transition: all 0.3s; text-decoration: none; display: inline-block;
-    }
-    .hub-back-btn:hover { border-color: rgba(55,138,221,0.4); color: #fff; background: rgba(55,138,221,0.08); box-shadow: 0 0 20px rgba(55,138,221,0.1); }
-
-    /* ===== WALKTHROUGH LAYER ===== */
-    .walk-layer {
-      position: absolute; inset: 0; z-index: 10;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      padding: 50px 24px 40px;
-      opacity: 0; pointer-events: none;
-      transition: opacity 0.5s ease;
-    }
-    .walk-layer.active { opacity: 1; pointer-events: auto; }
-
-    .walk-top-bar {
-      position: absolute; top: 0; left: 0; right: 0;
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 16px 24px; z-index: 20; opacity: 0;
-    }
-    .walk-layer.active .walk-top-bar { animation: fadeIn 0.5s ease 0.3s forwards; }
-    .walk-back {
-      font-family: var(--font-brand); font-size: 12px; font-weight: 600;
-      letter-spacing: 1.5px; text-transform: uppercase;
-      color: var(--text-muted); background: none; border: none; cursor: pointer;
-      display: flex; align-items: center; gap: 8px; transition: all 0.3s;
-    }
-    .walk-back:hover { color: #fff; text-shadow: 0 0 10px rgba(55,138,221,0.3); }
-    .walk-ws-label {
-      font-family: var(--font-brand); font-size: 13px; font-weight: 600;
-      letter-spacing: 2px; text-transform: uppercase;
-    }
-
-    .walk-device {
-      width: min(90vw, 540px); height: min(68vh, 380px);
-      background: rgba(6,14,30,0.96);
-      border: 1px solid rgba(55,138,221,0.15);
-      border-radius: 20px; position: relative; overflow: hidden;
-      box-shadow: 0 0 80px rgba(55,138,221,0.06), 0 0 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
-      transition: box-shadow 0.5s;
-    }
-    .walk-device::before {
-      content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-      background: linear-gradient(90deg, transparent, var(--ws-accent, rgba(55,138,221,0.5)), transparent);
-    }
-    .walk-device::after {
-      content: ""; position: absolute; inset: 0; pointer-events: none;
-      background: radial-gradient(ellipse at 50% 0%, var(--ws-glow, rgba(55,138,221,0.04)) 0%, transparent 60%);
-    }
-
-    .walk-scene {
-      position: absolute; inset: 0; padding: 26px; display: flex; flex-direction: column;
-      opacity: 0; transition: opacity 0.5s ease, transform 0.5s ease;
-      transform: translateX(20px);
-      z-index: 1;
-    }
-    .walk-scene.active { opacity: 1; transform: translateX(0); }
-    .walk-scene.exit { opacity: 0; transform: translateX(-20px); }
-
-    .walk-controls { display: flex; align-items: center; gap: 14px; margin-top: 18px; opacity: 0; }
-    .walk-layer.active .walk-controls { animation: fadeIn 0.5s ease 0.5s forwards; }
-    .walk-dots { display: flex; gap: 8px; }
-    .walk-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: rgba(55,138,221,0.15); transition: all 0.4s; cursor: pointer;
-    }
-    .walk-dot.active { background: var(--ws-accent, var(--accent-blue)); transform: scale(1.4); box-shadow: 0 0 12px var(--ws-accent, var(--accent-blue)); }
-    .walk-dot.done { background: rgba(55,138,221,0.4); }
-    .walk-nav-btn {
-      width: 34px; height: 34px; border-radius: 50%; display: flex;
-      align-items: center; justify-content: center; cursor: pointer;
-      background: rgba(55,138,221,0.06); border: 1px solid rgba(55,138,221,0.15);
-      color: var(--text-muted); transition: all 0.3s; font-size: 16px;
-    }
-    .walk-nav-btn:hover { background: rgba(55,138,221,0.15); color: #fff; border-color: rgba(55,138,221,0.4); box-shadow: 0 0 15px rgba(55,138,221,0.1); }
-
-    .walk-scene-label {
-      position: absolute; bottom: 10px; left: 0; right: 0; z-index: 2;
-      text-align: center; font-size: 10px; font-weight: 300;
-      letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim);
-    }
-
-    /* ===== SCENE CONTENT ===== */
-    .scene-title {
-      font-family: var(--font-brand); font-size: 15px; font-weight: 700;
-      color: rgba(200,225,255,0.9); letter-spacing: 1px; margin-bottom: 14px;
-    }
-    .scene-card {
-      background: rgba(18,30,55,0.8); border: 1px solid rgba(55,138,221,0.08);
-      border-radius: 10px; padding: 11px 14px; width: 100%;
-      opacity: 0; transform: translateX(25px);
-      transition: all 0.5s cubic-bezier(0.16,1,0.3,1);
-    }
-    .scene-card.in { opacity: 1; transform: translateX(0); }
-    .scene-card-title { font-family: var(--font-brand); font-size: 13px; font-weight: 600; color: #fff; }
-    .scene-card-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-
-    .scene-btn {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 10px 24px; border-radius: 8px; border: none;
-      font-family: var(--font-brand); font-size: 14px; font-weight: 600;
-      letter-spacing: 1px; cursor: default; color: #fff; position: relative; overflow: hidden;
-    }
-    .scene-btn.pulse { animation: counterPulse 1.2s ease-in-out infinite; }
-    .scene-btn-flash { position: absolute; inset: 0; background: rgba(255,255,255,0.35); opacity: 0; border-radius: inherit; }
-    .scene-btn-flash.fire { animation: fadeIn 0.08s ease forwards, fadeOut 0.5s ease 0.1s forwards; }
-
-    .scene-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .scene-stat {
-      background: rgba(18,30,55,0.7); border: 1px solid rgba(55,138,221,0.06);
-      border-radius: 10px; padding: 13px; text-align: center;
-      opacity: 0; transform: scale(0.9);
-      transition: all 0.5s cubic-bezier(0.16,1,0.3,1);
-    }
-    .scene-stat.in { opacity: 1; transform: scale(1); }
-    .scene-stat-value { font-family: var(--font-brand); font-size: 26px; font-weight: 700; color: #fff; line-height: 1; }
-    .scene-stat-label { font-size: 9px; color: var(--text-muted); margin-top: 4px; letter-spacing: 1px; text-transform: uppercase; }
-
-    .scene-progress-bar { width: 100%; height: 5px; border-radius: 3px; background: rgba(55,138,221,0.08); overflow: hidden; margin-top: 6px; }
-    .scene-progress-fill { height: 100%; border-radius: 3px; width: 0; transition: width 1.2s cubic-bezier(0.16,1,0.3,1); }
-
-    .scene-check-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; opacity: 0; transform: translateX(-10px); transition: all 0.4s ease; }
-    .scene-check-row.in { opacity: 1; transform: translateX(0); }
-    .scene-check-box { width: 17px; height: 17px; border-radius: 4px; border: 1.5px solid rgba(55,138,221,0.25); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.3s; }
-    .scene-check-box.checked { background: var(--accent-teal); border-color: var(--accent-teal); }
-    .scene-check-box.checked svg { opacity: 1; }
-    .scene-check-box svg { width: 11px; height: 11px; opacity: 0; transition: opacity 0.2s; }
-    .scene-check-label { font-size: 12px; color: var(--text-muted); }
-    .scene-check-label.done { color: rgba(200,225,255,0.8); }
-
-    .scene-table { width: 100%; border-collapse: collapse; }
-    .scene-table th { font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-dim); text-align: left; padding: 5px 8px; border-bottom: 1px solid rgba(55,138,221,0.08); }
-    .scene-table td { font-size: 11px; color: var(--text-muted); padding: 7px 8px; border-bottom: 1px solid rgba(55,138,221,0.04); }
-    .scene-table tr { opacity: 0; transform: translateY(8px); transition: all 0.4s ease; }
-    .scene-table tr.in { opacity: 1; transform: translateY(0); }
-    .scene-badge { display: inline-block; padding: 2px 9px; border-radius: 4px; font-size: 9px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
-
-    .scene-stamp {
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(3) rotate(-20deg);
-      font-family: var(--font-brand); font-size: 34px; font-weight: 700;
-      letter-spacing: 4px; text-transform: uppercase;
-      border: 3px solid; border-radius: 8px; padding: 8px 22px;
-      opacity: 0; pointer-events: none; z-index: 5;
-    }
-    .scene-stamp.fire { animation: stampIn 0.5s cubic-bezier(0.16,1,0.3,1) forwards; }
-
-    .scene-kanban { display: flex; gap: 8px; flex: 1; min-height: 0; }
-    .scene-kanban-col { flex: 1; display: flex; flex-direction: column; gap: 6px; background: rgba(12,22,42,0.5); border-radius: 8px; padding: 8px; }
-    .scene-kanban-title { font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 2px; text-align: center; }
-    .scene-kanban-card {
-      background: rgba(18,30,55,0.9); border: 1px solid rgba(55,138,221,0.06);
-      border-radius: 6px; padding: 7px 9px; font-size: 10px; color: var(--text-muted);
-      opacity: 0; transform: translateY(8px); transition: all 0.5s cubic-bezier(0.16,1,0.3,1);
-    }
-    .scene-kanban-card.in { opacity: 1; transform: translateY(0); }
-    .scene-kanban-card.moving { background: rgba(55,138,221,0.12); border-color: rgba(55,138,221,0.25); }
-
-    .scene-avatar {
-      width: 28px; height: 28px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 10px; font-weight: 700; color: #fff;
-      opacity: 0; transform: scale(0);
-      transition: all 0.4s cubic-bezier(0.16,1,0.3,1);
-    }
-    .scene-avatar.in { opacity: 1; transform: scale(1); }
-
-    .scene-map {
-      flex: 1; border-radius: 10px; background: rgba(8,16,34,0.8);
-      border: 1px solid rgba(55,138,221,0.06); position: relative; overflow: hidden; min-height: 100px;
-    }
-    .scene-map-grid {
-      position: absolute; inset: 0; opacity: 0.1;
-      background-image: linear-gradient(rgba(55,138,221,0.25) 1px, transparent 1px), linear-gradient(90deg, rgba(55,138,221,0.25) 1px, transparent 1px);
-      background-size: 40px 40px;
-    }
-    .scene-map-pin {
-      position: absolute; width: 10px; height: 10px; border-radius: 50%;
-      transform: scale(0); transition: transform 0.4s cubic-bezier(0.16,1,0.3,1);
-    }
-    .scene-map-pin.drop { transform: scale(1); }
-    .scene-map-pin::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid; opacity: 0; }
-    .scene-map-pin.drop::after { animation: pingRing 1.5s ease-out forwards; }
-
-    .scene-scan-area {
-      flex: 1; border-radius: 10px; border: 2px dashed rgba(55,138,221,0.15);
-      display: flex; align-items: center; justify-content: center;
-      position: relative; overflow: hidden; transition: border-color 0.3s;
-    }
-    .scene-scan-line {
-      position: absolute; left: 10%; right: 10%; height: 2px;
-      background: linear-gradient(90deg, transparent, var(--accent-teal), transparent);
-      top: 8%; opacity: 0;
-    }
-    .scene-scan-line.sweep { opacity: 1; animation: scanLine 1.2s ease-in-out forwards; }
-
-    /* ===== STATUS BAR ===== */
-    .demo-status {
-      position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
-      display: flex; align-items: center; gap: 7px; z-index: 9991;
-    }
-    .demo-status-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent-teal); animation: blink 2s ease-in-out infinite; }
-    .demo-status-text { font-family: var(--font-ui); font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase; color: rgba(100,180,140,0.45); }
-
-    /* ===== SKIP BUTTON ===== */
-    .skip-btn {
-      position: fixed; bottom: 14px; right: 20px; z-index: 9995;
-      font-family: var(--font-brand); font-size: 10px; font-weight: 600;
-      letter-spacing: 2px; text-transform: uppercase;
-      color: var(--text-dim); background: rgba(55,138,221,0.04); border: 1px solid rgba(255,255,255,0.06);
-      padding: 5px 14px; border-radius: 3px; cursor: pointer; transition: all 0.3s;
-    }
-    .skip-btn:hover { color: var(--text-muted); border-color: rgba(55,138,221,0.3); background: rgba(55,138,221,0.08); }
-
-    /* ===== RESPONSIVE ===== */
-    @media (max-width: 720px) {
-      .tc-logo { height: 60px; }
-      .tc-subtitle { font-size: 22px; }
-      .tc-streak { width: min(85vw, 340px); }
-      .walk-device { width: 95vw; height: 58vh; border-radius: 14px; }
-      .walk-ws-label { display: none; }
-    }
+    /* SCENE COMPONENTS */
+    .stitle{font-family:var(--brand);font-size:15px;font-weight:700;letter-spacing:1px;color:rgba(200,225,255,.9);}
+    .shint{font-size:10px;color:var(--dim);line-height:1.5;}
+    .scard{background:rgba(10,20,44,.88);border:1px solid rgba(55,138,221,.09);border-radius:10px;padding:11px 13px;transition:all .2s;}
+    .scard.click{cursor:pointer;}
+    .scard.click:hover{border-color:rgba(55,138,221,.28);background:rgba(16,32,66,.85);}
+    .scard.sel{border-color:var(--ws-a,var(--blue));background:rgba(55,138,221,.07);}
+    .sct{font-size:13px;font-weight:600;margin-bottom:3px;}
+    .scs{font-size:11px;color:var(--muted);}
+    .sbadge{display:inline-block;font-size:9px;padding:2px 8px;border-radius:8px;font-weight:700;letter-spacing:.4px;}
+    .bg{background:rgba(29,158,117,.15);color:#4EC29A;}
+    .ba{background:rgba(186,117,23,.15);color:#D39A44;}
+    .bb{background:rgba(55,138,221,.15);color:#6CAEEB;}
+    .br{background:rgba(216,90,48,.18);color:#EE835D;}
+    .sbtn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:9px 17px;border-radius:8px;border:none;font-family:var(--ui);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;}
+    .sbtn.p{background:var(--ws-a,var(--blue));color:#fff;}
+    .sbtn.p:hover:not(:disabled){filter:brightness(1.15);transform:translateY(-1px);}
+    .sbtn.p:disabled{opacity:.4;cursor:not-allowed;}
+    .sbtn.g{background:rgba(255,255,255,.05);color:var(--muted);border:1px solid rgba(255,255,255,.08);}
+    .sbtn.g:hover{background:rgba(255,255,255,.09);color:#fff;}
+    .sbtn.pulse{animation:btnPulse 1.6s ease-in-out infinite;}
+    .sin{width:100%;background:rgba(5,11,24,.9);border:1px solid rgba(55,138,221,.15);border-radius:8px;padding:9px 11px;color:#fff;font-family:var(--ui);font-size:12px;outline:none;transition:border-color .18s;resize:none;}
+    .sin:focus{border-color:var(--ws-a,var(--blue));}
+    .ssel{width:100%;background:rgba(5,11,24,.95);border:1px solid rgba(55,138,221,.15);border-radius:8px;padding:9px 11px;color:#fff;font-family:var(--ui);font-size:12px;outline:none;appearance:none;cursor:pointer;}
+    .slbl{font-size:10px;color:var(--muted);margin-bottom:3px;display:block;letter-spacing:.4px;}
+    .srow{display:flex;gap:8px;align-items:center;}
+    .scol{display:flex;flex-direction:column;gap:5px;}
+    .sdiv{height:1px;background:rgba(55,138,221,.07);margin:2px 0;}
+    .spb{height:5px;background:rgba(255,255,255,.05);border-radius:3px;overflow:hidden;}
+    .spf{height:100%;border-radius:3px;transition:width 1.1s cubic-bezier(.16,1,.3,1);}
+    .sok{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:22px 0;text-align:center;animation:fadeIn .35s ease;}
+    .sclock{font-family:var(--brand);font-size:44px;font-weight:700;text-align:center;letter-spacing:4px;}
+    .sclocksub{font-size:10px;color:var(--muted);text-align:center;letter-spacing:2px;}
+    /* map */
+    .smap{position:relative;border-radius:10px;overflow:hidden;background:#070f26;border:1px solid rgba(55,138,221,.09);}
+    .smap-grid{position:absolute;inset:0;opacity:.07;background-image:linear-gradient(rgba(55,138,221,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(55,138,221,.5) 1px,transparent 1px);background-size:26px 26px;}
+    .sroad{position:absolute;background:rgba(55,138,221,.1);border-radius:1px;}
+    .smaphint{position:absolute;bottom:7px;left:50%;transform:translateX(-50%);font-size:9px;color:var(--dim);white-space:nowrap;background:rgba(5,8,16,.75);padding:2px 8px;border-radius:4px;pointer-events:none;}
+    .spin{position:absolute;transform:translate(-50%,-100%);cursor:pointer;animation:dropPin .4s cubic-bezier(.16,1,.3,1) both;}
+    .spin-ring{position:absolute;width:22px;height:22px;border-radius:50%;border:2px solid var(--pc,var(--blue));bottom:-2px;left:50%;transform:translateX(-50%);pointer-events:none;animation:ringPop 1.1s ease-out both;}
+    .spin-lbl{position:absolute;top:-26px;left:50%;transform:translateX(-50%);background:rgba(5,11,24,.95);border:1px solid rgba(55,138,221,.2);border-radius:4px;font-size:9px;padding:2px 6px;white-space:nowrap;color:rgba(180,210,240,.9);pointer-events:none;}
+    .spin-shad{position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);width:8px;height:3px;background:rgba(0,0,0,.45);border-radius:50%;filter:blur(2px);}
+    /* photo */
+    .spz{border:2px dashed rgba(55,138,221,.18);border-radius:10px;padding:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;cursor:pointer;transition:all .22s;text-align:center;}
+    .spz:hover{border-color:var(--ws-a,var(--blue));background:rgba(55,138,221,.04);}
+    .spgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;}
+    .spthumb{border-radius:8px;overflow:hidden;aspect-ratio:1;background:rgba(10,20,44,.9);border:1px solid rgba(55,138,221,.09);display:flex;flex-direction:column;align-items:center;justify-content:center;animation:scaleIn .28s ease both;}
+    /* table */
+    .stbl{width:100%;border-collapse:collapse;font-size:11px;}
+    .stbl th{text-align:left;padding:5px 8px;font-size:9px;font-weight:600;color:var(--dim);letter-spacing:1px;border-bottom:1px solid rgba(55,138,221,.09);}
+    .stbl td{padding:7px 8px;border-bottom:1px solid rgba(55,138,221,.04);}
+    .stbl tbody tr:hover td{background:rgba(55,138,221,.04);}
+    .stot{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:rgba(55,138,221,.06);border-radius:8px;border:1px solid rgba(55,138,221,.1);}
+    /* checkmark */
+    .ckc{stroke-dasharray:176;stroke-dashoffset:176;transition:stroke-dashoffset 1s ease;}
+    .ckp{stroke-dasharray:50;stroke-dashoffset:50;transition:stroke-dashoffset .5s ease .75s;}
+    .ckc.on{stroke-dashoffset:0;}.ckp.on{stroke-dashoffset:0;}
+    /* toast */
+    #toast{position:fixed;bottom:36px;left:50%;transform:translateX(-50%);background:rgba(14,28,58,.97);border:1px solid rgba(55,138,221,.25);color:#fff;padding:9px 18px;border-radius:9px;font-size:12px;font-weight:500;z-index:9998;opacity:0;transition:opacity .22s;white-space:nowrap;pointer-events:none;max-width:88vw;text-align:center;}
+    #toast.on{opacity:1;}
+    /* status */
+    .dstatus{position:fixed;bottom:8px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:6px;z-index:9990;}
+    .dsdot{width:5px;height:5px;border-radius:50%;background:var(--teal);animation:blink 2s ease-in-out infinite;}
+    .dstxt{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:rgba(100,180,140,.4);}
+    @media(max-width:480px){.hub-grid{grid-template-columns:repeat(2,1fr);}.frame{border-radius:0;width:100vw;height:100dvh;}}
   </style>
 </head>
 <body>
+<canvas id="starfield"></canvas>
+<svg class="fiber-bg" viewBox="0 0 800 540" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+  <path class="sp-strand sp-f1" d="M-20,80 C100,120 200,60 340,140 S560,200 820,100"/>
+  <path class="sp-strand sp-f2" d="M-20,300 C120,260 280,320 440,280 S660,340 820,300"/>
+  <path class="sp-strand sp-f1" d="M-20,450 C100,410 240,460 400,420 S620,470 820,440"/>
+  <path class="sp-pulse sp-p1" d="M-20,80 C100,120 200,60 340,140 S560,200 820,100"/>
+  <path class="sp-pulse sp-p2" d="M-20,300 C120,260 280,320 440,280 S660,340 820,300"/>
+  <path class="sp-pulse sp-p3" d="M-20,450 C100,410 240,460 400,420 S620,470 820,440"/>
+</svg>
+<div class="glow-orb go1"></div><div class="glow-orb go2"></div>
+<div class="cb tl"></div><div class="cb tr"></div><div class="cb bl"></div><div class="cb br"></div>
+<div class="cbar top" id="cTop"></div><div class="cbar bot" id="cBot"></div>
+<div id="warp"></div>
 
-  <!-- Starfield Canvas -->
-  <canvas id="starfield"></canvas>
+<div id="splash">
+  <img src="assets/speccom_logo_2.png" alt="SpecCom" class="spl-logo"/>
+  <div class="spl-title">SPECCOM DEMO</div>
+  <div class="spl-sub">FIELD · DISPATCH · DOCUMENTATION · BILLING</div>
+  <button class="spl-btn" id="splashBtn">Explore Interactive Demo →</button>
+  <div class="spl-tag">No login required · No data saved · 100% interactive</div>
+</div>
 
-  <!-- Fiber Background -->
-  <svg class="fiber-bg" viewBox="0 0 800 540" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-    <path class="sp-strand sp-f1" d="M-20,80 C100,120 200,60 340,140 S560,200 820,100"/>
-    <path class="sp-strand sp-f2" d="M-20,160 C80,200 200,140 380,200 S600,260 820,180"/>
-    <path class="sp-strand sp-f3" d="M-20,300 C120,260 280,320 440,280 S660,340 820,300"/>
-    <path class="sp-strand sp-f4" d="M-20,420 C100,380 240,440 400,400 S620,450 820,420"/>
-    <path class="sp-strand sp-f1" d="M-20,500 C140,470 300,510 460,480 S660,520 820,490"/>
-    <path class="sp-strand sp-f2" d="M200,540 C240,440 300,360 380,270 S480,160 520,-20"/>
-    <path class="sp-strand sp-f4" d="M400,540 C420,440 460,360 520,260 S600,140 660,-20"/>
-    <path class="sp-strand sp-f1" d="M600,540 C600,440 620,380 660,280 S720,160 760,-20"/>
-    <path class="sp-pulse sp-p1" d="M-20,80 C100,120 200,60 340,140 S560,200 820,100"/>
-    <path class="sp-pulse sp-p2" d="M-20,300 C120,260 280,320 440,280 S660,340 820,300"/>
-    <path class="sp-pulse sp-p3" d="M-20,420 C100,380 240,440 400,400 S620,450 820,420"/>
-    <path class="sp-pulse sp-p4" d="M200,540 C240,440 300,360 380,270 S480,160 520,-20"/>
-    <path class="sp-pulse sp-p5" d="M-20,160 C80,200 200,140 380,200 S600,260 820,180"/>
-    <path class="sp-pulse sp-p1" d="M400,540 C420,440 460,360 520,260 S600,140 660,-20"/>
-  </svg>
+<div id="hub">
+  <img src="assets/speccom_logo_2.png" alt="SpecCom" class="hub-logo"/>
+  <div class="hub-h">Pick a Workspace</div>
+  <div class="hub-s">Click around, fill things in — it's the real experience</div>
+  <div class="hub-grid" id="hubGrid"></div>
+</div>
 
-  <!-- Glow Orbs -->
-  <div class="glow-orb go1"></div>
-  <div class="glow-orb go2"></div>
-  <div class="glow-orb go3"></div>
-  <div class="glow-orb go4"></div>
-
-  <!-- Corner Brackets -->
-  <div class="cb tl"></div><div class="cb tr"></div>
-  <div class="cb bl"></div><div class="cb br"></div>
-
-  <!-- Cinematic Bars -->
-  <div class="cine-bar top" id="cineTop"></div>
-  <div class="cine-bar bottom" id="cineBottom"></div>
-
-  <!-- Warp Overlay -->
-  <div id="warp-overlay"></div>
-
-  <!-- Lens Flare -->
-  <div class="lens-flare" id="lensFlare"></div>
-  <div class="lens-flare-streak" id="lensStreak" style="top:50%;"></div>
-
-  <!-- Opening Crawl -->
-  <div id="crawl-container">
-    <div id="crawl-text">
-      <div class="crawl-title">SPECCOM</div>
-      In a world where fiber networks span thousands of miles,<br>
-      one platform unites every role on the job site.<br><br>
-      From <span class="crawl-accent">technicians</span> in the field<br>
-      to <span class="crawl-accent">dispatchers</span> coordinating crews,<br>
-      from <span class="crawl-accent">splicers</span> connecting fiber strands<br>
-      to <span class="crawl-accent">supervisors</span> tracking every milestone.<br><br>
-      Verification. Documentation. Billing.<br>
-      All in one unified command center.<br><br>
-      This is the future of field operations.<br>
-      This is <span class="crawl-accent">SpecCom</span>.
+<div id="shell">
+  <div class="frame" id="frame">
+    <div class="ftopbar">
+      <img src="assets/speccom_logo_2.png" alt="SpecCom"/>
+      <div class="flabel" id="wsLabel">—</div>
+      <button class="fback" id="backBtn">← Back</button>
     </div>
+    <div class="ftabs" id="tabsEl"></div>
+    <div class="fbody" id="bodyEl"></div>
   </div>
+</div>
 
-  <!-- Title Card -->
-  <div id="title-card">
-    <img src="assets/speccom_logo_2.png" alt="SpecCom" class="tc-logo" id="tcLogo" />
-    <div class="tc-streak" id="tcStreak">
-      <div class="tc-streak-line"></div>
-      <div class="tc-streak-pulse"></div>
-    </div>
-    <div class="tc-tagline" id="tcTagline">
-      <div class="sep"></div>
-      <span class="item" id="tci1">Field</span><div class="dot"></div>
-      <span class="item" id="tci2">Dispatch</span><div class="dot"></div>
-      <span class="item" id="tci3">Documentation</span><div class="dot"></div>
-      <span class="item" id="tci4">Billing</span>
-      <div class="sep"></div>
-    </div>
-    <div class="tc-subtitle" id="tcSubtitle">One Platform. Every Role.</div>
-    <div class="tc-subtitle-sub" id="tcSubSub">From the field to the office, SpecCom connects every step of verification, documentation, and billing into a single streamlined workflow.</div>
-  </div>
-
-  <!-- Icon Explosion Stage -->
-  <div id="icon-stage"></div>
-
-  <!-- Main App -->
-  <div id="demo-app">
-    <!-- Hub -->
-    <div class="hub-layer" id="hubLayer">
-      <div class="hub-header">
-        <img src="assets/speccom_logo_2.png" alt="SpecCom" class="hub-logo" />
-        <div class="hub-title">Interactive Demo</div>
-        <div class="hub-subtitle">Choose a workspace to explore</div>
-      </div>
-      <div class="hub-grid" id="hubGrid"></div>
-      <div class="hub-back-row">
-        <a href="./index.html" class="hub-back-btn">&larr; Back to SpecCom</a>
-      </div>
-    </div>
-    <!-- Walkthrough -->
-    <div class="walk-layer" id="walkLayer">
-      <div class="walk-top-bar">
-        <button class="walk-back" id="walkBackBtn">&larr; <span>All Workspaces</span></button>
-        <div class="walk-ws-label" id="walkLabel"></div>
-      </div>
-      <div class="walk-device" id="walkDevice"></div>
-      <div class="walk-controls">
-        <button class="walk-nav-btn" id="walkPrev">&lsaquo;</button>
-        <div class="walk-dots" id="walkDots"></div>
-        <button class="walk-nav-btn" id="walkNext">&rsaquo;</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Status -->
-  <div class="demo-status">
-    <div class="demo-status-dot"></div>
-    <span class="demo-status-text">Demo Mode</span>
-  </div>
-
-  <!-- Skip -->
-  <button class="skip-btn" id="skipBtn">Skip &raquo;</button>
+<div id="toast"></div>
+<div class="dstatus"><div class="dsdot"></div><span class="dstxt">Demo Mode · No data is saved</span></div>
 
 <script>
-(function () {
-  "use strict";
+!function(){
+"use strict";
+var $=function(id){return document.getElementById(id);};
+var wait=function(ms){return new Promise(function(r){setTimeout(r,ms);});};
+var toastTimer;
+function toast(msg,dur){
+  dur=dur||2500;
+  var t=$("toast");t.textContent=msg;t.classList.add("on");
+  clearTimeout(toastTimer);toastTimer=setTimeout(function(){t.classList.remove("on");},dur);
+}
 
-  const $ = (id) => document.getElementById(id);
-  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+/* ── STARFIELD ── */
+var cvs=$("starfield"),ctx=cvs.getContext("2d"),stars=[],warp=0,tw=0;
+function initS(){cvs.width=innerWidth;cvs.height=innerHeight;stars=[];for(var i=0;i<280;i++)stars.push({x:Math.random()*cvs.width-cvs.width/2,y:Math.random()*cvs.height-cvs.height/2,z:Math.random()*1000});}
+function drawS(){
+  ctx.fillStyle="rgba(5,8,16,0.3)";ctx.fillRect(0,0,cvs.width,cvs.height);
+  var cx=cvs.width/2,cy=cvs.height/2;
+  for(var i=0;i<stars.length;i++){var s=stars[i];s.z-=1+warp*26;if(s.z<=0){s.z=1000;s.x=Math.random()*cvs.width-cx;s.y=Math.random()*cvs.height-cy;}
+    var sx=(s.x/s.z)*300+cx,sy=(s.y/s.z)*300+cy,r=Math.max(.3,(1-s.z/1000)*(1.4+warp*2)),b=Math.min(1,(1-s.z/1000)*1.5);
+    ctx.fillStyle="rgba(180,210,255,"+b+")";ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();}
+  warp+=(tw-warp)*.05;requestAnimationFrame(drawS);
+}
+addEventListener("resize",function(){cvs.width=innerWidth;cvs.height=innerHeight;});
+initS();drawS();
 
-  /* ========== STARFIELD ========== */
-  const canvas = $("starfield");
-  const ctx = canvas.getContext("2d");
-  let stars = [];
-  let warpSpeed = 0;
-  let targetWarp = 0;
+function fireWarp(dur){
+  return new Promise(function(res){
+    tw=1;var ov=$("warp");ov.innerHTML="";ov.classList.add("on");
+    var cx=innerWidth/2,cy=innerHeight/2;
+    for(var i=0;i<44;i++){
+      var l=document.createElement("div");l.className="wl";
+      var a=(i/44)*360,d=30+Math.random()*65,len=16+Math.random()*32,rad=a*Math.PI/180;
+      l.style.cssText="left:"+(cx+Math.cos(rad)*d)+"px;top:"+(cy+Math.sin(rad)*d)+"px;width:"+len+"px;background:linear-gradient(90deg,transparent,rgba(140,200,255,.5),transparent);transform-origin:left center;transform:rotate("+a+"deg) scaleX(0);";
+      ov.appendChild(l);(function(el){setTimeout(function(){el.classList.add("on");},15+Math.random()*50);})(l);
+    }
+    setTimeout(function(){tw=0;ov.classList.remove("on");ov.innerHTML="";res();},dur||460);
+  });
+}
 
-  function initStars() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    stars = [];
-    for (let i = 0; i < 400; i++) {
-      stars.push({
-        x: Math.random() * canvas.width - canvas.width / 2,
-        y: Math.random() * canvas.height - canvas.height / 2,
-        z: Math.random() * 1000,
-        o: Math.random(),
+/* ── WORKSPACES ── */
+var WS=[
+  {key:"technician",title:"Technician",a:"#378ADD",g:"rgba(55,138,221,.14)",ib:"rgba(55,138,221,.14)",sub:"Clock in, view daily schedule, inspect vehicle, capture field photos",chips:["Clock In","Daily Schedule","Vehicle Inspect","Capture Photo","Complete Job"],
+   icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5"><circle cx="9" cy="9" r="6"/><path d="M9 5.5v3.5l2 2"/></svg>'},
+  {key:"fieldmap",title:"Field Map",a:"#1D9E75",g:"rgba(29,158,117,.14)",ib:"rgba(29,158,117,.14)",sub:"Drop pins, name locations, capture GPS coordinates",chips:["Drop Pin","Name It","GPS Fix","Save"],
+   icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><path d="M9 2C6.24 2 4 4.24 4 7c0 4 5 9 5 9s5-5 5-9c0-2.76-2.24-5-5-5z"/><circle cx="9" cy="7" r="2"/></svg>'},
+  {key:"photos",title:"Field Photos",a:"#00bcd4",g:"rgba(0,188,212,.14)",ib:"rgba(0,188,212,.14)",sub:"Upload GPS-tagged photos, assign MH node tags",chips:["Upload","GPS Tags","MH Assign","Photo Map"],
+   icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#00bcd4" stroke-width="1.5"><rect x="2.5" y="3" width="13" height="11.5" rx="1.8"/><circle cx="6.2" cy="7" r="1.2"/><path d="M4.8 12l2.8-3 2.2 2.1 1.8-1.6 2 2.5"/></svg>'},
+  {key:"splicer",title:"Splicer",a:"#7F77DD",g:"rgba(127,119,221,.14)",ib:"rgba(127,119,221,.14)",sub:"Projects, billing codes, redline map",chips:["Projects","Billing Codes","Fiber Map","Redline"],
+   icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#A59CF4" stroke-width="1.5"><path d="M3 9h12"/><path d="M6 5l-3 4 3 4"/><path d="M12 5l3 4-3 4"/></svg>'},
+  {key:"dispatch",title:"Dispatch",a:"#D39A44",g:"rgba(211,154,68,.14)",ib:"rgba(186,117,23,.14)",sub:"Create work orders, assign crews, track queue",chips:["Create WO","Assign","Priority","Queue"],
+   icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#D39A44" stroke-width="1.5"><rect x="2" y="5" width="14" height="10" rx="1.5"/><path d="M6 5V3.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V5"/><path d="M9 9v3M7.5 10.5h3"/></svg>'},
+  {key:"office",title:"Office & Billing",a:"#EE835D",g:"rgba(238,131,93,.14)",ib:"rgba(216,90,48,.14)",sub:"Invoice review, approve billing, run reports",chips:["Invoices","Approve","Reports","Export"],
+   icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#EE835D" stroke-width="1.5"><rect x="4" y="2.5" width="10" height="13" rx="1.5"/><path d="M6.5 6h5M6.5 9h5M6.5 12h3.5"/></svg>'},
+];
+
+/* ── BUILD HUB ── */
+function buildHub(){
+  var g=$("hubGrid");g.innerHTML="";
+  WS.forEach(function(ws){
+    var c=document.createElement("div");
+    c.className="hcard";
+    c.style.borderColor="rgba(255,255,255,.07)";
+    c.onmouseenter=function(){c.style.borderColor=ws.a;c.style.boxShadow="0 8px 30px "+ws.g;};
+    c.onmouseleave=function(){c.style.borderColor="rgba(255,255,255,.07)";c.style.boxShadow="";};
+    var chips=ws.chips.map(function(ch){return '<span class="hc-chip">'+ch+'</span>';}).join("");
+    c.innerHTML='<div class="hc-icon" style="background:'+ws.ib+';">'+ws.icon+'</div>'
+      +'<div class="hc-title">'+ws.title+'</div>'
+      +'<div class="hc-sub">'+ws.sub+'</div>'
+      +'<div class="hc-chips">'+chips+'</div>';
+    c.addEventListener("click",function(){openWS(ws);});
+    g.appendChild(c);
+  });
+}
+
+/* ── SPLASH ── */
+$("splashBtn").addEventListener("click",function(){
+  $("splash").classList.add("out");
+  setTimeout(function(){
+    fireWarp(360).then(function(){
+      buildHub();
+      $("hub").classList.add("on");
+    });
+  },350);
+});
+
+/* ── OPEN WORKSPACE ── */
+function openWS(ws){
+  $("cTop").classList.add("on");$("cBot").classList.add("on");
+  $("hub").classList.remove("on");
+  fireWarp(380).then(function(){
+    $("cTop").classList.remove("on");$("cBot").classList.remove("on");
+    $("shell").style.setProperty("--ws-a",ws.a);
+    $("wsLabel").textContent=ws.title;
+    $("wsLabel").style.color=ws.a;
+    $("frame").style.boxShadow="0 0 80px "+ws.g+",0 0 40px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.04)";
+    loadWS(ws);
+    $("shell").classList.add("on");
+  });
+}
+
+$("backBtn").addEventListener("click",function(){
+  $("cTop").classList.add("on");$("cBot").classList.add("on");
+  $("shell").classList.remove("on");
+  fireWarp(360).then(function(){
+    $("cTop").classList.remove("on");$("cBot").classList.remove("on");
+    $("tabsEl").innerHTML="";$("bodyEl").innerHTML="";
+    $("hub").classList.add("on");
+  });
+});
+
+/* ── LOAD WORKSPACE ── */
+function loadWS(ws){
+  var scenes=getScenes(ws);
+  var tabs=$("tabsEl"),body=$("bodyEl");
+  tabs.innerHTML="";body.innerHTML="";
+  scenes.forEach(function(sc,i){
+    var t=document.createElement("button");
+    t.className="ftab"+(i===0?" on":"");
+    t.textContent=sc.label;
+    t.addEventListener("click",function(){
+      tabs.querySelectorAll(".ftab").forEach(function(b){b.classList.remove("on");});
+      t.classList.add("on");
+      showScene(sc,body);
+    });
+    tabs.appendChild(t);
+  });
+  showScene(scenes[0],body);
+}
+
+var _sceneInterval=null;
+function showScene(sc,body){
+  if(_sceneInterval){clearInterval(_sceneInterval);_sceneInterval=null;}
+  body.innerHTML="";
+  var d=document.createElement("div");
+  d.className="scene";
+  body.appendChild(d);  // append FIRST so getElementById works inside build()
+  sc.build(d);
+  body.scrollTop=0;
+}
+
+/* ── MAP HELPER ── */
+function mkMap(h,accent,pins,onDrop){
+  var m=document.createElement("div");
+  m.className="smap";m.style.height=h+"px";
+  m.innerHTML='<div class="smap-grid"></div>'
+    +'<div class="sroad" style="top:30%;left:0;right:0;height:3px;opacity:.35;"></div>'
+    +'<div class="sroad" style="top:58%;left:0;right:0;height:2px;opacity:.22;"></div>'
+    +'<div class="sroad" style="top:0;bottom:0;left:38%;width:2px;opacity:.22;"></div>'
+    +'<div class="sroad" style="top:0;bottom:0;left:70%;width:2px;opacity:.16;"></div>'
+    +'<div class="smaphint">'+(onDrop?"Tap anywhere to drop a pin":"Tap a pin to view details")+'</div>';
+  (pins||[]).forEach(function(p){m.appendChild(mkPin(p.x,p.y,accent,p.label));});
+  if(onDrop){
+    m.style.cursor="crosshair";
+    m.addEventListener("click",function(e){
+      if(e.target.closest(".spin"))return;
+      var r=m.getBoundingClientRect();
+      var x=((e.clientX-r.left)/r.width*100).toFixed(1);
+      var y=((e.clientY-r.top)/r.height*100).toFixed(1);
+      onDrop(parseFloat(x),parseFloat(y),m);
+    });
+  }
+  return m;
+}
+function mkPin(x,y,accent,label){
+  var p=document.createElement("div");
+  p.className="spin";
+  p.style.left=x;p.style.top=y;p.style.setProperty("--pc",accent);
+  p.innerHTML=(label?'<div class="spin-lbl">'+label+'</div>':'')
+    +'<svg width="18" height="26" viewBox="0 0 20 28"><path d="M10 0C4.48 0 0 4.48 0 10c0 7.5 10 18 10 18S20 17.5 20 10C20 4.48 15.52 0 10 0z" fill="'+accent+'"/><circle cx="10" cy="10" r="3.5" fill="rgba(255,255,255,.3)"/></svg>'
+    +'<div class="spin-ring"></div><div class="spin-shad"></div>';
+  return p;
+}
+function drawCheck(c){
+  var cc=c.querySelector(".ckc"),cp=c.querySelector(".ckp");
+  if(cc)requestAnimationFrame(function(){cc.classList.add("on");});
+  if(cp)setTimeout(function(){cp.classList.add("on");},750);
+}
+
+/* ────────────────────────────────────
+   SCENES
+──────────────────────────────────── */
+function getScenes(ws){
+  var A=ws.a;
+
+  /* TECHNICIAN */
+  if(ws.key==="technician") return [
+    /* ── CLOCK IN ── */
+    {label:"Clock In",build:function(c){
+      c.innerHTML='<div class="stitle">Start Your Shift</div>'
+        +'<div style="text-align:center;padding:16px 0;">'
+        +'<div class="sclock" id="lc" style="color:'+A+';">—</div>'
+        +'<div class="sclocksub" id="ls">Not clocked in</div></div>'
+        +'<label class="slbl">Select Project</label>'
+        +'<select class="ssel" id="lp"><option>Somewhere, USA — Fiber Build</option><option>Somewhere, USA — Expansion</option><option>Somewhere, USA — Maintenance</option></select>'
+        +'<button class="sbtn p pulse" id="lb" style="width:100%;padding:13px;font-size:14px;">⏱ Clock In</button>'
+        +'<div id="lr" style="display:none;">'
+        +'<div class="scard sel" style="text-align:center;padding:14px;">'
+        +'<div style="font-size:24px;margin-bottom:6px;">✓</div>'
+        +'<div style="font-weight:700;font-size:14px;color:'+A+';">Clocked In Successfully</div>'
+        +'<div class="scs" style="margin-top:4px;">Session active · <span id="lp2"></span></div>'
+        +'</div></div>';
+      var clocked=false;
+      var iv=_sceneInterval=setInterval(function(){var lc=document.getElementById("lc");if(lc)lc.textContent=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});},1000);
+      document.getElementById("lc").textContent=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+      document.getElementById("lb").addEventListener("click",function(){
+        if(clocked)return;clocked=true;clearInterval(iv);
+        this.classList.remove("pulse");this.disabled=true;this.style.opacity=".45";this.textContent="✓ Clocked In";
+        document.getElementById("ls").textContent="Session active";
+        document.getElementById("lp2").textContent=document.getElementById("lp").value;
+        document.getElementById("lr").style.display="block";
+        toast("✓ Clocked in! Have a safe shift.");
       });
-    }
-  }
+    }},
+    /* ── DAILY SCHEDULE ── */
+    {label:"Daily Schedule",build:function(c){
+      var jobs=[
+        {time:"0800–1000",id:"WO-5101",name:"Jon Doe",type:"No Internet OOS",tag:"Trouble",addr:"123 Fictitious St",color:"#D85A30",dot:"🔴",selected:false},
+        {time:"1000–1200",id:"WO-5102",name:"Jane Doe",type:"Service Order",tag:"Service",addr:"456 Fictitious Ave",color:"#1D9E75",dot:"🟢",selected:false},
+        {time:"1300–1400",id:"WO-5103",name:"Bob Smith",type:"Service Order",tag:"Service",addr:"745 Fictitious Blvd",color:"#1D9E75",dot:"🟢",selected:false},
+        {time:"1400–1600",id:"WO-5104",name:"James Devtest",type:"Slow Speeds",tag:"Trouble",addr:"444 Angel Dr",color:"#D85A30",dot:"🔴",selected:false},
+      ];
+      c.innerHTML='<div class="stitle">Daily Schedule</div>'
+        +'<div class="shint">Tap a job to view details and actions</div>'
+        +'<div style="display:flex;flex-direction:column;gap:6px;" id="sched">'
+        /* Pre-Shift */
+        +'<div class="scard" style="background:rgba(55,138,221,.06);border-color:rgba(55,138,221,.18);padding:10px 14px;">'
+        +'<div class="srow" style="gap:10px;align-items:center;">'
+        +'<div style="font-size:18px;">🚚</div>'
+        +'<div><div class="sct" style="font-size:12px;">Pre-Shift</div>'
+        +'<div class="scs">Vehicle Inspection — required before leaving yard</div></div>'
+        +'</div></div>'
+        /* Jobs */
+        +'<div id="jlist" style="display:flex;flex-direction:column;gap:6px;"></div>'
+        /* Lunch */
+        +'<div class="scard" style="background:rgba(211,154,68,.06);border-color:rgba(211,154,68,.18);padding:10px 14px;">'
+        +'<div class="srow" style="gap:10px;align-items:center;">'
+        +'<div style="font-size:18px;">🍽</div>'
+        +'<div><div class="sct" style="font-size:12px;">Around Noon</div>'
+        +'<div class="scs">Lunch (flex card, tech\'s choice)</div></div>'
+        +'</div></div>'
+        +'</div>'
+        /* Detail panel */
+        +'<div id="jdetail" style="display:none;margin-top:10px;"></div>';
 
-  function drawStars() {
-    ctx.fillStyle = "rgba(5,8,16,0.3)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
-    for (const s of stars) {
-      s.z -= 1 + warpSpeed * 30;
-      if (s.z <= 0) { s.z = 1000; s.x = Math.random() * canvas.width - cx; s.y = Math.random() * canvas.height - cy; }
-      const sx = (s.x / s.z) * 300 + cx;
-      const sy = (s.y / s.z) * 300 + cy;
-      const r = Math.max(0.3, (1 - s.z / 1000) * (1.5 + warpSpeed * 2));
-      const bright = Math.min(1, (1 - s.z / 1000) * 1.5 + warpSpeed * 0.5);
-      if (warpSpeed > 0.3) {
-        const psx = (s.x / (s.z + 10 + warpSpeed * 30)) * 300 + cx;
-        const psy = (s.y / (s.z + 10 + warpSpeed * 30)) * 300 + cy;
-        ctx.strokeStyle = `rgba(140,180,255,${bright * 0.5})`;
-        ctx.lineWidth = r * 0.8;
-        ctx.beginPath(); ctx.moveTo(psx, psy); ctx.lineTo(sx, sy); ctx.stroke();
-      }
-      ctx.fillStyle = `rgba(180,210,255,${bright})`;
-      ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
-    }
-    warpSpeed += (targetWarp - warpSpeed) * 0.05;
-    requestAnimationFrame(drawStars);
-  }
-
-  window.addEventListener("resize", () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
-  initStars();
-  drawStars();
-
-  /* ========== FX FUNCTIONS ========== */
-  function fireWarp(duration = 600) {
-    return new Promise((resolve) => {
-      targetWarp = 1;
-      const overlay = $("warp-overlay");
-      overlay.innerHTML = "";
-      overlay.classList.add("fire");
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
-      for (let i = 0; i < 60; i++) {
-        const line = document.createElement("div");
-        line.className = "warp-line";
-        const angle = (i / 60) * 360;
-        const dist = 40 + Math.random() * 100;
-        const len = 20 + Math.random() * 40;
-        const rad = (angle * Math.PI) / 180;
-        line.style.cssText = `left:${cx + Math.cos(rad) * dist}px;top:${cy + Math.sin(rad) * dist}px;width:${len}px;background:linear-gradient(90deg,transparent,rgba(140,200,255,${0.3 + Math.random() * 0.5}),transparent);transform-origin:left center;transform:rotate(${angle}deg) scaleX(0);`;
-        overlay.appendChild(line);
-        setTimeout(() => line.classList.add("fire"), 20 + Math.random() * 80);
-      }
-      setTimeout(() => {
-        targetWarp = 0;
-        overlay.classList.remove("fire");
-        overlay.innerHTML = "";
-        resolve();
-      }, duration);
-    });
-  }
-
-  function fireLensFlare(x, y) {
-    const flare = $("lensFlare");
-    const streak = $("lensStreak");
-    flare.style.left = x + "px"; flare.style.top = y + "px";
-    streak.style.top = y + "px";
-    flare.classList.remove("fire"); streak.classList.remove("fire");
-    void flare.offsetWidth;
-    flare.classList.add("fire"); streak.classList.add("fire");
-  }
-
-  function fireParticles(x, y, color, count = 30) {
-    for (let i = 0; i < count; i++) {
-      const p = document.createElement("div");
-      p.className = "particle";
-      const angle = (i / count) * 360 + Math.random() * 20;
-      const dist = 60 + Math.random() * 140;
-      const rad = (angle * Math.PI) / 180;
-      const dur = 0.5 + Math.random() * 0.6;
-      p.style.cssText = `left:${x}px;top:${y}px;background:${color};--px:${Math.cos(rad) * dist}px;--py:${Math.sin(rad) * dist}px;--dur:${dur}s;width:${2 + Math.random() * 4}px;height:${2 + Math.random() * 4}px;`;
-      document.body.appendChild(p);
-      requestAnimationFrame(() => p.classList.add("fire"));
-      setTimeout(() => p.remove(), dur * 1000 + 100);
-    }
-  }
-
-  function fireShockwave(container) {
-    const ring = document.createElement("div");
-    ring.className = "shockwave";
-    container.appendChild(ring);
-    requestAnimationFrame(() => ring.classList.add("fire"));
-    setTimeout(() => ring.remove(), 900);
-  }
-
-  function setCineBars(on) {
-    $("cineTop").classList.toggle("active", on);
-    $("cineBottom").classList.toggle("active", on);
-  }
-
-  /* ========== TYPEWRITER & HELPERS ========== */
-  function typewriter(el, text, delay = 40) {
-    return new Promise((resolve) => {
-      el.textContent = "";
-      let i = 0;
-      const tick = () => {
-        if (i < text.length) { el.textContent += text[i]; i++; setTimeout(tick, delay); } else resolve();
-      };
-      tick();
-    });
-  }
-
-  function countUp(el, target, duration = 1200) {
-    return new Promise((resolve) => {
-      const start = performance.now();
-      const isFloat = String(target).includes(".");
-      const prefix = el.dataset.prefix || "";
-      const suffix = el.dataset.suffix || "";
-      function frame(now) {
-        const t = Math.min((now - start) / duration, 1);
-        const ease = 1 - Math.pow(1 - t, 3);
-        const val = ease * target;
-        el.textContent = prefix + (isFloat ? val.toFixed(2) : Math.round(val).toLocaleString()) + suffix;
-        if (t < 1) requestAnimationFrame(frame); else resolve();
-      }
-      requestAnimationFrame(frame);
-    });
-  }
-
-  function staggerIn(elements, delayMs = 100) { elements.forEach((el, i) => setTimeout(() => el.classList.add("in"), i * delayMs)); }
-  function staggerDrop(pins, delayMs = 200) { pins.forEach((p, i) => setTimeout(() => p.classList.add("drop"), i * delayMs)); }
-
-  /* ========== WORKSPACE DATA ========== */
-  const workspaces = [
-    { key:"technician", title:"Technician", accent:"#378ADD", glow:"rgba(55,138,221,0.12)", iconBg:"rgba(55,138,221,0.15)", chips:["Clock in","Field tasks","Photos"], summary:"Clock in, field tasks, and photo capture.", icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5"><path d="M9 2v6l4 2"/><circle cx="9" cy="9" r="6"/></svg>' },
-    { key:"splicer", title:"Splicer", accent:"#1D9E75", glow:"rgba(29,158,117,0.12)", iconBg:"rgba(29,158,117,0.15)", chips:["Projects","Closures","Billing codes"], summary:"Projects, closures, billing codes, and redline map.", icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><path d="M3 9h12"/><path d="M6 5l-3 4 3 4"/><path d="M12 5l3 4-3 4"/></svg>' },
-    { key:"photos", title:"Field Photos", accent:"#00bcd4", glow:"rgba(0,188,212,0.12)", iconBg:"rgba(0,188,212,0.15)", chips:["GPS EXIF","MH tags","Photo map"], summary:"Upload GPS-tagged photos and auto-pin map markers.", icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#00bcd4" stroke-width="1.5"><rect x="2.5" y="3" width="13" height="11.5" rx="1.8"/><circle cx="6.2" cy="7" r="1.2"/><path d="M4.8 12l2.8-3 2.2 2.1 1.8-1.6 2 2.5"/></svg>' },
-    { key:"office", title:"Office & Billing", accent:"#6CAEEB", glow:"rgba(108,174,235,0.12)", iconBg:"rgba(55,138,221,0.15)", chips:["Invoices","Reports","Billing"], summary:"Invoice processing, reports, and billing review.", icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5"><rect x="4" y="2.5" width="10" height="13" rx="1.5"/><path d="M6.5 6h5M6.5 9h5M6.5 12h3.5"/></svg>' },
-    { key:"dispatch", title:"Dispatch", accent:"#D39A44", glow:"rgba(211,154,68,0.12)", iconBg:"rgba(186,117,23,0.15)", chips:["Create","Assign","Queue"], summary:"Create work orders, assign crews, and manage queue.", icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#D39A44" stroke-width="1.5"><path d="M2 9h14"/><path d="M9 2v14"/><circle cx="9" cy="9" r="6"/></svg>' },
-    { key:"warehouse", title:"Warehouse", accent:"#4EC29A", glow:"rgba(78,194,154,0.12)", iconBg:"rgba(29,158,117,0.15)", chips:["Inventory","Search","Assignments"], summary:"Inventory, material search, and assignment visibility.", icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><rect x="3" y="3" width="12" height="12" rx="1.5"/><path d="M3 8h12"/></svg>' },
-    { key:"supervisor", title:"Supervisor", accent:"#A59CF4", glow:"rgba(165,156,244,0.12)", iconBg:"rgba(127,119,221,0.15)", chips:["Progress","Verification","Metrics"], summary:"Progress oversight, field verification, and daily metrics.", icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#A59CF4" stroke-width="1.5"><path d="M3 13l4-4 3 3 5-7"/><circle cx="13.5" cy="5" r="1.3" fill="#A59CF4" stroke="none"/></svg>' },
-    { key:"admin", title:"Admin", accent:"#EE835D", glow:"rgba(238,131,93,0.12)", iconBg:"rgba(216,90,48,0.15)", chips:["Users","Projects","System"], summary:"User, project, and system control surfaces.", icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#EE835D" stroke-width="1.5"><circle cx="9" cy="9" r="2.2"/><path d="M9 2.5v2M9 13.5v2M2.5 9h2M13.5 9h2M4.2 4.2l1.4 1.4M12.4 12.4l1.4 1.4M13.8 4.2l-1.4 1.4M5.6 12.4l-1.4 1.4"/></svg>' },
-    { key:"import", title:"Smart Import", accent:"#C084FC", glow:"rgba(192,132,252,0.14)", iconBg:"rgba(127,63,210,0.18)", chips:[".kmz",".pdf",".csv",".zip",".png"], summary:"Drop any file — the app maps, invoices, and organizes everything automatically.", icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#C084FC" stroke-width="1.5"><path d="M9 12V4"/><path d="M5.5 8L9 12l3.5-4"/><rect x="3" y="13" width="12" height="2.5" rx="1.2"/></svg>' },
+      var jlist=document.getElementById("jlist");
+      var detail=document.getElementById("jdetail");
+      jobs.forEach(function(job,i){
+        var d=document.createElement("div");
+        d.className="scard click";
+        d.id="jcard"+i;
+        d.innerHTML='<div class="srow" style="justify-content:space-between;align-items:flex-start;">'
+          +'<div style="flex:1;">'
+          +'<div class="srow" style="gap:6px;align-items:center;">'
+          +'<span style="font-size:13px;">'+job.dot+'</span>'
+          +'<div><div class="sct" style="font-size:12px;color:var(--dim);">'+job.time+'</div>'
+          +'<div class="sct">'+job.id+' · '+job.name+'</div>'
+          +'<div class="scs">'+job.type+' @ '+job.addr+'</div></div></div></div>'
+          +'<span class="sbadge" style="background:'+job.color+'22;color:'+job.color+';">'+job.tag+'</span>'
+          +'</div>';
+        (function(idx,j){
+          d.addEventListener("click",function(){
+            jlist.querySelectorAll(".scard").forEach(function(x){x.classList.remove("sel");});
+            d.classList.add("sel");
+            detail.style.display="block";
+            detail.innerHTML='<div class="scard sel" style="border-color:'+j.color+'44;">'
+              +'<div class="sct">'+j.id+' · '+j.name+'</div>'
+              +'<div class="scs" style="margin:2px 0;">'+j.type+' · '+j.addr+'</div>'
+              +'<div class="sdiv" style="margin:8px 0;"></div>'
+              +'<div class="srow" style="gap:7px;">'
+              +'<button class="sbtn p" style="flex:1;font-size:11px;padding:7px 10px;" id="btn-nav-'+idx+'">🗺 Navigate</button>'
+              +'<button class="sbtn g" style="flex:1;font-size:11px;padding:7px 10px;" id="btn-call-'+idx+'">📞 Call Customer</button>'
+              +'</div>'
+              +'<div style="margin-top:10px;">'
+              +'<label class="slbl">Update Status</label>'
+              +'<div class="srow" style="gap:6px;flex-wrap:wrap;">'
+              +'<button class="sbtn g" style="font-size:10px;padding:5px 10px;" data-st="En Route" data-id="'+j.id+'">En Route</button>'
+              +'<button class="sbtn g" style="font-size:10px;padding:5px 10px;" data-st="On Site" data-id="'+j.id+'">On Site</button>'
+              +'<button class="sbtn g" style="font-size:10px;padding:5px 10px;" data-st="In Progress" data-id="'+j.id+'">In Progress</button>'
+              +'<button class="sbtn g" style="font-size:10px;padding:5px 10px;" data-st="Complete" data-id="'+j.id+'">Complete</button>'
+              +'</div></div></div>';
+            document.getElementById("btn-nav-"+idx).addEventListener("click",function(){toast("🗺 Navigating to "+j.addr+"...");});
+            document.getElementById("btn-call-"+idx).addEventListener("click",function(){toast("📞 Calling "+j.name+"...");});
+            detail.querySelectorAll("[data-st]").forEach(function(btn){
+              btn.addEventListener("click",function(){toast("✓ "+btn.dataset.id+" status: "+btn.dataset.st);});
+            });
+          });
+        })(i,job);
+        jlist.appendChild(d);
+      });
+      /* Breaks footer */
+      var breaks=document.createElement("div");
+      breaks.className="scard";
+      breaks.style.cssText="background:rgba(127,119,221,.06);border-color:rgba(127,119,221,.18);padding:10px 14px;";
+      breaks.innerHTML='<div class="srow" style="gap:10px;align-items:center;">'
+        +'<div style="font-size:18px;">☕</div>'
+        +'<div><div class="sct" style="font-size:12px;">Breaks (AM &amp; PM)</div>'
+        +'<div class="scs">Shown as flex cards — tech\'s choice</div></div>'
+        +'</div>';
+      document.getElementById("sched").appendChild(breaks);
+    }},
+    /* ── VEHICLE INSPECT ── */
+    {label:"Vehicle Inspect",build:function(c){
+      var sections=[
+        {label:"Exterior",icon:"🚗",items:["Lights (headlights, taillights, turn signals)","Tires — pressure & tread condition","Windshield & mirrors — no cracks or obstructions","Body damage — note any new damage","License plates secured & visible"]},
+        {label:"Under Hood",icon:"🔧",items:["Engine oil level","Coolant level","Brake fluid level","Battery connections secure","No visible leaks or worn belts"]},
+        {label:"Cab & Equipment",icon:"🪛",items:["Seatbelts functional","Fire extinguisher present & charged","First aid kit present","PPE — hard hat, vest, gloves on board","SpecCom tablet charged & connected"]},
+      ];
+      var total=0,checked=0;
+      sections.forEach(function(s){total+=s.items.length;});
+      c.innerHTML='<div class="stitle">Vehicle Inspection</div>'
+        +'<div class="shint">Complete all items before leaving the yard</div>'
+        +'<div class="scard" style="background:rgba(55,138,221,.05);padding:10px 14px;margin-bottom:4px;">'
+        +'<div class="srow" style="justify-content:space-between;align-items:center;">'
+        +'<div class="sct">Inspection Progress</div>'
+        +'<span id="vcount" style="font-size:13px;font-weight:700;color:'+A+';">0 / '+total+'</span>'
+        +'</div>'
+        +'<div class="spb" style="margin-top:8px;"><div class="spf" id="vpbar" style="width:0%;background:'+A+';transition:width .3s ease;"></div></div>'
+        +'</div>'
+        +'<div id="vsections" style="display:flex;flex-direction:column;gap:8px;"></div>'
+        +'<button class="sbtn p" id="vsubmit" style="width:100%;margin-top:4px;opacity:.4;pointer-events:none;">✓ Submit Vehicle Inspection</button>'
+        +'<div id="vdone" style="display:none;" class="sok">'
+        +'<div style="font-size:30px;">✅</div>'
+        +'<div style="font-family:var(--brand);font-size:16px;font-weight:700;color:'+A+';">VEHICLE CLEARED</div>'
+        +'<div style="font-size:11px;color:var(--muted);">Inspection complete · Safe to depart</div>'
+        +'</div>';
+      var vsec=document.getElementById("vsections");
+      sections.forEach(function(sec,si){
+        var wrap=document.createElement("div");
+        wrap.className="scard";
+        var itemsHtml=sec.items.map(function(item,ii){
+          return '<label style="display:flex;align-items:flex-start;gap:8px;font-size:11px;color:var(--muted);cursor:pointer;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04);">'
+            +'<input type="checkbox" class="vchk" style="accent-color:'+A+';margin-top:1px;flex-shrink:0;" data-si="'+si+'" data-ii="'+ii+'"/>'
+            +'<span>'+item+'</span></label>';
+        }).join("");
+        wrap.innerHTML='<div class="srow" style="gap:8px;margin-bottom:8px;align-items:center;">'
+          +'<span style="font-size:18px;">'+sec.icon+'</span>'
+          +'<div class="sct">'+sec.label+'</div>'
+          +'<span class="sbadge" id="sbadge-'+si+'" style="margin-left:auto;">0/'+sec.items.length+'</span>'
+          +'</div>'
+          +itemsHtml;
+        vsec.appendChild(wrap);
+      });
+      /* checkbox handler */
+      vsec.addEventListener("change",function(e){
+        if(!e.target.classList.contains("vchk"))return;
+        checked=vsec.querySelectorAll(".vchk:checked").length;
+        document.getElementById("vcount").textContent=checked+" / "+total;
+        document.getElementById("vpbar").style.width=Math.round(checked/total*100)+"%";
+        /* update per-section badges */
+        sections.forEach(function(sec,si){
+          var secChecked=vsec.querySelectorAll(".vchk:checked[data-si='"+si+"']").length;
+          var badge=document.getElementById("sbadge-"+si);
+          badge.textContent=secChecked+"/"+sec.items.length;
+          badge.className="sbadge "+(secChecked===sec.items.length?"bg":"");
+        });
+        var submit=document.getElementById("vsubmit");
+        if(checked===total){
+          submit.style.opacity="1";submit.style.pointerEvents="auto";
+        } else {
+          submit.style.opacity=".4";submit.style.pointerEvents="none";
+        }
+      });
+      document.getElementById("vsubmit").addEventListener("click",function(){
+        this.style.display="none";
+        var vd=document.getElementById("vdone");
+        vd.style.display="flex";vd.style.flexDirection="column";vd.style.alignItems="center";vd.style.gap="10px";
+        toast("✓ Vehicle inspection complete — cleared to depart!");
+      });
+    }},
+    /* ── CAPTURE PHOTO ── */
+    {label:"Capture Photo",build:function(c){
+      var emojis=["🔌","📦","🔧","🪛","⚡","🛠️","🔩","📡"];var photos=[];
+      c.innerHTML='<div class="stitle">Capture Field Photos</div>'
+        +'<div class="shint">Photos attach to your active work order with GPS coordinates</div>'
+        +'<label class="slbl">Attached to</label>'
+        +'<select class="ssel"><option>WO-5101 · 123 Fictitious St</option><option>WO-5102 · 456 Fictitious Ave</option><option>WO-5103 · 745 Fictitious Blvd</option><option>WO-5104 · 444 Angel Dr</option></select>'
+        +'<div class="spz" id="cam">'
+        +'<svg width="40" height="40" viewBox="0 0 48 48" fill="none" stroke="'+A+'" stroke-width="1.4"><rect x="4" y="10" width="40" height="30" rx="4"/><circle cx="24" cy="26" r="9"/><path d="M16 10l2.5-6h7L28 10"/><circle cx="39" cy="16" r="2.5" fill="'+A+'"/></svg>'
+        +'<div style="font-size:12px;color:var(--dim);">Tap to take a photo</div></div>'
+        +'<div class="spgrid" id="pg"></div>'
+        +'<div class="srow" style="justify-content:space-between;">'
+        +'<span style="font-size:11px;color:var(--muted);" id="pc2"></span>'
+        +'<button class="sbtn g" id="pub" style="font-size:10px;padding:6px 14px;display:none;">Upload All</button></div>';
+      document.getElementById("cam").addEventListener("click",function(){
+        if(photos.length>=emojis.length){toast("All photos captured!");return;}
+        var e2=emojis[photos.length];photos.push(e2);
+        var t=document.createElement("div");t.className="spthumb";
+        t.style.animationDelay=(photos.length*.05)+"s";
+        t.innerHTML='<div style="font-size:20px;">'+e2+'</div><div style="font-size:8px;color:var(--dim);margin-top:3px;">IMG_48'+(20+photos.length)+'.jpg</div>';
+        document.getElementById("pg").appendChild(t);
+        document.getElementById("pc2").textContent=photos.length+" photo"+(photos.length>1?"s":"")+" ready";
+        document.getElementById("pub").style.display="inline-flex";
+        toast("📷 Photo captured & GPS-tagged!");
+      });
+      document.getElementById("pub").addEventListener("click",function(){toast("✓ "+photos.length+" photos uploaded!");this.textContent="Uploaded ✓";this.disabled=true;});
+    }},
+    /* ── COMPLETE JOB ── */
+    {label:"Complete Job",build:function(c){
+      c.innerHTML='<div class="stitle">Complete Work Order</div>'
+        +'<label class="slbl">Select Work Order</label>'
+        +'<select class="ssel" id="cwo">'
+        +'<option>WO-5101 · Jon Doe — No Internet OOS</option>'
+        +'<option>WO-5102 · Jane Doe — Service Order</option>'
+        +'<option>WO-5103 · Bob Smith — Service Order</option>'
+        +'<option>WO-5104 · James Devtest — Slow Speeds</option>'
+        +'</select>'
+        +'<label class="slbl">Completion Notes</label>'
+        +'<textarea class="sin" rows="3" placeholder="Describe work performed, issues found..."></textarea>'
+        +'<label class="slbl">Final Status</label>'
+        +'<select class="ssel"><option>Complete</option><option>Needs Follow-up</option><option>Partially Complete</option></select>'
+        +'<label class="slbl">Customer Signature</label>'
+        +'<div class="scard" style="background:rgba(55,138,221,.04);text-align:center;padding:18px;cursor:pointer;" id="sigpad">'
+        +'<div style="font-size:11px;color:var(--dim);">Tap to capture signature</div>'
+        +'<div id="sigdone" style="display:none;font-size:20px;color:'+A+';">✓ Signature captured</div>'
+        +'</div>'
+        +'<div style="display:flex;gap:16px;">'
+        +'<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);cursor:pointer;"><input type="checkbox" style="accent-color:'+A+';"/> Photos attached</label>'
+        +'<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);cursor:pointer;"><input type="checkbox" style="accent-color:'+A+';"/> Billing codes entered</label>'
+        +'</div>'
+        +'<button class="sbtn p" id="fin" style="width:100%;">Mark Job Complete</button>'
+        +'<div id="finr" style="display:none;" class="sok">'
+        +'<svg width="62" height="62" viewBox="0 0 62 62">'
+        +'<circle cx="31" cy="31" r="28" fill="none" stroke="rgba(29,158,117,.15)" stroke-width="2"/>'
+        +'<circle cx="31" cy="31" r="28" fill="none" stroke="#4EC29A" stroke-width="2.5" class="ckc" style="transform:rotate(-90deg);transform-origin:center;"/>'
+        +'<path d="M19 32l9 9 16-19" fill="none" stroke="#4EC29A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="ckp"/>'
+        +'</svg>'
+        +'<div style="font-family:var(--brand);font-size:18px;font-weight:700;color:#4EC29A;letter-spacing:2px;">JOB COMPLETE</div>'
+        +'<div style="font-size:11px;color:var(--muted);" id="wodonelbl">Work order submitted · Billing queued</div></div>';
+      document.getElementById("sigpad").addEventListener("click",function(){
+        document.getElementById("sigdone").style.display="block";
+        this.querySelector("div").style.display="none";
+        toast("✓ Signature captured!");
+      });
+      document.getElementById("fin").addEventListener("click",function(){
+        var wo=document.getElementById("cwo").value.split("·")[0].trim();
+        this.style.display="none";
+        var r=document.getElementById("finr");r.style.display="flex";r.style.flexDirection="column";
+        document.getElementById("wodonelbl").textContent=wo+" submitted · Billing queued";
+        drawCheck(c);toast("🎉 Work order submitted!");
+      });
+    }},
   ];
 
-  /* ========== SCENE DEFINITIONS ========== */
-  function getScenes(ws) {
-    const a = ws.accent;
-    const scenes = {
-      technician: [
-        { label:"Clock In", build(c){ c.innerHTML=`<div class="scene-title">Start Your Day</div><div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;"><div class="scene-btn pulse" id="sc-cb" style="background:${a};font-size:18px;padding:16px 40px;border-radius:12px;">Clock In<div class="scene-btn-flash" id="sc-cf"></div></div><div id="sc-ct" style="font-family:var(--font-brand);font-size:28px;font-weight:700;color:rgba(200,225,255,0.9);opacity:0;"></div><div id="sc-cbg" class="scene-badge" style="background:rgba(29,158,117,0.2);color:#4EC29A;opacity:0;">CLOCKED IN</div></div>`; }, async animate(c){ await wait(600); c.querySelector("#sc-cb").classList.remove("pulse"); c.querySelector("#sc-cf").classList.add("fire"); await wait(300); const t=c.querySelector("#sc-ct"); t.style.opacity="1"; t.style.transition="opacity 0.4s"; t.textContent="7:02 AM"; await wait(400); const b=c.querySelector("#sc-cbg"); b.style.transition="opacity 0.3s"; b.style.opacity="1"; } },
-        { label:"Work Orders", build(c){ c.innerHTML=`<div class="scene-title">Today's Work Orders</div><div class="scene-card" id="w1"><div class="scene-card-title">WO-4821 &middot; Splice Closure</div><div class="scene-card-sub">MH-1635CA_03 &middot; Ruidoso, NM</div></div><div class="scene-card" id="w2"><div class="scene-card-title">WO-4822 &middot; Maintenance</div><div class="scene-card-sub">MH-1635EA_01 &middot; Routine</div></div><div class="scene-card" id="w3"><div class="scene-card-title">WO-4823 &middot; Emergency</div><div class="scene-card-sub">MH-1440BB_02 &middot; Priority</div></div>`; }, async animate(c){ await wait(200); staggerIn(c.querySelectorAll(".scene-card"), 200); } },
-        { label:"Photo Capture", build(c){ c.innerHTML=`<div class="scene-title">Capture Field Photo</div><div class="scene-scan-area" id="vf" style="flex:1;"><svg width="50" height="50" viewBox="0 0 60 60" fill="none" stroke="rgba(55,138,221,0.25)" stroke-width="1.5"><rect x="5" y="5" width="50" height="50" rx="4"/><circle cx="30" cy="30" r="10"/><line x1="30" y1="15" x2="30" y2="22"/><line x1="30" y1="38" x2="30" y2="45"/><line x1="15" y1="30" x2="22" y2="30"/><line x1="38" y1="30" x2="45" y2="30"/></svg></div><div id="pht" style="display:flex;gap:6px;margin-top:8px;"></div>`; }, async animate(c){ await wait(700); const vf=c.querySelector("#vf"); vf.style.transition="background 0.1s,border-color 0.3s"; vf.style.background="rgba(255,255,255,0.12)"; await wait(120); vf.style.background="rgba(10,20,40,0.3)"; vf.style.borderColor="rgba(29,158,117,0.4)"; await wait(300); const t=c.querySelector("#pht"); for(let i=0;i<3;i++){const d=document.createElement("div");d.style.cssText=`width:44px;height:44px;border-radius:7px;background:rgba(18,30,55,0.8);border:1px solid rgba(55,138,221,0.12);opacity:0;transform:scale(0.8);transition:all 0.3s;display:flex;align-items:center;justify-content:center;font-size:16px;`;d.textContent="\u{1F4F7}";t.appendChild(d);await wait(180);d.style.opacity="1";d.style.transform="scale(1)";} } },
-        { label:"Job Complete", build(c){ c.innerHTML=`<div class="scene-title">Complete Job</div><div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;"><svg width="70" height="70" viewBox="0 0 80 80"><circle cx="40" cy="40" r="36" fill="none" stroke="rgba(29,158,117,0.15)" stroke-width="2"/><circle id="cc" cx="40" cy="40" r="36" fill="none" stroke="#4EC29A" stroke-width="2.5" stroke-dasharray="226" stroke-dashoffset="226" style="transition:stroke-dashoffset 1s ease"/><path id="cp" d="M24 42l10 10 22-24" fill="none" stroke="#4EC29A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="60" stroke-dashoffset="60" style="transition:stroke-dashoffset 0.6s ease 0.6s"/></svg><div id="ct" style="font-family:var(--font-brand);font-size:18px;font-weight:700;color:#4EC29A;letter-spacing:2px;text-transform:uppercase;opacity:0;">Complete</div></div>`; }, async animate(c){ await wait(400); c.querySelector("#cc").style.strokeDashoffset="0"; await wait(600); c.querySelector("#cp").style.strokeDashoffset="0"; await wait(800); const t=c.querySelector("#ct"); t.style.transition="opacity 0.4s"; t.style.opacity="1"; } },
-      ],
-      splicer: [
-        { label:"Projects", build(c){ c.innerHTML=`<div class="scene-title">Active Projects</div><div class="scene-card" id="s1"><div class="scene-card-title">Ruidoso Fire Rebuild</div><div class="scene-card-sub">TC-241635027 &middot; 48 closures</div></div><div class="scene-card" id="s2"><div class="scene-card-title">Lincoln County Expansion</div><div class="scene-card-sub">TC-241890015 &middot; 22 closures</div></div><div class="scene-card" id="s3"><div class="scene-card-title">Mescalero Trunk Run</div><div class="scene-card-sub">TC-242010008 &middot; 15 closures</div></div>`; }, async animate(c){ await wait(200); staggerIn(c.querySelectorAll(".scene-card"), 200); } },
-        { label:"Fiber Diagram", build(c){ c.innerHTML=`<div class="scene-title">Closure 1635CA_03</div><svg width="100%" height="160" viewBox="0 0 460 140" fill="none" style="margin:auto;"><path d="M20,70 C100,70 140,30 220,30 S340,70 440,70" stroke="rgba(55,138,221,0.2)" stroke-width="2" fill="none"/><path id="fd" d="M20,70 C100,70 140,30 220,30 S340,70 440,70" stroke="${a}" stroke-width="2.5" fill="none" stroke-dasharray="500" stroke-dashoffset="500" style="transition:stroke-dashoffset 1.5s ease"/><circle id="fn1" cx="120" cy="52" r="5" fill="${a}" opacity="0" style="transition:opacity 0.3s"/><circle id="fn2" cx="220" cy="30" r="5" fill="${a}" opacity="0" style="transition:opacity 0.3s"/><circle id="fn3" cx="340" cy="62" r="5" fill="${a}" opacity="0" style="transition:opacity 0.3s"/><text x="120" y="78" fill="rgba(140,175,210,0.5)" font-size="9" text-anchor="middle" opacity="0" id="fl1">Node A</text><text x="220" y="20" fill="rgba(140,175,210,0.5)" font-size="9" text-anchor="middle" opacity="0" id="fl2">Splice</text><text x="340" y="88" fill="rgba(140,175,210,0.5)" font-size="9" text-anchor="middle" opacity="0" id="fl3">Node B</text></svg>`; }, async animate(c){ await wait(300); c.querySelector("#fd").style.strokeDashoffset="0"; await wait(600); ["fn1","fn2","fn3"].forEach((id,i)=>setTimeout(()=>c.querySelector("#"+id).style.opacity="1",i*250)); await wait(900); ["fl1","fl2","fl3"].forEach((id,i)=>setTimeout(()=>{const e=c.querySelector("#"+id);e.style.transition="opacity 0.3s";e.style.opacity="1";},i*200)); } },
-        { label:"Billing Codes", build(c){ c.innerHTML=`<div class="scene-title">Enter Billing Codes</div><div style="display:flex;flex-direction:column;gap:6px;"><div class="scene-card" id="b1"><div class="scene-card-title" id="b1t"></div><div class="scene-card-sub">Splice labor &mdash; <span id="b1v">$0</span></div></div><div class="scene-card" id="b2"><div class="scene-card-title" id="b2t"></div><div class="scene-card-sub">Material &mdash; <span id="b2v">$0</span></div></div><div class="scene-card" id="b3"><div class="scene-card-title" id="b3t"></div><div class="scene-card-sub">Equipment &mdash; <span id="b3v">$0</span></div></div></div><div style="margin-top:auto;padding-top:10px;text-align:right;font-family:var(--font-brand);font-size:18px;font-weight:700;color:${a};">Total: <span id="bt" data-prefix="$">$0</span></div>`; }, async animate(c){ const codes=[["SPL-4821-A","b1","b1t","b1v",1250],["MAT-FIBER-12","b2","b2t","b2v",480],["EQP-OTDR-01","b3","b3t","b3v",320]]; for(const[code,cid,tid,vid,amt]of codes){await typewriter(c.querySelector("#"+tid),code,50);c.querySelector("#"+cid).classList.add("in");await countUp(c.querySelector("#"+vid),amt,600);await wait(200);} await countUp(c.querySelector("#bt"),2050,800); } },
-        { label:"Redline Map", build(c){ c.innerHTML=`<div class="scene-title">Redline Map</div><div class="scene-map"><div class="scene-map-grid"></div><svg style="position:absolute;inset:0;width:100%;height:100%;" viewBox="0 0 400 200" fill="none" preserveAspectRatio="xMidYMid slice"><path id="rl" d="M40,160 L120,80 L200,100 L280,40 L360,90" stroke="#D85A30" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="500" stroke-dashoffset="500" style="transition:stroke-dashoffset 1.5s ease" opacity="0.8"/></svg><div class="scene-map-pin" style="top:75%;left:8%;background:#D85A30;" id="r1"></div><div class="scene-map-pin" style="top:35%;left:28%;background:#D85A30;" id="r2"></div><div class="scene-map-pin" style="top:45%;left:48%;background:#D85A30;" id="r3"></div><div class="scene-map-pin" style="top:15%;left:68%;background:#D85A30;" id="r4"></div><div class="scene-map-pin" style="top:40%;left:88%;background:#D85A30;" id="r5"></div></div>`; }, async animate(c){ await wait(300); staggerDrop(c.querySelectorAll(".scene-map-pin"),200); await wait(600); c.querySelector("#rl").style.strokeDashoffset="0"; } },
-      ],
-      photos: [
-        { label:"Upload", build(c){ c.innerHTML=`<div class="scene-title">Upload Field Photos</div><div class="scene-scan-area" id="pd" style="flex:1;"><div style="text-align:center;color:var(--text-dim);"><svg width="36" height="36" viewBox="0 0 40 40" fill="none" stroke="rgba(0,188,212,0.3)" stroke-width="1.5"><rect x="4" y="8" width="32" height="24" rx="3"/><path d="M14 28l6-7 5 5 3-3 4 5"/><circle cx="13" cy="16" r="2.5"/></svg><div style="margin-top:6px;font-size:11px;">Drop photos here</div></div></div><div id="pf" style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;"></div>`; }, async animate(c){ const d=c.querySelector("#pd"),f=c.querySelector("#pf"); const names=["IMG_4821.jpg","IMG_4822.jpg","IMG_4823.jpg","IMG_4824.jpg"]; await wait(400); d.style.borderColor="rgba(0,188,212,0.4)"; for(const n of names){const ch=document.createElement("div");ch.style.cssText=`padding:3px 9px;border-radius:5px;background:rgba(0,188,212,0.08);border:1px solid rgba(0,188,212,0.15);font-size:10px;color:rgba(0,188,212,0.7);opacity:0;transform:translateY(6px);transition:all 0.3s;`;ch.textContent=n;f.appendChild(ch);await wait(130);ch.style.opacity="1";ch.style.transform="translateY(0)";} } },
-        { label:"GPS Extract", build(c){ c.innerHTML=`<div class="scene-title">GPS EXIF Extracted</div><div style="display:flex;flex-direction:column;gap:8px;"><div class="scene-card" id="g1"><div class="scene-card-title">IMG_4821.jpg</div><div class="scene-card-sub" id="g1c"></div></div><div class="scene-card" id="g2"><div class="scene-card-title">IMG_4822.jpg</div><div class="scene-card-sub" id="g2c"></div></div><div class="scene-card" id="g3"><div class="scene-card-title">IMG_4823.jpg</div><div class="scene-card-sub" id="g3c"></div></div></div>`; }, async animate(c){ const d=[["33.3946\u00b0 N, 105.6731\u00b0 W","g1","g1c"],["33.3951\u00b0 N, 105.6728\u00b0 W","g2","g2c"],["33.3938\u00b0 N, 105.6745\u00b0 W","g3","g3c"]]; for(const[coord,cid,sid]of d){c.querySelector("#"+cid).classList.add("in");await typewriter(c.querySelector("#"+sid),coord,30);await wait(200);} } },
-        { label:"MH Tags", build(c){ c.innerHTML=`<div class="scene-title">Assign MH Tags</div><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;flex:1;align-items:center;"><div class="scene-card" id="m1" style="width:110px;text-align:center;padding:14px;"><div style="font-size:20px;margin-bottom:6px;">\u{1F4F7}</div><div class="scene-card-title" style="font-size:12px;">IMG_4821</div><div id="m1t" style="margin-top:5px;"></div></div><div class="scene-card" id="m2" style="width:110px;text-align:center;padding:14px;"><div style="font-size:20px;margin-bottom:6px;">\u{1F4F7}</div><div class="scene-card-title" style="font-size:12px;">IMG_4822</div><div id="m2t" style="margin-top:5px;"></div></div><div class="scene-card" id="m3" style="width:110px;text-align:center;padding:14px;"><div style="font-size:20px;margin-bottom:6px;">\u{1F4F7}</div><div class="scene-card-title" style="font-size:12px;">IMG_4823</div><div id="m3t" style="margin-top:5px;"></div></div></div>`; }, async animate(c){ await wait(200); staggerIn(c.querySelectorAll(".scene-card"),200); await wait(700); const tags=[["MH-1635CA_03","m1t"],["MH-1635EA_01","m2t"],["MH-1440BB_02","m3t"]]; for(const[tag,el]of tags){const b=document.createElement("span");b.className="scene-badge";b.style.cssText="background:rgba(0,188,212,0.12);color:#00bcd4;opacity:0;transform:scale(0.8);transition:all 0.3s;display:inline-block;";b.textContent=tag;c.querySelector("#"+el).appendChild(b);await wait(180);b.style.opacity="1";b.style.transform="scale(1)";} } },
-        { label:"Photo Map", build(c){ c.innerHTML=`<div class="scene-title">Photo Map</div><div class="scene-map" style="flex:1;"><div class="scene-map-grid"></div><div class="scene-map-pin" style="top:28%;left:32%;background:#00bcd4;" id="pm1"></div><div class="scene-map-pin" style="top:48%;left:55%;background:#00bcd4;" id="pm2"></div><div class="scene-map-pin" style="top:62%;left:22%;background:#00bcd4;" id="pm3"></div><div class="scene-map-pin" style="top:38%;left:72%;background:#00bcd4;" id="pm4"></div></div>`; }, async animate(c){ await wait(300); staggerDrop(c.querySelectorAll(".scene-map-pin"),300); } },
-      ],
-      office: [
-        { label:"Invoices", build(c){ c.innerHTML=`<div class="scene-title">Invoice Summary</div><table class="scene-table"><thead><tr class="in"><th>Invoice</th><th>Node</th><th>Amount</th><th>Status</th></tr></thead><tbody><tr id="i1"><td>TDS_001</td><td>1635EA_03</td><td>$2,450</td><td><span class="scene-badge" style="background:rgba(29,158,117,0.15);color:#4EC29A;">Paid</span></td></tr><tr id="i2"><td>TDS_002</td><td>1635CA_02</td><td>$1,820</td><td><span class="scene-badge" style="background:rgba(29,158,117,0.15);color:#4EC29A;">Paid</span></td></tr><tr id="i3"><td>TDS_003</td><td>1440BB_01</td><td>$3,100</td><td><span class="scene-badge" style="background:rgba(186,117,23,0.15);color:#D39A44;">Pending</span></td></tr><tr id="i4"><td>TDS_004</td><td>1635EA_01</td><td>$2,880</td><td><span class="scene-badge" style="background:rgba(186,117,23,0.15);color:#D39A44;">Pending</span></td></tr></tbody></table>`; }, async animate(c){ await wait(200); staggerIn(c.querySelectorAll("tbody tr"),200); } },
-        { label:"Line Items", build(c){ c.innerHTML=`<div class="scene-title">Invoice TDS_001</div><div style="display:flex;flex-direction:column;gap:5px;"><div class="scene-card" id="l1"><div style="display:flex;justify-content:space-between;"><span class="scene-card-title">Splice Labor</span><span style="color:#6CAEEB;font-weight:600;font-size:12px;">$1,250</span></div></div><div class="scene-card" id="l2"><div style="display:flex;justify-content:space-between;"><span class="scene-card-title">Materials</span><span style="color:#6CAEEB;font-weight:600;font-size:12px;">$480</span></div></div><div class="scene-card" id="l3"><div style="display:flex;justify-content:space-between;"><span class="scene-card-title">Equipment</span><span style="color:#6CAEEB;font-weight:600;font-size:12px;">$320</span></div></div><div class="scene-card" id="l4"><div style="display:flex;justify-content:space-between;"><span class="scene-card-title">Travel</span><span style="color:#6CAEEB;font-weight:600;font-size:12px;">$400</span></div></div></div><div style="margin-top:auto;padding-top:8px;text-align:right;border-top:1px solid rgba(55,138,221,0.08);"><span style="font-family:var(--font-brand);font-size:22px;font-weight:700;color:#6CAEEB;" id="lt" data-prefix="$">$0</span></div>`; }, async animate(c){ await wait(200); staggerIn(c.querySelectorAll(".scene-card"),180); await wait(900); countUp(c.querySelector("#lt"),2450,800); } },
-        { label:"Revenue Chart", build(c){ c.innerHTML=`<div class="scene-title">Monthly Revenue</div><div style="flex:1;display:flex;align-items:flex-end;gap:10px;padding:8px 0;">${["Jan","Feb","Mar","Apr"].map((m,i)=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;"><div style="width:100%;border-radius:5px 5px 0 0;background:rgba(108,174,235,${0.25+i*0.1});height:0;transition:height 1s ease ${i*0.15}s;" id="br${i}"></div><span style="font-size:9px;color:var(--text-dim);">${m}</span></div>`).join("")}</div>`; }, async animate(c){ await wait(400); [60,78,45,92].forEach((h,i)=>c.querySelector("#br"+i).style.height=h+"%"); } },
-        { label:"Approved", build(c){ c.innerHTML=`<div class="scene-title">Invoice Review</div><div style="flex:1;display:flex;align-items:center;justify-content:center;position:relative;"><div style="text-align:center;color:var(--text-muted);font-size:12px;"><div>TDS_003 &middot; $3,100</div><div style="margin-top:3px;">Node 1440BB_01</div></div><div class="scene-stamp" id="stmp" style="color:#4EC29A;border-color:#4EC29A;">Approved</div></div>`; }, async animate(c){ await wait(600); c.querySelector("#stmp").classList.add("fire"); } },
-      ],
-      dispatch: [
-        { label:"Queue", build(c){ c.innerHTML=`<div class="scene-title">Dispatch Queue</div><div class="scene-kanban"><div class="scene-kanban-col"><div class="scene-kanban-title">Pending</div><div class="scene-kanban-card" id="d1">WO-4825<br><span style="font-size:9px;color:var(--text-dim);">Splice &middot; MH-22</span></div><div class="scene-kanban-card" id="d2">WO-4826<br><span style="font-size:9px;color:var(--text-dim);">Repair &middot; MH-35</span></div></div><div class="scene-kanban-col"><div class="scene-kanban-title">Assigned</div><div class="scene-kanban-card" id="d3">WO-4821<br><span style="font-size:9px;color:var(--text-dim);">Splice &middot; MH-03</span></div></div><div class="scene-kanban-col"><div class="scene-kanban-title">Complete</div><div class="scene-kanban-card" id="d4">WO-4819<br><span style="font-size:9px;color:var(--text-dim);">Maint.</span></div></div></div>`; }, async animate(c){ await wait(200); staggerIn(c.querySelectorAll(".scene-kanban-card"),200); } },
-        { label:"New Order", build(c){ c.innerHTML=`<div class="scene-title">Create Work Order</div><div style="display:flex;flex-direction:column;gap:8px;">${["TYPE","LOCATION","PRIORITY"].map((l,i)=>`<div style="padding:7px 11px;border-radius:7px;border:1px solid rgba(211,154,68,0.15);background:rgba(18,30,55,0.6);"><div style="font-size:9px;color:var(--text-dim);margin-bottom:3px;">${l}</div><div id="wo${i}" style="font-size:12px;color:var(--text-muted);min-height:16px;"></div></div>`).join("")}</div>`; }, async animate(c){ await wait(300); await typewriter(c.querySelector("#wo0"),"Splice Closure",45); await wait(180); await typewriter(c.querySelector("#wo1"),"MH-1635CA_07, Ruidoso NM",35); await wait(180); await typewriter(c.querySelector("#wo2"),"High",60); } },
-        { label:"Assign Crew", build(c){ c.innerHTML=`<div class="scene-title">Assign Crew</div><div class="scene-card in" style="opacity:1;transform:none;margin-bottom:14px;"><div class="scene-card-title">WO-4827 &middot; Splice</div><div class="scene-card-sub">MH-1635CA_07 &middot; High priority</div></div><div style="font-size:10px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">Assign Team</div><div style="display:flex;gap:8px;" id="cr"><div class="scene-avatar" style="background:rgba(55,138,221,0.25);">JM</div><div class="scene-avatar" style="background:rgba(29,158,117,0.25);">RK</div><div class="scene-avatar" style="background:rgba(186,117,23,0.25);">TL</div></div><div id="cs" style="margin-top:10px;opacity:0;"></div>`; }, async animate(c){ await wait(300); staggerIn(c.querySelectorAll(".scene-avatar"),250); await wait(900); const s=c.querySelector("#cs"); s.innerHTML='<span class="scene-badge" style="background:rgba(29,158,117,0.15);color:#4EC29A;">Crew Assigned</span>'; s.style.transition="opacity 0.3s"; s.style.opacity="1"; } },
-        { label:"Updated", build(c){ c.innerHTML=`<div class="scene-title">Queue Updated</div><div class="scene-kanban"><div class="scene-kanban-col"><div class="scene-kanban-title">Pending</div><div class="scene-kanban-card in" style="opacity:1;transform:none;">WO-4826<br><span style="font-size:9px;color:var(--text-dim);">Repair</span></div></div><div class="scene-kanban-col" id="ac"><div class="scene-kanban-title">Assigned</div><div class="scene-kanban-card in" style="opacity:1;transform:none;">WO-4821<br><span style="font-size:9px;color:var(--text-dim);">Splice</span></div></div><div class="scene-kanban-col"><div class="scene-kanban-title">Complete</div><div class="scene-kanban-card in" style="opacity:1;transform:none;">WO-4819<br><span style="font-size:9px;color:var(--text-dim);">Maint.</span></div></div></div>`; }, async animate(c){ await wait(500); const cd=document.createElement("div"); cd.className="scene-kanban-card"; cd.innerHTML='WO-4827<br><span style="font-size:9px;color:var(--text-dim);">Splice &middot; Assigned</span>'; c.querySelector("#ac").appendChild(cd); await wait(50); cd.classList.add("in","moving"); } },
-      ],
-      warehouse: [
-        { label:"Search", build(c){ c.innerHTML=`<div class="scene-title">Inventory Search</div><div style="padding:7px 12px;border-radius:7px;border:1px solid rgba(78,194,154,0.15);background:rgba(18,30,55,0.6);margin-bottom:10px;"><div id="wq" style="font-size:12px;color:var(--text-muted);min-height:16px;"></div></div><div id="wr" style="display:flex;flex-direction:column;gap:5px;"></div>`; }, async animate(c){ await typewriter(c.querySelector("#wq"),"fiber optic cable",40); await wait(200); const items=[["FOC-SM-12","Single-mode 12-strand &middot; 2,400 ft"],["FOC-SM-48","Single-mode 48-strand &middot; 800 ft"],["FOC-MM-6","Multi-mode 6-strand &middot; 1,200 ft"]]; const r=c.querySelector("#wr"); for(const[t,s]of items){const cd=document.createElement("div");cd.className="scene-card";cd.innerHTML=`<div class="scene-card-title">${t}</div><div class="scene-card-sub">${s}</div>`;r.appendChild(cd);await wait(80);cd.classList.add("in");await wait(130);} } },
-        { label:"Detail", build(c){ c.innerHTML=`<div class="scene-title">FOC-SM-12</div><div class="scene-grid"><div class="scene-stat" id="ws1"><div class="scene-stat-value" id="wv1" data-suffix=" ft">0</div><div class="scene-stat-label">In Stock</div></div><div class="scene-stat" id="ws2"><div class="scene-stat-value" id="wv2">0</div><div class="scene-stat-label">Assigned</div></div><div class="scene-stat" id="ws3"><div class="scene-stat-value" id="wv3">0</div><div class="scene-stat-label">On Order</div></div><div class="scene-stat" id="ws4"><div class="scene-stat-value" id="wv4" data-prefix="$">0</div><div class="scene-stat-label">Unit Cost</div></div></div>`; }, async animate(c){ staggerIn(c.querySelectorAll(".scene-stat"),150); await wait(400); countUp(c.querySelector("#wv1"),2400,800); countUp(c.querySelector("#wv2"),18,600); countUp(c.querySelector("#wv3"),5,400); countUp(c.querySelector("#wv4"),1.25,600); } },
-        { label:"Assign", build(c){ c.innerHTML=`<div class="scene-title">Assign to Work Order</div><div style="display:flex;align-items:center;gap:14px;margin:auto 0;"><div class="scene-card in" style="opacity:1;transform:none;flex:1;text-align:center;"><div style="font-size:18px;margin-bottom:3px;">\u{1F4E6}</div><div class="scene-card-title" style="font-size:12px;">FOC-SM-12</div><div class="scene-card-sub">200 ft</div></div><svg id="aa" width="36" height="18" viewBox="0 0 40 20" fill="none" style="opacity:0;"><path d="M0,10 L30,10 M24,4 L30,10 L24,16" stroke="${a}" stroke-width="2" stroke-linecap="round" stroke-dasharray="50" stroke-dashoffset="50" style="transition:stroke-dashoffset 0.8s ease" id="aap"/></svg><div class="scene-card in" style="opacity:1;transform:none;flex:1;text-align:center;"><div style="font-size:18px;margin-bottom:3px;">\u{1F527}</div><div class="scene-card-title" style="font-size:12px;">WO-4827</div><div class="scene-card-sub">Splice</div></div></div><div id="ab" style="text-align:center;margin-top:10px;opacity:0;"></div>`; }, async animate(c){ await wait(500); const a=c.querySelector("#aa"); a.style.transition="opacity 0.3s"; a.style.opacity="1"; await wait(200); c.querySelector("#aap").style.strokeDashoffset="0"; await wait(700); const b=c.querySelector("#ab"); b.innerHTML='<span class="scene-badge" style="background:rgba(78,194,154,0.15);color:#4EC29A;">Material Assigned</span>'; b.style.transition="opacity 0.3s"; b.style.opacity="1"; } },
-        { label:"Barcode", build(c){ c.innerHTML=`<div class="scene-title">Scan Item</div><div class="scene-scan-area" style="flex:1;"><div class="scene-scan-line" id="wsc"></div><svg width="70" height="50" viewBox="0 0 80 60" fill="none" stroke="rgba(78,194,154,0.25)" stroke-width="1.5"><rect x="5" y="5" width="70" height="50" rx="4"/><line x1="15" y1="15" x2="15" y2="45"/><line x1="22" y1="15" x2="22" y2="45" stroke-width="2.5"/><line x1="30" y1="15" x2="30" y2="45"/><line x1="36" y1="15" x2="36" y2="45" stroke-width="2"/><line x1="44" y1="15" x2="44" y2="45"/><line x1="50" y1="15" x2="50" y2="45" stroke-width="3"/><line x1="58" y1="15" x2="58" y2="45"/><line x1="65" y1="15" x2="65" y2="45" stroke-width="1.5"/></svg></div><div class="scene-card" id="wsr" style="margin-top:8px;"><div class="scene-card-title" id="wst"></div><div class="scene-card-sub" id="wss"></div></div>`; }, async animate(c){ await wait(400); c.querySelector("#wsc").classList.add("sweep"); await wait(1300); c.querySelector("#wsr").classList.add("in"); await typewriter(c.querySelector("#wst"),"FOC-SM-12",50); await typewriter(c.querySelector("#wss"),"Single-mode 12-strand \u00B7 Bin A-14",30); } },
-      ],
-      supervisor: [
-        { label:"KPIs", build(c){ c.innerHTML=`<div class="scene-title">Daily Metrics</div><div class="scene-grid"><div class="scene-stat" id="k1"><div class="scene-stat-value" id="kv1">0</div><div class="scene-stat-label">Jobs Done</div></div><div class="scene-stat" id="k2"><div class="scene-stat-value" id="kv2">0</div><div class="scene-stat-label">Techs Active</div></div><div class="scene-stat" id="k3"><div class="scene-stat-value" id="kv3" data-prefix="$">0</div><div class="scene-stat-label">Revenue</div></div><div class="scene-stat" id="k4"><div class="scene-stat-value" id="kv4" data-suffix="%">0</div><div class="scene-stat-label">On-Time</div></div></div>`; }, async animate(c){ staggerIn(c.querySelectorAll(".scene-stat"),150); await wait(400); countUp(c.querySelector("#kv1"),24,800); countUp(c.querySelector("#kv2"),8,600); countUp(c.querySelector("#kv3"),18450,1200); countUp(c.querySelector("#kv4"),94,1000); } },
-        { label:"Progress", build(c){ c.innerHTML=`<div class="scene-title">Project Progress</div><div style="display:flex;flex-direction:column;gap:12px;">${[["Ruidoso Rebuild",78],["Lincoln County",45],["Mescalero Trunk",92]].map(([n,p],i)=>`<div><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:3px;"><span>${n}</span><span id="pl${i}">0%</span></div><div class="scene-progress-bar"><div class="scene-progress-fill" id="pf${i}" style="background:${a};"></div></div></div>`).join("")}</div>`; }, async animate(c){ await wait(400); [78,45,92].forEach((p,i)=>{c.querySelector("#pf"+i).style.width=p+"%";countUp(c.querySelector("#pl"+i),p,800);}); } },
-        { label:"Verification", build(c){ c.innerHTML=`<div class="scene-title">Field Verification</div><div style="display:flex;flex-direction:column;gap:3px;">${["Photos uploaded","GPS verified","Splice count matches","OTDR test passed","Supervisor sign-off"].map((t,i)=>`<div class="scene-check-row" id="ck${i}"><div class="scene-check-box" id="cb${i}"><svg viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2"><path d="M2 6l3 3 5-5"/></svg></div><span class="scene-check-label" id="cl${i}">${t}</span></div>`).join("")}</div>`; }, async animate(c){ for(let i=0;i<5;i++){c.querySelector("#ck"+i).classList.add("in");await wait(250);c.querySelector("#cb"+i).classList.add("checked");c.querySelector("#cl"+i).classList.add("done");await wait(200);} } },
-        { label:"Trend", build(c){ c.innerHTML=`<div class="scene-title">Weekly Trend</div><svg width="100%" height="180" viewBox="0 0 440 160" fill="none" style="margin:auto;"><line x1="40" y1="140" x2="420" y2="140" stroke="rgba(55,138,221,0.08)" stroke-width="1"/><path id="tl" d="M60,110 L120,85 L180,100 L240,60 L300,45 L360,28 L400,32" stroke="${a}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="600" stroke-dashoffset="600" style="transition:stroke-dashoffset 2s ease"/><path d="M60,110 L120,85 L180,100 L240,60 L300,45 L360,28 L400,32 L400,140 L60,140 Z" fill="url(#tg)" opacity="0" id="tf" style="transition:opacity 1s ease 1s"/><defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${a}" stop-opacity="0.15"/><stop offset="100%" stop-color="${a}" stop-opacity="0"/></linearGradient></defs></svg>`; }, async animate(c){ await wait(400); c.querySelector("#tl").style.strokeDashoffset="0"; c.querySelector("#tf").style.opacity="1"; } },
-      ],
-      admin: [
-        { label:"Users", build(c){ c.innerHTML=`<div class="scene-title">User Management</div><table class="scene-table"><thead><tr class="in"><th>Name</th><th>Role</th><th>Status</th></tr></thead><tbody><tr id="a1"><td>Jake Mitchell</td><td><span class="scene-badge" style="background:rgba(55,138,221,0.12);color:#6CAEEB;">Tech</span></td><td style="color:#4EC29A;">Active</td></tr><tr id="a2"><td>Rosa Kimura</td><td><span class="scene-badge" style="background:rgba(29,158,117,0.12);color:#4EC29A;">Splicer</span></td><td style="color:#4EC29A;">Active</td></tr><tr id="a3"><td>Tom Lawson</td><td><span class="scene-badge" style="background:rgba(186,117,23,0.12);color:#D39A44;">Dispatch</span></td><td style="color:#4EC29A;">Active</td></tr><tr id="a4"><td>Lisa Chen</td><td><span class="scene-badge" style="background:rgba(127,119,221,0.12);color:#A59CF4;">Super</span></td><td style="color:var(--text-dim);">Offline</td></tr></tbody></table>`; }, async animate(c){ await wait(200); staggerIn(c.querySelectorAll("tbody tr"),180); } },
-        { label:"Settings", build(c){ c.innerHTML=`<div class="scene-title">Project Settings</div><div style="display:flex;flex-direction:column;gap:10px;">${["GPS Verification","Photo Requirements","Auto-Invoice"].map((t,i)=>`<div class="scene-card" id="ts${i}" style="display:flex;justify-content:space-between;align-items:center;"><span class="scene-card-title" style="font-size:12px;">${t}</span><div id="tg${i}" style="width:38px;height:20px;border-radius:10px;background:rgba(55,138,221,0.15);position:relative;transition:background 0.3s;"><div style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left 0.3s,background 0.3s;"></div></div></div>`).join("")}</div>`; }, async animate(c){ staggerIn(c.querySelectorAll(".scene-card"),200); await wait(700); for(let i=0;i<3;i++){const t=c.querySelector("#tg"+i); t.style.background="rgba(29,158,117,0.4)"; t.firstElementChild.style.left="20px"; t.firstElementChild.style.background="#4EC29A"; await wait(300);} } },
-        { label:"Health", build(c){ c.innerHTML=`<div class="scene-title">System Status</div><div class="scene-grid">${[["API","#4EC29A"],["Database","#4EC29A"],["Storage","#4EC29A"],["Edge CDN","#D39A44"]].map(([n,col],i)=>`<div class="scene-stat" id="sh${i}"><div style="width:8px;height:8px;border-radius:50%;background:${col};margin:0 auto 6px;animation:blink 2s ease-in-out ${i*0.5}s infinite;"></div><div class="scene-stat-label">${n}</div></div>`).join("")}</div>`; }, async animate(c){ staggerIn(c.querySelectorAll(".scene-stat"),200); } },
-        { label:"Activity", build(c){ c.innerHTML=`<div class="scene-title">Activity Log</div><div id="al" style="display:flex;flex-direction:column;gap:3px;font-size:11px;overflow:hidden;"></div>`; }, async animate(c){ const entries=[["9:42","Jake clocked in","#6CAEEB"],["9:45","WO-4821 assigned","#D39A44"],["10:02","Invoice submitted","#6CAEEB"],["10:15","GPS verified","#4EC29A"],["10:28","Photo uploaded","#00bcd4"],["10:41","WO-4819 complete","#4EC29A"],["10:55","Rate card updated","#EE835D"]]; const log=c.querySelector("#al"); for(const[t,txt,col]of entries){const r=document.createElement("div");r.style.cssText=`display:flex;gap:8px;align-items:center;padding:4px 7px;border-radius:5px;background:rgba(18,30,55,0.4);opacity:0;transform:translateY(-6px);transition:all 0.3s;`;r.innerHTML=`<span style="color:var(--text-dim);font-size:9px;white-space:nowrap;">${t}</span><span style="color:${col};font-size:10px;">${txt}</span>`;log.prepend(r);await wait(40);r.style.opacity="1";r.style.transform="translateY(0)";await wait(200);} } },
-      ],
-      import: [
-        /* Scene 1 — Drop Zone */
-        { label:"Drop Zone", build(c){ c.innerHTML=`<div class="scene-title">Drop Your Files</div><div id="dz" style="flex:1;border:2px dashed rgba(192,132,252,0.22);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;position:relative;transition:all 0.5s;background:rgba(127,63,210,0.03);"><svg viewBox="0 0 40 40" fill="none" stroke="#C084FC" stroke-width="1.5" style="width:38px;height:38px;opacity:0.45;"><path d="M20 28V12"/><path d="M13 19l7-7 7 7"/><rect x="6" y="29" width="28" height="4.5" rx="2"/></svg><div id="dz-hint" style="font-family:var(--font-brand);font-size:13px;color:rgba(192,132,252,0.55);letter-spacing:1px;">Drag files or tap to upload</div><div id="dz-chips" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin:0 8px;min-height:22px;"></div><div id="dz-st" style="font-size:9.5px;color:rgba(192,132,252,0.5);letter-spacing:.8px;opacity:0;transition:opacity 0.4s;text-align:center;padding:0 10px;"></div></div>`; }, async animate(c){ const chips=[".kmz",".pdf",".csv",".zip",".png"]; const colors=["#C084FC","#6CAEEB","#4EC29A","#D39A44","#00bcd4"]; const wrap=c.querySelector("#dz-chips"); for(let i=0;i<chips.length;i++){ const ch=document.createElement("span"); ch.className="scene-badge"; ch.style.cssText=`background:rgba(20,10,50,0.7);border:1px solid ${colors[i]}55;color:${colors[i]};opacity:0;transform:translateY(8px);transition:all 0.35s;font-size:10px;`; ch.textContent=chips[i]; wrap.appendChild(ch); await wait(280); ch.style.opacity="1"; ch.style.transform="translateY(0)"; } await wait(420); const dz=c.querySelector("#dz"); dz.style.borderColor="rgba(192,132,252,0.65)"; dz.style.background="rgba(127,63,210,0.1)"; dz.style.boxShadow="0 0 32px rgba(192,132,252,0.12)"; c.querySelector("#dz-hint").textContent="5 files detected \u2014 routing to processors..."; c.querySelector("#dz-hint").style.color="#C084FC"; const st=c.querySelector("#dz-st"); st.textContent="Reading types \u00b7 Validating structure \u00b7 Queueing parsers"; st.style.opacity="1"; } },
-        /* Scene 2 — KMZ → Map */
-        { label:"KMZ \u2192 Map", build(c){ c.innerHTML=`<div class="scene-title">KMZ \u00b7 Network Locations</div><div id="kmz-hdr" style="display:flex;gap:8px;align-items:center;margin-bottom:10px;opacity:0;transition:opacity 0.4s;"><span class="scene-badge" style="background:rgba(192,132,252,0.1);color:#C084FC;border:1px solid rgba(192,132,252,0.3);">.kmz</span><span style="font-size:11px;color:var(--text-muted);" id="kmz-msg">Parsing route data...</span><div style="flex:1;height:3px;border-radius:2px;background:rgba(192,132,252,0.1);overflow:hidden;"><div id="kmz-bar" style="height:100%;background:#C084FC;width:0%;transition:width 1.6s ease;border-radius:2px;"></div></div></div><div class="scene-map" style="flex:1;"><div class="scene-map-grid"></div><div id="kpins" style="position:absolute;inset:0;"></div></div>`; }, async animate(c){ const hdr=c.querySelector("#kmz-hdr"); hdr.style.opacity="1"; await wait(300); c.querySelector("#kmz-bar").style.width="100%"; await wait(900); c.querySelector("#kmz-msg").textContent="12 locations loaded \u2713"; const pd=[[18,22],[32,52],[53,33],[63,63],[78,28],[44,73],[70,48],[26,68],[56,18],[14,48],[86,70],[47,47]]; const cols=["#C084FC","#4EC29A","#6CAEEB","#D39A44","#C084FC","#4EC29A","#6CAEEB","#C084FC","#4EC29A","#D39A44","#6CAEEB","#C084FC"]; const pw=c.querySelector("#kpins"); for(let i=0;i<pd.length;i++){ const pin=document.createElement("div"); pin.className="scene-map-pin"; pin.style.cssText=`left:${pd[i][0]}%;top:${pd[i][1]}%;background:${cols[i]};`; pw.appendChild(pin); await wait(130); pin.classList.add("drop"); } } },
-        /* Scene 3 — PDF/CSV → Invoices */
-        { label:"PDF/CSV \u2192 Billing", build(c){ c.innerHTML=`<div class="scene-title">PDF &amp; CSV \u00b7 Auto-Invoice</div><div style="display:flex;gap:7px;margin-bottom:10px;align-items:center;"><span id="f-pdf" class="scene-badge" style="background:rgba(108,174,235,0.1);color:#6CAEEB;border:1px solid rgba(108,174,235,0.3);opacity:0;transition:opacity 0.3s;">.pdf</span><span id="f-csv" class="scene-badge" style="background:rgba(78,194,154,0.1);color:#4EC29A;border:1px solid rgba(78,194,154,0.3);opacity:0;transition:opacity 0.3s;">.csv</span><div id="f-scan" style="flex:1;height:30px;background:rgba(18,30,55,0.6);border-radius:6px;overflow:hidden;position:relative;"><div class="scene-scan-line" id="inv-sl"></div><span id="scan-lbl" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:9.5px;color:var(--text-dim);white-space:nowrap;">Scanning billing data...</span></div></div><table class="scene-table" style="flex:1;"><thead><tr class="in"><th>Invoice #</th><th>Location</th><th>Total</th><th>Status</th></tr></thead><tbody><tr id="ir1"><td>INV-001</td><td>1635EA_03</td><td>$4,733</td><td><span class="scene-badge" style="background:rgba(29,158,117,0.15);color:#4EC29A;">Ready</span></td></tr><tr id="ir2"><td>INV-002</td><td>1635CA_02</td><td>$3,475</td><td><span class="scene-badge" style="background:rgba(29,158,117,0.15);color:#4EC29A;">Ready</span></td></tr><tr id="ir3"><td>INV-003</td><td>1635BA_01</td><td>$1,643</td><td><span class="scene-badge" style="background:rgba(29,158,117,0.15);color:#4EC29A;">Ready</span></td></tr><tr id="ir4"><td>INV-004</td><td>1440BB_02</td><td>$2,890</td><td><span class="scene-badge" style="background:rgba(186,117,23,0.15);color:#D39A44;">Review</span></td></tr></tbody></table>`; }, async animate(c){ c.querySelector("#f-pdf").style.opacity="1"; await wait(220); c.querySelector("#f-csv").style.opacity="1"; await wait(260); c.querySelector("#inv-sl").classList.add("sweep"); await wait(1450); c.querySelector("#scan-lbl").textContent="4 invoices extracted \u2713"; staggerIn(c.querySelectorAll("tbody tr"),220); } },
-        /* Scene 4 — ZIP/PNG → Photos */
-        { label:"ZIP/PNG \u2192 Photos", build(c){ c.innerHTML=`<div class="scene-title">ZIP &amp; PNG \u00b7 Field Photos</div><div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;"><span class="scene-badge" style="background:rgba(211,154,68,0.12);color:#D39A44;border:1px solid rgba(211,154,68,0.28);">.zip</span><span class="scene-badge" style="background:rgba(0,188,212,0.12);color:#00bcd4;border:1px solid rgba(0,188,212,0.28);">.png</span><span id="zip-st" style="font-size:10px;color:var(--text-dim);margin-left:4px;transition:color 0.3s;">Extracting archive...</span></div><div id="pgrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;flex:1;"></div>`; }, async animate(c){ const photos=[{label:"MH-1635CA_03",gps:"33.3\u00b0N 105.6\u00b0W",col:"#00bcd4"},{label:"MH-1635EA_01",gps:"33.1\u00b0N 105.5\u00b0W",col:"#4EC29A"},{label:"MH-1440BB_02",gps:"33.4\u00b0N 105.8\u00b0W",col:"#6CAEEB"},{label:"MH-1635CA_07",gps:"33.2\u00b0N 105.7\u00b0W",col:"#C084FC"},{label:"MH-1635BA_01",gps:"33.5\u00b0N 105.4\u00b0W",col:"#D39A44"},{label:"MH-1890AA_04",gps:"33.0\u00b0N 105.9\u00b0W",col:"#00bcd4"}]; const grid=c.querySelector("#pgrid"); const st=c.querySelector("#zip-st"); for(let i=0;i<photos.length;i++){ const p=photos[i]; const card=document.createElement("div"); card.style.cssText=`background:rgba(18,30,55,0.85);border:1px solid rgba(55,138,221,0.09);border-radius:8px;padding:8px;opacity:0;transform:scale(0.82);transition:all 0.4s cubic-bezier(0.16,1,0.3,1);`; card.innerHTML=`<div style="height:34px;border-radius:5px;background:rgba(8,16,34,0.8);border:1px solid ${p.col}28;margin-bottom:5px;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 16 16" fill="none" stroke="${p.col}" stroke-width="1.2" style="width:14px;height:14px;opacity:0.75;"><rect x="1.5" y="2" width="13" height="10.5" rx="1.5"/><circle cx="5.5" cy="6" r="1"/><path d="M3.5 10.5l2.5-3 2.2 2 1.8-2 2.5 3"/></svg></div><div style="font-size:8px;color:rgba(200,220,255,0.75);font-weight:600;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.label}</div><div style="font-size:7.5px;color:var(--text-dim);margin-top:1px;">${p.gps}</div>`; grid.appendChild(card); await wait(190); card.style.opacity="1"; card.style.transform="scale(1)"; st.textContent=`${i+1} of ${photos.length} photos geo-tagged`; st.style.color="#C084FC"; } st.textContent=`${photos.length} photos GPS-mapped \u2713`; } },
-        /* Scene 5 — Results */
-        { label:"Results", build(c){ c.innerHTML=`<div class="scene-title">Import Complete</div><div class="scene-grid" style="margin-bottom:12px;"><div class="scene-stat" id="r1"><div class="scene-stat-value" id="rv1">0</div><div class="scene-stat-label">Sites Loaded</div></div><div class="scene-stat" id="r2"><div class="scene-stat-value" id="rv2">0</div><div class="scene-stat-label">Invoices Ready</div></div><div class="scene-stat" id="r3"><div class="scene-stat-value" id="rv3">0</div><div class="scene-stat-label">Photos Mapped</div></div><div class="scene-stat" id="r4"><div class="scene-stat-value" id="rv4">0</div><div class="scene-stat-label">Work Orders</div></div></div><div style="display:flex;flex-direction:column;gap:5px;"><div class="scene-check-row" id="rc1"><div class="scene-check-box" id="cb1"><svg viewBox="0 0 11 11" fill="none" stroke="#fff" stroke-width="2"><path d="M2 5.5l2.5 2.5 4.5-4.5"/></svg></div><span class="scene-check-label">KMZ route imported to live map</span></div><div class="scene-check-row" id="rc2"><div class="scene-check-box" id="cb2"><svg viewBox="0 0 11 11" fill="none" stroke="#fff" stroke-width="2"><path d="M2 5.5l2.5 2.5 4.5-4.5"/></svg></div><span class="scene-check-label">Invoices staged for billing review</span></div><div class="scene-check-row" id="rc3"><div class="scene-check-box" id="cb3"><svg viewBox="0 0 11 11" fill="none" stroke="#fff" stroke-width="2"><path d="M2 5.5l2.5 2.5 4.5-4.5"/></svg></div><span class="scene-check-label">Photos geo-tagged and archived</span></div><div class="scene-check-row" id="rc4"><div class="scene-check-box" id="cb4"><svg viewBox="0 0 11 11" fill="none" stroke="#fff" stroke-width="2"><path d="M2 5.5l2.5 2.5 4.5-4.5"/></svg></div><span class="scene-check-label">Work orders generated from CSV</span></div></div>`; }, async animate(c){ staggerIn(c.querySelectorAll(".scene-stat"),160); await wait(450); countUp(c.querySelector("#rv1"),12,900); countUp(c.querySelector("#rv2"),4,700); countUp(c.querySelector("#rv3"),6,800); countUp(c.querySelector("#rv4"),8,1000); await wait(1250); for(const[r,b]of[["rc1","cb1"],["rc2","cb2"],["rc3","cb3"],["rc4","cb4"]]){ const row=c.querySelector("#"+r); row.classList.add("in"); row.querySelector(".scene-check-label").classList.add("done"); await wait(180); c.querySelector("#"+b).classList.add("checked"); await wait(210); } } },
-      ],
-    };
-    return scenes[ws.key] || [];
-  }
+  /* FIELD MAP */
+  if(ws.key==="fieldmap") return [
+    {label:"Drop a Pin",build:function(c){
+      var dropped=false,lx=50,ly=50;
+      c.innerHTML='<div class="stitle">Field Map</div>'
+        +'<div class="shint">Tap anywhere on the map to create a new location</div>'
+        +'<div id="mw"></div>'
+        +'<div id="pf" style="display:none;flex-direction:column;gap:9px;">'
+        +'<div class="sdiv"></div>'
+        +'<label class="slbl">Location Code / Name</label>'
+        +'<input class="sin" id="pn" placeholder="e.g. MH-1635CA_03" autocomplete="off"/>'
+        +'<label class="slbl">Location Type</label>'
+        +'<select class="ssel" id="pt"><option>Splice Point</option><option>Node</option><option>Closure</option><option>Handhole</option><option>Pedestal</option><option>MST</option><option>Other</option></select>'
+        +'<label class="slbl">Notes (optional)</label>'
+        +'<input class="sin" id="pnotes" placeholder="Field notes, access info..." autocomplete="off"/>'
+        +'<button class="sbtn p" id="ps" style="width:100%;">📍 Create Location Here</button></div>'
+        +'<div id="pd" style="display:none;" class="sok">'
+        +'<div style="font-size:30px;">📍</div>'
+        +'<div style="font-family:var(--brand);font-size:15px;font-weight:700;color:'+A+';" id="pdn"></div>'
+        +'<div style="font-size:11px;color:var(--muted);" id="pdc"></div>'
+        +'<button class="sbtn g" id="pr" style="margin-top:6px;font-size:11px;">Drop Another Pin</button></div>';
+      var map=mkMap(200,A,[{x:"22%",y:"36%",label:"Node A"},{x:"60%",y:"24%",label:"MH-1440"},{x:"76%",y:"60%",label:"Splice-04"}],function(x,y,mapEl){
+        lx=x;ly=y;
+        if(!dropped){mapEl.appendChild(mkPin(x+"%",y+"%",A,"New Location"));dropped=true;}
+        mapEl.querySelector(".smaphint").textContent="Pin placed — fill in the details below";
+        var pf=$("pf");pf.style.display="flex";pf.style.flexDirection="column";pf.style.gap="9px";
+        $("pd").style.display="none";
+      });
+      $("mw").appendChild(map);
+      $("ps").addEventListener("click",function(){
+        var name=$("pn").value.trim()||"New Location",type=$("pt").value;
+        $("pf").style.display="none";
+        var pd=$("pd");pd.style.display="flex";pd.style.flexDirection="column";pd.style.alignItems="center";pd.style.gap="10px";
+        $("pdn").textContent=name+" · "+type;
+        $("pdc").textContent="34."+parseFloat(lx).toFixed(0)+"°N, 87."+parseFloat(ly).toFixed(0)+"°W (simulated GPS)";
+        toast("📍 "+name+" saved to project!");
+      });
+      $("pr").addEventListener("click",function(){
+        dropped=false;$("pd").style.display="none";$("pn").value="";
+        map.querySelector(".smaphint").textContent="Tap anywhere to drop a pin";
+        toast("Ready — tap the map to drop a new pin");
+      });
+    }},
+    {label:"Saved Locations",build:function(c){
+      var locs=[
+        {name:"MH-1635CA_03",type:"Splice Point",status:"Complete",photos:4,x:"28%",y:"38%"},
+        {name:"MH-1440BB_02",type:"Node",status:"In Progress",photos:2,x:"55%",y:"22%"},
+        {name:"MH-1635EA_01",type:"Closure",status:"Not Started",photos:0,x:"72%",y:"55%"},
+        {name:"PED-0042",type:"Pedestal",status:"Complete",photos:6,x:"38%",y:"68%"},
+      ];
+      function sc(s){return s==="Complete"?"bg":s==="In Progress"?"bb":"ba";}
+      c.innerHTML='<div class="stitle">Saved Locations</div><div class="shint">Tap a location to add photos or notes</div><div id="lmw"></div><div id="ll" style="display:flex;flex-direction:column;gap:7px;margin-top:8px;"></div>';
+      $("lmw").appendChild(mkMap(130,A,locs.map(function(l){return {x:l.x,y:l.y,label:l.name};}),null));
+      var list=$("ll");
+      locs.forEach(function(loc,i){
+        var d=document.createElement("div");d.className="scard click";
+        d.innerHTML='<div class="srow" style="justify-content:space-between;">'
+          +'<div><div class="sct">'+loc.name+'</div><div class="scs">'+loc.type+'</div></div>'
+          +'<span class="sbadge '+sc(loc.status)+'">'+loc.status+'</span></div>'
+          +'<div id="ld'+i+'" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid rgba(55,138,221,.07);">'
+          +'<div class="srow" style="justify-content:space-between;">'
+          +'<span style="font-size:10px;color:var(--muted);">📷 '+loc.photos+' photo'+(loc.photos!==1?"s":"")+'</span>'
+          +'<div class="srow" style="gap:5px;">'
+          +'<button class="sbtn g" style="font-size:9px;padding:4px 10px;" data-a="photo" data-n="'+loc.name+'">+ Photo</button>'
+          +'<button class="sbtn g" style="font-size:9px;padding:4px 10px;" data-a="note" data-n="'+loc.name+'">+ Note</button>'
+          +'<button class="sbtn g" style="font-size:9px;padding:4px 10px;" data-a="nav" data-n="'+loc.name+'">Navigate</button>'
+          +'</div></div></div>';
+        (function(idx){
+          d.addEventListener("click",function(e){
+            if(e.target.closest("[data-a]"))return;
+            list.querySelectorAll(".scard").forEach(function(x){x.classList.remove("sel");});
+            list.querySelectorAll("[id^=ld]").forEach(function(x){x.style.display="none";});
+            d.classList.add("sel");
+            document.getElementById("ld"+idx).style.display="block";
+          });
+        })(i);
+        list.appendChild(d);
+      });
+      list.addEventListener("click",function(e){
+        var b=e.target.closest("[data-a]");if(!b)return;
+        if(b.dataset.a==="photo")toast("📷 Camera opened for "+b.dataset.n);
+        if(b.dataset.a==="note")toast("📝 Note opened for "+b.dataset.n);
+        if(b.dataset.a==="nav")toast("🗺 Navigating to "+b.dataset.n+"...");
+      });
+    }},
+    {label:"GPS Fix",build:function(c){
+      c.innerHTML='<div class="stitle">GPS Location Capture</div>'
+        +'<div class="shint">Simulate capturing your exact field coordinates</div>'
+        +'<div class="scard" style="background:rgba(29,158,117,.05);border-color:rgba(29,158,117,.12);">'
+        +'<div class="srow" style="gap:10px;align-items:flex-start;">'
+        +'<div style="font-size:26px;margin-top:2px;">📡</div>'
+        +'<div style="flex:1;"><div class="sct" id="gs">Ready to capture</div>'
+        +'<div class="scs" id="gc">Tap button below to start</div>'
+        +'<div class="spb" style="margin-top:8px;"><div class="spf" id="gb" style="width:0%;background:#1D9E75;"></div></div>'
+        +'</div></div></div>'
+        +'<button class="sbtn p" id="gcap" style="width:100%;">📡 Capture My Location</button>'
+        +'<div id="gr" style="display:none;flex-direction:column;gap:8px;">'
+        +'<div class="sdiv"></div>'
+        +'<div class="scard sel"><div class="srow" style="justify-content:space-between;">'
+        +'<div><div class="sct" style="color:'+A+';">GPS Fix Acquired</div>'
+        +'<div class="scs" id="gf"></div><div class="scs" id="ga"></div></div>'
+        +'<span class="sbadge bg">±4m</span></div></div>'
+        +'<button class="sbtn p" id="gcre" style="width:100%;">Create Location Here</button></div>';
+      $("gcap").addEventListener("click",function(){
+        var btn=this;btn.disabled=true;btn.style.opacity=".45";
+        var steps=[[20,"Searching satellites...","Scanning..."],[45,"3 satellites found","Triangulating..."],[70,"High-accuracy fix","34.5801°N, -87.0337°W"],[92,"Applying corrections","34.5801°N, -87.0337°W"],[100,"Fix acquired ±4m","34.580128°N, -87.033768°W"]];
+        var i=0;
+        function step(){if(i>=steps.length){var gr=$("gr");gr.style.display="flex";gr.style.flexDirection="column";gr.style.gap="8px";$("gf").textContent="34.580128°N, -87.033768°W";$("ga").textContent="Elevation: 1,050 ft";toast("📡 GPS fix acquired!");return;}
+          $("gb").style.width=steps[i][0]+"%";$("gs").textContent=steps[i][1];$("gc").textContent=steps[i][2];i++;setTimeout(step,500);}
+        step();
+      });
+      $("gcre").addEventListener("click",function(){toast("📍 Location pinned at current GPS coordinates!");});
+    }},
+  ];
 
-  /* ========== STATE ========== */
-  let currentState = "intro";
-  let currentWs = null;
-  let currentSceneIdx = 0;
-  let scenes = [];
-  let autoTimer = null;
-  const clearAuto = () => { if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; } };
+  /* FIELD PHOTOS */
+  if(ws.key==="photos") return [
+    {label:"Upload",build:function(c){
+      var ff=[{e:"📷",n:"IMG_4821.jpg"},{e:"🌿",n:"IMG_4822.jpg"},{e:"🧰",n:"IMG_4823.jpg"},{e:"⚡",n:"IMG_4824.jpg"},{e:"📦",n:"IMG_4825.jpg"},{e:"🛠️",n:"IMG_4826.jpg"}];var cnt=0;
+      c.innerHTML='<div class="stitle">Upload Field Photos</div>'
+        +'<div class="shint">GPS coordinates are auto-extracted from photo EXIF data</div>'
+        +'<div class="spz" id="dz">'
+        +'<svg width="40" height="40" viewBox="0 0 48 48" fill="none" stroke="'+A+'" stroke-width="1.4"><rect x="4" y="10" width="40" height="30" rx="4"/><circle cx="24" cy="26" r="9"/><path d="M16 10l2.5-6h7L28 10"/></svg>'
+        +'<div style="font-size:12px;color:var(--dim);">Tap to select photos</div></div>'
+        +'<div class="spgrid" id="phg"></div>'
+        +'<div class="srow" style="justify-content:space-between;align-items:center;">'
+        +'<span style="font-size:11px;color:var(--muted);" id="phc"></span>'
+        +'<button class="sbtn p" id="phu" style="display:none;font-size:11px;padding:7px 16px;">Upload All</button></div>';
+      $("dz").addEventListener("click",function(){
+        if(cnt>=ff.length){toast("All demo photos added!");return;}
+        var f=ff[cnt++];
+        var t=document.createElement("div");t.className="spthumb";t.style.animationDelay=(cnt*.05)+"s";
+        t.innerHTML='<div style="font-size:18px;">'+f.e+'</div><div style="font-size:8px;color:var(--dim);margin-top:2px;">'+f.n+'</div>';
+        $("phg").appendChild(t);
+        $("phc").textContent=cnt+" photo"+(cnt>1?"s":"")+" ready";
+        $("phu").style.display="inline-flex";
+        toast("Added "+f.n+" · GPS detected");
+      });
+      $("phu").addEventListener("click",function(){toast("✓ "+cnt+" photos uploaded & geo-tagged!");this.textContent="Uploaded ✓";this.disabled=true;});
+    }},
+    {label:"GPS Tags",build:function(c){
+      var photos=[{n:"IMG_4821.jpg",lat:"33.3946°N",lng:"105.6731°W",alt:"6,942 ft",ok:true},{n:"IMG_4822.jpg",lat:"33.3951°N",lng:"105.6728°W",alt:"6,938 ft",ok:true},{n:"IMG_4823.jpg",lat:"33.3938°N",lng:"105.6745°W",alt:"6,951 ft",ok:true},{n:"IMG_4824.jpg",lat:"—",lng:"—",alt:"No GPS data",ok:false}];
+      c.innerHTML='<div class="stitle">GPS EXIF Data</div><div class="shint">Coordinates extracted automatically from photo metadata</div><div style="display:flex;flex-direction:column;gap:7px;" id="gpl"></div>';
+      photos.forEach(function(p,i){
+        var d=document.createElement("div");d.className="scard";d.style.animationDelay=(i*.1)+"s";d.style.animation="fadeIn .3s ease both";
+        d.innerHTML='<div class="srow" style="justify-content:space-between;">'
+          +'<div><div class="sct">📷 '+p.n+'</div><div class="scs">'+p.lat+(p.lat!=="—"?", "+p.lng:"")+'</div><div class="scs">'+p.alt+'</div></div>'
+          +'<span class="sbadge '+(p.ok?"bg":"ba")+'">'+(p.ok?"GPS ✓":"No GPS")+'</span></div>';
+        $("gpl").appendChild(d);
+      });
+    }},
+    {label:"MH Assign",build:function(c){
+      var assigns=[{p:"IMG_4821.jpg",n:"",ok:false},{p:"IMG_4822.jpg",n:"",ok:false},{p:"IMG_4823.jpg",n:"",ok:false},{p:"IMG_4824.jpg",n:"",ok:false}];
+      var nodes=["MH-1635CA_03","MH-1635EA_01","MH-1440BB_02","PED-0042","CLOSURE-07"];
+      function render(){
+        var list=c.querySelector("#tl");list.innerHTML="";
+        assigns.forEach(function(a,i){
+          var d=document.createElement("div");d.className="scard";d.style.animationDelay=(i*.06)+"s";d.style.animation="fadeIn .25s ease both";
+          var inner='<div class="srow" style="justify-content:space-between;align-items:flex-start;"><div style="flex:1;"><div class="sct">📷 '+a.p+'</div>';
+          if(a.ok){inner+='<div class="scs" style="color:'+A+';margin-top:3px;">✓ '+a.n+'</div>';}
+          else{inner+='<select class="ssel" style="margin-top:6px;padding:6px 10px;font-size:11px;" data-i="'+i+'"><option value="">-- Assign to node --</option>'+nodes.map(function(n){return '<option>'+n+'</option>';}).join("")+'</select>';}
+          inner+='</div><span class="sbadge '+(a.ok?"bg":"ba")+'" style="margin-top:2px;">'+(a.ok?"Tagged ✓":"Untagged")+'</span></div>';
+          d.innerHTML=inner;list.appendChild(d);
+        });
+        list.querySelectorAll("select[data-i]").forEach(function(sel){
+          sel.addEventListener("change",function(){
+            if(sel.value){assigns[+sel.dataset.i].n=sel.value;assigns[+sel.dataset.i].ok=true;render();toast("Tagged to "+sel.value);}
+          });
+        });
+      }
+      c.innerHTML='<div class="stitle">Assign MH Node Tags</div><div class="shint">Link each photo to its job site node</div><div style="display:flex;flex-direction:column;gap:7px;" id="tl"></div><button class="sbtn p" id="ata" style="width:100%;margin-top:2px;">⚡ Auto-Tag All from GPS</button>';
+      render();
+      $("ata").addEventListener("click",function(){assigns.forEach(function(a,i){a.n=nodes[i%nodes.length];a.ok=true;});render();toast("✓ All photos auto-tagged!");this.textContent="✓ All Tagged";this.disabled=true;});
+    }},
+    {label:"Photo Map",build:function(c){
+      c.innerHTML='<div class="stitle">Photo Map</div><div class="shint">Each photo pinned to its exact GPS location</div><div id="pmw"></div>'
+        +'<div class="scard" style="background:rgba(0,188,212,.05);border-color:rgba(0,188,212,.12);">'
+        +'<div class="srow" style="justify-content:space-between;">'
+        +'<div><div class="sct">4 Photos Mapped</div><div class="scs">Ruidoso area · All GPS-verified</div></div>'
+        +'<span class="sbadge bg">Synced</span></div></div>';
+      var map=mkMap(190,A,[{x:"28%",y:"34%",label:"IMG_4821"},{x:"54%",y:"50%",label:"IMG_4822"},{x:"70%",y:"26%",label:"IMG_4823"},{x:"36%",y:"66%",label:"IMG_4824"}],null);
+      $("pmw").appendChild(map);map.style.cursor="default";map.querySelector(".smaphint").textContent="Tap a pin to preview";
+      map.addEventListener("click",function(e){var p=e.target.closest(".spin");if(p){var l=p.querySelector(".spin-lbl");toast("📷 "+(l?l.textContent:"Photo")+" — full resolution view");}});
+    }},
+  ];
 
-  /* ========== INTRO SEQUENCE ========== */
-  async function runIntro() {
-    setCineBars(true);
+  /* SPLICER */
+  if(ws.key==="splicer") return [
+    {label:"Projects",build:function(c){
+      var projects=[{name:"Ruidoso Fire Rebuild",code:"TC-241635027",done:31,total:48,status:"In Progress"},{name:"Lincoln County Expansion",code:"TC-241890015",done:22,total:22,status:"Complete"},{name:"Mescalero Trunk Run",code:"TC-242010008",done:3,total:15,status:"In Progress"}];
+      c.innerHTML='<div class="stitle">Active Projects</div><div class="shint">Tap a project to set it as active</div><div style="display:flex;flex-direction:column;gap:8px;" id="prl"></div>';
+      var list=$("prl");
+      projects.forEach(function(p,i){
+        var pct=Math.round(p.done/p.total*100);
+        var d=document.createElement("div");d.className="scard click";d.style.animationDelay=(i*.1)+"s";d.style.animation="fadeIn .3s ease both";
+        d.innerHTML='<div class="srow" style="justify-content:space-between;">'
+          +'<div class="sct">'+p.name+'</div>'
+          +'<span class="sbadge '+(p.status==="Complete"?"bg":"bb")+'">'+p.status+'</span></div>'
+          +'<div class="scs" style="margin:3px 0;">'+p.code+' · '+p.done+'/'+p.total+' closures</div>'
+          +'<div class="spb"><div class="spf" style="width:0%;background:'+A+';" data-pct="'+pct+'"></div></div>'
+          +'<div style="font-size:9px;color:var(--dim);margin-top:3px;">'+pct+'%</div>';
+        d.addEventListener("click",function(){list.querySelectorAll(".scard").forEach(function(x){x.classList.remove("sel");});d.classList.add("sel");toast("Active project: "+p.name);});
+        list.appendChild(d);
+        setTimeout(function(){var bar=d.querySelector("[data-pct]");if(bar)bar.style.width=bar.dataset.pct+"%";},200+i*100);
+      });
+    }},
+    {label:"Billing Codes",build:function(c){
+      var codes=[{c:"FBSP-2",d:"Splice labor (per fiber)",u:23.63},{c:"FBOSC-12",d:"12-count closure set",u:45.00},{c:"FBTERM",d:"Terminal placement",u:18.50},{c:"FBTEST",d:"OTDR test & cert",u:35.00},{c:"FBCAB-1",d:"Cable (per foot)",u:1.85}];
+      var total=0;
+      c.innerHTML='<div class="stitle">Billing Codes</div>'
+        +'<div class="scard" style="background:rgba(127,119,221,.05);border-color:rgba(127,119,221,.12);"><div class="sct">MH-1635CA_03 · Splice Closure</div><div class="scs">Ruidoso Fire Rebuild</div></div>'
+        +'<div class="srow" style="gap:7px;align-items:flex-end;">'
+        +'<div class="scol" style="flex:2;"><label class="slbl">Code</label>'
+        +'<select class="ssel" id="bcs"><option value="">Select code...</option>'+codes.map(function(x){return '<option value="'+x.c+'|'+x.u+'|'+x.d+'">'+x.c+' · '+x.d+'</option>';}).join("")+'</select></div>'
+        +'<div class="scol" style="flex:1;"><label class="slbl">Qty</label><input class="sin" type="number" id="bcq" value="1" min="1" style="text-align:center;"/></div>'
+        +'<button class="sbtn p" id="bca" style="padding:9px 14px;">Add</button></div>'
+        +'<div id="bctw" style="display:none;"><table class="stbl"><thead><tr><th>Code</th><th>Desc</th><th>Qty</th><th>Amt</th></tr></thead><tbody id="bcb"></tbody></table></div>'
+        +'<div id="bctr" style="display:none;" class="stot"><span style="font-size:12px;font-weight:700;">Total</span><span style="font-size:16px;font-weight:800;color:'+A+';" id="bct">$0.00</span></div>';
+      $("bca").addEventListener("click",function(){
+        var sel=$("bcs");if(!sel.value)return toast("⚠ Select a billing code first");
+        var parts=sel.value.split("|"),code=parts[0],unit=parseFloat(parts[1]),desc=parts[2];
+        var qty=parseInt($("bcq").value)||1,amt=unit*qty;total+=amt;
+        var tr=document.createElement("tr");
+        tr.innerHTML='<td style="color:'+A+';font-weight:600;">'+code+'</td><td style="color:var(--muted);">'+desc+'</td><td>'+qty+'</td><td style="font-weight:600;">$'+amt.toFixed(2)+'</td>';
+        $("bcb").appendChild(tr);$("bctw").style.display="block";
+        var btr=$("bctr");btr.style.display="flex";btr.style.justifyContent="space-between";btr.style.alignItems="center";
+        $("bct").textContent="$"+total.toFixed(2);sel.value="";$("bcq").value="1";
+        toast("Added "+code+" ×"+qty+" — $"+amt.toFixed(2));
+      });
+    }},
+    {label:"Redline Map",build:function(c){
+      var pins=[],cnt=0;
+      c.innerHTML='<div class="stitle">Redline Map</div><div class="shint">Tap the map to drop redline correction markers</div><div id="rlw"></div><div class="srow" style="justify-content:space-between;margin-top:4px;"><span style="font-size:11px;color:var(--muted);" id="rlc">0 markers</span><button class="sbtn g" id="rlcl" style="font-size:10px;padding:5px 11px;">Clear All</button></div>';
+      var map=mkMap(220,"#D85A30",[{x:"20%",y:"35%",label:"Node A"},{x:"55%",y:"20%",label:"Splice-01"},{x:"75%",y:"58%",label:"Node B"}],function(x,y,mapEl){
+        cnt++;var p=mkPin(x+"%",y+"%","#D85A30","");mapEl.appendChild(p);pins.push(p);
+        $("rlc").textContent=cnt+" marker"+(cnt>1?"s":"");toast("🔴 Redline marker placed");
+      });
+      $("rlw").appendChild(map);
+      $("rlcl").addEventListener("click",function(){pins.forEach(function(p){p.remove();});pins=[];cnt=0;$("rlc").textContent="0 markers";toast("Markers cleared");});
+    }},
+  ];
 
-    // Phase 1: Opening crawl (Star Wars style)
-    await wait(1000);
+  /* DISPATCH */
+  if(ws.key==="dispatch") return [
+    {label:"Create WO",build:function(c){
+      var woNum=4824;
+      c.innerHTML='<div class="stitle">Create Work Order</div>'
+        +'<div id="wof" style="display:flex;flex-direction:column;gap:9px;">'
+        +'<div class="srow" style="gap:8px;">'
+        +'<div class="scol" style="flex:1;"><label class="slbl">Type</label><select class="ssel" id="wot"><option>Splice Closure</option><option>Maintenance</option><option>Emergency Repair</option><option>New Install</option></select></div>'
+        +'<div class="scol" style="flex:1;"><label class="slbl">Priority</label><select class="ssel" id="wop"><option>Normal</option><option>High</option><option>Urgent</option></select></div></div>'
+        +'<label class="slbl">Node / Location</label><input class="sin" id="won" placeholder="e.g. MH-1635CA_03" autocomplete="off"/>'
+        +'<label class="slbl">Assign To</label><select class="ssel" id="woa"><option value="">-- Select Technician --</option><option>J. Reyes</option><option>T. Morrison</option><option>D. Pierce</option><option>K. Flowers</option><option>M. Sandoval</option></select>'
+        +'<label class="slbl">Instructions</label><textarea class="sin" rows="2" id="woi" placeholder="Special instructions, access codes..."></textarea>'
+        +'<button class="sbtn p" id="woc" style="width:100%;margin-top:2px;">📋 Dispatch Work Order</button></div>'
+        +'<div id="wos2" style="display:none;" class="sok">'
+        +'<div style="font-size:30px;">📋</div>'
+        +'<div style="font-family:var(--brand);font-size:16px;font-weight:700;color:'+A+';" id="woid"></div>'
+        +'<div style="font-size:11px;color:var(--muted);" id="wod"></div>'
+        +'<button class="sbtn g" id="woan" style="margin-top:8px;">Create Another</button></div>';
+      $("woc").addEventListener("click",function(){
+        var a=$("woa").value;if(!a)return toast("⚠ Assign a technician first");
+        var type=$("wot").value,node=$("won").value.trim()||"(no location)",id="WO-"+woNum++;
+        $("wof").style.display="none";
+        var ws2=$("wos2");ws2.style.display="flex";ws2.style.flexDirection="column";ws2.style.alignItems="center";ws2.style.gap="10px";
+        $("woid").textContent=id+" Dispatched";$("wod").textContent=type+" · "+node+" → "+a;
+        toast("✓ "+id+" sent to "+a);
+      });
+      $("woan").addEventListener("click",function(){
+        $("wos2").style.display="none";$("wof").style.display="flex";$("wof").style.flexDirection="column";$("wof").style.gap="9px";
+        $("won").value="";$("woi").value="";$("woa").value="";
+      });
+    }},
+    {label:"Queue",build:function(c){
+      var q=[{id:"WO-4821",type:"Splice Closure",tech:"J. Reyes",status:"En Route",pri:"High"},{id:"WO-4822",type:"Maintenance",tech:"T. Morrison",status:"In Progress",pri:"Normal"},{id:"WO-4823",type:"Emergency Repair",tech:"D. Pierce",status:"Dispatched",pri:"Urgent"},{id:"WO-4819",type:"New Install",tech:"K. Flowers",status:"Complete",pri:"Normal"}];
+      function sc(s){return s==="En Route"?"bb":s==="In Progress"?"ba":s==="Complete"?"bg":"br";}
+      c.innerHTML='<div class="stitle">Dispatch Queue</div><div class="shint">Tap a work order for status details</div><div style="display:flex;flex-direction:column;gap:7px;" id="ql"></div>';
+      q.forEach(function(wo,i){
+        var d=document.createElement("div");d.className="scard click";d.style.animationDelay=(i*.08)+"s";d.style.animation="fadeIn .3s ease both";
+        d.innerHTML='<div class="srow" style="justify-content:space-between;">'
+          +'<div><div class="sct">'+wo.id+' · '+wo.type+'</div><div class="scs">→ '+wo.tech+'</div></div>'
+          +'<div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;">'
+          +'<span class="sbadge '+sc(wo.status)+'">'+wo.status+'</span>'
+          +'<span style="font-size:9px;color:var(--dim);">'+wo.pri+'</span></div></div>';
+        d.addEventListener("click",function(){toast(wo.id+": "+wo.status+" · "+wo.tech);});
+        $("ql").appendChild(d);
+      });
+    }},
+  ];
 
-    // Wait for crawl to get going, then fade it out after a while
-    await wait(11000);
-    const crawl = $("crawl-container");
-    crawl.style.transition = "opacity 1.5s ease";
-    crawl.style.opacity = "0";
-    await wait(1500);
-    crawl.classList.add("hidden");
+  /* OFFICE & BILLING */
+  if(ws.key==="office") return [
+    {label:"Invoices",build:function(c){
+      var invs=[{id:"TDS-2401",node:"1635EA_03",tech:"J. Reyes",amt:2450,status:"Approved"},{id:"TDS-2402",node:"1635CA_02",tech:"T. Morrison",amt:1820,status:"Approved"},{id:"TDS-2403",node:"1440BB_01",tech:"D. Pierce",amt:3100,status:"Pending Review"},{id:"TDS-2404",node:"1635EA_01",tech:"K. Flowers",amt:2880,status:"Pending Review"},{id:"TDS-2405",node:"PED-0042",tech:"J. Reyes",amt:940,status:"Draft"}];
+      function sc(s){return s==="Approved"?"bg":s==="Pending Review"?"ba":"bb";}
+      c.innerHTML='<div class="stitle">Invoice Review</div><div class="shint">Tap a Pending invoice to approve or send back</div>'
+        +'<table class="stbl"><thead><tr><th>Invoice</th><th>Node</th><th>Amount</th><th>Status</th></tr></thead><tbody id="ib"></tbody></table>'
+        +'<div id="id2" style="display:none;flex-direction:column;gap:8px;">'
+        +'<div class="sdiv"></div><div class="scard" id="idc"></div>'
+        +'<div class="srow" style="gap:7px;">'
+        +'<button class="sbtn p" id="iap" style="flex:1;font-size:12px;">✓ Approve</button>'
+        +'<button class="sbtn g" id="irj" style="flex:1;font-size:12px;">↩ Send Back</button>'
+        +'</div></div>';
+      var selInv=null;
+      invs.forEach(function(inv,i){
+        var tr=document.createElement("tr");tr.style.animationDelay=(i*.08)+"s";
+        tr.innerHTML='<td style="color:'+A+';font-weight:600;">'+inv.id+'</td><td style="color:var(--muted);">'+inv.node+'</td><td style="font-weight:600;">$'+inv.amt.toLocaleString()+'</td><td><span class="sbadge '+sc(inv.status)+'">'+inv.status+'</span></td>';
+        if(inv.status==="Pending Review"){
+          tr.style.cursor="pointer";
+          (function(inv2){tr.addEventListener("click",function(){
+            selInv=inv2;
+            $("idc").innerHTML='<div class="sct">'+inv2.id+' · '+inv2.node+'</div><div class="scs">Tech: '+inv2.tech+' · $'+inv2.amt.toLocaleString()+'</div><div class="scs">3 line items · 4 photos attached</div>';
+            var id2=$("id2");id2.style.display="flex";id2.style.flexDirection="column";id2.style.gap="8px";
+          });})(inv);
+        }
+        $("ib").appendChild(tr);
+      });
+      $("iap").addEventListener("click",function(){if(selInv){toast("✓ "+selInv.id+" approved — queued for payment");$("id2").style.display="none";}});
+      $("irj").addEventListener("click",function(){if(selInv){toast("↩ "+selInv.id+" sent back for corrections");$("id2").style.display="none";}});
+    }},
+    {label:"Reports",build:function(c){
+      var rpts=[{n:"Weekly Production Summary",d:"Closures, photos, billing by week",i:"📊"},{n:"Technician Hours Report",d:"Clock-in/out totals by tech",i:"⏱"},{n:"Invoice Reconciliation",d:"Wired vs SpecCom vs K&S billing",i:"💰"},{n:"Photo Documentation Export",d:"All GPS-tagged photos as PDF",i:"📷"},{n:"KMZ Route Summary",d:"Fiber path + node inventory",i:"🗺"}];
+      c.innerHTML='<div class="stitle">Project Reports</div><div class="shint">Tap Generate to run a report</div><div style="display:flex;flex-direction:column;gap:7px;" id="rlist"></div>';
+      rpts.forEach(function(r,i){
+        var d=document.createElement("div");d.className="scard";d.style.animationDelay=(i*.08)+"s";d.style.animation="fadeIn .3s ease both";
+        d.innerHTML='<div class="srow" style="gap:10px;">'
+          +'<div style="font-size:20px;">'+r.i+'</div>'
+          +'<div style="flex:1;"><div class="sct">'+r.n+'</div><div class="scs">'+r.d+'</div></div>'
+          +'<button class="sbtn g" style="font-size:9px;padding:4px 10px;" data-rn="'+r.n+'">Generate</button></div>';
+        $("rlist").appendChild(d);
+      });
+      c.addEventListener("click",function(e){var b=e.target.closest("[data-rn]");if(b)toast("📊 Generating: "+b.dataset.rn+"...");});
+    }},
+    {label:"Export",build:function(c){
+      var exps=[{f:"PDF",d:"Full documentation packet",s:"~4.2 MB",i:"📄"},{f:"CSV",d:"Line items & billing codes",s:"~180 KB",i:"📊"},{f:"KMZ",d:"Route & node map file",s:"~820 KB",i:"🗺"},{f:"ZIP",d:"All photos + reports",s:"~240 MB",i:"📦"}];
+      c.innerHTML='<div class="stitle">Export & Share</div><div class="shint">Package project data for client delivery</div><div style="display:flex;flex-direction:column;gap:8px;" id="elist"></div>';
+      exps.forEach(function(e2,i){
+        var d=document.createElement("div");d.className="scard";d.style.animationDelay=(i*.08)+"s";d.style.animation="fadeIn .3s ease both";
+        d.innerHTML='<div class="srow" style="justify-content:space-between;">'
+          +'<div class="srow" style="gap:10px;"><div style="font-size:22px;">'+e2.i+'</div><div><div class="sct">'+e2.f+' Export</div><div class="scs">'+e2.d+' · '+e2.s+'</div></div></div>'
+          +'<button class="sbtn p" style="font-size:10px;padding:5px 12px;" data-fmt="'+e2.f+'">Export</button></div>';
+        $("elist").appendChild(d);
+      });
+      c.addEventListener("click",function(e){var b=e.target.closest("[data-fmt]");if(b)toast("⬇ Preparing "+b.dataset.fmt+" export...");});
+    }},
+  ];
 
-    // Phase 2: Hyperspace jump
-    await fireWarp(800);
-    await wait(300);
+  return [];
+}
 
-    // Phase 3: Title card — logo reveal with lens flare
-    const tc = $("title-card");
-    tc.classList.add("active");
-    const logo = $("tcLogo");
-    logo.classList.add("in");
-    await wait(600);
-    fireLensFlare(window.innerWidth / 2, window.innerHeight / 2 - 40);
-    fireParticles(window.innerWidth / 2, window.innerHeight / 2 - 40, "rgba(55,138,221,0.8)", 25);
-    await wait(800);
-    logo.classList.remove("in");
-    logo.classList.add("glow");
-
-    // Streak
-    $("tcStreak").classList.add("in");
-    await wait(400);
-
-    // Tagline items one by one
-    $("tcTagline").classList.add("in");
-    await wait(200);
-    for (let i = 1; i <= 4; i++) {
-      await wait(300);
-      $("tci" + i).classList.add("in");
-    }
-    await wait(600);
-
-    // Subtitle
-    $("tcSubtitle").classList.add("in");
-    await wait(600);
-    $("tcSubSub").classList.add("in");
-    await wait(2500);
-
-    // Phase 4: Fade out title, explode icons
-    tc.style.transition = "opacity 0.8s ease";
-    tc.style.opacity = "0";
-    await wait(800);
-    tc.classList.remove("active");
-
-    // Icon explosion
-    const stage = $("icon-stage");
-    stage.classList.add("active");
-
-    const cx = window.innerWidth / 2;
-    const cy = window.innerHeight / 2;
-    const radius = Math.min(window.innerWidth, window.innerHeight) * 0.28;
-    const angleStep = (2 * Math.PI) / workspaces.length;
-
-    // Create orbs
-    workspaces.forEach((ws, i) => {
-      const orb = document.createElement("div");
-      orb.className = "icon-orb";
-      orb.style.cssText = `--orb-accent:${ws.accent};`;
-      const angle = angleStep * i - Math.PI / 2;
-      const x = cx + Math.cos(angle) * radius - 28;
-      const y = cy + Math.sin(angle) * radius - 28;
-      orb.style.left = x + "px";
-      orb.style.top = y + "px";
-      orb.innerHTML = ws.icon + `<span class="orb-label" style="color:${ws.accent};">${ws.title}</span><div class="orb-ring"></div>`;
-      stage.appendChild(orb);
-    });
-
-    // Central shockwave
-    fireParticles(cx, cy, "rgba(55,138,221,0.6)", 40);
-    fireShockwave(stage);
-    fireLensFlare(cx, cy);
-    await wait(200);
-
-    // Explode orbs in sequence
-    const orbs = stage.querySelectorAll(".icon-orb");
-    for (let i = 0; i < orbs.length; i++) {
-      orbs[i].style.animationDelay = (i * 0.08) + "s";
-      orbs[i].classList.add("explode");
-      await wait(80);
-    }
-    await wait(600);
-
-    // Show labels
-    orbs.forEach((o, i) => setTimeout(() => o.classList.add("labeled"), i * 60));
-    await wait(500);
-
-    // Ring effect
-    orbs.forEach((o, i) => setTimeout(() => o.classList.add("ringed"), i * 80));
-    await wait(2000);
-
-    // Phase 5: Warp to hub
-    stage.style.transition = "opacity 0.6s ease";
-    stage.style.opacity = "0";
-    setCineBars(false);
-    await fireWarp(500);
-    await wait(300);
-    stage.classList.remove("active");
-    $("skipBtn").style.display = "none";
-    enterHub();
-  }
-
-  /* ========== HUB ========== */
-  function buildHubCards() {
-    const grid = $("hubGrid");
-    grid.innerHTML = "";
-    workspaces.forEach((ws, i) => {
-      const card = document.createElement("div");
-      card.className = "hub-card";
-      card.style.cssText = `--card-accent:${ws.accent};--card-glow:${ws.glow};animation-delay:${0.3 + i * 0.07}s;`;
-      card.innerHTML = `
-        <div class="hub-card-icon" style="background:${ws.iconBg};">${ws.icon}</div>
-        <div class="hub-card-title">${ws.title}</div>
-        <div class="hub-card-desc">${ws.summary}</div>
-        <div class="hub-card-chips">${ws.chips.map(c => `<span class="hub-card-chip">${c}</span>`).join("")}</div>
-        <div class="hub-card-footer"><span class="hub-card-cta" style="color:${ws.accent};">Explore <span class="cta-arrow">&rarr;</span></span></div>`;
-      card.addEventListener("click", () => enterWalkthrough(ws));
-      grid.appendChild(card);
-    });
-  }
-
-  function enterHub() {
-    currentState = "hub";
-    $("hubLayer").classList.add("active");
-    $("walkLayer").classList.remove("active");
-    buildHubCards();
-  }
-
-  /* ========== WALKTHROUGH ========== */
-  async function enterWalkthrough(ws) {
-    currentState = "walkthrough";
-    currentWs = ws;
-    currentSceneIdx = 0;
-    scenes = getScenes(ws);
-
-    // Warp transition
-    setCineBars(true);
-    $("hubLayer").classList.remove("active");
-    await fireWarp(400);
-    setCineBars(false);
-
-    const walk = $("walkLayer");
-    walk.classList.add("active");
-    walk.style.setProperty("--ws-accent", ws.accent);
-    walk.style.setProperty("--ws-glow", ws.glow);
-
-    $("walkLabel").textContent = ws.title;
-    $("walkLabel").style.color = ws.accent;
-    $("walkDevice").style.boxShadow = `0 0 80px ${ws.glow}, 0 0 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)`;
-
-    buildDots();
-    showScene(0);
-  }
-
-  function buildDots() {
-    const dots = $("walkDots");
-    dots.innerHTML = "";
-    scenes.forEach((_, i) => {
-      const dot = document.createElement("div");
-      dot.className = "walk-dot" + (i === 0 ? " active" : "");
-      dot.addEventListener("click", () => goToScene(i));
-      dots.appendChild(dot);
-    });
-  }
-
-  function updateDots() {
-    const dots = $("walkDots").children;
-    for (let i = 0; i < dots.length; i++) {
-      dots[i].className = "walk-dot" + (i === currentSceneIdx ? " active" : i < currentSceneIdx ? " done" : "");
-    }
-  }
-
-  async function showScene(idx) {
-    clearAuto();
-    if (idx < 0 || idx >= scenes.length) return;
-
-    const device = $("walkDevice");
-    const oldScenes = device.querySelectorAll(".walk-scene");
-
-    // Mark old as exiting
-    oldScenes.forEach(s => { s.classList.remove("active"); s.classList.add("exit"); });
-
-    currentSceneIdx = idx;
-    updateDots();
-
-    const scene = scenes[idx];
-    const container = document.createElement("div");
-    container.className = "walk-scene";
-    scene.build(container);
-
-    const label = document.createElement("div");
-    label.className = "walk-scene-label";
-    label.textContent = scene.label;
-    container.appendChild(label);
-
-    device.appendChild(container);
-    await wait(50);
-    container.classList.add("active");
-
-    setTimeout(() => oldScenes.forEach(s => s.remove()), 600);
-
-    await wait(200);
-    scene.animate(container);
-
-    autoTimer = setTimeout(() => {
-      if (currentSceneIdx < scenes.length - 1) goToScene(currentSceneIdx + 1);
-    }, 5000);
-  }
-
-  function goToScene(idx) { showScene(idx); }
-
-  async function exitWalkthrough() {
-    clearAuto();
-    setCineBars(true);
-    $("walkLayer").classList.remove("active");
-    await fireWarp(400);
-    setCineBars(false);
-    $("walkDevice").innerHTML = "";
-    currentState = "hub";
-    $("hubLayer").classList.add("active");
-    buildHubCards();
-  }
-
-  /* ========== EVENTS ========== */
-  $("walkBackBtn").addEventListener("click", exitWalkthrough);
-  $("walkPrev").addEventListener("click", () => { if (currentSceneIdx > 0) goToScene(currentSceneIdx - 1); });
-  $("walkNext").addEventListener("click", () => { if (currentSceneIdx < scenes.length - 1) goToScene(currentSceneIdx + 1); else exitWalkthrough(); });
-
-  $("skipBtn").addEventListener("click", async () => {
-    $("crawl-container").classList.add("hidden");
-    $("title-card").classList.remove("active");
-    $("icon-stage").classList.remove("active");
-    setCineBars(false);
-    $("skipBtn").style.display = "none";
-    await fireWarp(400);
-    enterHub();
-  });
-
-  document.addEventListener("keydown", (e) => {
-    if (currentState === "walkthrough") {
-      if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); if (currentSceneIdx < scenes.length - 1) goToScene(currentSceneIdx + 1); }
-      if (e.key === "ArrowLeft") { e.preventDefault(); if (currentSceneIdx > 0) goToScene(currentSceneIdx - 1); }
-      if (e.key === "Escape") exitWalkthrough();
-    }
-    if (currentState === "intro" && (e.key === "Escape" || e.key === " ")) { e.preventDefault(); $("skipBtn").click(); }
-  });
-
-  $("walkDevice").addEventListener("mouseenter", clearAuto);
-  $("walkDevice").addEventListener("mouseleave", () => {
-    if (currentState === "walkthrough" && currentSceneIdx < scenes.length - 1) {
-      autoTimer = setTimeout(() => goToScene(currentSceneIdx + 1), 5000);
-    }
-  });
-
-  /* ========== INIT ========== */
-  buildHubCards();
-  runIntro();
-
-})();
+buildHub();
+}();
 </script>
 </body>
 </html>
