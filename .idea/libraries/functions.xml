@@ -1,0 +1,13 @@
+<component name="libraryTable">
+  <library name="functions">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/.netlify/functions/get-projects.zip!/" />
+      <root url="jar://$PROJECT_DIR$/.netlify/functions/process-data.zip!/" />
+      <root url="jar://$PROJECT_DIR$/.netlify/functions/app-config.zip!/" />
+      <root url="jar://$PROJECT_DIR$/.netlify/functions/translate.zip!/" />
+      <root url="jar://$PROJECT_DIR$/.netlify/functions/import-sites.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

@@ -876,14 +876,113 @@ function getScenes(ws){
       });
     }},
     {label:"Redline Map",build:function(c){
-      var pins=[],cnt=0;
-      c.innerHTML='<div class="stitle">Redline Map</div><div class="shint">Tap the map to drop redline correction markers</div><div id="rlw"></div><div class="srow" style="justify-content:space-between;margin-top:4px;"><span style="font-size:11px;color:var(--muted);" id="rlc">0 markers</span><button class="sbtn g" id="rlcl" style="font-size:10px;padding:5px 11px;">Clear All</button></div>';
+      var types=[{id:"route",name:"Routing Error",emoji:"🔀",color:"#EE835D"},{id:"splice",name:"Missing Splice",emoji:"🔗",color:"#D39A44"},{id:"cable",name:"Cable Routing",emoji:"📍",color:"#7F77DD"},{id:"clear",name:"Clearance Issue",emoji:"⚠️",color:"#D85A30"}];
+      var markers=[],selectedIdx=null;
+      var markerCounts={route:0,splice:0,cable:0,clear:0};
+      function renderSummary(){
+        var html="";types.forEach(function(t){var cnt=markerCounts[t.id];html+='<div class="srow" style="justify-content:space-between;font-size:11px;"><span>'+t.emoji+' '+t.name+'</span><span style="font-weight:600;">'+cnt+'</span></div>';});
+        $("rlsum").innerHTML=html;
+      }
+      function addMarker(x,y,type,notes){
+        var t=types.find(function(ty){return ty.id===type;});
+        markers.push({x:x,y:y,type:type,notes:notes||"",code:"RL-"+(1000+markers.length)});
+        markerCounts[type]++;renderSummary();
+      }
+      function renderMarkers(){
+        var mapEl=c.querySelector(".smap");
+        mapEl.querySelectorAll(".spin").forEach(function(p){if(!p.getAttribute("data-orig"))p.remove();});
+        markers.forEach(function(m,idx){
+          var t=types.find(function(ty){return ty.id===m.type;});
+          var p=mkPin(m.x+"%",m.y+"%",t.color,m.code);
+          p.setAttribute("data-idx",idx);p.style.cursor="pointer";
+          p.addEventListener("click",function(e){e.stopPropagation();selectedIdx=idx;showDetail(idx);});
+          mapEl.appendChild(p);
+        });
+      }
+      function showDetail(idx){
+        var m=markers[idx];var t=types.find(function(ty){return ty.id===m.type;});
+        var p=$("rldet");p.innerHTML='<div class="sdiv"></div>'
+          +'<div class="scard sel" style="border-color:'+t.color+'44;">'
+          +'<div style="display:flex;justify-content:space-between;align-items:start;">'
+          +'<div><div class="sct">'+t.emoji+' '+m.code+'</div><div class="scs">'+t.name+'</div></div>'
+          +'<button style="background:none;border:1px solid rgba(255,255,255,.15);color:var(--muted);font-size:10px;padding:4px 8px;border-radius:5px;cursor:pointer;" onclick="var m=arguments.callee.marker;m.markers.splice(arguments.callee.idx,1);arguments.callee.fn();arguments.callee.fn2();toast(\'Marker deleted\');arguments.callee.fn3();"><span id="delbtn">Delete</span></button>'
+          +'</div>'
+          +'<div style="margin-top:6px;font-size:10px;color:var(--dim);">'+parseFloat(m.x).toFixed(1)+'%, '+parseFloat(m.y).toFixed(1)+'%</div>'
+          +'<label class="slbl" style="margin-top:8px;">Notes</label>'
+          +'<textarea class="sin" style="font-size:10px;resize:none;" rows="2" id="mnoteinp" placeholder="Details about this correction...">'+m.notes+'</textarea>'
+          +'<button class="sbtn p" style="width:100%;margin-top:6px;font-size:11px;" id="mnotesave">Save Changes</button>'
+          +'</div>';
+        p.style.display="flex";p.style.flexDirection="column";p.style.gap="8px";
+        var delbtn=$("delbtn");if(delbtn){
+          var origFn=delbtn.parentElement.parentElement.parentElement.querySelector("[onclick]");
+          if(origFn){
+            origFn.addEventListener("click",function(){
+              markers.splice(idx,1);markerCounts[m.type]--;renderMarkers();renderSummary();
+              selectedIdx=null;$("rldet").style.display="none";toast("🗑 Marker deleted");
+            });
+          }
+        }
+        $("mnotesave").addEventListener("click",function(){
+          markers[idx].notes=$("mnoteinp").value;
+          renderMarkers();$("rldet").style.display="none";toast("✓ Marker updated");
+        });
+      }
+      c.innerHTML='<div class="stitle">Redline Map</div>'
+        +'<div class="shint">Tap map to add corrections · click markers to edit</div>'
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;" id="tsel">'
+        +types.map(function(t){return '<button class="sbtn g" style="font-size:10px;padding:6px 11px;flex:1;min-width:80px;" data-type="'+t.id+'">'+t.emoji+' '+t.name+'</button>';}).join("")
+        +'</div>'
+        +'<div id="rlw"></div>'
+        +'<div class="scard" style="background:rgba(232,73,69,.05);border-color:rgba(232,73,69,.12);margin-top:6px;padding:9px 11px;">'
+        +'<div class="sct" style="font-size:12px;margin-bottom:6px;">Marker Summary</div>'
+        +'<div id="rlsum" style="display:flex;flex-direction:column;gap:4px;"></div>'
+        +'</div>'
+        +'<div class="srow" style="justify-content:space-between;margin-top:6px;gap:6px;">'
+        +'<button class="sbtn g" id="rlundo" style="flex:1;font-size:10px;">↶ Undo</button>'
+        +'<button class="sbtn g" id="rlcl" style="flex:1;font-size:10px;">Clear All</button>'
+        +'<button class="sbtn p" id="rlexp" style="flex:1;font-size:10px;">⬇ Export</button></div>'
+        +'<div id="rldet" style="display:none;flex-direction:column;gap:8px;margin-top:8px;"></div>';
+      var selectedType="route";
+      $("tsel").addEventListener("click",function(e){
+        var btn=e.target.closest("[data-type]");if(!btn)return;
+        $("tsel").querySelectorAll("button").forEach(function(b){b.style.opacity="0.6";});
+        btn.style.opacity="1";selectedType=btn.dataset.type;toast("Type: "+types.find(function(t){return t.id===selectedType;}).name);
+      });
+      $("tsel").querySelector("button").style.opacity="1";
       var map=mkMap(220,"#D85A30",[{x:"20%",y:"35%",label:"Node A"},{x:"55%",y:"20%",label:"Splice-01"},{x:"75%",y:"58%",label:"Node B"}],function(x,y,mapEl){
-        cnt++;var p=mkPin(x+"%",y+"%","#D85A30","");mapEl.appendChild(p);pins.push(p);
-        $("rlc").textContent=cnt+" marker"+(cnt>1?"s":"");toast("🔴 Redline marker placed");
+        addMarker(parseFloat(x).toFixed(1),parseFloat(y).toFixed(1),selectedType,"");renderMarkers();
+        toast("🔴 Marker added: "+types.find(function(t){return t.id===selectedType;}).name);
       });
       $("rlw").appendChild(map);
-      $("rlcl").addEventListener("click",function(){pins.forEach(function(p){p.remove();});pins=[];cnt=0;$("rlc").textContent="0 markers";toast("Markers cleared");});
+      renderSummary();
+      $("rlundo").addEventListener("click",function(){
+        if(markers.length===0){toast("Nothing to undo");return;}
+        var m=markers.pop();markerCounts[m.type]--;
+        renderMarkers();renderSummary();selectedIdx=null;$("rldet").style.display="none";
+        toast("↶ Last marker removed");
+      });
+      $("rlcl").addEventListener("click",function(){
+        markers=[];types.forEach(function(t){markerCounts[t.id]=0;});
+        renderMarkers();renderSummary();selectedIdx=null;$("rldet").style.display="none";
+        toast("Redline cleared");
+      });
+      $("rlexp").addEventListener("click",function(){
+        if(markers.length===0){toast("⚠ No markers to export");return;}
+        var summary="REDLINE CORRECTIONS\\n"+new Date().toLocaleDateString()+"\\n\\n";
+        types.forEach(function(t){
+          var m=markers.filter(function(mk){return mk.type===t.id;});
+          if(m.length>0){summary+=t.name+": "+m.length+"\\n";m.forEach(function(mk){summary+="  • "+mk.code+" ("+parseFloat(mk.x).toFixed(1)+"%, "+parseFloat(mk.y).toFixed(1)+"%)";if(mk.notes)summary+=" — "+mk.notes;summary+="\\n";});}
+        });
+        toast("✓ Redline export ready — "+markers.length+" corrections documented");
+        var exp=$("rldet");exp.style.display="flex";exp.style.flexDirection="column";exp.style.gap="8px";
+        exp.innerHTML='<div class="sdiv"></div>'
+          +'<div class="scard sel"><div class="sct" style="color:'+A+';">Export Ready</div>'
+          +'<div class="scs" style="margin-top:6px;">'+markers.length+' correction markers</div>'
+          +'<div class="scs">'+Object.keys(markerCounts).reduce(function(s,k){var cnt=markerCounts[k];return s+(cnt>0?" · "+cnt+" "+types.find(function(t){return t.id===k;}).name:"");},"")+' </div>'
+          +'<div class="scs" style="margin-top:8px;color:var(--dim);">Ready to generate redline PDF for field team review</div>'
+          +'<button class="sbtn p" style="width:100%;margin-top:8px;font-size:11px;">📥 Download Redline PDF</button>'
+          +'</div>';
+      });
     }},
   ];
 

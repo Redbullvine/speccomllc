@@ -1,6 +1,9 @@
 {
   "name": "speccom",
   "private": true,
+  "scripts": {
+    "process:timbond": "node C:\\SpecCom\\process_tim_bond_attachments.mjs"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
     "busboy": "^1.6.0",
@@ -11,3 +14,4 @@
     "xlsx": "^0.18.5"
   }
 }
+
