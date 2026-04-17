@@ -32484,7 +32484,7 @@ function wireUI(){
       renderPendingUploadsList();
     });
   }
-
+}
 
 // ─── Help & Auto-Troubleshoot System ────────────────────────────────────────
 
