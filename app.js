@@ -33235,6 +33235,7 @@ async function renderPendingUploadsList() {
 }
 
 
+async function startApp(){
   initSplash();
   wireUI();
   
