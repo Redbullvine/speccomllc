@@ -797,8 +797,8 @@
         <div class="sp-tsep"></div>
       </div>
       <div class="sp-btn-row">
-        <button class="sp-btn sp-btn-primary" id="splash-login-btn">Login</button>
-        <button class="sp-btn sp-btn-ghost" id="splash-demo-btn">Explore Demo</button>
+        <button type="button" class="sp-btn sp-btn-primary" id="splash-login-btn">Login</button>
+        <button type="button" class="sp-btn sp-btn-ghost" id="splash-demo-btn">Explore Demo</button>
       </div>
     </div>
     <div class="sp-status">
@@ -851,6 +851,16 @@
           <line x1="13" y1="13" x2="13" y2="10"/>
         </svg>
       </button>
+    </div>
+    <div style="position:relative;">
+      <button id="pendingUploadsBadge" class="nav-util" title="Pending Uploads" type="button" style="display:none;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 10L8 4L14 10"/>
+          <line x1="8" y1="4" x2="8" y2="12"/>
+          <circle cx="8" cy="13" r="1" fill="currentColor" stroke="none"/>
+        </svg>
+      </button>
+      <span id="pendingUploadsCount" class="badge" style="display:none; position:absolute; top:-4px; right:-4px; background:#ff6b6b; color:white; font-size:10px; padding:2px 5px; border-radius:9px; font-weight:700;">0</span>
     </div>
     <span id="saveStatusBadge"></span>
   </nav>
@@ -2141,6 +2151,58 @@
         <div class="row" style="justify-content:flex-end;">
           <button id="btnProfilePageSave" class="prof-save-btn" type="button">Save Profile</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Photo Capture Modal -->
+    <div id="photoCaptureBackdrop" class="modal-backdrop" style="display:none;">
+      <div id="photoCaptureModal" class="modal" style="max-width:420px;width:100%;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <h3 style="margin:0;font-size:1.05rem;">Take Verification Photo</h3>
+          <button id="btnPhotoCaptureClose" class="btn ghost small" type="button">✕</button>
+        </div>
+        <div style="margin-bottom:12px;">
+          <video id="photoCaptureVideo" autoplay playsinline muted style="width:100%;border-radius:8px;background:#000;margin-bottom:10px;display:none;"></video>
+          <div id="photoCapturePreview" style="width:100%;border-radius:8px;background:rgba(55,138,221,0.1);border:1px dashed rgba(55,138,221,0.3);min-height:240px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;text-align:center;padding:20px;">Camera not started</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-direction:column;margin-bottom:12px;">
+          <div style="font-size:10px;color:var(--muted);">
+            <div style="margin-bottom:4px;">📍 GPS: <span id="photoCaptureGPS">—</span></div>
+            <div>⏱ Time: <span id="photoCaptureTime">—</span></div>
+          </div>
+        </div>
+        <div class="row" style="gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:8px;">
+          <button id="btnPhotoCaptureStart" class="btn secondary small" type="button" style="display:none;">📷 Start Camera</button>
+          <button id="btnPhotoCapture" class="btn small" type="button" style="display:none;">📸 Capture Photo</button>
+          <button id="btnPhotoCaptureRetry" class="btn ghost small" type="button" style="display:none;">Retry</button>
+        </div>
+        <div id="photoCaptureStatus" style="font-size:11px;color:var(--muted);"></div>
+      </div>
+    </div>
+
+    <!-- Pending Uploads Panel Modal -->
+    <div id="pendingUploadsBackdrop" class="modal-backdrop" style="display:none;">
+      <div id="pendingUploadsModal" class="modal" style="max-width:480px;width:100%;max-height:70vh;overflow:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <h3 style="margin:0;font-size:1.05rem;">📤 Pending Uploads</h3>
+          <button id="btnPendingUploadsClose" class="btn ghost small" type="button">✕</button>
+        </div>
+        <div id="pendingUploadsStats" style="background:rgba(55,138,221,0.06);border:1px solid rgba(55,138,221,0.15);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div><strong>Total:</strong> <span id="statsTotal">0</span></div>
+            <div><strong>Uploading:</strong> <span id="statsUploading" style="color:#378ADD;">0</span></div>
+            <div><strong>Failed:</strong> <span id="statsFailed" style="color:#ff6b6b;">0</span></div>
+            <div><strong>Storage:</strong> <span id="statsStorage">0 MB</span></div>
+          </div>
+        </div>
+        <div style="margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:12px;">
+          <div class="row" style="gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+            <button id="btnPendingUploadsSync" class="btn secondary small" type="button">🔄 Sync Now</button>
+            <button id="btnPendingUploadsClear" class="btn ghost small" type="button">Clear Uploaded</button>
+            <button id="btnPendingUploadsClearAll" class="btn ghost small" type="button" style="color:#ff6b6b;">Clear All</button>
+          </div>
+        </div>
+        <div id="pendingUploadsList" style="max-height:400px;overflow-y:auto;"></div>
       </div>
     </div>
 

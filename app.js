@@ -10545,16 +10545,33 @@ function initSplash() {
     splash.classList.add("hide");
     setTimeout(() => {
       splash.remove();
-      if (targetHash) window.location.hash = targetHash;
+      if (targetHash) {
+        window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${targetHash}`);
+      }
     }, 600);
   }
 
-  loginBtn.addEventListener("click", () => {
+  loginBtn.type = "button";
+  demoBtn.type = "button";
+
+  loginBtn.addEventListener("click", (event) => {
+    event.preventDefault();
+    openSignInUi("splash");
     dismissSplash("#login");
   });
 
-  demoBtn.addEventListener("click", () => {
-    window.location.href = "./demo.html";
+  demoBtn.addEventListener("click", (event) => {
+    event.preventDefault();
+    const demoUrl = new URL("demo.html", window.location.href).href;
+    window.location.assign(demoUrl);
+  });
+
+  splash.addEventListener("click", (event) => {
+    if (event.target === loginBtn || loginBtn.contains(event.target)) return;
+    if (event.target === demoBtn || demoBtn.contains(event.target)) return;
+    if (event.target === splash) {
+      event.stopPropagation();
+    }
   });
 }
 
