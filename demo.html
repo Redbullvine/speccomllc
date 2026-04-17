@@ -257,7 +257,7 @@ var WS=[
    icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#EE835D" stroke-width="1.5"><rect x="4" y="2.5" width="10" height="13" rx="1.5"/><path d="M6.5 6h5M6.5 9h5M6.5 12h3.5"/></svg>'},
   {key:"warehouse",title:"Warehouse",a:"#FF9800",g:"rgba(255,152,0,.14)",ib:"rgba(255,152,0,.14)",sub:"Manage inventory, track equipment, process shipments",chips:["Inventory","Equipment","Shipments","Reports"],
    icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#FF9800" stroke-width="1.5"><rect x="2" y="6" width="14" height="10" rx="1"/><path d="M6 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M9 10v2M7.5 11.5h3"/></svg>'},
-  {key:"supervisor",title:"Supervisor",a:"#9C27B0",g:"rgba(156,39,176,.14)",ib:"rgba(156,39,176,.14)",sub:"Oversee crews, review progress, manage schedules",chips:["Crew Oversight","Progress","Schedules","Reports"],
+  {key:"supervisor",title:"Supervisor",a:"#9C27B0",g:"rgba(156,39,176,.14)",ib:"rgba(156,39,176,.14)",sub:"Oversee crews, review progress, manage schedules",chips:["Crew Oversight","Progress","Schedules","Crew Map"],
    icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#9C27B0" stroke-width="1.5"><circle cx="9" cy="6" r="3"/><path d="M3 15c0-3 3-5 6-5s6 2 6 5"/></svg>'},
 ];
 
@@ -1234,6 +1234,32 @@ function getScenes(ws){
           +'<div class="sct">'+s.event+'</div></div>'
           +'</div>';
         list.appendChild(d);
+      });
+    }},
+    {label:"Crew Map",build:function(c){
+      var crews=[
+        {name:"Team Alpha",lead:"Mike Johnson",status:"On Site",location:"Downtown Fiber Build",x:"45%",y:"35%",color:A},
+        {name:"Team Beta",lead:"Sarah Wilson",status:"En Route",location:"Suburban Expansion",x:"75%",y:"60%",color:A},
+        {name:"Team Gamma",lead:"Tom Brown",status:"At Yard",location:"Maintenance Check",x:"25%",y:"70%",color:A},
+      ];
+      c.innerHTML='<div class="stitle">Crew Locations</div>'
+        +'<div class="shint">Real-time location tracking for all field crews</div>'
+        +'<div id="crewmap"></div>'
+        +'<div class="scard" style="margin-top:12px;">'
+        +'<div class="sct" style="margin-bottom:8px;">Crew Status Legend</div>'
+        +'<div style="display:flex;flex-direction:column;gap:4px;" id="crewlegend"></div>'
+        +'</div>';
+      var map=mkMap(280,A,crews.map(function(crew){return {x:crew.x,y:crew.y,label:crew.name+' - '+crew.status};}));
+      document.getElementById("crewmap").appendChild(map);
+      var legend=document.getElementById("crewlegend");
+      crews.forEach(function(crew){
+        var statusColor=crew.status==="On Site"?"#1D9E75":crew.status==="En Route"?"#378ADD":"#D39A44";
+        var li=document.createElement("div");
+        li.className="srow";
+        li.style.cssText="gap:8px;align-items:center;font-size:11px;";
+        li.innerHTML='<div style="width:8px;height:8px;border-radius:50%;background:'+statusColor+';"></div>'
+          +'<span>'+crew.name+' - '+crew.location+'</span>';
+        legend.appendChild(li);
       });
     }},
   ];
