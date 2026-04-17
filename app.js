@@ -66,7 +66,7 @@ const SHOWCASE_MODULES = [
   { key: "supervisor_dashboard", title: "Supervisor Oversight", group: "supervisor", chips: ["KPI status", "Blocked jobs", "Daily summary"], summary: "Supervisor progress tracking, escalations, and exception oversight.", action: { type: "view", target: "viewSupervisor" } },
   { key: "supervisor_photos", title: "Field Verification", group: "supervisor", chips: ["Field photos", "Proof checks", "Readiness"], summary: "Photo and proof validation workflows.", action: { type: "view", target: "viewPhotos" } },
   { key: "network_map", title: "Map Workspace", group: "network", chips: ["KMZ map", "Site pins", "Route points"], summary: "KMZ map and geospatial field tools.", action: { type: "view", target: "viewMap" } },
-  { key: "network_field_photos", title: "Field Photos", group: "network", chips: ["GPS EXIF", "Map markers", "Photo archive"], summary: "Upload GPS-tagged field photos and review map pins.", action: { type: "link", target: "./workspaces/field-photos.html" } },
+  { key: "network_field_photos", title: "Field Photos", group: "network", chips: ["GPS EXIF", "Map markers", "Photo archive"], summary: "Upload GPS-tagged field photos and review map pins.", action: { type: "view", target: "viewMap", fallbackViews: ["viewNodes", "viewDashboard"] } },
   { key: "platform_messages", title: "Messaging", group: "network", chips: ["Main board", "Direct messages", "Team coordination"], summary: "Communication and updates.", action: { type: "modal", target: "messages" } },
 ];
 
@@ -4986,9 +4986,12 @@ function focusSiteOnMap(siteId){
     const pinsLayer = state.map.layers?.pins;
     if (pinsLayer?.addLayer) pinsLayer.addLayer(targetMarker);
     else targetMarker.addTo(state.map.instance);
+    const resolveSite = () => getVisibleSites().find((row) => toSiteIdKey(row?.id) === siteKey) || site;
     targetMarker.on("click", () => {
-      const resolveSite = () => getVisibleSites().find((row) => toSiteIdKey(row?.id) === siteKey) || site;
-      void handleSiteMarkerClick(targetMarker, siteKey, resolveSite);
+      openSiteMarkerPopup(targetMarker, siteKey, resolveSite, { syncSelection: true });
+    });
+    targetMarker.on("mouseover", () => {
+      openSiteMarkerPopup(targetMarker, siteKey, resolveSite, { syncSelection: false });
     });
     bindSiteMarkerPopup(targetMarker, site, {
       requiredCodes: normalizeCodeList(getCodesRequiredForActiveProject()),
@@ -7260,7 +7263,15 @@ async function handleSiteMarkerClick(marker, siteIdKey, resolveSite){
   setMapPopupSiteContext(marker, site);
   await renderMapPopupActiveSite({ syncSelection: true });
 }
-
+function openSiteMarkerPopup(marker, siteIdKey, resolveSite, { syncSelection = true } = {}){
+  const site = typeof resolveSite === "function" ? resolveSite() : null;
+  if (!site) return;
+  const activeKey = toSiteIdKey(getMapPopupSnapshot()?.site?.id);
+  const alreadyOpen = Boolean(marker?.isPopupOpen && marker.isPopupOpen());
+  if (alreadyOpen && activeKey === toSiteIdKey(siteIdKey)) return;
+  setMapPopupSiteContext(marker, site);
+  void renderMapPopupActiveSite({ syncSelection });
+}
 const FEATURE_FIELD_LABELS = {
   id: "ID",
   type: "Type",
@@ -9731,7 +9742,10 @@ function updateMapMarkers(rows){
       if (pinsLayer?.addLayer) pinsLayer.addLayer(marker);
       else marker.addTo(state.map.instance);
       marker.on("click", () => {
-        void handleSiteMarkerClick(marker, id, resolveSite);
+        openSiteMarkerPopup(marker, id, resolveSite, { syncSelection: true });
+      });
+      marker.on("mouseover", () => {
+        openSiteMarkerPopup(marker, id, resolveSite, { syncSelection: false });
       });
       markers.set(id, marker);
       state.map.featureMarkerMeta.set(id, { kind: "site", siteId: id });
@@ -21202,23 +21216,32 @@ function renderMapFieldPanel(){
       actionsWrap.innerHTML = `
         <div class="muted small" style="width:100%;">No saved location within ${Math.round(state.map.nearbyRadiusM || 30)}m.</div>
         <div style="width:100%;background:rgba(55,138,221,0.08);border:1px solid rgba(55,138,221,0.2);border-radius:8px;padding:10px;margin-top:4px;">
-          <div class="muted small" style="margin-bottom:6px;color:rgba(55,138,221,0.9);">⚠ Select a project to create a location:</div>
+          <div class="muted small" style="margin-bottom:6px;color:rgba(55,138,221,0.9);">No project selected. You can still create a trouble-ticket location here, or assign one to a project first.</div>
           ${projectOptions.length
             ? `<select id="mapInlineProjectSelect" class="input compact" style="margin-bottom:8px;">
-                <option value="">-- Pick a project --</option>
+                <option value="">Create without a project</option>
                 ${projectOptions}
-               </select>
-               <button id="btnMapShowCreateLocation" class="btn secondary small" type="button" style="width:100%;">Create New Location Here</button>`
-            : `<div class="muted small" style="color:rgba(255,180,60,0.8);">No projects found. Create a project first from the Office workspace.</div>`
+               </select>`
+            : `<div class="muted small" style="margin-bottom:8px;color:rgba(255,180,60,0.8);">No projects found. This location will be created without a project.</div>`
           }
+          <button id="btnMapShowCreateLocation" class="btn secondary small" type="button" style="width:100%;">Create New Location Here</button>
         </div>
       `;
-      // Wire inline project select — selecting sets activeProject then enables the button
       const sel = actionsWrap.querySelector("#mapInlineProjectSelect");
       if (sel) {
+        sel.value = state.activeProject?.id || "";
         sel.addEventListener("change", () => {
           const id = sel.value;
-          if (id) setActiveProjectById(id);
+          if (id) {
+            setActiveProjectById(id);
+          } else {
+            state.activeProject = null;
+            state.projectNodes = [];
+            state.projectSites = [];
+            state.activeNode = null;
+            state.activeSite = null;
+            renderMapMarkers();
+          }
           renderMapFieldPanel();
         });
       }
@@ -21528,10 +21551,6 @@ async function appendMapFieldBillingCodesToSiteNotes(site, billingRows){
 }
 
 async function createFieldLocationFromCurrentGps(){
-  if (!state.activeProject){
-    toast("Project required", "Select a project before creating a new location.");
-    return;
-  }
   const gps = state.map.myLocation || await requestMapCurrentLocation({ center: false, silent: false });
   if (!gps){
     return;
@@ -22778,10 +22797,6 @@ async function addSiteMedia(file){
 }
 
 async function dropPin(){
-  if (!state.activeProject){
-    toast("Project required", "Select a project to drop a pin.");
-    return;
-  }
   ensureMap();
   const pendingLatLng = state.map.pendingLatLng;
   if (!pendingLatLng){
@@ -29075,7 +29090,7 @@ function renderDemoShowcaseHome(){
       accent: "accent-teal",
       summary: "Upload GPS-tagged photos, auto-pin map markers, and review MH-tagged thumbnails.",
       chips: ["GPS EXIF", "MH tags", "Photo map"],
-      action: { type: "link", target: "./workspaces/field-photos.html" },
+      action: { type: "view", target: "viewMap", fallbackViews: ["viewNodes", "viewDashboard"] },
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#00bcd4" stroke-width="1.5"><rect x="2.5" y="3" width="13" height="11.5" rx="1.8"/><circle cx="6.2" cy="7" r="1.2"/><path d="M4.8 12l2.8-3 2.2 2.1 1.8-1.6 2 2.5"/></svg>',
     },
     {

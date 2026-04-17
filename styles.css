@@ -4524,19 +4524,51 @@ body.map-mode .map-canvas .leaflet-control-zoom a{
 
 /* Mobile: stack columns, full page scroll */
 @media (max-width: 700px) {
-  .tech-workspace { height: auto; overflow: visible; }
-  .tech-body { flex-direction: column; overflow: visible; }
-  .tech-main-col { padding: 10px 12px; overflow: visible; }
+  .tech-workspace {
+    height: auto;
+    min-height: calc(100dvh - 120px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+  .tech-body {
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+  .tech-main-col {
+    padding: 10px 12px;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
   .tech-side-col {
     width: 100%;
     min-width: 0;
+    height: auto;
+    min-height: 0;
     border-left: none;
     border-top: 1px solid rgba(148,163,184,0.2);
-    padding: 10px 12px;
+    padding: 10px 12px calc(18px + env(safe-area-inset-bottom));
+    overflow: visible;
   }
   .tech-summary-card { position: static; }
-  .tech-clock-bar { padding: 8px 12px; }
+  .tech-clock-bar {
+    padding: 8px 12px;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
   .tech-clock-btn { min-width: 80px; font-size: 14px; }
+}
+@supports not (height: 100dvh) {
+  @media (max-width: 700px) {
+    .tech-workspace {
+      min-height: calc(100vh - 120px);
+    }
+  }
 }
 
 /* -- Technician Shift Items � field-readable cards --------------- */
