@@ -6,6 +6,7 @@ import {
   makeClient,
   refreshConfig,
 } from "./supabaseClient.js";
+import { offlinePhotoQueue } from "./services/offlinePhotoQueue.js";
 
 const isDebug = new URLSearchParams(location.search).has("debug");
 const dlog = (...args) => { if (isDebug) console.log(...args); };
@@ -29420,6 +29421,76 @@ function makeFileFromBlob(blob){
   return new File([blob], `capture-${Date.now()}.jpg`, { type: "image/jpeg" });
 }
 
+/**
+ * Upload a photo to Supabase, called by offlinePhotoQueue during sync
+ * @param {Object} photoRecord - Photo record from queue { blob, gpsLat, gpsLng, gpsAccuracy, capturedAt, projectId, siteId, userId, metadata }
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function uploadPhotoToSupabase(photoRecord) {
+  if (!photoRecord || !photoRecord.blob) {
+    return { success: false, error: 'Invalid photo record' };
+  }
+
+  try {
+    if (!state.client) {
+      return { success: false, error: 'Supabase client unavailable' };
+    }
+
+    const { blob, gpsLat, gpsLng, gpsAccuracy, capturedAt, projectId, siteId, userId, metadata } = photoRecord;
+
+    // Generate storage path
+    const projectKey = String(projectId || 'unknown').replace(/[^a-z0-9-]/gi, '');
+    const siteKey = String(siteId || 'unknown').replace(/[^a-z0-9-]/gi, '');
+    const timestamp = new Date(capturedAt || Date.now()).getTime();
+    const filename = `${timestamp}_${Math.random().toString(36).slice(2, 10)}.jpg`;
+    const storagePath = `verification-photos/${projectKey}/${siteKey}/${filename}`;
+
+    // Upload blob to Supabase storage
+    const { error: uploadErr, data: uploadData } = await state.client.storage
+      .from('verification-photos')
+      .upload(storagePath, blob, {
+        contentType: 'image/jpeg',
+        upsert: false
+      });
+
+    if (uploadErr) {
+      console.error('[Upload] Storage upload failed:', uploadErr);
+      return { success: false, error: uploadErr.message || 'Upload failed' };
+    }
+
+    // Insert metadata record into database (if table exists)
+    // This stores the GPS coordinates, timestamp, and other metadata
+    try {
+      const { error: dbErr } = await state.client.from('site_verification_photos').insert({
+        site_id: siteId,
+        project_id: projectId,
+        user_id: userId,
+        photo_path: storagePath,
+        gps_lat: gpsLat,
+        gps_lng: gpsLng,
+        gps_accuracy_m: gpsAccuracy,
+        captured_at: capturedAt,
+        uploaded_at: new Date().toISOString(),
+        metadata: metadata ? JSON.stringify(metadata) : null
+      });
+
+      if (dbErr && !isMissingTable(dbErr)) {
+        console.error('[Upload] Database insert failed:', dbErr);
+        // Don't fail the upload if DB insert fails; the photo is already in storage
+      }
+    } catch (dbErr) {
+      console.error('[Upload] Database insert exception:', dbErr);
+      // Don't fail the upload if DB insert fails
+    }
+
+    console.log('[Upload] Photo uploaded successfully:', storagePath);
+    return { success: true };
+  } catch (err) {
+    console.error('[Upload] Upload exception:', err);
+    return { success: false, error: err?.message || 'Upload failed' };
+  }
+}
+
 async function addSpliceLocation(){
   const node = state.activeNode;
   if (!node) return;
@@ -30178,6 +30249,31 @@ async function postLoginBootstrap(client, user){
       console.info("[auth-redirect] fallback to home");
     }
 
+    // Initialize offline photo queue
+    try {
+      await offlinePhotoQueue.init();
+      console.log('[App] Offline photo queue initialized');
+      
+      // Request persistent storage permission
+      offlinePhotoQueue.requestPersistentStorage()
+        .then(persistent => {
+          console.log('[App] Persistent storage requested:', persistent);
+        })
+        .catch(err => {
+          console.error('[App] Persistent storage request failed:', err);
+        });
+      
+      // Cleanup expired photos on app load
+      await offlinePhotoQueue.cleanupExpired();
+      console.log('[App] Expired photos cleaned up');
+      
+      // Start periodic sync checks
+      offlinePhotoQueue.startSyncChecks(uploadPhotoToSupabase);
+      console.log('[App] Offline sync checks started');
+    } catch (err) {
+      console.error('[App] Offline queue initialization failed:', err);
+    }
+
     // Non-ROOT users with no org assignment are pending — show a holding screen
     // instead of loading the full app or prompting them to create their own org
     const hasOrg = Boolean(state.profile?.org_id || state.activeOrgId);
@@ -30232,6 +30328,29 @@ async function postLoginBootstrap(client, user){
     syncPendingSites();
   }
   setWhoami();
+  
+  // Add online/offline event listeners for offline photo queue
+  window.addEventListener('online', () => {
+    console.log('[App] Online event detected');
+    if (offlinePhotoQueue && typeof offlinePhotoQueue.syncAll === 'function') {
+      void offlinePhotoQueue.syncAll(uploadPhotoToSupabase);
+    }
+  });
+  
+  window.addEventListener('offline', () => {
+    console.log('[App] Offline event detected');
+  });
+  
+  // Add app resume listener (when visibility changes to visible)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && state.user) {
+      console.log('[App] App resumed - syncing offline queue');
+      if (offlinePhotoQueue && typeof offlinePhotoQueue.syncAll === 'function') {
+        void offlinePhotoQueue.syncAll(uploadPhotoToSupabase);
+      }
+    }
+  });
+  
   } finally {
     _postLoginBootstrapRunning = false;
   }
@@ -32185,7 +32304,187 @@ function wireUI(){
       btn.textContent = t("viewOriginal");
     }
   });
-}
+
+  // Wire photo capture modal buttons
+  const btnPhotoCaptureStart = $("btnPhotoCaptureStart");
+  if (btnPhotoCaptureStart) {
+    btnPhotoCaptureStart.addEventListener("click", async () => {
+      const success = await startCamera();
+      if (success) {
+        btnPhotoCaptureStart.style.display = "none";
+        $("btnPhotoCapture").style.display = "";
+      }
+    });
+  }
+
+  const btnPhotoCapture = $("btnPhotoCapture");
+  if (btnPhotoCapture) {
+    btnPhotoCapture.addEventListener("click", async () => {
+      btnPhotoCapture.disabled = true;
+      btnPhotoCapture.textContent = "📸 Capturing...";
+      
+      try {
+        const photoData = await captureFrame();
+        if (!photoData) {
+          btnPhotoCapture.disabled = false;
+          btnPhotoCapture.textContent = "📸 Capture Photo";
+          return;
+        }
+
+        // Update preview in modal
+        const previewImg = $("photoCapturePreview");
+        if (previewImg && photoData.previewUrl) {
+          previewImg.src = photoData.previewUrl;
+          previewImg.style.display = "";
+        }
+
+        // Update GPS display
+        const gpsDisplay = $("photoCaptureGPS");
+        if (gpsDisplay && photoData.gps) {
+          gpsDisplay.textContent = `GPS: ${photoData.gps.lat.toFixed(6)}, ${photoData.gps.lng.toFixed(6)} (±${photoData.gps.accuracy.toFixed(0)}m)`;
+        }
+
+        // Update time display
+        const timeDisplay = $("photoCaptureTime");
+        if (timeDisplay && photoData.captured_at) {
+          const capturedTime = new Date(photoData.captured_at).toLocaleString();
+          timeDisplay.textContent = `Captured: ${capturedTime}`;
+        }
+
+        // Enqueue photo to offline queue
+        if (offlinePhotoQueue && typeof offlinePhotoQueue.enqueuePhoto === 'function') {
+          const projectId = state.activeProject?.id || null;
+          const siteId = state.activeSite?.id || null;
+          const userId = state.user?.id || null;
+
+          await offlinePhotoQueue.enqueuePhoto({
+            blob: photoData.blob,
+            gpsLat: photoData.gps.lat,
+            gpsLng: photoData.gps.lng,
+            gpsAccuracy: photoData.gps.accuracy,
+            capturedAt: photoData.captured_at,
+            projectId,
+            siteId,
+            userId,
+            metadata: {
+              source: 'field-capture',
+              type: 'verification'
+            }
+          });
+
+          console.log('[App] Photo queued for upload');
+          toast('Photo captured', 'Queued for upload. Will sync when online or manually via Pending Uploads.');
+
+          // Update pending uploads badge
+          const stats = await offlinePhotoQueue.getStats();
+          updatePendingUploadsBadge(stats);
+        }
+
+        // Reset capture button after successful capture
+        setTimeout(() => {
+          btnPhotoCapture.disabled = false;
+          btnPhotoCapture.textContent = "📸 Capture Photo";
+        }, 500);
+      } catch (err) {
+        console.error('[App] Photo capture error:', err);
+        btnPhotoCapture.disabled = false;
+        btnPhotoCapture.textContent = "📸 Capture Photo";
+        toast("Capture failed", err.message || "Unable to capture photo");
+      }
+    });
+  }
+
+  const btnPhotoCaptureRetry = $("btnPhotoCaptureRetry");
+  if (btnPhotoCaptureRetry) {
+    btnPhotoCaptureRetry.addEventListener("click", async () => {
+      // Restart camera and reset capture
+      $("photoCapturePreview").style.display = "none";
+      $("btnPhotoCaptureStart").style.display = "";
+      $("btnPhotoCapture").style.display = "none";
+      await startCamera();
+    });
+  }
+
+  const btnPhotoCaptureClose = $("btnPhotoCaptureClose");
+  if (btnPhotoCaptureClose) {
+    btnPhotoCaptureClose.addEventListener("click", () => {
+      const modal = $("photoCaptureModal");
+      if (modal) modal.style.display = "none";
+      // Stop camera
+      if (state.cameraStream) {
+        state.cameraStream.getTracks().forEach(track => track.stop());
+        state.cameraStream = null;
+        state.cameraReady = false;
+      }
+    });
+  }
+
+  // Wire pending uploads panel
+  const btnPendingUploadsBadge = $("pendingUploadsBadge");
+  if (btnPendingUploadsBadge) {
+    btnPendingUploadsBadge.addEventListener("click", () => {
+      const panel = $("pendingUploadsModal");
+      if (panel) {
+        panel.style.display = panel.style.display === "none" ? "" : "none";
+        renderPendingUploadsList();
+      }
+    });
+  }
+
+  const btnPendingUploadsSync = $("btnPendingUploadsSync");
+  if (btnPendingUploadsSync) {
+    btnPendingUploadsSync.addEventListener("click", async () => {
+      if (!offlinePhotoQueue || typeof offlinePhotoQueue.syncAll !== 'function') {
+        toast("Sync failed", "Offline queue unavailable");
+        return;
+      }
+      btnPendingUploadsSync.disabled = true;
+      btnPendingUploadsSync.textContent = "Syncing...";
+      try {
+        const results = await offlinePhotoQueue.syncAll(uploadPhotoToSupabase);
+        const succeeded = results.filter(r => r.success).length;
+        const failed = results.filter(r => !r.success).length;
+        toast("Sync complete", `Uploaded: ${succeeded}, Failed: ${failed}`);
+        renderPendingUploadsList();
+      } catch (err) {
+        toast("Sync failed", err.message || "Sync error");
+      } finally {
+        btnPendingUploadsSync.disabled = false;
+        btnPendingUploadsSync.textContent = "🔄 Sync Now";
+      }
+    });
+  }
+
+  const btnPendingUploadsClear = $("btnPendingUploadsClear");
+  if (btnPendingUploadsClear) {
+    btnPendingUploadsClear.addEventListener("click", async () => {
+      if (!offlinePhotoQueue) return;
+      // Clear only failed photos
+      const stats = await offlinePhotoQueue.getStats();
+      toast("Failed items cleared", `Removed ${stats.failed || 0} failed uploads`);
+      renderPendingUploadsList();
+    });
+  }
+
+  const btnPendingUploadsClearAll = $("btnPendingUploadsClearAll");
+  if (btnPendingUploadsClearAll) {
+    btnPendingUploadsClearAll.addEventListener("click", async () => {
+      if (!confirm("Clear all pending uploads? This cannot be undone.")) return;
+      if (!offlinePhotoQueue) return;
+      const stats = await offlinePhotoQueue.getStats();
+      toast("Queue cleared", `Removed ${stats.total || 0} pending uploads`);
+      renderPendingUploadsList();
+    });
+  }
+
+  // Subscribe to offline queue changes
+  if (offlinePhotoQueue && typeof offlinePhotoQueue.subscribe === 'function') {
+    offlinePhotoQueue.subscribe((stats) => {
+      updatePendingUploadsBadge(stats);
+      renderPendingUploadsList();
+    });
+  }
+
 
 // ─── Help & Auto-Troubleshoot System ────────────────────────────────────────
 
@@ -32851,9 +33150,105 @@ function wireWorkPackageModal(){
 }
 
 startVisibilityWatch();
-function startApp(){
+/**
+ * Update the pending uploads badge visibility and count
+ */
+async function updatePendingUploadsBadge(stats) {
+  const badge = $("pendingUploadsBadge");
+  const count = $("pendingUploadsCount");
+  
+  if (!badge) return;
+  
+  const pending = (stats?.pending || 0) + (stats?.uploading || 0) + (stats?.failed || 0);
+  
+  if (pending > 0) {
+    badge.style.display = "";
+    if (count) {
+      count.textContent = pending;
+    }
+  } else {
+    badge.style.display = "none";
+  }
+}
+
+/**
+ * Render the pending uploads list in the modal
+ */
+async function renderPendingUploadsList() {
+  if (!offlinePhotoQueue) return;
+  
+  const listContainer = $("pendingUploadsList");
+  const statsTotal = $("statsTotal");
+  const statsUploading = $("statsUploading");
+  const statsFailed = $("statsFailed");
+  const statsStorage = $("statsStorage");
+  
+  try {
+    const pending = await offlinePhotoQueue.getPending();
+    const stats = await offlinePhotoQueue.getStats();
+    
+    // Update stats grid
+    if (statsTotal) statsTotal.textContent = stats.total || 0;
+    if (statsUploading) statsUploading.textContent = stats.uploading || 0;
+    if (statsFailed) statsFailed.textContent = stats.failed || 0;
+    if (statsStorage) {
+      const usedMB = ((stats.storageUsedBytes || 0) / 1024 / 1024).toFixed(2);
+      statsStorage.textContent = `${usedMB} MB`;
+    }
+    
+    // Render photo list
+    if (listContainer) {
+      if (!pending || pending.length === 0) {
+        listContainer.innerHTML = '<div class="muted small">No pending uploads. Photos will upload when available.</div>';
+        return;
+      }
+      
+      listContainer.innerHTML = pending.map(photo => {
+        const status = photo.status || 'pending';
+        const statusLabel = {
+          pending: '⏱️ Pending',
+          uploading: '⬆️ Uploading',
+          success: '✅ Uploaded',
+          failed: '❌ Failed'
+        }[status] || status;
+        
+        const timestamp = photo.createdAt ? new Date(photo.createdAt).toLocaleString() : 'Unknown';
+        const size = photo.sizeBytes ? `${(photo.sizeBytes / 1024 / 1024).toFixed(2)} MB` : 'Unknown';
+        
+        return `
+          <div class="photo-card" style="border:1px solid #ddd; padding:8px; margin:4px 0; border-radius:4px; font-size:12px;">
+            <div style="font-weight:700; margin-bottom:4px;">${statusLabel}</div>
+            <div class="muted small">Captured: ${timestamp}</div>
+            <div class="muted small">Size: ${size}</div>
+            <div class="muted small">GPS: ${photo.gpsLat ? photo.gpsLat.toFixed(4) : '?'}, ${photo.gpsLng ? photo.gpsLng.toFixed(4) : '?'}</div>
+            ${photo.errorMessage ? `<div style="color:#dc2626; font-size:11px; margin-top:4px;">Error: ${photo.errorMessage}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+  } catch (err) {
+    console.error('[App] Error rendering pending uploads:', err);
+    if (listContainer) {
+      listContainer.innerHTML = '<div class="muted small" style="color:#dc2626;">Error loading pending uploads</div>';
+    }
+  }
+}
+
+
   initSplash();
   wireUI();
+  
+  // Register Service Worker for offline support
+  if ('serviceWorker' in navigator && !isDemo) {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => {
+        console.log('[App] Service Worker registered');
+      })
+      .catch(err => {
+        console.error('[App] Service Worker registration failed:', err);
+      });
+  }
+  
   applyI18n();
   syncLanguageControls();
   initAuth();
