@@ -255,6 +255,10 @@ var WS=[
    icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#D39A44" stroke-width="1.5"><rect x="2" y="5" width="14" height="10" rx="1.5"/><path d="M6 5V3.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V5"/><path d="M9 9v3M7.5 10.5h3"/></svg>'},
   {key:"office",title:"Office & Billing",a:"#EE835D",g:"rgba(238,131,93,.14)",ib:"rgba(216,90,48,.14)",sub:"Invoice review, approve billing, run reports",chips:["Invoices","Approve","Reports","Export"],
    icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#EE835D" stroke-width="1.5"><rect x="4" y="2.5" width="10" height="13" rx="1.5"/><path d="M6.5 6h5M6.5 9h5M6.5 12h3.5"/></svg>'},
+  {key:"warehouse",title:"Warehouse",a:"#FF9800",g:"rgba(255,152,0,.14)",ib:"rgba(255,152,0,.14)",sub:"Manage inventory, track equipment, process shipments",chips:["Inventory","Equipment","Shipments","Reports"],
+   icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#FF9800" stroke-width="1.5"><rect x="2" y="6" width="14" height="10" rx="1"/><path d="M6 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M9 10v2M7.5 11.5h3"/></svg>'},
+  {key:"supervisor",title:"Supervisor",a:"#9C27B0",g:"rgba(156,39,176,.14)",ib:"rgba(156,39,176,.14)",sub:"Oversee crews, review progress, manage schedules",chips:["Crew Oversight","Progress","Schedules","Reports"],
+   icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#9C27B0" stroke-width="1.5"><circle cx="9" cy="6" r="3"/><path d="M3 15c0-3 3-5 6-5s6 2 6 5"/></svg>'},
 ];
 
 /* ── BUILD HUB ── */
@@ -1088,6 +1092,149 @@ function getScenes(ws){
         $("elist").appendChild(d);
       });
       c.addEventListener("click",function(e){var b=e.target.closest("[data-fmt]");if(b)toast("⬇ Preparing "+b.dataset.fmt+" export...");});
+    }},
+  ];
+
+  /* WAREHOUSE */
+  if(ws.key==="warehouse") return [
+    {label:"Inventory",build:function(c){
+      var items=[
+        {name:"Fiber Optic Cable (500m)",qty:45,low:10,status:"In Stock"},
+        {name:"Splice Enclosures",qty:8,low:5,status:"Low Stock"},
+        {name:"OTDR Tester",qty:3,low:2,status:"In Stock"},
+        {name:"Fusion Splicer",qty:2,low:1,status:"In Stock"},
+        {name:"Cable Cutters",qty:12,low:8,status:"In Stock"},
+        {name:"Hard Hats",qty:4,low:10,status:"Critical Low"},
+      ];
+      c.innerHTML='<div class="stitle">Inventory Management</div>'
+        +'<div class="shint">Track stock levels and reorder when needed</div>'
+        +'<div style="display:flex;flex-direction:column;gap:6px;" id="invlist"></div>';
+      var list=document.getElementById("invlist");
+      items.forEach(function(item,i){
+        var statusColor=item.status==="In Stock"?"#1D9E75":item.status==="Low Stock"?"#D39A44":"#D85A30";
+        var d=document.createElement("div");
+        d.className="scard";
+        var reorderBtn = item.status !== "In Stock" ? '<button class="sbtn g" style="font-size:10px;padding:4px 8px;margin-left:8px;" onclick="toast(\'📦 Reorder request sent for '+item.name+'\')">Reorder</button>' : '';
+        d.innerHTML='<div class="srow" style="justify-content:space-between;align-items:center;">'
+          +'<div><div class="sct">'+item.name+'</div><div class="scs">Qty: '+item.qty+' (Low: '+item.low+')</div></div>'
+          +'<div class="srow" style="align-items:center;">'+reorderBtn+'<span class="sbadge" style="background:'+statusColor+'22;color:'+statusColor+';">'+item.status+'</span></div>'
+          +'</div>';
+        list.appendChild(d);
+      });
+    }},
+    {label:"Equipment",build:function(c){
+      var equip=[
+        {id:"EQ-001",name:"Truck #15",status:"Checked Out",tech:"John Doe",due:"2026-04-17"},
+        {id:"EQ-002",name:"Van #08",status:"Available",tech:"",due:""},
+        {id:"EQ-003",name:"Splicer Kit A",status:"Checked Out",tech:"Jane Smith",due:"2026-04-18"},
+        {id:"EQ-004",name:"OTDR Unit 2",status:"Maintenance",tech:"",due:""},
+      ];
+      c.innerHTML='<div class="stitle">Equipment Tracking</div>'
+        +'<div class="shint">Monitor equipment checkout and maintenance</div>'
+        +'<div style="display:flex;flex-direction:column;gap:6px;" id="eqlist"></div>';
+      var list=document.getElementById("eqlist");
+      equip.forEach(function(e,i){
+        var statusColor=e.status==="Available"?"#1D9E75":e.status==="Checked Out"?"#378ADD":"#D39A44";
+        var d=document.createElement("div");
+        d.className="scard";
+        d.innerHTML='<div class="srow" style="justify-content:space-between;align-items:flex-start;">'
+          +'<div><div class="sct">'+e.id+' · '+e.name+'</div>'
+          +'<div class="scs">Status: '+e.status+(e.tech?' · '+e.tech:'')+(e.due?' · Due: '+e.due:'')+'</div></div>'
+          +'<span class="sbadge" style="background:'+statusColor+'22;color:'+statusColor+';">'+e.status+'</span>'
+          +'</div>';
+        list.appendChild(d);
+      });
+    }},
+    {label:"Shipments",build:function(c){
+      var shipments=[
+        {id:"SH-2026-0415",desc:"Fiber Cable Replenishment",status:"In Transit",eta:"2026-04-18"},
+        {id:"SH-2026-0414",desc:"Splice Materials",status:"Delivered",eta:"2026-04-16"},
+        {id:"SH-2026-0413",desc:"Safety Equipment",status:"Processing",eta:"2026-04-20"},
+      ];
+      c.innerHTML='<div class="stitle">Shipment Tracking</div>'
+        +'<div class="shint">Monitor incoming and outgoing shipments</div>'
+        +'<div style="display:flex;flex-direction:column;gap:6px;" id="shlist"></div>';
+      var list=document.getElementById("shlist");
+      shipments.forEach(function(s,i){
+        var statusColor=s.status==="Delivered"?"#1D9E75":s.status==="In Transit"?"#378ADD":"#D39A44";
+        var d=document.createElement("div");
+        d.className="scard";
+        d.innerHTML='<div class="srow" style="justify-content:space-between;align-items:flex-start;">'
+          +'<div><div class="sct">'+s.id+'</div><div class="scs">'+s.desc+' · ETA: '+s.eta+'</div></div>'
+          +'<span class="sbadge" style="background:'+statusColor+'22;color:'+statusColor+';">'+s.status+'</span>'
+          +'</div>';
+        list.appendChild(d);
+      });
+    }},
+  ];
+
+  /* SUPERVISOR */
+  if(ws.key==="supervisor") return [
+    {label:"Crew Oversight",build:function(c){
+      var crews=[
+        {name:"Team Alpha",lead:"Mike Johnson",members:4,status:"On Site",location:"Downtown Fiber Build",progress:85},
+        {name:"Team Beta",lead:"Sarah Wilson",members:3,status:"En Route",location:"Suburban Expansion",progress:60},
+        {name:"Team Gamma",lead:"Tom Brown",members:5,status:"At Yard",location:"Maintenance Check",progress:20},
+      ];
+      c.innerHTML='<div class="stitle">Crew Oversight</div>'
+        +'<div class="shint">Monitor team locations and progress</div>'
+        +'<div style="display:flex;flex-direction:column;gap:6px;" id="crewlist"></div>';
+      var list=document.getElementById("crewlist");
+      crews.forEach(function(crew,i){
+        var statusColor=crew.status==="On Site"?"#1D9E75":crew.status==="En Route"?"#378ADD":"#D39A44";
+        var d=document.createElement("div");
+        d.className="scard";
+        d.innerHTML='<div class="srow" style="justify-content:space-between;align-items:flex-start;">'
+          +'<div><div class="sct">'+crew.name+' · '+crew.lead+'</div>'
+          +'<div class="scs">'+crew.members+' members · '+crew.location+'</div>'
+          +'<div class="spb" style="margin-top:6px;width:100%;"><div class="spf" style="width:'+crew.progress+'%;background:'+A+';"></div></div></div>'
+          +'<div class="srow" style="flex-direction:column;gap:4px;"><button class="sbtn g" style="font-size:10px;padding:4px 8px;" onclick="toast(\'📞 Calling '+crew.lead+'...\')">Call</button><span class="sbadge" style="background:'+statusColor+'22;color:'+statusColor+';">'+crew.status+'</span></div>'
+          +'</div>';
+        list.appendChild(d);
+      });
+    }},
+    {label:"Progress",build:function(c){
+      var projects=[
+        {name:"Downtown Fiber Build",progress:85,issues:2,deadline:"2026-05-01"},
+        {name:"Suburban Expansion",progress:60,issues:0,deadline:"2026-05-15"},
+        {name:"Maintenance Check",progress:20,issues:1,deadline:"2026-04-30"},
+      ];
+      c.innerHTML='<div class="stitle">Project Progress</div>'
+        +'<div class="shint">Track overall project completion and issues</div>'
+        +'<div style="display:flex;flex-direction:column;gap:6px;" id="projlist"></div>';
+      var list=document.getElementById("projlist");
+      projects.forEach(function(p,i){
+        var d=document.createElement("div");
+        d.className="scard";
+        d.innerHTML='<div><div class="sct">'+p.name+'</div>'
+          +'<div class="scs">Deadline: '+p.deadline+' · Issues: '+p.issues+'</div>'
+          +'<div class="spb" style="margin-top:6px;"><div class="spf" style="width:'+p.progress+'%;background:'+A+';"></div></div></div>';
+        list.appendChild(d);
+      });
+    }},
+    {label:"Schedules",build:function(c){
+      var schedule=[
+        {time:"08:00",event:"Team Alpha departs yard",type:"departure"},
+        {time:"09:30",event:"Team Beta safety briefing",type:"meeting"},
+        {time:"11:00",event:"Site inspection - Downtown",type:"inspection"},
+        {time:"14:00",event:"Equipment maintenance check",type:"maintenance"},
+        {time:"16:00",event:"Daily progress report",type:"report"},
+      ];
+      c.innerHTML='<div class="stitle">Daily Schedule</div>'
+        +'<div class="shint">Oversee scheduled activities and meetings</div>'
+        +'<div style="display:flex;flex-direction:column;gap:6px;" id="schlist"></div>';
+      var list=document.getElementById("schlist");
+      schedule.forEach(function(s,i){
+        var icon=s.type==="departure"?"🚚":s.type==="meeting"?"👥":s.type==="inspection"?"🔍":s.type==="maintenance"?"🔧":"📊";
+        var d=document.createElement("div");
+        d.className="scard";
+        d.innerHTML='<div class="srow" style="gap:10px;align-items:center;">'
+          +'<div style="font-size:18px;">'+icon+'</div>'
+          +'<div><div class="sct" style="font-size:12px;color:var(--dim);">'+s.time+'</div>'
+          +'<div class="sct">'+s.event+'</div></div>'
+          +'</div>';
+        list.appendChild(d);
+      });
     }},
   ];
 
