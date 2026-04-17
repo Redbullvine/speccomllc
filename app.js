@@ -30173,6 +30173,10 @@ async function loadProfile(client, userId){
   }
 
   if (error){
+    console.error("[profile] load failed", {
+      userId,
+      error,
+    });
     toast("Profile error", error.message);
     state.profile = null;
     setActiveOrgContext(null);
@@ -30181,26 +30185,58 @@ async function loadProfile(client, userId){
   if (!data){
     const email = String(state.user?.email || "").trim().toLowerCase();
     const fallbackName = email ? email.split("@")[0] : "";
-    await client
+    const { error: bootstrapError } = await client
       .from("profiles")
       .upsert({
         id: userId,
         display_name: fallbackName || null,
       }, { onConflict: "id" });
-    ({ data } = await client
+    if (bootstrapError){
+      console.error("[profile] bootstrap upsert failed", {
+        userId,
+        error: bootstrapError,
+      });
+    }
+    ({ data, error } = await client
       .from("profiles")
       .select(profileSelect)
       .eq("id", userId)
       .maybeSingle());
+    if (error){
+      console.error("[profile] reload after bootstrap failed", {
+        userId,
+        error,
+      });
+      toast("Profile error", error.message);
+      state.profile = null;
+      setActiveOrgContext(null);
+      return;
+    }
   }
   if (!data?.org_id){
     const { error: claimError } = await client.rpc("fn_claim_profile_invite");
+    if (claimError){
+      console.error("[profile] invite claim failed", {
+        userId,
+        error: claimError,
+      });
+    }
     if (!claimError){
-      ({ data } = await client
+      ({ data, error } = await client
         .from("profiles")
         .select(profileSelect)
         .eq("id", userId)
         .maybeSingle());
+      if (error){
+        console.error("[profile] reload after invite claim failed", {
+          userId,
+          error,
+        });
+        toast("Profile error", error.message);
+        state.profile = null;
+        setActiveOrgContext(null);
+        return;
+      }
     }
   }
   state.profile = data || null;
