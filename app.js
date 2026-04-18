@@ -1786,7 +1786,7 @@ function getSavedMapPanelVisible(){
 
 function getSavedLayersPanelOpen(){
   const raw = safeLocalStorageGet(LAYERS_PANEL_OPEN_KEY);
-  if (raw == null) return true;
+  if (raw == null) return !isMobileViewport();
   return raw === "1";
 }
 
@@ -2557,6 +2557,9 @@ function normalizePopupPhotos(items){
         createdBy: item?.createdBy || item?.created_by || "",
         url,
         createdAt: item?.createdAt || "",
+        gpsLat: Number.isFinite(Number(item?.gpsLat)) ? Number(item.gpsLat) : null,
+        gpsLng: Number.isFinite(Number(item?.gpsLng)) ? Number(item.gpsLng) : null,
+        gpsAccuracyM: Number.isFinite(Number(item?.gpsAccuracyM)) ? Number(item.gpsAccuracyM) : null,
       };
     })
     .filter(Boolean)
@@ -2604,14 +2607,14 @@ async function fetchSitePhotosForMapPopup(siteId){
   if (!state.client) return setCachedSitePhotos(key, []);
   let { data, error } = await state.client
     .from("site_media")
-    .select("id, media_path, created_by, created_at")
+    .select("id, media_path, created_by, created_at, gps_lat, gps_lng, gps_accuracy_m")
     .eq("site_id", siteId)
     .order("created_at", { ascending: false })
     .limit(6);
   if (error && isMissingColumnError(error, "created_by")){
     ({ data, error } = await state.client
       .from("site_media")
-      .select("id, media_path, created_at")
+      .select("id, media_path, created_at, gps_lat, gps_lng, gps_accuracy_m")
       .eq("site_id", siteId)
       .order("created_at", { ascending: false })
       .limit(6));
@@ -2642,6 +2645,9 @@ async function fetchSitePhotosForMapPopup(siteId){
       createdBy: row?.created_by || "",
       url,
       createdAt: row?.created_at || "",
+      gpsLat: row?.gps_lat ?? null,
+      gpsLng: row?.gps_lng ?? null,
+      gpsAccuracyM: row?.gps_accuracy_m ?? null,
     });
   }
   return setCachedSitePhotos(key, rows);
@@ -5549,6 +5555,7 @@ function buildSiteMarkerPopupHtml(site, {
   const codeMatch = evaluateCodeMatch(effectiveRequiredCodes, effectiveSiteCodes);
   const notesRaw = String(site?.notes || "");
   const canDeleteSite = !site?.is_pending && SpecCom.helpers.isRoot();
+  const canEditVerification = !site?.is_pending && (SpecCom.helpers.isRoot() || isOwner());
   const photos = normalizePopupPhotos(sitePhotos);
   const canManagePhotos = !site?.is_pending;
   const photoUrlsText = photos.map((item) => item.url).filter(Boolean).join("\n");
@@ -5572,11 +5579,22 @@ function buildSiteMarkerPopupHtml(site, {
     ? `<div class="scSitePopup-photo-empty">Loading photos...</div>`
     : photos.length
       ? `<div class="scSitePopup-photos">${photos.map((item) => `
-          <a class="photo" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">
-            <img src="${escapeHtml(item.url)}" alt="Site photo" loading="lazy" />
-          </a>${canManagePhotos && item.id && canDeleteSiteMediaItem(item) ? `
+          <div class="scSitePopup-photo-card">
+            <a class="photo" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">
+              <img src="${escapeHtml(item.url)}" alt="Site photo" loading="lazy" />
+            </a>
+            <div class="muted small" style="margin-top:6px;">
+              ${item.createdAt ? `Captured: ${escapeHtml(new Date(item.createdAt).toLocaleString())}` : "Captured: -"}
+            </div>
+            <div class="muted small">
+              ${(Number.isFinite(item.gpsLat) && Number.isFinite(item.gpsLng))
+                ? `GPS: ${escapeHtml(item.gpsLat.toFixed(6))}, ${escapeHtml(item.gpsLng.toFixed(6))}${Number.isFinite(item.gpsAccuracyM) ? ` (±${escapeHtml(String(Math.round(item.gpsAccuracyM)))}m)` : ""}`
+                : "GPS: -"}
+            </div>
+            ${canManagePhotos && item.id && canDeleteSiteMediaItem(item) ? `
             <button type="button" class="btn ghost small" data-popup-action="remove-photo" data-popup-photo-id="${escapeHtml(String(item.id))}">Remove</button>
-          ` : ""}
+            ` : ""}
+          </div>
         `).join("")}</div>`
       : `<div class="scSitePopup-photo-empty">No photos yet.</div>`;
   const photoUploadRow = canManagePhotos ? `
@@ -5635,9 +5653,6 @@ function buildSiteMarkerPopupHtml(site, {
           <textarea rows="3" data-popup-field="codes" placeholder="Example: HO-1(48), 1635CA">${escapeHtml(billedCodesCsv)}</textarea>
         </label>
       </div>
-      <div class="scSitePopup-actions">
-        <button type="button" class="scSitePopup-action" data-popup-action="save" data-popup-site-id="${escapeHtml(siteId)}">Save Codes</button>
-      </div>
       <div class="scSitePopup-edit-head">Photo urls</div>
       <div class="scSitePopup-edit-grid">
         <label class="scSitePopup-field is-full">
@@ -5652,8 +5667,11 @@ function buildSiteMarkerPopupHtml(site, {
       <div class="scSitePopup-edit-grid">
         <label class="scSitePopup-field is-full">
           <span>Notes</span>
-          <textarea rows="4" readonly>${escapeHtml(notesRaw || "-")}</textarea>
+          <textarea rows="4" data-popup-field="notes" ${canEditVerification ? "" : "readonly"} placeholder="Field notes, proof details, access notes...">${escapeHtml(notesRaw)}</textarea>
         </label>
+      </div>
+      <div class="scSitePopup-actions">
+        <button type="button" class="scSitePopup-action" data-popup-action="save" data-popup-site-id="${escapeHtml(siteId)}">Save Codes + Notes</button>
       </div>
       <div class="scSitePopup-photo-head">Photos</div>
       ${photosHtml}
@@ -21308,6 +21326,9 @@ function setMapFieldCreateOpen(open){
   state.map.fieldCreateOpen = Boolean(open);
   if (open){
     state.map.fieldPanelVisible = true;
+    if (isMobileViewport()){
+      setLayersPanelOpen(false);
+    }
   }
   if (!open){
     state.map.fieldCreateRecentlyClosedUntil = Date.now() + 450;
@@ -21341,14 +21362,27 @@ function setMapFieldCreateOpen(open){
   renderMapFieldPanel();
 }
 
+async function openSitePopupForSiteId(siteId, { center = true, syncSelection = true } = {}){
+  const siteKey = toSiteIdKey(siteId);
+  if (!siteKey) return false;
+  const site = getVisibleSiteByIdKey(siteKey);
+  if (!site) return false;
+  if (center){
+    focusSiteOnMap(siteKey);
+  }
+  const marker = state.map.markers.get(siteKey) || null;
+  if (!marker) return false;
+  setMapPopupSiteContext(marker, site);
+  await renderMapPopupActiveSite({ syncSelection });
+  return true;
+}
+
 async function openLocationForField(siteId, { center = true, forAdd = false } = {}){
   if (!siteId) return;
   await setActiveSite(siteId, { openOverview: false });
   setMapFieldSelectedSite(siteId);
-  if (center){
-    focusSiteOnMap(siteId);
-  }
-  if (forAdd){
+  const popupOpened = await openSitePopupForSiteId(siteId, { center, syncSelection: true });
+  if (forAdd && !popupOpened){
     setDrawerTab("data", { open: true });
   }
 }
@@ -21655,6 +21689,9 @@ async function createFieldLocationFromCurrentGps(){
   if ($("mapFieldLocationNotes")) $("mapFieldLocationNotes").value = "";
   if (billingInput) billingInput.value = "";
   renderMapFieldPanel();
+  if (createdSiteId){
+    await openLocationForField(createdSiteId, { center: true, forAdd: true });
+  }
 }
 
 function getSiteSearchResultSet(){
