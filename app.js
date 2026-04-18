@@ -1785,8 +1785,9 @@ function getSavedMapPanelVisible(){
 }
 
 function getSavedLayersPanelOpen(){
+  if (isMobileViewport()) return false;
   const raw = safeLocalStorageGet(LAYERS_PANEL_OPEN_KEY);
-  if (raw == null) return !isMobileViewport();
+  if (raw == null) return true;
   return raw === "1";
 }
 
