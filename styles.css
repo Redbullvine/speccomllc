@@ -4070,9 +4070,14 @@ body.map-mode .map-canvas .leaflet-control-zoom a{
   body.map-mode .topbar-actions #btnMenu{
     display:inline-flex !important;
   }
+  body.map-mode .content,
+  body.map-mode .view,
+  body.map-mode #viewMap{
+    padding-bottom:0 !important;
+  }
   body.map-mode .map-workspace{
-    height:calc(100vh - 45px);
-    min-height:calc(100vh - 45px);
+    height:calc(100dvh - 45px - 84px - env(safe-area-inset-bottom));
+    min-height:calc(100dvh - 45px - 84px - env(safe-area-inset-bottom));
   }
   body.map-mode .map-menu-btn{
     top:10px;
@@ -4103,18 +4108,56 @@ body.map-mode .map-canvas .leaflet-control-zoom a{
     border-radius: 0;
   }
   body.map-mode .map-view-floating{
+    top:auto;
+    bottom:calc(96px + env(safe-area-inset-bottom));
     right:10px;
-    top:54px;
-    min-width:162px;
-    max-width:min(170px, calc(100vw - 20px));
+    left:auto;
+    min-width:0;
+    width:auto;
+    max-width:min(220px, calc(100vw - 20px));
+    padding:6px;
+    gap:0;
+    border-radius:14px;
+  }
+  body.map-mode .map-view-floating > .row:first-child,
+  body.map-mode .map-view-floating > .row:nth-child(2){
+    display:none;
   }
   body.map-mode .map-basemap-switch{
     top:10px;
     left:62%;
     transform:translateX(-50%);
   }
+  body.map-mode #mapViewDropdownButton{
+    display:flex;
+    min-width:0;
+    width:auto;
+    padding:8px 12px;
+    border-radius:999px;
+    background:#ffffff;
+    color:#111827;
+    box-shadow:0 8px 20px rgba(15,23,42,.18);
+  }
+  body.map-mode .map-view-dropdown{
+    min-width:0;
+  }
+  body.map-mode .map-view-menu{
+    position:absolute;
+    right:0;
+    left:auto;
+    bottom:calc(100% + 8px);
+    top:auto;
+    min-width:190px;
+    max-width:min(240px, calc(100vw - 20px));
+    border:1px solid rgba(15,23,42,.14);
+    border-radius:12px;
+    background:rgba(245,247,250,.98);
+    box-shadow:0 14px 30px rgba(15,23,42,.2);
+    padding:8px;
+    gap:8px;
+  }
   body.map-mode .map-canvas .leaflet-top.leaflet-left{
-    bottom:12px;
+    bottom:calc(98px + env(safe-area-inset-bottom));
     right:10px;
   }
   body.map-mode .redline-entry-btn{
@@ -4130,13 +4173,24 @@ body.map-mode .map-canvas .leaflet-control-zoom a{
   body.map-mode .redline-panel{
     left:10px;
     right:10px;
-    bottom:68px;
+    bottom:calc(102px + env(safe-area-inset-bottom));
     top:auto;
     max-height:52%;
   }
   body.map-mode .redline-legend{
     left:10px;
-    bottom:10px;
+    bottom:calc(96px + env(safe-area-inset-bottom));
+    max-width:min(220px, calc(100vw - 20px));
+    opacity:.96;
+  }
+}
+
+@supports not (height: 100dvh){
+  @media (max-width: 480px){
+    body.map-mode .map-workspace{
+      height:calc(100vh - 45px - 84px - env(safe-area-inset-bottom));
+      min-height:calc(100vh - 45px - 84px - env(safe-area-inset-bottom));
+    }
   }
 }
 
