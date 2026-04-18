@@ -4117,6 +4117,7 @@ body.map-mode .map-canvas .leaflet-control-zoom a{
     bottom:calc(96px + env(safe-area-inset-bottom));
     right:10px;
     left:auto;
+    z-index:720;
     min-width:0;
     width:auto;
     max-width:min(220px, calc(100vw - 20px));
@@ -4152,6 +4153,7 @@ body.map-mode .map-canvas .leaflet-control-zoom a{
     left:auto;
     bottom:calc(100% + 8px);
     top:auto;
+    z-index:720;
     min-width:190px;
     max-width:min(240px, calc(100vw - 20px));
     border:1px solid rgba(15,23,42,.14);

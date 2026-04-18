@@ -21192,6 +21192,10 @@ function renderMapFieldPanel(){
   if (showBtn){
     showBtn.style.display = panelVisible ? "none" : "";
   }
+  if (panelVisible && isMobileViewport()){
+    setLayersPanelOpen(false, { persist: true });
+    setMapViewDropdownOpen(false);
+  }
   if (!panelVisible) return;
   const createOpen = Boolean(state.map.fieldCreateOpen);
   createWrap.hidden = !createOpen;
@@ -21310,6 +21314,10 @@ function renderMapFieldPanel(){
 function setMapFieldPanelVisible(visible){
   const next = Boolean(visible);
   state.map.fieldPanelVisible = next;
+  if (next && isMobileViewport()){
+    setLayersPanelOpen(false, { persist: true });
+    setMapViewDropdownOpen(false);
+  }
   if (!next && state.map.fieldCreateOpen){
     state.map.fieldCreateOpen = false;
     document.body.classList.remove("map-create-open");
