@@ -22,7 +22,7 @@ using (
             select 1
             from public.profiles p
             where p.id = auth.uid()
-              and public.effective_role_code(p.role_code, p.role) in ('ROOT','OWNER','ADMIN','PROJECT_MANAGER','SUPPORT')
+              and upper(coalesce(p.role, '')) in ('ROOT','OWNER','ADMIN','PROJECT_MANAGER','SUPPORT','PRIME')
           )
         )
       )
@@ -46,7 +46,7 @@ with check (
             select 1
             from public.profiles p
             where p.id = auth.uid()
-              and public.effective_role_code(p.role_code, p.role) in ('ROOT','OWNER','ADMIN','PROJECT_MANAGER','SUPPORT')
+              and upper(coalesce(p.role, '')) in ('ROOT','OWNER','ADMIN','PROJECT_MANAGER','SUPPORT','PRIME')
           )
         )
       )
@@ -69,7 +69,7 @@ using (
             select 1
             from public.profiles p
             where p.id = auth.uid()
-              and public.effective_role_code(p.role_code, p.role) in ('ROOT','OWNER','ADMIN','PROJECT_MANAGER','SUPPORT')
+              and upper(coalesce(p.role, '')) in ('ROOT','OWNER','ADMIN','PROJECT_MANAGER','SUPPORT','PRIME')
           )
         )
       )
@@ -80,7 +80,7 @@ using (
       select 1
       from public.profiles p
       where p.id = auth.uid()
-        and public.effective_role_code(p.role_code, p.role) in ('ROOT','OWNER','ADMIN','PROJECT_MANAGER','SUPPORT')
+        and upper(coalesce(p.role, '')) in ('ROOT','OWNER','ADMIN','PROJECT_MANAGER','SUPPORT','PRIME')
     )
   )
 );

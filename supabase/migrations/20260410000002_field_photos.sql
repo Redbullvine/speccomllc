@@ -30,7 +30,7 @@ using (
       join public.projects pr on pr.id = field_photos.project_id
       where p.id = auth.uid()
         and (
-          public.effective_role_code(p.role_code, p.role) = 'ROOT'
+          upper(coalesce(p.role, '')) = 'ROOT'
           or pr.org_id = p.org_id
         )
     )
@@ -51,7 +51,7 @@ with check (
       join public.projects pr on pr.id = field_photos.project_id
       where p.id = auth.uid()
         and (
-          public.effective_role_code(p.role_code, p.role) = 'ROOT'
+          upper(coalesce(p.role, '')) = 'ROOT'
           or pr.org_id = p.org_id
         )
     )
