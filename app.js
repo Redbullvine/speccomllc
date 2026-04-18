@@ -29103,6 +29103,260 @@ function runShowcaseAction(action){
   toast("Control Center", "Opening Projects.");
 }
 
+const FIELD_OPS_STUDIO_KEY = "speccom.fieldOpsStudio.v1";
+
+const FIELD_OPS_WORKSPACES = [
+  {
+    key: "technician",
+    title: "Technician",
+    accent: "#378ADD",
+    iconClass: "icon-blue",
+    summary: "Service installs with forgiving proof capture, customer notes, and clean handoff.",
+    chips: ["Install", "Photos", "GPS", "Submit"],
+    iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5"><path d="M9 2v6l4 2"/><circle cx="9" cy="9" r="6"/></svg>',
+    fields: [
+      { key: "assignment", label: "Work Order / Customer", type: "text", placeholder: "WO-4821 / Johnson install" },
+      { key: "address", label: "Address / Area", type: "text", placeholder: "124 Cedar Lane, Ruidoso NM" },
+      { key: "install_type", label: "Install Type", type: "select", options: ["Fiber Install", "Trouble Ticket", "Repair Visit", "Equipment Swap"] },
+      { key: "proof_status", label: "Proof Package", type: "select", options: ["Not Started", "Photos Captured", "GPS + Time Verified", "Ready to Submit"] },
+      { key: "codes_used", label: "Codes / Material Used", type: "textarea", placeholder: "ONT-1 1\nDROPCLAMP 2\nROUTER 1" },
+      { key: "notes", label: "Field Notes", type: "textarea", placeholder: "Customer requested router on west wall. Dog in yard. Burial path clear." },
+    ],
+  },
+  {
+    key: "splicer",
+    title: "Splicer",
+    accent: "#1D9E75",
+    iconClass: "icon-teal",
+    summary: "Main line work with closure notes, materials, closure progress, and proof that survives bad field days.",
+    chips: ["Closure", "Material", "Proof", "Edit Anytime"],
+    iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><path d="M3 9h12"/><path d="M6 5l-3 4 3 4"/><path d="M12 5l3 4-3 4"/></svg>',
+    fields: [
+      { key: "segment", label: "Segment / Route", type: "text", placeholder: "Ruidoso Fire Rebuild / Segment 4" },
+      { key: "closure_id", label: "Closure / Location", type: "text", placeholder: "MH-1635CA_03" },
+      { key: "work_stage", label: "Work Stage", type: "select", options: ["Prep", "In Progress", "Waiting on Material", "Ready for Review"] },
+      { key: "material_used", label: "Material Used", type: "textarea", placeholder: "FBSP-2 3\nFBOSC-12 1\nFBTEST 1" },
+      { key: "proof_status", label: "Proof Status", type: "select", options: ["No Photos Yet", "Photos + GPS Saved", "Codes Entered", "Ready to Turn In"] },
+      { key: "notes", label: "Splice Notes", type: "textarea", placeholder: "Slack added at vault. Span clean. Need one follow-up photo after cleanup." },
+    ],
+  },
+  {
+    key: "drop_crew",
+    title: "Drop Crew",
+    accent: "#D39A44",
+    iconClass: "icon-amber",
+    summary: "House-drop jobs with address proof, install notes, and simple closeout that crews will actually finish.",
+    chips: ["House Drop", "Address", "Photos", "Closeout"],
+    iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#D39A44" stroke-width="1.5"><path d="M3 8.5L9 3l6 5.5"/><path d="M5 7.8V15h8V7.8"/><path d="M8 15v-4h2v4"/></svg>',
+    fields: [
+      { key: "assignment", label: "Address / Ticket", type: "text", placeholder: "578 Aspen Dr / DROP-204" },
+      { key: "drop_length", label: "Drop Length / Type", type: "text", placeholder: "182 ft aerial" },
+      { key: "status", label: "Crew Status", type: "select", options: ["On Deck", "At House", "Needs Retry", "Finished"] },
+      { key: "proof_status", label: "Proof Package", type: "select", options: ["Address Photo Missing", "Before / After Captured", "GPS / Time Locked", "Ready for PM"] },
+      { key: "codes_used", label: "Codes / Hardware", type: "textarea", placeholder: "DROP-200 1\nHOOK 2\nNID 1" },
+      { key: "notes", label: "House Notes", type: "textarea", placeholder: "Dog gate locked. Neighbor side path used. Customer requested line tuck under deck." },
+    ],
+  },
+  {
+    key: "warehouse",
+    title: "Warehouse",
+    accent: "#EE835D",
+    iconClass: "icon-coral",
+    summary: "Inventory movement, truck loads, and clean counts without office clutter or role friction.",
+    chips: ["Inventory", "Truck Load", "Counts", "Corrections Welcome"],
+    iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#EE835D" stroke-width="1.5"><rect x="3" y="3" width="12" height="12" rx="1.5"/><path d="M3 8h12"/><path d="M8.5 3v12"/></svg>',
+    fields: [
+      { key: "assignment", label: "Truck / Crew", type: "text", placeholder: "Truck 12 / Reyes Crew" },
+      { key: "movement_type", label: "Movement Type", type: "select", options: ["Load Out", "Return", "Cycle Count", "Damage / Missing"] },
+      { key: "item_summary", label: "Item / Quantity", type: "textarea", placeholder: "FBOSC-12 4\nDROPCLAMP 18\nNID 6" },
+      { key: "bin_location", label: "Bin / Yard Location", type: "text", placeholder: "Yard C / Rack 2 / Bin 14" },
+      { key: "status", label: "Record Status", type: "select", options: ["Draft", "Needs Review", "Confirmed", "Closed"] },
+      { key: "notes", label: "Warehouse Notes", type: "textarea", placeholder: "2 damaged boxes set aside. Short 1 clamp pack. Crew signed for loadout." },
+    ],
+  },
+];
+
+function getDefaultFieldOpsStudioState(){
+  const drafts = {};
+  FIELD_OPS_WORKSPACES.forEach((workspace) => {
+    drafts[workspace.key] = { workspace: workspace.key, updatedAt: "" };
+    workspace.fields.forEach((field) => {
+      drafts[workspace.key][field.key] = field.type === "select" ? String(field.options?.[0] || "") : "";
+    });
+  });
+  return { activeWorkspace: FIELD_OPS_WORKSPACES[0].key, drafts };
+}
+
+function loadFieldOpsStudioState(){
+  const defaults = getDefaultFieldOpsStudioState();
+  let parsed = null;
+  try { parsed = JSON.parse(safeLocalStorageGet(FIELD_OPS_STUDIO_KEY) || "null"); } catch {}
+  if (!parsed || typeof parsed !== "object") return defaults;
+  const next = { activeWorkspace: defaults.activeWorkspace, drafts: { ...defaults.drafts } };
+  if (FIELD_OPS_WORKSPACES.some((workspace) => workspace.key === parsed.activeWorkspace)){
+    next.activeWorkspace = parsed.activeWorkspace;
+  }
+  FIELD_OPS_WORKSPACES.forEach((workspace) => {
+    const incoming = parsed?.drafts?.[workspace.key];
+    if (incoming && typeof incoming === "object"){
+      next.drafts[workspace.key] = { ...defaults.drafts[workspace.key], ...incoming };
+    }
+  });
+  return next;
+}
+
+function saveFieldOpsStudioState(nextState){
+  safeLocalStorageSet(FIELD_OPS_STUDIO_KEY, JSON.stringify(nextState));
+}
+
+function getFieldOpsWorkspaceMeta(workspaceKey){
+  return FIELD_OPS_WORKSPACES.find((item) => item.key === workspaceKey) || FIELD_OPS_WORKSPACES[0];
+}
+
+function formatFieldOpsStudioTimestamp(raw){
+  if (!raw) return "Not saved yet";
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return "Saved";
+  return `Saved ${parsed.toLocaleString()}`;
+}
+
+function buildFieldOpsWorkspaceFieldsHtml(workspace, draft){
+  return workspace.fields.map((field) => {
+    const current = String(draft?.[field.key] || "");
+    if (field.type === "textarea"){
+      return `<label class="field-ops-form-field is-full"><span>${escapeHtml(field.label)}</span><textarea data-field-ops-key="${escapeHtml(field.key)}" rows="4" placeholder="${escapeHtml(field.placeholder || "")}">${escapeHtml(current)}</textarea></label>`;
+    }
+    if (field.type === "select"){
+      return `<label class="field-ops-form-field"><span>${escapeHtml(field.label)}</span><select data-field-ops-key="${escapeHtml(field.key)}">${(field.options || []).map((option) => `<option value="${escapeHtml(option)}"${option === current ? " selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select></label>`;
+    }
+    return `<label class="field-ops-form-field"><span>${escapeHtml(field.label)}</span><input data-field-ops-key="${escapeHtml(field.key)}" type="text" value="${escapeHtml(current)}" placeholder="${escapeHtml(field.placeholder || "")}" /></label>`;
+  }).join("");
+}
+
+function renderFieldOpsStudioShell(){
+  const stateData = loadFieldOpsStudioState();
+  const activeWorkspace = getFieldOpsWorkspaceMeta(stateData.activeWorkspace);
+  const activeDraft = stateData.drafts[activeWorkspace.key] || {};
+  return `
+    <section class="field-ops-studio">
+      <div class="field-ops-hero">
+        <div>
+          <div class="field-ops-kicker">Field Ops Studio</div>
+          <h2>Real field work, forgiving edits, demo-side mojo.</h2>
+          <p>Every workspace autosaves, stays editable, and keeps the hard labor flow front and center. No office clutter. No punishments for honest mistakes.</p>
+        </div>
+        <div class="field-ops-hero-note">
+          <div class="field-ops-hero-pill">Autosave on every change</div>
+          <div class="field-ops-hero-pill">Edit and resubmit anytime</div>
+          <div class="field-ops-hero-pill">Built for messy real crews</div>
+        </div>
+      </div>
+      <div class="field-ops-shell">
+        <div class="field-ops-card-grid">
+          ${FIELD_OPS_WORKSPACES.map((workspace) => {
+            const draft = stateData.drafts[workspace.key] || {};
+            const isActive = workspace.key === activeWorkspace.key;
+            return `<article class="field-ops-card${isActive ? " is-active" : ""}" style="--field-ops-accent:${workspace.accent};"><div class="field-ops-card-icon ${workspace.iconClass}">${workspace.iconSvg}</div><div class="field-ops-card-title">${escapeHtml(workspace.title)}</div><div class="field-ops-card-desc">${escapeHtml(workspace.summary)}</div><div class="field-ops-card-tags">${workspace.chips.map((chip) => `<span class="field-ops-chip">${escapeHtml(chip)}</span>`).join("")}</div><div class="field-ops-card-footer"><div class="field-ops-card-save">${escapeHtml(formatFieldOpsStudioTimestamp(draft.updatedAt))}</div><button class="field-ops-open-btn" type="button" data-field-ops-open="${escapeHtml(workspace.key)}">${isActive ? "Open Now" : "Open Workspace"}</button></div></article>`;
+          }).join("")}
+        </div>
+        <section class="field-ops-workspace-panel" style="--field-ops-accent:${activeWorkspace.accent};">
+          <div class="field-ops-panel-head">
+            <div>
+              <div class="field-ops-panel-kicker">${escapeHtml(activeWorkspace.title)} Workspace</div>
+              <div class="field-ops-panel-title">${escapeHtml(activeWorkspace.summary)}</div>
+            </div>
+            <div class="field-ops-panel-meta">
+              <span class="field-ops-state-pill">${escapeHtml(formatFieldOpsStudioTimestamp(activeDraft.updatedAt))}</span>
+              <button type="button" class="field-ops-reset-btn" data-field-ops-reset="${escapeHtml(activeWorkspace.key)}">Reset Draft</button>
+            </div>
+          </div>
+          <div class="field-ops-proof-strip">
+            <div class="field-ops-proof-card"><strong>Proof</strong><span>Photos, GPS, time, codes, notes</span></div>
+            <div class="field-ops-proof-card"><strong>Save</strong><span>Draft first, submit later</span></div>
+            <div class="field-ops-proof-card"><strong>Edit</strong><span>Fix it without losing progress</span></div>
+          </div>
+          <form class="field-ops-form" id="fieldOpsStudioForm" data-field-ops-workspace="${escapeHtml(activeWorkspace.key)}">
+            ${buildFieldOpsWorkspaceFieldsHtml(activeWorkspace, activeDraft)}
+          </form>
+          <div class="field-ops-panel-actions">
+            <button type="button" class="field-ops-primary-btn" data-field-ops-save="${escapeHtml(activeWorkspace.key)}">Save Work</button>
+            <button type="button" class="field-ops-secondary-btn" data-field-ops-submit="${escapeHtml(activeWorkspace.key)}">Mark Ready for Supervisor</button>
+          </div>
+        </section>
+      </div>
+    </section>
+  `;
+}
+
+function bindFieldOpsStudioUi(root){
+  root.querySelectorAll("[data-field-ops-open]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const stateData = loadFieldOpsStudioState();
+      stateData.activeWorkspace = String(button.dataset.fieldOpsOpen || FIELD_OPS_WORKSPACES[0].key);
+      saveFieldOpsStudioState(stateData);
+      renderDemoShowcaseHome();
+    });
+  });
+  root.querySelectorAll("[data-field-ops-key]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const workspaceKey = root.querySelector("#fieldOpsStudioForm")?.dataset.fieldOpsWorkspace;
+      const fieldKey = input.dataset.fieldOpsKey;
+      if (!workspaceKey || !fieldKey) return;
+      const stateData = loadFieldOpsStudioState();
+      const draft = stateData.drafts[workspaceKey];
+      if (!draft) return;
+      draft[fieldKey] = input.value;
+      draft.updatedAt = new Date().toISOString();
+      saveFieldOpsStudioState(stateData);
+      const savedLabel = root.querySelector(".field-ops-state-pill");
+      if (savedLabel){
+        savedLabel.textContent = formatFieldOpsStudioTimestamp(draft.updatedAt);
+      }
+    });
+  });
+  root.querySelectorAll("[data-field-ops-reset]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const workspaceKey = String(button.dataset.fieldOpsReset || "");
+      if (!workspaceKey) return;
+      const defaults = getDefaultFieldOpsStudioState();
+      const stateData = loadFieldOpsStudioState();
+      stateData.drafts[workspaceKey] = { ...defaults.drafts[workspaceKey] };
+      stateData.activeWorkspace = workspaceKey;
+      saveFieldOpsStudioState(stateData);
+      renderDemoShowcaseHome();
+      toast("Field Ops", `${getFieldOpsWorkspaceMeta(workspaceKey).title} draft reset.`);
+    });
+  });
+  root.querySelectorAll("[data-field-ops-save]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const workspaceKey = String(button.dataset.fieldOpsSave || "");
+      if (!workspaceKey) return;
+      const stateData = loadFieldOpsStudioState();
+      const draft = stateData.drafts[workspaceKey];
+      if (!draft) return;
+      draft.updatedAt = new Date().toISOString();
+      saveFieldOpsStudioState(stateData);
+      renderDemoShowcaseHome();
+      toast("Field Ops", `${getFieldOpsWorkspaceMeta(workspaceKey).title} work saved.`);
+    });
+  });
+  root.querySelectorAll("[data-field-ops-submit]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const workspaceKey = String(button.dataset.fieldOpsSubmit || "");
+      if (!workspaceKey) return;
+      const stateData = loadFieldOpsStudioState();
+      const draft = stateData.drafts[workspaceKey];
+      if (!draft) return;
+      if ("proof_status" in draft) draft.proof_status = "Ready for Supervisor";
+      if ("status" in draft) draft.status = "Confirmed";
+      draft.updatedAt = new Date().toISOString();
+      saveFieldOpsStudioState(stateData);
+      renderDemoShowcaseHome();
+      toast("Field Ops", `${getFieldOpsWorkspaceMeta(workspaceKey).title} marked ready for supervisor.`);
+    });
+  });
+}
+
 function renderDemoShowcaseHome(){
   const wrap = $("demoShowcaseHome");
   if (!wrap) return;
@@ -29224,6 +29478,9 @@ function renderDemoShowcaseHome(){
         </button>
       </div>
     </div>
+    <div style="padding:0 20px 4px;">
+      ${renderFieldOpsStudioShell()}
+    </div>
     <div class="section-label">Workspaces</div>
     <div class="ws-grid">
       ${workspaces.map((workspace) => `
@@ -29309,6 +29566,7 @@ function renderDemoShowcaseHome(){
   void loadWeather(citySeed, String(state.activeProject?.id || state.activeProject?.name || "").trim());
   currentMsgTab = "company";
   void loadBoardMessages("company");
+  bindFieldOpsStudioUi(wrap);
 }
 
 function renderProofChecklist(){
