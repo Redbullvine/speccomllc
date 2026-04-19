@@ -29113,6 +29113,8 @@ const FIELD_OPS_WORKSPACES = [
     iconClass: "icon-blue",
     summary: "Service installs with forgiving proof capture, customer notes, and clean handoff.",
     chips: ["Install", "Photos", "GPS", "Submit"],
+    launchAction: { type: "view", target: "viewTechnician", label: "Open Technician Live" },
+    supportAction: { type: "view", target: "viewMap", fallbackViews: ["viewNodes", "viewDashboard"], label: "Open Proof Map" },
     iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5"><path d="M9 2v6l4 2"/><circle cx="9" cy="9" r="6"/></svg>',
     fields: [
       { key: "assignment", label: "Work Order / Customer", type: "text", placeholder: "WO-4821 / Johnson install" },
@@ -29130,6 +29132,8 @@ const FIELD_OPS_WORKSPACES = [
     iconClass: "icon-teal",
     summary: "Main line work with closure notes, materials, closure progress, and proof that survives bad field days.",
     chips: ["Closure", "Material", "Proof", "Edit Anytime"],
+    launchAction: { type: "view", target: "viewMap", fallbackViews: ["viewNodes", "viewDashboard"], label: "Open Splice Map" },
+    supportAction: { type: "view", target: "viewNodes", fallbackViews: ["viewDashboard"], label: "Open Site Workspace" },
     iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><path d="M3 9h12"/><path d="M6 5l-3 4 3 4"/><path d="M12 5l3 4-3 4"/></svg>',
     fields: [
       { key: "segment", label: "Segment / Route", type: "text", placeholder: "Ruidoso Fire Rebuild / Segment 4" },
@@ -29147,6 +29151,8 @@ const FIELD_OPS_WORKSPACES = [
     iconClass: "icon-amber",
     summary: "House-drop jobs with address proof, install notes, and simple closeout that crews will actually finish.",
     chips: ["House Drop", "Address", "Photos", "Closeout"],
+    launchAction: { type: "view", target: "viewMap", fallbackViews: ["viewNodes", "viewDashboard"], label: "Open Drop Map" },
+    supportAction: { type: "view", target: "viewTechnician", fallbackViews: ["viewDashboard"], label: "Open Field Task List" },
     iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#D39A44" stroke-width="1.5"><path d="M3 8.5L9 3l6 5.5"/><path d="M5 7.8V15h8V7.8"/><path d="M8 15v-4h2v4"/></svg>',
     fields: [
       { key: "assignment", label: "Address / Ticket", type: "text", placeholder: "578 Aspen Dr / DROP-204" },
@@ -29164,6 +29170,8 @@ const FIELD_OPS_WORKSPACES = [
     iconClass: "icon-coral",
     summary: "Inventory movement, truck loads, and clean counts without office clutter or role friction.",
     chips: ["Inventory", "Truck Load", "Counts", "Corrections Welcome"],
+    launchAction: { type: "view", target: "viewCatalog", label: "Open Inventory Live" },
+    supportAction: { type: "view", target: "viewWarehouseScan", fallbackViews: ["viewCatalog", "viewDashboard"], label: "Open Scan Mode" },
     iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#EE835D" stroke-width="1.5"><rect x="3" y="3" width="12" height="12" rx="1.5"/><path d="M3 8h12"/><path d="M8.5 3v12"/></svg>',
     fields: [
       { key: "assignment", label: "Truck / Crew", type: "text", placeholder: "Truck 12 / Reyes Crew" },
@@ -29220,6 +29228,49 @@ function formatFieldOpsStudioTimestamp(raw){
   return `Saved ${parsed.toLocaleString()}`;
 }
 
+function getFieldOpsDraftStatusLabel(workspace, draft){
+  if (!draft) return "Fresh draft";
+  if (draft.proof_status){
+    const label = String(draft.proof_status).trim();
+    if (label) return label;
+  }
+  if (draft.status){
+    const label = String(draft.status).trim();
+    if (label) return label;
+  }
+  if (draft.work_stage){
+    const label = String(draft.work_stage).trim();
+    if (label) return label;
+  }
+  if (draft.movement_type){
+    return `${draft.movement_type} draft`;
+  }
+  return `${workspace.title} draft`;
+}
+
+function getFieldOpsStudioSummary(stateData){
+  const drafts = FIELD_OPS_WORKSPACES.map((workspace) => stateData.drafts?.[workspace.key] || {});
+  const touchedCount = drafts.filter((draft) => String(draft.updatedAt || "").trim()).length;
+  const readyCount = drafts.filter((draft) => {
+    const combined = `${draft.proof_status || ""} ${draft.status || ""} ${draft.work_stage || ""}`.toLowerCase();
+    return combined.includes("ready") || combined.includes("confirmed");
+  }).length;
+  return {
+    touchedCount,
+    readyCount,
+    activeCount: FIELD_OPS_WORKSPACES.length - readyCount,
+  };
+}
+
+function buildFieldOpsWorkspaceActionButton(action, className){
+  if (!action) return "";
+  const payload = buildShowcaseActionPayload(action, {
+    label: action.label || "Open Workspace",
+    fallbackViews: action.fallbackViews || [],
+  });
+  return `<button type="button" class="${className}" data-showcase-action='${escapeHtml(JSON.stringify(payload))}'>${escapeHtml(action.label || "Open Workspace")}</button>`;
+}
+
 function buildFieldOpsWorkspaceFieldsHtml(workspace, draft){
   return workspace.fields.map((field) => {
     const current = String(draft?.[field.key] || "");
@@ -29237,6 +29288,7 @@ function renderFieldOpsStudioShell(){
   const stateData = loadFieldOpsStudioState();
   const activeWorkspace = getFieldOpsWorkspaceMeta(stateData.activeWorkspace);
   const activeDraft = stateData.drafts[activeWorkspace.key] || {};
+  const summary = getFieldOpsStudioSummary(stateData);
   return `
     <section class="field-ops-studio">
       <div class="field-ops-hero">
@@ -29251,12 +29303,26 @@ function renderFieldOpsStudioShell(){
           <div class="field-ops-hero-pill">Built for messy real crews</div>
         </div>
       </div>
+      <div class="field-ops-summary-bar">
+        <div class="field-ops-summary-card">
+          <strong>${summary.touchedCount}</strong>
+          <span>Workspaces with saved progress</span>
+        </div>
+        <div class="field-ops-summary-card">
+          <strong>${summary.readyCount}</strong>
+          <span>Ready for supervisor review</span>
+        </div>
+        <div class="field-ops-summary-card">
+          <strong>${summary.activeCount}</strong>
+          <span>Still in crew hands and editable</span>
+        </div>
+      </div>
       <div class="field-ops-shell">
         <div class="field-ops-card-grid">
           ${FIELD_OPS_WORKSPACES.map((workspace) => {
             const draft = stateData.drafts[workspace.key] || {};
             const isActive = workspace.key === activeWorkspace.key;
-            return `<article class="field-ops-card${isActive ? " is-active" : ""}" style="--field-ops-accent:${workspace.accent};"><div class="field-ops-card-icon ${workspace.iconClass}">${workspace.iconSvg}</div><div class="field-ops-card-title">${escapeHtml(workspace.title)}</div><div class="field-ops-card-desc">${escapeHtml(workspace.summary)}</div><div class="field-ops-card-tags">${workspace.chips.map((chip) => `<span class="field-ops-chip">${escapeHtml(chip)}</span>`).join("")}</div><div class="field-ops-card-footer"><div class="field-ops-card-save">${escapeHtml(formatFieldOpsStudioTimestamp(draft.updatedAt))}</div><button class="field-ops-open-btn" type="button" data-field-ops-open="${escapeHtml(workspace.key)}">${isActive ? "Open Now" : "Open Workspace"}</button></div></article>`;
+            return `<article class="field-ops-card${isActive ? " is-active" : ""}" style="--field-ops-accent:${workspace.accent};"><div class="field-ops-card-icon ${workspace.iconClass}">${workspace.iconSvg}</div><div class="field-ops-card-title">${escapeHtml(workspace.title)}</div><div class="field-ops-card-desc">${escapeHtml(workspace.summary)}</div><div class="field-ops-card-tags">${workspace.chips.map((chip) => `<span class="field-ops-chip">${escapeHtml(chip)}</span>`).join("")}</div><div class="field-ops-card-status">${escapeHtml(getFieldOpsDraftStatusLabel(workspace, draft))}</div><div class="field-ops-card-footer"><div class="field-ops-card-save">${escapeHtml(formatFieldOpsStudioTimestamp(draft.updatedAt))}</div><button class="field-ops-open-btn" type="button" data-field-ops-open="${escapeHtml(workspace.key)}">${isActive ? "Open Now" : "Open Workspace"}</button></div></article>`;
           }).join("")}
         </div>
         <section class="field-ops-workspace-panel" style="--field-ops-accent:${activeWorkspace.accent};">
@@ -29275,12 +29341,25 @@ function renderFieldOpsStudioShell(){
             <div class="field-ops-proof-card"><strong>Save</strong><span>Draft first, submit later</span></div>
             <div class="field-ops-proof-card"><strong>Edit</strong><span>Fix it without losing progress</span></div>
           </div>
+          <div class="field-ops-launch-strip">
+            ${buildFieldOpsWorkspaceActionButton(activeWorkspace.launchAction, "field-ops-live-btn")}
+            ${buildFieldOpsWorkspaceActionButton(activeWorkspace.supportAction, "field-ops-support-btn")}
+          </div>
           <form class="field-ops-form" id="fieldOpsStudioForm" data-field-ops-workspace="${escapeHtml(activeWorkspace.key)}">
             ${buildFieldOpsWorkspaceFieldsHtml(activeWorkspace, activeDraft)}
           </form>
           <div class="field-ops-panel-actions">
             <button type="button" class="field-ops-primary-btn" data-field-ops-save="${escapeHtml(activeWorkspace.key)}">Save Work</button>
             <button type="button" class="field-ops-secondary-btn" data-field-ops-submit="${escapeHtml(activeWorkspace.key)}">Mark Ready for Supervisor</button>
+          </div>
+          <div class="field-ops-handoff-board">
+            <div class="field-ops-handoff-title">Crew Handoff Board</div>
+            <div class="field-ops-handoff-list">
+              ${FIELD_OPS_WORKSPACES.map((workspace) => {
+                const draft = stateData.drafts[workspace.key] || {};
+                return `<div class="field-ops-handoff-row"><div><strong>${escapeHtml(workspace.title)}</strong><span>${escapeHtml(getFieldOpsDraftStatusLabel(workspace, draft))}</span></div><button type="button" class="field-ops-handoff-open" data-field-ops-open="${escapeHtml(workspace.key)}">Open</button></div>`;
+              }).join("")}
+            </div>
           </div>
         </section>
       </div>
