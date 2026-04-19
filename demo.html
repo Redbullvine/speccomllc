@@ -61,8 +61,8 @@
     #hub.on{opacity:1;pointer-events:auto;}
     .hub-logo{height:36px;margin-bottom:8px;filter:drop-shadow(0 0 12px rgba(55,138,221,.4));}
     .hub-h{font-family:var(--brand);font-size:20px;font-weight:700;letter-spacing:3px;text-align:center;margin-bottom:3px;}
-    .hub-s{font-size:11px;color:var(--muted);letter-spacing:1.5px;text-align:center;margin-bottom:22px;}
-    .hub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;width:100%;max-width:680px;}
+    .hub-s{font-size:11px;color:var(--muted);letter-spacing:1.5px;text-align:center;margin-bottom:22px;max-width:720px;line-height:1.7;}
+    .hub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;width:100%;max-width:920px;}
     .hcard{background:rgba(13,22,42,.92);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:15px 13px;cursor:pointer;transition:border-color .2s,transform .2s,box-shadow .2s;position:relative;overflow:hidden;}
     .hcard:hover{transform:translateY(-3px);}
     .hcard .hc-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:9px;}
@@ -174,15 +174,15 @@
 <div id="splash">
   <img src="assets/speccom_logo_2.png" alt="SpecCom" class="spl-logo"/>
   <div class="spl-title">SPECCOM DEMO</div>
-  <div class="spl-sub">FIELD · DISPATCH · DOCUMENTATION · BILLING</div>
+  <div class="spl-sub">TECHNICIAN · SPLICER · DROP CREW · WAREHOUSE</div>
   <button class="spl-btn" id="splashBtn">Explore Interactive Demo →</button>
-  <div class="spl-tag">No login required · No data saved · 100% interactive</div>
+  <div class="spl-tag">No login required · No data saved · Built to preview real field flow</div>
 </div>
 
 <div id="hub">
   <img src="assets/speccom_logo_2.png" alt="SpecCom" class="hub-logo"/>
-  <div class="hub-h">Pick a Workspace</div>
-  <div class="hub-s">Click around, fill things in — it's the real experience</div>
+  <div class="hub-h">Choose Your Crew</div>
+  <div class="hub-s">Four field-first workspaces, no office clutter, no role friction. Fast, forgiving flows for crews who need to save work, fix mistakes, and turn it in clean.</div>
   <div class="hub-grid" id="hubGrid"></div>
 </div>
 
@@ -199,7 +199,7 @@
 </div>
 
 <div id="toast"></div>
-<div class="dstatus"><div class="dsdot"></div><span class="dstxt">Demo Mode · No data is saved</span></div>
+<div class="dstatus"><div class="dsdot"></div><span class="dstxt">Field Ops Demo · Crew-first workflow preview</span></div>
 
 <script>
 !function(){
@@ -243,22 +243,14 @@ function fireWarp(dur){
 
 /* ── WORKSPACES ── */
 var WS=[
-  {key:"technician",title:"Technician",a:"#378ADD",g:"rgba(55,138,221,.14)",ib:"rgba(55,138,221,.14)",sub:"Clock in, view daily schedule, inspect vehicle, capture field photos",chips:["Clock In","Daily Schedule","Vehicle Inspect","Capture Photo","Complete Job"],
+  {key:"technician",title:"Technician",a:"#378ADD",g:"rgba(55,138,221,.14)",ib:"rgba(55,138,221,.14)",sub:"Service installs, proof photos, customer notes, and clean closeout without punishing mistakes.",chips:["Install","Proof Photos","Notes","Submit"],
    icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5"><circle cx="9" cy="9" r="6"/><path d="M9 5.5v3.5l2 2"/></svg>'},
-  {key:"fieldmap",title:"Field Map",a:"#1D9E75",g:"rgba(29,158,117,.14)",ib:"rgba(29,158,117,.14)",sub:"Drop pins, name locations, capture GPS coordinates",chips:["Drop Pin","Name It","GPS Fix","Save"],
-   icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><path d="M9 2C6.24 2 4 4.24 4 7c0 4 5 9 5 9s5-5 5-9c0-2.76-2.24-5-5-5z"/><circle cx="9" cy="7" r="2"/></svg>'},
-  {key:"photos",title:"Field Photos",a:"#00bcd4",g:"rgba(0,188,212,.14)",ib:"rgba(0,188,212,.14)",sub:"Upload GPS-tagged photos, assign MH node tags",chips:["Upload","GPS Tags","MH Assign","Photo Map"],
-   icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#00bcd4" stroke-width="1.5"><rect x="2.5" y="3" width="13" height="11.5" rx="1.8"/><circle cx="6.2" cy="7" r="1.2"/><path d="M4.8 12l2.8-3 2.2 2.1 1.8-1.6 2 2.5"/></svg>'},
-  {key:"splicer",title:"Splicer",a:"#7F77DD",g:"rgba(127,119,221,.14)",ib:"rgba(127,119,221,.14)",sub:"Projects, billing codes, redline map",chips:["Projects","Billing Codes","Fiber Map","Redline"],
+  {key:"splicer",title:"Splicer",a:"#7F77DD",g:"rgba(127,119,221,.14)",ib:"rgba(127,119,221,.14)",sub:"Main line installation flow with closures, billing codes, material tracking, and redline correction.",chips:["Closures","Billing Codes","Material","Redline"],
    icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#A59CF4" stroke-width="1.5"><path d="M3 9h12"/><path d="M6 5l-3 4 3 4"/><path d="M12 5l3 4-3 4"/></svg>'},
-  {key:"dispatch",title:"Dispatch",a:"#D39A44",g:"rgba(211,154,68,.14)",ib:"rgba(186,117,23,.14)",sub:"Create work orders, assign crews, track queue",chips:["Create WO","Assign","Priority","Queue"],
-   icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#D39A44" stroke-width="1.5"><rect x="2" y="5" width="14" height="10" rx="1.5"/><path d="M6 5V3.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V5"/><path d="M9 9v3M7.5 10.5h3"/></svg>'},
-  {key:"office",title:"Office & Billing",a:"#EE835D",g:"rgba(238,131,93,.14)",ib:"rgba(216,90,48,.14)",sub:"Invoice review, approve billing, run reports",chips:["Invoices","Approve","Reports","Export"],
-   icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#EE835D" stroke-width="1.5"><rect x="4" y="2.5" width="10" height="13" rx="1.5"/><path d="M6.5 6h5M6.5 9h5M6.5 12h3.5"/></svg>'},
-  {key:"warehouse",title:"Warehouse",a:"#FF9800",g:"rgba(255,152,0,.14)",ib:"rgba(255,152,0,.14)",sub:"Manage inventory, track equipment, process shipments",chips:["Inventory","Equipment","Shipments","Reports"],
+  {key:"drop_crew",title:"Drop Crew",a:"#1D9E75",g:"rgba(29,158,117,.14)",ib:"rgba(29,158,117,.14)",sub:"House drops, address proof, GPS pinning, and photo-backed closeout crews can finish in the field.",chips:["Address Proof","GPS Pin","Photos","Closeout"],
+   icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><path d="M3 8.5L9 3l6 5.5"/><path d="M5 7.8V15h8V7.8"/><path d="M8 15v-4h2v4"/></svg>'},
+  {key:"warehouse",title:"Warehouse",a:"#FF9800",g:"rgba(255,152,0,.14)",ib:"rgba(255,152,0,.14)",sub:"Inventory, load-outs, returns, and corrections with a cleaner, faster warehouse lane.",chips:["Inventory","Load Out","Returns","Counts"],
    icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#FF9800" stroke-width="1.5"><rect x="2" y="6" width="14" height="10" rx="1"/><path d="M6 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M9 10v2M7.5 11.5h3"/></svg>'},
-  {key:"supervisor",title:"Supervisor",a:"#9C27B0",g:"rgba(156,39,176,.14)",ib:"rgba(156,39,176,.14)",sub:"Oversee crews, review progress, manage schedules",chips:["Crew Oversight","Progress","Schedules","Crew Map"],
-   icon:'<svg viewBox="0 0 18 18" fill="none" stroke="#9C27B0" stroke-width="1.5"><circle cx="9" cy="6" r="3"/><path d="M3 15c0-3 3-5 6-5s6 2 6 5"/></svg>'},
 ];
 
 /* ── BUILD HUB ── */
@@ -649,22 +641,24 @@ function getScenes(ws){
     }},
   ];
 
-  /* FIELD MAP */
-  if(ws.key==="fieldmap") return [
+  /* DROP CREW / FIELD MAP */
+  if(ws.key==="fieldmap" || ws.key==="drop_crew") {
+    var dropCrewMode=ws.key==="drop_crew";
+    return [
     {label:"Drop a Pin",build:function(c){
       var dropped=false,lx=50,ly=50;
-      c.innerHTML='<div class="stitle">Field Map</div>'
-        +'<div class="shint">Tap anywhere on the map to create a new location</div>'
+      c.innerHTML='<div class="stitle">'+(dropCrewMode?'Drop Crew Map':'Field Map')+'</div>'
+        +'<div class="shint">'+(dropCrewMode?'Tap anywhere on the map to pin a house drop or address proof location':'Tap anywhere on the map to create a new location')+'</div>'
         +'<div id="mw"></div>'
         +'<div id="pf" style="display:none;flex-direction:column;gap:9px;">'
         +'<div class="sdiv"></div>'
-        +'<label class="slbl">Location Code / Name</label>'
-        +'<input class="sin" id="pn" placeholder="e.g. MH-1635CA_03" autocomplete="off"/>'
-        +'<label class="slbl">Location Type</label>'
-        +'<select class="ssel" id="pt"><option>Splice Point</option><option>Node</option><option>Closure</option><option>Handhole</option><option>Pedestal</option><option>MST</option><option>Other</option></select>'
+        +'<label class="slbl">'+(dropCrewMode?'Address / Drop Name':'Location Code / Name')+'</label>'
+        +'<input class="sin" id="pn" placeholder="'+(dropCrewMode?'e.g. 578 Aspen Dr / DROP-204':'e.g. MH-1635CA_03')+'" autocomplete="off"/>'
+        +'<label class="slbl">'+(dropCrewMode?'Drop Type':'Location Type')+'</label>'
+        +'<select class="ssel" id="pt">'+(dropCrewMode?'<option>House Drop</option><option>Buried Drop</option><option>Aerial Drop</option><option>Retry Visit</option><option>Service Loop</option><option>Other</option>':'<option>Splice Point</option><option>Node</option><option>Closure</option><option>Handhole</option><option>Pedestal</option><option>MST</option><option>Other</option>')+'</select>'
         +'<label class="slbl">Notes (optional)</label>'
         +'<input class="sin" id="pnotes" placeholder="Field notes, access info..." autocomplete="off"/>'
-        +'<button class="sbtn p" id="ps" style="width:100%;">📍 Create Location Here</button></div>'
+        +'<button class="sbtn p" id="ps" style="width:100%;">'+(dropCrewMode?'🏠 Save Drop Location':'📍 Create Location Here')+'</button></div>'
         +'<div id="pd" style="display:none;" class="sok">'
         +'<div style="font-size:30px;">📍</div>'
         +'<div style="font-family:var(--brand);font-size:15px;font-weight:700;color:'+A+';" id="pdn"></div>'
@@ -692,7 +686,7 @@ function getScenes(ws){
         toast("Ready — tap the map to drop a new pin");
       });
     }},
-    {label:"Saved Locations",build:function(c){
+    {label:dropCrewMode?"Saved Drops":"Saved Locations",build:function(c){
       var locs=[
         {name:"MH-1635CA_03",type:"Splice Point",status:"Complete",photos:4,x:"28%",y:"38%"},
         {name:"MH-1440BB_02",type:"Node",status:"In Progress",photos:2,x:"55%",y:"22%"},
@@ -700,7 +694,7 @@ function getScenes(ws){
         {name:"PED-0042",type:"Pedestal",status:"Complete",photos:6,x:"38%",y:"68%"},
       ];
       function sc(s){return s==="Complete"?"bg":s==="In Progress"?"bb":"ba";}
-      c.innerHTML='<div class="stitle">Saved Locations</div><div class="shint">Tap a location to add photos or notes</div><div id="lmw"></div><div id="ll" style="display:flex;flex-direction:column;gap:7px;margin-top:8px;"></div>';
+      c.innerHTML='<div class="stitle">'+(dropCrewMode?'Saved Drop Locations':'Saved Locations')+'</div><div class="shint">'+(dropCrewMode?'Tap a drop to add proof photos, notes, or navigation':'Tap a location to add photos or notes')+'</div><div id="lmw"></div><div id="ll" style="display:flex;flex-direction:column;gap:7px;margin-top:8px;"></div>';
       $("lmw").appendChild(mkMap(130,A,locs.map(function(l){return {x:l.x,y:l.y,label:l.name};}),null));
       var list=$("ll");
       locs.forEach(function(loc,i){
@@ -734,9 +728,9 @@ function getScenes(ws){
         if(b.dataset.a==="nav")toast("🗺 Navigating to "+b.dataset.n+"...");
       });
     }},
-    {label:"GPS Fix",build:function(c){
-      c.innerHTML='<div class="stitle">GPS Location Capture</div>'
-        +'<div class="shint">Simulate capturing your exact field coordinates</div>'
+    {label:dropCrewMode?"Address Proof":"GPS Fix",build:function(c){
+      c.innerHTML='<div class="stitle">'+(dropCrewMode?'Address Proof + GPS':'GPS Location Capture')+'</div>'
+        +'<div class="shint">'+(dropCrewMode?'Simulate locking the exact house-drop location before closeout':'Simulate capturing your exact field coordinates')+'</div>'
         +'<div class="scard" style="background:rgba(29,158,117,.05);border-color:rgba(29,158,117,.12);">'
         +'<div class="srow" style="gap:10px;align-items:flex-start;">'
         +'<div style="font-size:26px;margin-top:2px;">📡</div>'
@@ -763,6 +757,7 @@ function getScenes(ws){
       $("gcre").addEventListener("click",function(){toast("📍 Location pinned at current GPS coordinates!");});
     }},
   ];
+  }
 
   /* FIELD PHOTOS */
   if(ws.key==="photos") return [
