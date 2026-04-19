@@ -29444,81 +29444,77 @@ function renderDemoShowcaseHome(){
   const profileCard = $("dashboardProfileCard");
   if (profileCard) profileCard.style.display = "none";
   legacyIds.forEach((id) => { const el = $(id); if (el) el.style.display = "none"; });
-  const workspaces = [
+  const studioState = loadFieldOpsStudioState();
+  const activeWorkspace = getFieldOpsWorkspaceMeta(studioState.activeWorkspace);
+  const activeDraft = studioState.drafts[activeWorkspace.key] || {};
+  const studioSummary = getFieldOpsStudioSummary(studioState);
+  const specialistLanes = [
     {
-      title: "Technician",
+      title: "I&R Specialist",
+      eyebrow: "Fast install lane",
       iconClass: "icon-blue",
       accent: "",
-      summary: "Clock in, field tasks, and photo capture.",
-      chips: ["Clock in", "Field tasks", "Photos"],
+      summary: "Install flow, proof capture, customer notes, and clean submit without fighting the screen.",
+      chips: ["Install", "Proof", "Submit"],
       action: { type: "view", target: "viewTechnician" },
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5"><path d="M9 2v6l4 2"/><circle cx="9" cy="9" r="6"/></svg>',
     },
     {
-      title: "Splicer",
+      title: "OSP Specialist",
+      eyebrow: "Mainline / closure lane",
       iconClass: "icon-teal",
       accent: "accent-teal",
-      summary: "Projects, closures, billing codes, and redline map workflows.",
-      chips: ["Projects", "Closures", "Billing codes"],
+      summary: "Closures, materials, redlines, and rugged field proof flow with less clutter.",
+      chips: ["Closures", "Materials", "Redline"],
       action: { type: "view", target: "viewMap", fallbackViews: ["viewNodes", "viewDashboard"] },
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><path d="M3 9h12"/><path d="M6 5l-3 4 3 4"/><path d="M12 5l3 4-3 4"/></svg>',
     },
     {
-      title: "Field Photos",
-      iconClass: "icon-teal",
-      accent: "accent-teal",
-      summary: "Upload GPS-tagged photos, auto-pin map markers, and review MH-tagged thumbnails.",
-      chips: ["GPS EXIF", "MH tags", "Photo map"],
-      action: { type: "view", target: "viewMap", fallbackViews: ["viewNodes", "viewDashboard"] },
-      iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#00bcd4" stroke-width="1.5"><rect x="2.5" y="3" width="13" height="11.5" rx="1.8"/><circle cx="6.2" cy="7" r="1.2"/><path d="M4.8 12l2.8-3 2.2 2.1 1.8-1.6 2 2.5"/></svg>',
-    },
-    {
-      title: "Office",
-      iconClass: "icon-blue",
-      accent: "",
-      summary: "Invoice processing, reports, and billing review operations.",
-      chips: ["Invoices", "Reports", "Billing"],
-      action: { type: "view", target: "viewInvoices" },
-      iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5"><rect x="4" y="2.5" width="10" height="13" rx="1.5"/><path d="M6.5 6h5M6.5 9h5M6.5 12h3.5"/></svg>',
-    },
-    {
-      title: "Dispatch",
+      title: "Dropline Specialist",
+      eyebrow: "Address closeout lane",
       iconClass: "icon-amber",
       accent: "accent-amber",
-      summary: "Create work orders, assign crews, and manage queue.",
-      chips: ["Create", "Assign", "Queue"],
+      summary: "Address proof, house-drop notes, and forgiving closeout crews can resume anytime.",
+      chips: ["Address", "Photos", "Closeout"],
+      action: { type: "view", target: "viewTechnician", fallbackViews: ["viewDashboard"] },
+      iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#D39A44" stroke-width="1.5"><path d="M3 8.5L9 3l6 5.5"/><path d="M5 7.8V15h8V7.8"/><path d="M8 15v-4h2v4"/></svg>',
+    },
+    {
+      title: "Operations Control",
+      eyebrow: "Command lane",
+      iconClass: "icon-amber",
+      accent: "accent-amber",
+      summary: "Assignments, queue control, blocked work, and the next decision surface for field leaders.",
+      chips: ["Queue", "Assign", "Escalations"],
       action: { type: "view", target: "viewDispatch", fallbackViews: ["viewDashboard"] },
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#D39A44" stroke-width="1.5"><path d="M2 9h14"/><path d="M9 2v14"/><circle cx="9" cy="9" r="6"/></svg>',
     },
     {
-      title: "Warehouse",
-      iconClass: "icon-teal",
-      accent: "accent-teal",
-      summary: "Inventory, material search, and assignment visibility.",
-      chips: ["Inventory", "Search", "Assignments"],
-      action: { type: "view", target: "viewCatalog" },
-      secondaryAction: { type: "view", target: "viewWarehouseScan", label: "Scan Item" },
-      iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><rect x="3" y="3" width="12" height="12" rx="1.5"/><path d="M3 8h12"/></svg>',
-    },
-    {
-      title: "Supervisor",
-      iconClass: "icon-purple",
-      accent: "accent-purple",
-      summary: "Progress oversight, field verification, and daily metrics.",
-      chips: ["Progress", "Verification", "Metrics"],
-      action: { type: "view", target: "viewSupervisor", fallbackViews: ["viewDailyReport", "viewDashboard"] },
-      iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#A59CF4" stroke-width="1.5"><path d="M3 13l4-4 3 3 5-7"/><circle cx="13.5" cy="5" r="1.3" fill="#A59CF4" stroke="none"/></svg>',
-    },
-    {
-      title: "Admin",
+      title: "Logistics Specialist",
+      eyebrow: "Inventory lane",
       iconClass: "icon-coral",
       accent: "accent-coral",
-      summary: "User, project, and system control surfaces.",
-      chips: ["Users", "Projects", "System"],
+      summary: "Material search, scan flow, and inventory movement without office-tool drag.",
+      chips: ["Inventory", "Scan", "Counts"],
+      action: { type: "view", target: "viewCatalog" },
+      supportAction: { type: "view", target: "viewWarehouseScan", label: "Scan Mode" },
+      iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#EE835D" stroke-width="1.5"><rect x="3" y="3" width="12" height="12" rx="1.5"/><path d="M3 8h12"/></svg>',
+    },
+    {
+      title: "Administration",
+      eyebrow: "Calm admin lane",
+      iconClass: "icon-coral",
+      accent: "accent-coral",
+      summary: "Users, access, and project governance in a cleaner control-center layout.",
+      chips: ["Users", "Projects", "Access"],
       action: { type: "view", target: "viewAdmin" },
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#EE835D" stroke-width="1.5"><circle cx="9" cy="9" r="2.2"/><path d="M9 2.5v2M9 13.5v2M2.5 9h2M13.5 9h2M4.2 4.2l1.4 1.4M12.4 12.4l1.4 1.4M13.8 4.2l-1.4 1.4M5.6 12.4l-1.4 1.4"/></svg>',
     },
   ];
+  const projectName = String(state.activeProject?.name || "").trim() || "Choose a project to unlock the next lane";
+  const focusStatus = getFieldOpsDraftStatusLabel(activeWorkspace, activeDraft);
+  const messagesAction = escapeHtml(JSON.stringify(buildShowcaseActionPayload({ type: "modal", target: "messages" }, { label: "Messages" })));
+  const projectsAction = escapeHtml(JSON.stringify(buildShowcaseActionPayload({ type: "modal", target: "projects" }, { label: "Projects" })));
 
   wrap.style.display = "";
   wrap.innerHTML = `
@@ -29557,23 +29553,74 @@ function renderDemoShowcaseHome(){
         </button>
       </div>
     </div>
+    <div class="gateway-shell">
+      <section class="gateway-hero">
+        <div class="gateway-hero-main">
+          <div class="gateway-kicker">Workspace Gateway</div>
+          <h2 class="gateway-title">Pick a lane, stay oriented, keep moving.</h2>
+          <p class="gateway-copy">SpecCom opens like the demo side now: clearer specialist lanes, a stronger current-step signal, and less office noise between crews and proof-ready work.</p>
+          <div class="gateway-pill-row">
+            <span class="gateway-pill">Fast to learn</span>
+            <span class="gateway-pill">Forgiving edits</span>
+            <span class="gateway-pill">Autosave first</span>
+          </div>
+        </div>
+        <div class="gateway-stat-grid">
+          <div class="gateway-stat-card">
+            <strong>${studioSummary.touchedCount}</strong>
+            <span>workspaces with live progress</span>
+          </div>
+          <div class="gateway-stat-card">
+            <strong>${studioSummary.readyCount}</strong>
+            <span>ready for review</span>
+          </div>
+          <div class="gateway-stat-card">
+            <strong>${studioSummary.activeCount}</strong>
+            <span>still editable in the field</span>
+          </div>
+        </div>
+      </section>
+      <section class="gateway-focus" style="--gateway-accent:${activeWorkspace.accent};">
+        <div class="gateway-focus-kicker">Current Workspace</div>
+        <div class="gateway-focus-body">
+          <div class="gateway-focus-copy">
+            <div class="gateway-focus-title">${escapeHtml(activeWorkspace.title)}</div>
+            <div class="gateway-focus-summary">${escapeHtml(activeWorkspace.summary)}</div>
+            <div class="gateway-focus-pills">
+              <span>Project: ${escapeHtml(projectName)}</span>
+              <span>Status: ${escapeHtml(focusStatus)}</span>
+              <span>${escapeHtml(formatFieldOpsStudioTimestamp(activeDraft.updatedAt))}</span>
+            </div>
+          </div>
+          <div class="gateway-focus-actions">
+            ${buildFieldOpsWorkspaceActionButton(activeWorkspace.launchAction, "gateway-primary-btn")}
+            ${buildFieldOpsWorkspaceActionButton(activeWorkspace.supportAction, "gateway-secondary-btn")}
+            <button class="gateway-secondary-btn" type="button" data-showcase-action='${projectsAction}'>Choose Project</button>
+          </div>
+        </div>
+      </section>
+    </div>
     <div style="padding:0 20px 4px;">
       ${renderFieldOpsStudioShell()}
     </div>
-    <div class="section-label">Workspaces</div>
+    <div class="section-label">Specialist Workspaces</div>
     <div class="ws-grid">
-      ${workspaces.map((workspace) => `
+      ${specialistLanes.map((workspace) => `
         <article class="ws-card ${workspace.accent}">
           <div class="ws-icon ${workspace.iconClass}">${workspace.iconSvg}</div>
+          <div class="ws-eyebrow">${escapeHtml(workspace.eyebrow || "Workspace")}</div>
           <div class="ws-title">${escapeHtml(workspace.title)}</div>
           <div class="ws-desc">${escapeHtml(workspace.summary)}</div>
           <div class="ws-tags">${workspace.chips.map((chip) => `<span class="ws-tag">${escapeHtml(chip)}</span>`).join("")}</div>
           <div class="ws-footer">
             <button class="ws-open" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(workspace.action, { label: workspace.title, fallbackViews: workspace.action.fallbackViews || [] })))}'>Open <span class="ws-open-arrow">></span></button>
-            ${workspace.secondaryAction ? `<button class="ws-open ws-open-teal" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(workspace.secondaryAction, { label: workspace.secondaryAction.label || "Scan Item" })))}'>Scan Item</button>` : ""}
+            ${workspace.supportAction ? `<button class="ws-open ws-open-teal" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(workspace.supportAction, { label: workspace.supportAction.label || "Open" })))}'>${escapeHtml(workspace.supportAction.label || "Open")}</button>` : ""}
           </div>
         </article>
       `).join("")}
+    </div>
+    <div class="section-label">Support Rail</div>
+    <div class="gateway-support-grid">
       <div class="msg-card" id="message-board-card">
         <div class="msg-header">
           <div class="msg-title-row">
@@ -29593,14 +29640,13 @@ function renderDemoShowcaseHome(){
             <div class="msg-tab" onclick="switchMsgTab('mine', this)">Mine</div>
           </div>
         </div>
+        <div class="msg-support-copy">Keep chatter out of the main lane until you need it. Open the full board only when it helps the job move forward.</div>
         <div class="msg-feed" id="msg-feed-company"></div>
-        <div class="msg-compose">
-          <input class="msg-input" id="msg-input" type="text" placeholder="Post to company board..." />
-          <button class="msg-send" onclick="postBoardMessage()">Post</button>
+        <div class="msg-actions">
+          <button class="msg-send" type="button" data-showcase-action='${messagesAction}'>Open Messages</button>
+          <button class="msg-send msg-send-ghost" type="button" data-showcase-action='${projectsAction}'>Projects</button>
         </div>
       </div>
-    </div>
-    <div style="padding: 0 20px 20px;">
       <div id="weather-card" class="wx-card">
         <div class="wx-header">
           <div class="wx-loc-row">

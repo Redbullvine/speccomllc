@@ -410,9 +410,181 @@
       text-transform: uppercase;
       color: rgba(100,140,180,0.45);
     }
+    .gateway-shell {
+      display: grid;
+      gap: 14px;
+      padding: 18px 20px 6px;
+    }
+    .gateway-hero,
+    .gateway-focus {
+      background: linear-gradient(180deg, rgba(13,30,58,0.86), rgba(9,18,34,0.92));
+      border: 1px solid rgba(55,138,221,0.16);
+      border-radius: 18px;
+      padding: 20px 22px;
+      position: relative;
+      overflow: hidden;
+    }
+    .gateway-hero::before,
+    .gateway-focus::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at top right, rgba(55,138,221,0.14), transparent 38%),
+        radial-gradient(circle at bottom left, rgba(29,158,117,0.12), transparent 32%);
+      pointer-events: none;
+    }
+    .gateway-hero-main,
+    .gateway-stat-grid,
+    .gateway-focus-body {
+      position: relative;
+      z-index: 1;
+    }
+    .gateway-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.9fr);
+      gap: 16px;
+      align-items: stretch;
+    }
+    .gateway-kicker,
+    .gateway-focus-kicker,
+    .ws-eyebrow {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 2.4px;
+      text-transform: uppercase;
+      color: rgba(123,177,229,0.68);
+    }
+    .gateway-title {
+      margin: 10px 0 0;
+      font-family: var(--font-brand);
+      font-size: 30px;
+      line-height: 1.02;
+      letter-spacing: 0.04em;
+      color: #f5f9ff;
+    }
+    .gateway-copy {
+      margin: 12px 0 0;
+      max-width: 720px;
+      font-size: 13px;
+      line-height: 1.7;
+      color: rgba(183,209,236,0.78);
+    }
+    .gateway-pill-row,
+    .gateway-focus-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .gateway-pill,
+    .gateway-focus-pills span {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(125,170,220,0.18);
+      background: rgba(255,255,255,0.05);
+      font-size: 11px;
+      font-weight: 600;
+      color: rgba(220,236,250,0.82);
+    }
+    .gateway-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .gateway-stat-card {
+      border-radius: 16px;
+      border: 1px solid rgba(126,173,221,0.14);
+      background: rgba(255,255,255,0.05);
+      padding: 16px 14px;
+      min-height: 110px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .gateway-stat-card strong {
+      font-family: var(--font-brand);
+      font-size: 34px;
+      line-height: 1;
+      color: #fff;
+    }
+    .gateway-stat-card span {
+      font-size: 11px;
+      line-height: 1.5;
+      color: rgba(180,205,230,0.72);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .gateway-focus {
+      border-color: color-mix(in srgb, var(--gateway-accent, #378ADD) 26%, rgba(255,255,255,0.12));
+    }
+    .gateway-focus-body {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 10px;
+    }
+    .gateway-focus-title {
+      font-family: var(--font-brand);
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #fff;
+    }
+    .gateway-focus-summary {
+      margin-top: 8px;
+      max-width: 720px;
+      font-size: 13px;
+      line-height: 1.65;
+      color: rgba(190,214,238,0.74);
+    }
+    .gateway-focus-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    .gateway-primary-btn,
+    .gateway-secondary-btn {
+      min-height: 46px;
+      padding: 0 16px;
+      border-radius: 999px;
+      border: 1px solid rgba(125,170,220,0.18);
+      font-family: var(--font-brand);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1.8px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+    }
+    .gateway-primary-btn {
+      background: var(--gateway-accent, #378ADD);
+      color: #07111f;
+      border-color: transparent;
+    }
+    .gateway-secondary-btn {
+      background: rgba(255,255,255,0.05);
+      color: rgba(225,238,250,0.9);
+    }
+    .gateway-primary-btn:active,
+    .gateway-secondary-btn:active {
+      transform: scale(0.985);
+    }
     .ws-grid {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      padding: 0 20px 20px;
+    }
+    .gateway-support-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 0.92fr);
       gap: 14px;
       padding: 0 20px 20px;
     }
@@ -458,6 +630,7 @@
     .icon-purple { background: rgba(127,119,221,0.15); }
     .icon-coral { background: rgba(216,90,48,0.15); }
     .ws-title { font-family: var(--font-brand); font-size: 18px; font-weight: 700; color: #fff; letter-spacing: 0.5px; }
+    .ws-eyebrow { margin-top: 2px; }
     .ws-desc { font-size: 12px; color: rgba(140,175,210,0.6); line-height: 1.5; }
     .ws-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
     .ws-tag {
@@ -518,6 +691,7 @@
       color: rgba(140,160,200,0.45);
     }
     .msg-tab.active { background: rgba(127,119,221,0.15); border-color: rgba(127,119,221,0.3); color: #AFA9EC; }
+    .msg-support-copy { font-size: 12px; line-height: 1.6; color: rgba(182,190,232,0.68); }
     .msg-feed { display: flex; flex-direction: column; gap: 10px; max-height: 180px; overflow-y: auto; }
     .msg-feed::-webkit-scrollbar { width: 3px; }
     .msg-feed::-webkit-scrollbar-thumb { background: rgba(127,119,221,0.3); border-radius: 3px; }
@@ -527,21 +701,7 @@
     .msg-time { font-size: 10px; color: rgba(140,160,200,0.35); }
     .msg-text { font-size: 12px; color: rgba(180,205,235,0.75); line-height: 1.5; }
     .msg-pin { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: rgba(186,117,23,0.7); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 2px; }
-    .msg-compose { display: flex; gap: 8px; margin-top: 2px; }
-    .msg-input {
-      flex: 1;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(127,119,221,0.2);
-      border-radius: 8px;
-      padding: 8px 12px;
-      color: rgba(200,220,245,0.8);
-      font-family: var(--font-ui);
-      font-size: 12px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-    .msg-input::placeholder { color: rgba(140,160,200,0.3); }
-    .msg-input:focus { border-color: rgba(127,119,221,0.45); }
+    .msg-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
     .msg-send {
       background: rgba(127,119,221,0.15);
       border: 1px solid rgba(127,119,221,0.3);
@@ -557,6 +717,11 @@
       transition: all 0.2s;
     }
     .msg-send:hover { background: rgba(127,119,221,0.25); border-color: rgba(127,119,221,0.5); color: #fff; }
+    .msg-send-ghost {
+      background: rgba(255,255,255,0.04);
+      border-color: rgba(125,170,220,0.14);
+      color: rgba(214,228,246,0.82);
+    }
 
     .wx-wrap { padding: 0 20px 20px; }
     .wx-card {
@@ -590,6 +755,98 @@
     .wx-day-name { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: rgba(100,150,200,0.5); }
     .wx-day-hi { font-family: var(--font-brand); font-size: 14px; font-weight: 600; color: rgba(180,215,250,0.9); }
     .wx-day-lo { font-size: 11px; color: rgba(100,150,200,0.45); }
+
+    .workspace-hero {
+      margin-bottom: 14px;
+      border: 1px solid rgba(125,170,220,0.14);
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(13,30,58,0.82), rgba(8,17,32,0.92));
+      padding: 20px 22px;
+      position: relative;
+      overflow: hidden;
+    }
+    .workspace-hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at top right, rgba(55,138,221,0.16), transparent 35%),
+        radial-gradient(circle at bottom left, rgba(29,158,117,0.12), transparent 28%);
+    }
+    .workspace-hero > * {
+      position: relative;
+      z-index: 1;
+    }
+    .workspace-hero-kicker {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 2.6px;
+      text-transform: uppercase;
+      color: rgba(120,176,229,0.68);
+    }
+    .workspace-hero-title {
+      margin: 8px 0 0;
+      font-family: var(--font-brand);
+      font-size: 28px;
+      letter-spacing: 0.04em;
+      color: #f7fbff;
+    }
+    .workspace-hero-copy {
+      margin: 12px 0 0;
+      max-width: 760px;
+      font-size: 13px;
+      line-height: 1.7;
+      color: rgba(186,211,236,0.76);
+    }
+    .workspace-hero-bar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 16px;
+    }
+    .workspace-hero-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .workspace-hero-pills span {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(125,170,220,0.16);
+      background: rgba(255,255,255,0.05);
+      font-size: 11px;
+      font-weight: 600;
+      color: rgba(223,236,250,0.82);
+    }
+    .workspace-hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .workspace-hero-link.menu-link {
+      margin-top: 0;
+      width: auto;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.05);
+      border-color: rgba(125,170,220,0.16);
+      color: rgba(223,236,250,0.84);
+    }
+    .workspace-hero-link.menu-link.workspace-hero-link-strong {
+      background: rgba(55,138,221,0.16);
+      border-color: rgba(55,138,221,0.28);
+      color: #d8ecff;
+    }
 
     #profile-view, .profile-card {
       background: rgba(13,22,42,0.9);
@@ -706,6 +963,17 @@
     }
 
     @media (max-width: 960px) {
+      .gateway-hero,
+      .gateway-focus-body,
+      .workspace-hero-bar {
+        grid-template-columns: 1fr;
+        flex-direction: column;
+      }
+      .gateway-stat-grid,
+      .gateway-support-grid,
+      .ws-grid {
+        grid-template-columns: 1fr;
+      }
       .ws-grid { grid-template-columns: 1fr; }
       #command-header { flex-direction: column; align-items: flex-start; }
       .cmd-right { width: 100%; flex-wrap: wrap; }
@@ -723,6 +991,9 @@
         margin: 12px 10px 0;
         padding: 14px;
       }
+      .gateway-shell {
+        padding: 12px 10px 6px;
+      }
       .section-label {
         padding: 16px 12px 8px;
       }
@@ -736,13 +1007,13 @@
       .wx-card {
         padding: 16px;
       }
+      .workspace-hero {
+        padding: 16px;
+      }
       .ws-footer,
       .msg-header {
         flex-wrap: wrap;
         gap: 8px;
-      }
-      .msg-compose {
-        flex-direction: column;
       }
       .msg-send {
         width: 100%;
@@ -1195,6 +1466,22 @@
 
           <!-- RIGHT MAIN AREA -->
           <main class="invoice-main-area">
+            <div class="workspace-hero">
+              <div class="workspace-hero-kicker">Office Workspace</div>
+              <h2 class="workspace-hero-title">Billing desk with less clutter and a clearer next move.</h2>
+              <p class="workspace-hero-copy">The office lane now starts with one clear surface for invoice review, file handoff, and workbook imports instead of competing panels. Work the list, open the record, finish the package.</p>
+              <div class="workspace-hero-bar">
+                <div class="workspace-hero-pills">
+                  <span>Current step: find the invoice or start a new one</span>
+                  <span>Next action: upload proof files when ready</span>
+                  <span>Project-safe review flow</span>
+                </div>
+                <div class="workspace-hero-actions">
+                  <button class="menu-link workspace-hero-link" type="button" data-view="viewDashboard">Workspace Gateway</button>
+                  <button class="menu-link workspace-hero-link workspace-hero-link-strong" type="button" data-view="viewDailyReport">Daily Report</button>
+                </div>
+              </div>
+            </div>
             <div class="invoice-toolbar">
               <div class="invoice-toolbar-left">
                 <button id="btnToggleInvoiceSidebar" class="btn ghost small icon-btn" type="button" title="Toggle invoice list">
@@ -1256,6 +1543,22 @@
         </section>
 
         <section id="viewDispatch" class="view">
+          <div class="workspace-hero">
+            <div class="workspace-hero-kicker">Operations Control</div>
+            <h2 class="workspace-hero-title">Run the queue from one calm command lane.</h2>
+            <p class="workspace-hero-copy">Dispatch now reads more like a decision surface than an admin dump. The active queue, assignment board, workforce status, and filters stay grouped by purpose so the next tap is easier to spot.</p>
+            <div class="workspace-hero-bar">
+              <div class="workspace-hero-pills">
+                <span>Current step: assign or unblock the next crew</span>
+                <span>Next action: create, import, or filter the queue</span>
+                <span>Minimal hunting between board and roster</span>
+              </div>
+              <div class="workspace-hero-actions">
+                <button class="menu-link workspace-hero-link" type="button" data-view="viewDashboard">Workspace Gateway</button>
+                <button class="menu-link workspace-hero-link workspace-hero-link-strong" type="button" data-view="viewSupervisor">Supervisor View</button>
+              </div>
+            </div>
+          </div>
           <div class="card">
             <div class="row" style="justify-content:space-between; align-items:center;">
               <h2 data-i18n="dispatchTitle">Dispatch / Planner</h2>
@@ -1306,6 +1609,22 @@
         </section>
 
         <section id="viewSupervisor" class="view">
+          <div class="workspace-hero">
+            <div class="workspace-hero-kicker">Operations Oversight</div>
+            <h2 class="workspace-hero-title">See the job clearly without becoming the dispatcher.</h2>
+            <p class="workspace-hero-copy">Supervisor view is trimmed down to the signal that matters: active jobs, blocked work, escalations, and crew health. It should feel more like a control surface and less like a spreadsheet hallway.</p>
+            <div class="workspace-hero-bar">
+              <div class="workspace-hero-pills">
+                <span>Current step: scan active and blocked work</span>
+                <span>Next action: jump into dispatch only when needed</span>
+                <span>Escalations stay visible</span>
+              </div>
+              <div class="workspace-hero-actions">
+                <button class="menu-link workspace-hero-link" type="button" data-view="viewDashboard">Workspace Gateway</button>
+                <button class="menu-link workspace-hero-link workspace-hero-link-strong" type="button" data-view="viewDispatch">Open Dispatch</button>
+              </div>
+            </div>
+          </div>
           <div class="grid cols-2">
             <div class="card">
               <div class="row" style="justify-content:space-between; align-items:center;">
@@ -1599,6 +1918,22 @@
         </div>
 
         <section id="viewCatalog" class="view">
+          <div class="workspace-hero">
+            <div class="workspace-hero-kicker">Logistics Workspace</div>
+            <h2 class="workspace-hero-title">Inventory lookup first, scanner second, no extra noise.</h2>
+            <p class="workspace-hero-copy">Material search now reads like a focused logistics tool. The catalog is the home base, scanning is the fast lane, and both stay connected without burying the operator in side chores.</p>
+            <div class="workspace-hero-bar">
+              <div class="workspace-hero-pills">
+                <span>Current step: find the item or scan it</span>
+                <span>Next action: switch into scan mode for fast intake</span>
+                <span>Cleaner field-friendly tap targets</span>
+              </div>
+              <div class="workspace-hero-actions">
+                <button class="menu-link workspace-hero-link" type="button" data-view="viewDashboard">Workspace Gateway</button>
+                <button class="menu-link workspace-hero-link workspace-hero-link-strong" type="button" data-view="viewWarehouseScan">Scan Mode</button>
+              </div>
+            </div>
+          </div>
           <div class="card">
             <div class="row" style="justify-content:space-between;">
               <h2 data-i18n="catalogTitle">Material catalog</h2>
@@ -1690,6 +2025,22 @@
 
         <section id="viewAdmin" class="view">
           <div id="admin-workspace" class="field-stack">
+            <div class="workspace-hero">
+              <div class="workspace-hero-kicker">Administration</div>
+              <h2 class="workspace-hero-title">Keep the control center organized, calm, and out of the crew’s way.</h2>
+              <p class="workspace-hero-copy">Admin stays available, but it now feels more intentionally separated from field flow. User access, companies, and project governance remain powerful without bleeding clutter into every other lane.</p>
+              <div class="workspace-hero-bar">
+                <div class="workspace-hero-pills">
+                  <span>Current step: choose companies, users, or projects</span>
+                  <span>Next action: make the change, then return to the lane</span>
+                  <span>Cleaner control-center feel</span>
+                </div>
+                <div class="workspace-hero-actions">
+                  <button class="menu-link workspace-hero-link" type="button" data-view="viewDashboard">Workspace Gateway</button>
+                  <button class="menu-link workspace-hero-link workspace-hero-link-strong" type="button" data-view="viewInvoices">Billing Desk</button>
+                </div>
+              </div>
+            </div>
             <div class="card">
               <div class="row" style="justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
                 <div>
@@ -1892,19 +2243,17 @@
           <button id="btnMenuClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
         </div>
         <div class="menu-section">
-          <div class="muted small menu-title">Navigate</div>
-          <button class="menu-link" type="button" data-view="viewDashboard">Home</button>
-          <button class="menu-link" type="button" data-view="viewTechnician" data-i18n="timesheetNav">Timesheet</button>
-          <button class="menu-link" type="button" data-view="viewDispatch">Dispatch / Planner</button>
-          <button class="menu-link" type="button" data-view="viewSupervisor">Supervisor</button>
-          <button class="menu-link" type="button" data-view="viewInvoices">Invoicing</button>
-      <button class="menu-link" type="button" data-view="viewCatalog">Material Search</button>
-      <button class="menu-link" type="button" data-view="viewWarehouseScan">Warehouse Scanner</button>
-      <button id="btnMenuMessages" class="menu-link" type="button">Messaging</button>
-      <button class="menu-link" type="button" data-view="viewMap">Map Workspace</button>
-      <button class="menu-link" type="button" data-view="viewMap" style="border-left:3px solid #00bcd4;">Field Photos</button>
-      <button id="btnMenuOpenRedline" class="menu-link" type="button">Open Redline</button>
-      <button class="menu-link" type="button" data-view="viewAdmin">Operations Panel <span class="status-pill" style="margin-left:8px; background:rgba(238,131,93,0.18); color:#EE835D; border:1px solid rgba(238,131,93,0.35);">Admin</span></button>
+          <div class="muted small menu-title">Workspace Gateway</div>
+          <button class="menu-link" type="button" data-view="viewDashboard">Workspace Gateway</button>
+          <button class="menu-link" type="button" data-view="viewTechnician">I&amp;R Specialist</button>
+          <button class="menu-link" type="button" data-view="viewMap">OSP Specialist / Proof Map</button>
+          <button class="menu-link" type="button" data-view="viewDispatch">Operations Control</button>
+          <button class="menu-link" type="button" data-view="viewSupervisor">Supervisor Overview</button>
+          <button class="menu-link" type="button" data-view="viewInvoices">Billing Desk</button>
+          <button class="menu-link" type="button" data-view="viewCatalog">Logistics Specialist</button>
+          <button class="menu-link" type="button" data-view="viewWarehouseScan">Scanner Lane</button>
+          <button class="menu-link" type="button" data-view="viewAdmin">Administration <span class="status-pill" style="margin-left:8px; background:rgba(238,131,93,0.18); color:#EE835D; border:1px solid rgba(238,131,93,0.35);">Admin</span></button>
+          <button id="btnMenuMessages" class="menu-link" type="button">Messaging</button>
           <button id="btnMenuSignIn" class="menu-link" type="button" data-i18n="signIn" style="display:none;">Sign in</button>
           <button id="btnMenuSignOut" class="menu-link" type="button" data-i18n="signOut">Sign out</button>
         </div>
@@ -1917,7 +2266,8 @@
           </select>
         </div>
         <div class="menu-section">
-          <div class="muted small menu-title">Splice Actions</div>
+          <div class="muted small menu-title">Advanced Map Tools</div>
+          <button id="btnMenuOpenRedline" class="menu-link" type="button">Open Redline</button>
           <button id="btnMenuAddSpliceDetails" class="menu-link" type="button">Add Splice Details</button>
         </div>
       </div>
