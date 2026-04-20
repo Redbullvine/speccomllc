@@ -7,7 +7,11 @@ supabase/.temp/**
 # local dependencies and transient artifacts
 node_modules/
 .tmp_*/
+.tmp*
+*.err
+*.out
 .tmp_public_schema.sql
+_quarantine_untracked_migrations/
 project_uploads/
 
 # generated/local artifacts
