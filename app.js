@@ -24201,14 +24201,15 @@ function renderSpliceSlotCard(loc, slotKey, isRequired){
   const placeholder = `
     <div class="slot-placeholder">
       <div class="camera-icon" aria-hidden="true"></div>
-      <div class="muted small">Tap to capture</div>
+      <div style="font-size:12px;font-weight:700;color:rgba(55,138,221,0.9);margin-top:4px;">📷 Tap to take photo</div>
+      <div class="muted small" style="font-size:10px;">Opens device camera</div>
     </div>
   `;
   const inputId = getSlotInputId(loc.id, slotKey);
   const inputEl = `<input id="${inputId}" class="file-input-hidden" type="file" accept="image/*" capture="environment" data-location-id="${loc.id}" data-slot-key="${slotKey}" data-input-id="${inputId}" />`;
   if (!photo){
     return `
-      <label class="photo-slot ${isRequired ? "" : "extra"}" for="${inputId}">
+      <label class="photo-slot ${isRequired ? "photo-slot-required" : "extra"}" for="${inputId}" style="${isRequired ? "border:1.5px solid rgba(55,138,221,0.35);background:rgba(55,138,221,0.04);" : ""}">
         ${inputEl}
         <div class="row" style="justify-content:space-between; width:100%;">
           <div class="slot-title">${escapeHtml(label)}</div>
@@ -29871,6 +29872,8 @@ async function addSpliceLocation(){
     renderLocations();
     updateKPI();
     renderProofChecklist();
+    setActiveView("viewNodes");
+    toast("Location created", "Name it below, then tap a photo slot to capture your proof photo.");
     return;
   }
 
@@ -29915,6 +29918,8 @@ async function addSpliceLocation(){
   renderLocations();
   updateKPI();
   renderProofChecklist();
+  setActiveView("viewNodes");
+  toast("Location created", "Name it below, then tap a photo slot to capture your proof photo.");
 }
 
 async function openNode(nodeNumber){
