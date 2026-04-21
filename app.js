@@ -2952,8 +2952,9 @@ function setActiveView(viewId, { syncHash = true } = {}){
     refreshMaterialProjectData({ silent: true });
     refreshLocations();
     const now = Date.now();
-    if (!state.map.lastFieldGpsCheckAt || (now - state.map.lastFieldGpsCheckAt) > 30000){
-      void requestMapCurrentLocation({ center: false, silent: true });
+    const isFirstLoad = !state.map.lastFieldGpsCheckAt;
+    if (isFirstLoad || (now - state.map.lastFieldGpsCheckAt) > 30000){
+      void requestMapCurrentLocation({ center: isFirstLoad, silent: true });
     } else {
       renderMapFieldPanel();
     }
@@ -9606,7 +9607,7 @@ function ensureMap(){
   if (state.map.instance || !window.L) return;
   const mapEl = $("liveMap");
   if (!mapEl) return;
-  const map = window.L.map(mapEl).setView([39.5, -98.35], 4);
+  const map = window.L.map(mapEl).setView([39.5, -98.35], 10);
   const street = window.L.tileLayer(MAP_BASEMAPS.street.url, {
     attribution: MAP_BASEMAPS.street.attribution,
     maxZoom: MAP_BASEMAPS.street.maxZoom,
