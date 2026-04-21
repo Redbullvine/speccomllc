@@ -970,11 +970,10 @@
         flex-direction: column;
       }
       .gateway-stat-grid,
-      .gateway-support-grid,
-      .ws-grid {
+      .gateway-support-grid {
         grid-template-columns: 1fr;
       }
-      .ws-grid { grid-template-columns: 1fr; }
+      .ws-grid { grid-template-columns: repeat(2, 1fr); }
       #command-header { flex-direction: column; align-items: flex-start; }
       .cmd-right { width: 100%; flex-wrap: wrap; }
       .wx-stats, .wx-forecast { grid-template-columns: repeat(2,1fr); }
@@ -1024,6 +1023,273 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
+
+    /* ===== SPLASH WORKSPACE GATEWAY ===== */
+    #splash-screen {
+      overflow-y: auto;
+      overflow-x: hidden;
+      justify-content: flex-start;
+      padding: clamp(28px, 7vh, 60px) 20px 60px;
+    }
+    .sp-content {
+      width: 100%;
+      max-width: 560px;
+    }
+    .splash-logo-img {
+      height: 54px;
+      width: auto;
+      display: block;
+      margin: 0 auto 6px;
+      filter: drop-shadow(0 0 20px rgba(55,138,221,0.55));
+      animation: spGlow 3s ease-in-out infinite;
+    }
+    .sp-ws-label {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 10px;
+      font-weight: 300;
+      letter-spacing: 3.5px;
+      text-transform: uppercase;
+      color: rgba(140,180,220,0.6);
+      text-align: center;
+      margin-bottom: 14px;
+      animation: spRise 1.4s cubic-bezier(0.16,1,0.3,1) 0.5s forwards;
+      opacity: 0;
+    }
+    .sp-ws-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      width: 100%;
+      animation: spRise 1.4s cubic-bezier(0.16,1,0.3,1) 0.65s forwards;
+      opacity: 0;
+    }
+    .sp-ws-tile {
+      background: rgba(13,22,42,0.88);
+      border: 1px solid rgba(55,138,221,0.13);
+      border-radius: 13px;
+      padding: 14px 10px 12px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      text-align: center;
+      transition: border-color 0.22s, transform 0.18s, background 0.22s;
+      position: relative;
+      overflow: hidden;
+    }
+    .sp-ws-tile::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: transparent;
+      transition: background 0.3s;
+    }
+    .sp-ws-tile:hover { transform: translateY(-3px); background: rgba(18,32,62,0.9); }
+    .sp-ws-tile:hover::before { background: linear-gradient(90deg, transparent, var(--sp-ws-accent, rgba(55,138,221,0.6)), transparent); }
+    .sp-ws-tile:active { transform: translateY(0); }
+    .sp-ws-tile-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .sp-ws-tile-icon svg { width: 18px; height: 18px; }
+    .sp-ws-tile-name {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: rgba(230,240,255,0.95);
+      letter-spacing: 0.3px;
+      line-height: 1.2;
+    }
+    .sp-ws-tile-sub {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 9.5px;
+      color: rgba(140,175,210,0.5);
+      line-height: 1.4;
+    }
+    .sp-ws-divider {
+      width: 100%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(55,138,221,0.18), transparent);
+      margin: 18px 0 14px;
+      animation: spRise 1.4s ease 0.9s forwards;
+      opacity: 0;
+    }
+    .sp-ws-footer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      animation: spRise 1.4s ease 1s forwards;
+      opacity: 0;
+    }
+    .sp-demo-link {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 11px;
+      font-weight: 300;
+      letter-spacing: 1.5px;
+      color: rgba(140,180,220,0.5);
+      text-decoration: none;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+    .sp-demo-link:hover { color: rgba(180,215,250,0.85); }
+    .sp-ws-signin-btn {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      padding: 9px 22px;
+      border-radius: 4px;
+      background: transparent;
+      border: 1px solid rgba(55,138,221,0.4);
+      color: rgba(180,215,250,0.85);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .sp-ws-signin-btn:hover {
+      border-color: rgba(55,138,221,0.8);
+      color: #fff;
+      background: rgba(55,138,221,0.1);
+    }
+    @media (max-width: 480px) {
+      .sp-ws-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .sp-content { max-width: 100%; }
+    }
+
+    /* ===== DARK AUTH FORM ===== */
+    #viewAuth {
+      background: transparent;
+      min-height: 0;
+    }
+    .auth-wrap {
+      min-height: 100vh;
+      background: radial-gradient(ellipse at 30% 40%, #0d1e3a 0%, #070d1a 50%, #050810 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+    .auth-card {
+      width: min(400px, 100%);
+      background: rgba(10,20,44,0.96);
+      border: 1px solid rgba(55,138,221,0.18);
+      border-radius: 18px;
+      padding: 36px 32px 28px;
+      position: relative;
+      overflow: hidden;
+    }
+    .auth-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(55,138,221,0.55), rgba(29,158,117,0.35), transparent);
+    }
+    .auth-logo {
+      display: block;
+      height: 40px;
+      margin: 0 auto 22px;
+      filter: drop-shadow(0 0 12px rgba(55,138,221,0.4));
+    }
+    .auth-card h1 {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: rgba(230,242,255,0.95);
+      text-align: center;
+      margin: 0 0 6px;
+    }
+    .auth-sub {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: rgba(140,180,220,0.45);
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .auth-card .hr { border-color: rgba(55,138,221,0.1); margin: 0 0 22px; }
+    .auth-card .input {
+      background: rgba(5,11,24,0.9) !important;
+      border: 1px solid rgba(55,138,221,0.18) !important;
+      border-radius: 8px !important;
+      color: rgba(200,220,245,0.9) !important;
+      font-family: 'Exo 2', sans-serif !important;
+      font-size: 13px !important;
+      padding: 11px 14px !important;
+      outline: none !important;
+      transition: border-color 0.18s !important;
+    }
+    .auth-card .input:focus {
+      border-color: rgba(55,138,221,0.5) !important;
+    }
+    .auth-card .input::placeholder { color: rgba(140,170,210,0.35) !important; }
+    .auth-card .field-stack { gap: 10px; }
+    .auth-card .btn {
+      min-height: 46px !important;
+      border-radius: 8px !important;
+      font-family: 'Rajdhani', sans-serif !important;
+      font-size: 13px !important;
+      font-weight: 700 !important;
+      letter-spacing: 2px !important;
+      transition: all 0.18s !important;
+    }
+    .auth-card .btn:not(.secondary):not(.ghost) {
+      background: rgba(55,138,221,0.85) !important;
+      border: 1px solid transparent !important;
+      color: #fff !important;
+    }
+    .auth-card .btn:not(.secondary):not(.ghost):hover {
+      background: rgba(55,138,221,1) !important;
+      box-shadow: 0 0 22px rgba(55,138,221,0.3) !important;
+    }
+    .auth-card .btn.secondary {
+      background: rgba(255,255,255,0.05) !important;
+      border: 1px solid rgba(55,138,221,0.22) !important;
+      color: rgba(180,215,250,0.85) !important;
+    }
+    .auth-card .btn.ghost {
+      background: transparent !important;
+      border: 1px solid rgba(255,255,255,0.1) !important;
+      color: rgba(140,180,220,0.65) !important;
+    }
+    .auth-workspace-context {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      background: rgba(55,138,221,0.07);
+      border: 1px solid rgba(55,138,221,0.18);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 18px;
+      font-family: 'Exo 2', sans-serif;
+      font-size: 12px;
+      color: rgba(160,205,250,0.8);
+    }
+    .auth-workspace-context.visible { display: flex; }
+    .auth-workspace-context-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* ===== HIDE NAV UTILITY CLUTTER ===== */
+    #nav-scanner-btn, #nav-redline-btn, #nav-splice-btn, #nav-workpkg-btn {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -1050,11 +1316,7 @@
     <div class="sp-cb tl"></div><div class="sp-cb tr"></div>
     <div class="sp-cb bl"></div><div class="sp-cb br"></div>
     <div class="sp-content">
-    <img
-      src="assets/speccom_logo_2.png"
-      alt="SpecCom"
-      class="splash-logo-img"
-    />
+      <img src="assets/speccom_logo_2.png" alt="SpecCom" class="splash-logo-img" />
       <div class="sp-streak-wrap">
         <div class="sp-streak-line"></div>
         <div class="sp-streak-pulse"></div>
@@ -1067,9 +1329,55 @@
         <span class="sp-titem">Billing</span>
         <div class="sp-tsep"></div>
       </div>
-      <div class="sp-btn-row">
-        <button type="button" class="sp-btn sp-btn-primary" id="splash-login-btn">Login</button>
-        <button type="button" class="sp-btn sp-btn-ghost" id="splash-demo-btn">Explore Demo</button>
+      <div class="sp-ws-label">Choose Your Workspace</div>
+      <div class="sp-ws-grid">
+        <button class="sp-ws-tile" data-ws-key="technician" type="button" style="--sp-ws-accent:rgba(55,138,221,0.6)">
+          <div class="sp-ws-tile-icon" style="background:rgba(55,138,221,0.15)">
+            <svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5"><rect x="3" y="2" width="12" height="14" rx="2"/><path d="M6 6h6M6 9h6M6 12h3"/></svg>
+          </div>
+          <div class="sp-ws-tile-name">I&amp;R Specialist</div>
+          <div class="sp-ws-tile-sub">Install · Proof · GPS</div>
+        </button>
+        <button class="sp-ws-tile" data-ws-key="splicer" type="button" style="--sp-ws-accent:rgba(29,158,117,0.6)">
+          <div class="sp-ws-tile-icon" style="background:rgba(29,158,117,0.15)">
+            <svg viewBox="0 0 18 18" fill="none" stroke="#4EC29A" stroke-width="1.5"><path d="M3 9h12"/><path d="M6 5l-3 4 3 4"/><path d="M12 5l3 4-3 4"/></svg>
+          </div>
+          <div class="sp-ws-tile-name">OSP Specialist</div>
+          <div class="sp-ws-tile-sub">Closure · Splice · Proof</div>
+        </button>
+        <button class="sp-ws-tile" data-ws-key="drop_crew" type="button" style="--sp-ws-accent:rgba(211,154,68,0.6)">
+          <div class="sp-ws-tile-icon" style="background:rgba(211,154,68,0.15)">
+            <svg viewBox="0 0 18 18" fill="none" stroke="#D39A44" stroke-width="1.5"><path d="M3 8.5L9 3l6 5.5"/><path d="M5 7.8V15h8V7.8"/><path d="M8 15v-4h2v4"/></svg>
+          </div>
+          <div class="sp-ws-tile-name">Dropline</div>
+          <div class="sp-ws-tile-sub">Drop · Address · Complete</div>
+        </button>
+        <button class="sp-ws-tile" data-ws-key="warehouse" type="button" style="--sp-ws-accent:rgba(238,131,93,0.6)">
+          <div class="sp-ws-tile-icon" style="background:rgba(238,131,93,0.15)">
+            <svg viewBox="0 0 18 18" fill="none" stroke="#EE835D" stroke-width="1.5"><rect x="3" y="3" width="12" height="12" rx="1.5"/><path d="M3 8h12"/><path d="M8.5 3v12"/></svg>
+          </div>
+          <div class="sp-ws-tile-name">Logistics</div>
+          <div class="sp-ws-tile-sub">Inventory · Loads · Counts</div>
+        </button>
+        <button class="sp-ws-tile" data-ws-key="dispatch" type="button" style="--sp-ws-accent:rgba(186,117,23,0.6)">
+          <div class="sp-ws-tile-icon" style="background:rgba(186,117,23,0.15)">
+            <svg viewBox="0 0 18 18" fill="none" stroke="#D39A44" stroke-width="1.5"><rect x="2" y="4" width="14" height="10" rx="1.5"/><path d="M5 8h8M5 11h5"/><circle cx="13" cy="5" r="3" fill="rgba(186,117,23,0.2)" stroke="#D39A44"/></svg>
+          </div>
+          <div class="sp-ws-tile-name">Operations</div>
+          <div class="sp-ws-tile-sub">Dispatch · Assign · Monitor</div>
+        </button>
+        <button class="sp-ws-tile" data-ws-key="admin" type="button" style="--sp-ws-accent:rgba(127,119,221,0.6)">
+          <div class="sp-ws-tile-icon" style="background:rgba(127,119,221,0.15)">
+            <svg viewBox="0 0 18 18" fill="none" stroke="#AFA9EC" stroke-width="1.5"><circle cx="9" cy="9" r="2.2"/><path d="M9 2.5v2M9 13.5v2M2.5 9h2M13.5 9h2M4.2 4.2l1.4 1.4M12.4 12.4l1.4 1.4M13.8 4.2l-1.4 1.4M5.6 12.4l-1.4 1.4"/></svg>
+          </div>
+          <div class="sp-ws-tile-name">Administration</div>
+          <div class="sp-ws-tile-sub">Manage · Billing · Users</div>
+        </button>
+      </div>
+      <div class="sp-ws-divider"></div>
+      <div class="sp-ws-footer">
+        <button type="button" class="sp-ws-signin-btn" id="splash-login-btn">Sign In Directly</button>
+        <button type="button" class="sp-demo-link" id="splash-demo-btn">Explore Demo →</button>
       </div>
     </div>
     <div class="sp-status">
@@ -1143,16 +1451,25 @@
     <div id="viewAuth" class="stack">
       <div class="auth-wrap">
         <div class="card auth-card">
+          <img src="assets/speccom_logo_2.png" alt="SpecCom" class="auth-logo" />
           <h1 data-i18n="authTitle">Sign in to SpecCom</h1>
-
+          <div class="auth-sub">Field verification &amp; operations platform</div>
+          <div class="auth-workspace-context" id="auth-workspace-context">
+            <div class="auth-workspace-context-icon" id="auth-ws-icon" style="background:rgba(55,138,221,0.15)">
+              <svg viewBox="0 0 18 18" fill="none" stroke="#6CAEEB" stroke-width="1.5" width="15" height="15"><rect x="3" y="2" width="12" height="14" rx="2"/><path d="M6 6h6M6 9h6M6 12h3"/></svg>
+            </div>
+            <div>
+              <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(120,170,220,0.5);margin-bottom:2px;">Signing into</div>
+              <div id="auth-ws-name" style="font-size:13px;font-weight:600;color:rgba(200,225,250,0.9);">Workspace</div>
+            </div>
+          </div>
           <div class="hr"></div>
-
           <form id="authForm" autocomplete="on">
             <div class="field-stack">
-              <input id="email" class="input" placeholder="email" data-i18n-placeholder="emailPlaceholder" autocomplete="username" />
-              <input id="password" class="input" placeholder="password" type="password" data-i18n-placeholder="passwordPlaceholder" autocomplete="current-password" />
+              <input id="email" class="input" placeholder="Email address" data-i18n-placeholder="emailPlaceholder" autocomplete="username" />
+              <input id="password" class="input" placeholder="Password" type="password" data-i18n-placeholder="passwordPlaceholder" autocomplete="current-password" />
             </div>
-            <div class="row" style="margin-top:12px;">
+            <div class="row" style="margin-top:14px;">
               <button id="btnSignIn" class="btn" data-action="signIn" data-i18n="signIn" type="button">Sign in</button>
               <button id="btnSignUp" class="btn secondary" data-action="signUp" data-i18n="createUser" type="button">Create account</button>
               <button id="btnDemoLogin" class="btn ghost" data-action="demoLogin" data-i18n="demoLogin" type="button" style="display:none;">Demo login</button>

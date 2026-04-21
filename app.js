@@ -10599,6 +10599,18 @@ function initSplash() {
     window.location.assign(demoUrl);
   });
 
+  document.querySelectorAll(".sp-ws-tile").forEach(function(tile) {
+    tile.addEventListener("click", function() {
+      const wsKey = tile.getAttribute("data-ws-key");
+      if (wsKey) {
+        sessionStorage.setItem("sc_workspace_intent", wsKey);
+        showWorkspaceContextOnAuth(wsKey);
+      }
+      openSignInUi("splash-gateway");
+      dismissSplash("#login");
+    });
+  });
+
   splash.addEventListener("click", (event) => {
     if (event.target === loginBtn || loginBtn.contains(event.target)) return;
     if (event.target === demoBtn || demoBtn.contains(event.target)) return;
@@ -17273,6 +17285,30 @@ function showPendingAccountMessage(){
     <button class="btn ghost small" style="margin-top:16px;" onclick="SpecCom.helpers.handleSignOut()">Sign out</button>
   `;
   main.prepend(card);
+}
+
+const _WS_INTENT_NAV_MAP = {
+  technician: "timesheet",
+  splicer: "map",
+  drop_crew: "map",
+  warehouse: "warehouse",
+  dispatch: "dispatch",
+  admin: "admin",
+};
+const _WS_INTENT_LABELS = {
+  technician: "I&R Specialist",
+  splicer: "OSP Specialist",
+  drop_crew: "Dropline Specialist",
+  warehouse: "Logistics Specialist",
+  dispatch: "Operations Control",
+  admin: "Administration",
+};
+function showWorkspaceContextOnAuth(wsKey){
+  const ctx = document.getElementById("auth-workspace-context");
+  const nameEl = document.getElementById("auth-ws-name");
+  if (!ctx || !nameEl) return;
+  nameEl.textContent = _WS_INTENT_LABELS[wsKey] || wsKey;
+  ctx.classList.add("visible");
 }
 
 function openSignInUi(source = "unknown"){
@@ -29108,7 +29144,7 @@ const FIELD_OPS_STUDIO_KEY = "speccom.fieldOpsStudio.v1";
 const FIELD_OPS_WORKSPACES = [
   {
     key: "technician",
-    title: "Technician",
+    title: "I&R Specialist",
     accent: "#378ADD",
     iconClass: "icon-blue",
     summary: "Service installs with forgiving proof capture, customer notes, and clean handoff.",
@@ -29127,7 +29163,7 @@ const FIELD_OPS_WORKSPACES = [
   },
   {
     key: "splicer",
-    title: "Splicer",
+    title: "OSP Specialist",
     accent: "#1D9E75",
     iconClass: "icon-teal",
     summary: "Main line work with closure notes, materials, closure progress, and proof that survives bad field days.",
@@ -29146,7 +29182,7 @@ const FIELD_OPS_WORKSPACES = [
   },
   {
     key: "drop_crew",
-    title: "Drop Crew",
+    title: "Dropline Specialist",
     accent: "#D39A44",
     iconClass: "icon-amber",
     summary: "House-drop jobs with address proof, install notes, and simple closeout that crews will actually finish.",
@@ -29165,7 +29201,7 @@ const FIELD_OPS_WORKSPACES = [
   },
   {
     key: "warehouse",
-    title: "Warehouse",
+    title: "Logistics Specialist",
     accent: "#EE835D",
     iconClass: "icon-coral",
     summary: "Inventory movement, truck loads, and clean counts without office clutter or role friction.",
@@ -29288,58 +29324,27 @@ function renderFieldOpsStudioShell(){
   const stateData = loadFieldOpsStudioState();
   const activeWorkspace = getFieldOpsWorkspaceMeta(stateData.activeWorkspace);
   const activeDraft = stateData.drafts[activeWorkspace.key] || {};
-  const summary = getFieldOpsStudioSummary(stateData);
   return `
     <section class="field-ops-studio">
-      <div class="field-ops-hero">
-        <div>
-          <div class="field-ops-kicker">Field Ops Studio</div>
-          <h2>Real field work, forgiving edits, demo-side mojo.</h2>
-          <p>Every workspace autosaves, stays editable, and keeps the hard labor flow front and center. No office clutter. No punishments for honest mistakes.</p>
-        </div>
-        <div class="field-ops-hero-note">
-          <div class="field-ops-hero-pill">Autosave on every change</div>
-          <div class="field-ops-hero-pill">Edit and resubmit anytime</div>
-          <div class="field-ops-hero-pill">Built for messy real crews</div>
-        </div>
-      </div>
-      <div class="field-ops-summary-bar">
-        <div class="field-ops-summary-card">
-          <strong>${summary.touchedCount}</strong>
-          <span>Workspaces with saved progress</span>
-        </div>
-        <div class="field-ops-summary-card">
-          <strong>${summary.readyCount}</strong>
-          <span>Ready for supervisor review</span>
-        </div>
-        <div class="field-ops-summary-card">
-          <strong>${summary.activeCount}</strong>
-          <span>Still in crew hands and editable</span>
-        </div>
-      </div>
       <div class="field-ops-shell">
         <div class="field-ops-card-grid">
           ${FIELD_OPS_WORKSPACES.map((workspace) => {
             const draft = stateData.drafts[workspace.key] || {};
             const isActive = workspace.key === activeWorkspace.key;
-            return `<article class="field-ops-card${isActive ? " is-active" : ""}" style="--field-ops-accent:${workspace.accent};"><div class="field-ops-card-icon ${workspace.iconClass}">${workspace.iconSvg}</div><div class="field-ops-card-title">${escapeHtml(workspace.title)}</div><div class="field-ops-card-desc">${escapeHtml(workspace.summary)}</div><div class="field-ops-card-tags">${workspace.chips.map((chip) => `<span class="field-ops-chip">${escapeHtml(chip)}</span>`).join("")}</div><div class="field-ops-card-status">${escapeHtml(getFieldOpsDraftStatusLabel(workspace, draft))}</div><div class="field-ops-card-footer"><div class="field-ops-card-save">${escapeHtml(formatFieldOpsStudioTimestamp(draft.updatedAt))}</div><button class="field-ops-open-btn" type="button" data-field-ops-open="${escapeHtml(workspace.key)}">${isActive ? "Open Now" : "Open Workspace"}</button></div></article>`;
+            const hasProgress = Boolean(String(draft.updatedAt || "").trim());
+            return `<article class="field-ops-card${isActive ? " is-active" : ""}" style="--field-ops-accent:${workspace.accent};"><div class="field-ops-card-icon ${workspace.iconClass}">${workspace.iconSvg}</div><div class="field-ops-card-title">${escapeHtml(workspace.title)}</div><div class="field-ops-card-status">${escapeHtml(getFieldOpsDraftStatusLabel(workspace, draft))}</div><div class="field-ops-card-footer"><div class="field-ops-card-save">${hasProgress ? escapeHtml(formatFieldOpsStudioTimestamp(draft.updatedAt)) : "No draft yet"}</div><button class="field-ops-open-btn" type="button" data-field-ops-open="${escapeHtml(workspace.key)}">${isActive ? "Active" : "Open"}</button></div></article>`;
           }).join("")}
         </div>
         <section class="field-ops-workspace-panel" style="--field-ops-accent:${activeWorkspace.accent};">
           <div class="field-ops-panel-head">
             <div>
-              <div class="field-ops-panel-kicker">${escapeHtml(activeWorkspace.title)} Workspace</div>
+              <div class="field-ops-panel-kicker">${escapeHtml(activeWorkspace.title)}</div>
               <div class="field-ops-panel-title">${escapeHtml(activeWorkspace.summary)}</div>
             </div>
             <div class="field-ops-panel-meta">
               <span class="field-ops-state-pill">${escapeHtml(formatFieldOpsStudioTimestamp(activeDraft.updatedAt))}</span>
-              <button type="button" class="field-ops-reset-btn" data-field-ops-reset="${escapeHtml(activeWorkspace.key)}">Reset Draft</button>
+              <button type="button" class="field-ops-reset-btn" data-field-ops-reset="${escapeHtml(activeWorkspace.key)}">Reset</button>
             </div>
-          </div>
-          <div class="field-ops-proof-strip">
-            <div class="field-ops-proof-card"><strong>Proof</strong><span>Photos, GPS, time, codes, notes</span></div>
-            <div class="field-ops-proof-card"><strong>Save</strong><span>Draft first, submit later</span></div>
-            <div class="field-ops-proof-card"><strong>Edit</strong><span>Fix it without losing progress</span></div>
           </div>
           <div class="field-ops-launch-strip">
             ${buildFieldOpsWorkspaceActionButton(activeWorkspace.launchAction, "field-ops-live-btn")}
@@ -29350,16 +29355,7 @@ function renderFieldOpsStudioShell(){
           </form>
           <div class="field-ops-panel-actions">
             <button type="button" class="field-ops-primary-btn" data-field-ops-save="${escapeHtml(activeWorkspace.key)}">Save Work</button>
-            <button type="button" class="field-ops-secondary-btn" data-field-ops-submit="${escapeHtml(activeWorkspace.key)}">Mark Ready for Supervisor</button>
-          </div>
-          <div class="field-ops-handoff-board">
-            <div class="field-ops-handoff-title">Crew Handoff Board</div>
-            <div class="field-ops-handoff-list">
-              ${FIELD_OPS_WORKSPACES.map((workspace) => {
-                const draft = stateData.drafts[workspace.key] || {};
-                return `<div class="field-ops-handoff-row"><div><strong>${escapeHtml(workspace.title)}</strong><span>${escapeHtml(getFieldOpsDraftStatusLabel(workspace, draft))}</span></div><button type="button" class="field-ops-handoff-open" data-field-ops-open="${escapeHtml(workspace.key)}">Open</button></div>`;
-              }).join("")}
-            </div>
+            <button type="button" class="field-ops-secondary-btn" data-field-ops-submit="${escapeHtml(activeWorkspace.key)}">Mark Ready</button>
           </div>
         </section>
       </div>
@@ -29444,10 +29440,6 @@ function renderDemoShowcaseHome(){
   const profileCard = $("dashboardProfileCard");
   if (profileCard) profileCard.style.display = "none";
   legacyIds.forEach((id) => { const el = $(id); if (el) el.style.display = "none"; });
-  const studioState = loadFieldOpsStudioState();
-  const activeWorkspace = getFieldOpsWorkspaceMeta(studioState.activeWorkspace);
-  const activeDraft = studioState.drafts[activeWorkspace.key] || {};
-  const studioSummary = getFieldOpsStudioSummary(studioState);
   const specialistLanes = [
     {
       title: "I&R Specialist",
@@ -29497,7 +29489,7 @@ function renderDemoShowcaseHome(){
       summary: "Material search, scan flow, and inventory movement without office-tool drag.",
       chips: ["Inventory", "Scan", "Counts"],
       action: { type: "view", target: "viewCatalog" },
-      supportAction: { type: "view", target: "viewWarehouseScan", label: "Scan Mode" },
+      secondaryAction: { type: "view", target: "viewWarehouseScan", fallbackViews: ["viewCatalog", "viewDashboard"], label: "Scan Mode" },
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#EE835D" stroke-width="1.5"><rect x="3" y="3" width="12" height="12" rx="1.5"/><path d="M3 8h12"/></svg>',
     },
     {
@@ -29511,11 +29503,6 @@ function renderDemoShowcaseHome(){
       iconSvg: '<svg viewBox="0 0 18 18" fill="none" stroke="#EE835D" stroke-width="1.5"><circle cx="9" cy="9" r="2.2"/><path d="M9 2.5v2M9 13.5v2M2.5 9h2M13.5 9h2M4.2 4.2l1.4 1.4M12.4 12.4l1.4 1.4M13.8 4.2l-1.4 1.4M5.6 12.4l-1.4 1.4"/></svg>',
     },
   ];
-  const projectName = String(state.activeProject?.name || "").trim() || "Choose a project to unlock the next lane";
-  const focusStatus = getFieldOpsDraftStatusLabel(activeWorkspace, activeDraft);
-  const messagesAction = escapeHtml(JSON.stringify(buildShowcaseActionPayload({ type: "modal", target: "messages" }, { label: "Messages" })));
-  const projectsAction = escapeHtml(JSON.stringify(buildShowcaseActionPayload({ type: "modal", target: "projects" }, { label: "Projects" })));
-
   wrap.style.display = "";
   wrap.innerHTML = `
     <div id="command-header">
@@ -29553,57 +29540,7 @@ function renderDemoShowcaseHome(){
         </button>
       </div>
     </div>
-    <div class="gateway-shell">
-      <section class="gateway-hero">
-        <div class="gateway-hero-main">
-          <div class="gateway-kicker">Workspace Gateway</div>
-          <h2 class="gateway-title">Pick a lane, stay oriented, keep moving.</h2>
-          <p class="gateway-copy">SpecCom opens like the demo side now: clearer specialist lanes, a stronger current-step signal, and less office noise between crews and proof-ready work.</p>
-          <div class="gateway-pill-row">
-            <span class="gateway-pill">Fast to learn</span>
-            <span class="gateway-pill">Forgiving edits</span>
-            <span class="gateway-pill">Autosave first</span>
-          </div>
-        </div>
-        <div class="gateway-stat-grid">
-          <div class="gateway-stat-card">
-            <strong>${studioSummary.touchedCount}</strong>
-            <span>workspaces with live progress</span>
-          </div>
-          <div class="gateway-stat-card">
-            <strong>${studioSummary.readyCount}</strong>
-            <span>ready for review</span>
-          </div>
-          <div class="gateway-stat-card">
-            <strong>${studioSummary.activeCount}</strong>
-            <span>still editable in the field</span>
-          </div>
-        </div>
-      </section>
-      <section class="gateway-focus" style="--gateway-accent:${activeWorkspace.accent};">
-        <div class="gateway-focus-kicker">Current Workspace</div>
-        <div class="gateway-focus-body">
-          <div class="gateway-focus-copy">
-            <div class="gateway-focus-title">${escapeHtml(activeWorkspace.title)}</div>
-            <div class="gateway-focus-summary">${escapeHtml(activeWorkspace.summary)}</div>
-            <div class="gateway-focus-pills">
-              <span>Project: ${escapeHtml(projectName)}</span>
-              <span>Status: ${escapeHtml(focusStatus)}</span>
-              <span>${escapeHtml(formatFieldOpsStudioTimestamp(activeDraft.updatedAt))}</span>
-            </div>
-          </div>
-          <div class="gateway-focus-actions">
-            ${buildFieldOpsWorkspaceActionButton(activeWorkspace.launchAction, "gateway-primary-btn")}
-            ${buildFieldOpsWorkspaceActionButton(activeWorkspace.supportAction, "gateway-secondary-btn")}
-            <button class="gateway-secondary-btn" type="button" data-showcase-action='${projectsAction}'>Choose Project</button>
-          </div>
-        </div>
-      </section>
-    </div>
-    <div style="padding:0 20px 4px;">
-      ${renderFieldOpsStudioShell()}
-    </div>
-    <div class="section-label">Specialist Workspaces</div>
+    <div class="section-label">Your Workspaces</div>
     <div class="ws-grid">
       ${specialistLanes.map((workspace) => `
         <article class="ws-card ${workspace.accent}">
@@ -29614,75 +29551,27 @@ function renderDemoShowcaseHome(){
           <div class="ws-tags">${workspace.chips.map((chip) => `<span class="ws-tag">${escapeHtml(chip)}</span>`).join("")}</div>
           <div class="ws-footer">
             <button class="ws-open" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(workspace.action, { label: workspace.title, fallbackViews: workspace.action.fallbackViews || [] })))}'>Open <span class="ws-open-arrow">></span></button>
-            ${workspace.supportAction ? `<button class="ws-open ws-open-teal" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(workspace.supportAction, { label: workspace.supportAction.label || "Open" })))}'>${escapeHtml(workspace.supportAction.label || "Open")}</button>` : ""}
+            ${workspace.secondaryAction ? `<button class="ws-open ws-open-teal" type="button" data-showcase-action='${escapeHtml(JSON.stringify(buildShowcaseActionPayload(workspace.secondaryAction, { label: workspace.secondaryAction.label || "Open", fallbackViews: workspace.secondaryAction.fallbackViews || [] })))}'>${escapeHtml(workspace.secondaryAction.label || "Open")}</button>` : ""}
           </div>
         </article>
       `).join("")}
     </div>
-    <div class="section-label">Support Rail</div>
-    <div class="gateway-support-grid">
-      <div class="msg-card" id="message-board-card">
-        <div class="msg-header">
-          <div class="msg-title-row">
-            <div class="msg-icon">
-              <svg viewBox="0 0 18 18" fill="none" stroke="#7F77DD" stroke-width="1.5" width="18" height="18">
-                <rect x="2" y="3" width="14" height="9" rx="1.5"/>
-                <path d="M5 14l2-2h7"/>
-              </svg>
-            </div>
-            <div>
-              <div class="msg-title">Message Board</div>
-              <div class="msg-subtitle">Company-wide and personal feeds</div>
-            </div>
-          </div>
-          <div class="msg-tabs">
-            <div class="msg-tab active" onclick="switchMsgTab('company', this)">Company</div>
-            <div class="msg-tab" onclick="switchMsgTab('mine', this)">Mine</div>
-          </div>
-        </div>
-        <div class="msg-support-copy">Keep chatter out of the main lane until you need it. Open the full board only when it helps the job move forward.</div>
-        <div class="msg-feed" id="msg-feed-company"></div>
-        <div class="msg-actions">
-          <button class="msg-send" type="button" data-showcase-action='${messagesAction}'>Open Messages</button>
-          <button class="msg-send msg-send-ghost" type="button" data-showcase-action='${projectsAction}'>Projects</button>
-        </div>
+    <div class="section-label">Quick Field Log</div>
+    <div style="padding:0 20px 16px;">
+      ${renderFieldOpsStudioShell()}
+    </div>
+    <div style="display:none;" aria-hidden="true" id="home-secondary-data">
+      <div id="weather-card">
+        <span id="wx-location"></span><span id="wx-proj-ref"></span>
+        <span id="wx-temp"></span><span id="wx-condition"></span>
+        <span id="wx-wind"></span><span id="wx-gusts"></span>
+        <span id="wx-humidity"></span><span id="wx-precip"></span>
+        <div id="wx-alert-wrap"><span id="wx-alert-text"></span></div>
+        <div id="wx-forecast"></div>
       </div>
-      <div id="weather-card" class="wx-card">
-        <div class="wx-header">
-          <div class="wx-loc-row">
-            <div class="wx-icon-wrap">
-              <svg viewBox="0 0 18 18" fill="none" stroke="#378ADD" stroke-width="1.5" width="18" height="18">
-                <path d="M9 2a5 5 0 015 5c0 3.5-5 9-5 9S4 10.5 4 7a5 5 0 015-5z"/>
-                <circle cx="9" cy="7" r="1.5"/>
-              </svg>
-            </div>
-            <div>
-              <div class="wx-location" id="wx-location">Loading...</div>
-              <div class="wx-proj-ref" id="wx-proj-ref">Active project</div>
-            </div>
-          </div>
-          <div style="text-align:right;">
-            <div><span class="wx-temp" id="wx-temp">--</span><span class="wx-unit">°F</span></div>
-            <div class="wx-condition" id="wx-condition">Fetching weather...</div>
-          </div>
-        </div>
-        <div id="wx-alert-wrap" style="display:none;">
-          <div class="wx-alert">
-            <svg viewBox="0 0 14 14" fill="none" stroke="#EF9F27" stroke-width="1.5" width="14" height="14">
-              <path d="M7 1L1 12h12L7 1z"/>
-              <line x1="7" y1="5" x2="7" y2="8"/>
-              <circle cx="7" cy="10" r="0.5" fill="#EF9F27"/>
-            </svg>
-            <span class="wx-alert-text" id="wx-alert-text"></span>
-          </div>
-        </div>
-        <div class="wx-stats" id="wx-stats">
-          <div class="wx-stat"><div class="wx-stat-label">Wind</div><div class="wx-stat-val" id="wx-wind">--</div></div>
-          <div class="wx-stat"><div class="wx-stat-label">Gusts</div><div class="wx-stat-val" id="wx-gusts">--</div></div>
-          <div class="wx-stat"><div class="wx-stat-label">Humidity</div><div class="wx-stat-val" id="wx-humidity">--</div></div>
-          <div class="wx-stat"><div class="wx-stat-label">Precip</div><div class="wx-stat-val" id="wx-precip">--</div></div>
-        </div>
-        <div class="wx-forecast" id="wx-forecast"></div>
+      <div id="message-board-card">
+        <div id="msg-feed-company"></div>
+        <input id="msg-input" type="hidden" />
       </div>
     </div>
   `;
@@ -30821,6 +30710,14 @@ async function postLoginBootstrap(client, user){
       return;
     }
     setActiveView(getDefaultView());
+    const _wsIntent = sessionStorage.getItem("sc_workspace_intent");
+    if (_wsIntent) {
+      sessionStorage.removeItem("sc_workspace_intent");
+      const _wsTarget = _WS_INTENT_NAV_MAP[_wsIntent];
+      if (_wsTarget && !pendingRedirect && !hasInvoiceHashRoute(window.location.hash || "") && !hasRedlineHashRoute(window.location.hash || "")) {
+        setTimeout(() => navigateTo(_wsTarget), 200);
+      }
+    }
     startLocationPolling();
     syncPendingSites();
   }
