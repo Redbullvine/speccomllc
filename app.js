@@ -9632,6 +9632,14 @@ function ensureMap(){
   registerMapUiBindings();
   renderMapLayerPanel();
   setMapBasemap(state.map.basemap);
+  // Prevent Leaflet from absorbing touches on overlay panels (causes multiple-click issue)
+  ["mapFieldPanel", "leftControlRail", "mapDetailsDrawer"].forEach((id) => {
+    const el = $(id);
+    if (el && window.L?.DomEvent) {
+      window.L.DomEvent.disableClickPropagation(el);
+      window.L.DomEvent.disableScrollPropagation(el);
+    }
+  });
   renderFeatureDrawer();
   map.on("popupclose", () => {
     // Clear popup context so stale async callbacks don't corrupt the next popup
@@ -21417,7 +21425,8 @@ async function openLocationForField(siteId, { center = true, forAdd = false } = 
   setMapFieldSelectedSite(siteId);
   const popupOpened = await openSitePopupForSiteId(siteId, { center, syncSelection: true });
   if (forAdd && !popupOpened){
-    setDrawerTab("data", { open: true });
+    setActiveView("viewNodes");
+    toast("Site opened", "Add splice locations and capture proof photos below.");
   }
 }
 
@@ -30625,6 +30634,7 @@ function showToast(message){
 }
 
 let _postLoginBootstrapRunning = false;
+let _postLoginBootstrapDone = false;
 async function postLoginBootstrap(client, user){
   // Guard against duplicate concurrent calls (onAuthStateChange + handleSignIn both call this)
   if (_postLoginBootstrapRunning){
@@ -30723,13 +30733,16 @@ async function postLoginBootstrap(client, user){
       setWhoami();
       return;
     }
-    setActiveView(getDefaultView());
-    const _wsIntent = sessionStorage.getItem("sc_workspace_intent");
-    if (_wsIntent) {
-      sessionStorage.removeItem("sc_workspace_intent");
-      const _wsTarget = _WS_INTENT_NAV_MAP[_wsIntent];
-      if (_wsTarget && !pendingRedirect && !hasInvoiceHashRoute(window.location.hash || "") && !hasRedlineHashRoute(window.location.hash || "")) {
-        setTimeout(() => navigateTo(_wsTarget), 200);
+    if (!_postLoginBootstrapDone) {
+      _postLoginBootstrapDone = true;
+      setActiveView(getDefaultView());
+      const _wsIntent = sessionStorage.getItem("sc_workspace_intent");
+      if (_wsIntent) {
+        sessionStorage.removeItem("sc_workspace_intent");
+        const _wsTarget = _WS_INTENT_NAV_MAP[_wsIntent];
+        if (_wsTarget && !pendingRedirect && !hasInvoiceHashRoute(window.location.hash || "") && !hasRedlineHashRoute(window.location.hash || "")) {
+          setTimeout(() => navigateTo(_wsTarget), 200);
+        }
       }
     }
     startLocationPolling();
