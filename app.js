@@ -621,7 +621,7 @@ const I18N = {
     laborDateLabel: "Work date",
     laborPaidHoursLabel: "Paid hours",
     jobSubtitle: "Ruidoso FTTH Rebuild (site-by-site workflow)",
-    photosOptionalBadge: "Photos optional for MVP",
+    photosOptionalBadge: "Proof photo required",
     activeNodeTitle: "Active site",
     kpiNode: "Site",
     kpiCompletion: "Completion",
@@ -637,19 +637,19 @@ const I18N = {
     openNode: "Open site",
     createNode: "Create site",
     spliceLocationsTitle: "Splice locations",
-    spliceLocationsSubtitle: "Photos are optional for billing in this MVP.",
+    spliceLocationsSubtitle: "GPS arrival pin + proof photo required for each location.",
     addSpliceLocation: "Add splice location",
     inventoryTitle: "Inventory checklist",
     inventorySubtitle: "What was used at this site. Splicers see items and checklists, not pricing.",
     photoChecklistTitle: "Photo checklist",
-    photosOptionalBanner: "Photos optional for MVP",
+    photosOptionalBanner: "Proof photo required before billing",
     capturePhotosTitle: "Capture photos",
     capturePhotosSubtitle: "Camera-only. GPS required at capture time. No gallery uploads.",
     startCamera: "Start camera",
     captureUsagePhoto: "Capture usage photo",
     photoStatusNone: "No photo captured",
     invoiceActionsTitle: "Invoice actions",
-    invoicesUngatedBanner: "Invoices available without proof in MVP",
+    invoicesUngatedBanner: "Proof photos required before invoicing",
     invoiceActionsSubtitle: "Billing entry is available in this MVP.",
     markNodeReady: "Mark site READY for billing",
     createInvoice: "Create invoice",
@@ -759,7 +759,7 @@ const I18N = {
     hidden: "hidden",
     openNodeInvoices: "Open a site to see invoice actions.",
     billingGateTitle: "Billing status",
-    billingGateBypass: "Invoices are not gated by proof in this MVP.",
+    billingGateBypass: "All locations must have proof photos before invoicing.",
     statusLabel: "Status",
     eligibleLabel: "ELIGIBLE",
     notReadyLabel: "NOT READY",
@@ -2356,7 +2356,7 @@ const SINGLE_PROOF_PHOTO_MODE = String(
   || (window.process && window.process.env && window.process.env.SINGLE_PROOF_PHOTO_MODE)
   || ""
 ).toLowerCase() === "true";
-const MVP_UNGATED = true;
+const MVP_UNGATED = false;
 const CONTROL_CENTER_DEV_MODE = false;
 
 function getSiteDisplayName(site){
@@ -2691,24 +2691,12 @@ function getRequiredSlotsForLocation(loc){
 
 function countRequiredSlotUploads(loc){
   const photos = loc?.photosBySlot || {};
-  if (SINGLE_PROOF_PHOTO_MODE){
-    const uploaded = Object.keys(photos).length > 0 ? 1 : 0;
-    return { uploaded, required: 1 };
-  }
-  const required = getRequiredSlotsForLocation(loc);
-  let uploaded = 0;
-  required.forEach((slot) => {
-    if (photos[slot]) uploaded += 1;
-  });
-  return { uploaded, required: 0 };
+  const uploaded = Object.keys(photos).length > 0 ? 1 : 0;
+  return { uploaded, required: 1 };
 }
 
 function hasAllRequiredSlotPhotos(loc){
-  const photos = loc?.photosBySlot || {};
-  if (SINGLE_PROOF_PHOTO_MODE){
-    return Object.keys(photos).length > 0;
-  }
-  return true;
+  return Object.keys(loc?.photosBySlot || {}).length > 0;
 }
 
 function getSpliceLocationDefaultName(index){
@@ -23904,9 +23892,17 @@ function renderLocations(){
       <div class="row" style="justify-content:space-between;">
         <div>
           ${nameHtml}
-          <div class="muted small">${escapeHtml(r.id)}</div>
-          ${SINGLE_PROOF_PHOTO_MODE ? "" : `<div class="muted small">Photos uploaded: <b>${counts.uploaded}/${FIXED_LOCATION_PHOTO_SLOTS}</b></div>`}
-          <div class="muted small">Work codes logged here: <b>${escapeHtml(workCodesLabel)}</b></div>
+          ${r.gps
+            ? `<div class="loc-gps-stamp">
+                <span class="loc-gps-icon">📍</span>
+                <span>${r.gps.lat.toFixed(6)}, ${r.gps.lng.toFixed(6)}</span>
+                <span class="loc-gps-acc">±${Math.round(r.gps.accuracy_m || 0)}m</span>
+                ${r.created_at ? `<span class="loc-gps-time">· ${new Date(r.created_at).toLocaleString()}</span>` : ""}
+              </div>`
+            : `<div class="loc-gps-missing">⚠ No arrival GPS — location not verified</div>`
+          }
+          <div class="muted small">Photos: <b>${counts.uploaded < counts.required ? `<span style="color:#f59e0b">0 captured — required before completion</span>` : `${counts.uploaded} captured`}</b></div>
+          <div class="muted small">Work codes: <b>${escapeHtml(workCodesLabel)}</b></div>
         </div>
         <div>
           ${done ? `<div style="display:flex; justify-content:flex-end;">${done}</div>` : ""}
@@ -29844,15 +29840,23 @@ async function uploadPhotoToSupabase(photoRecord) {
 async function addSpliceLocation(){
   const node = state.activeNode;
   if (!node) return;
+
+  const arrivalGPS = await captureGPS();
+  if (!arrivalGPS){
+    toast("GPS required", "Enable location access to drop an arrival pin. GPS coordinates are required for proof.");
+    return;
+  }
+
   const nextSortOrder = Math.max(...(node.splice_locations || []).map(l => l.sort_order || 0), 0) + 1;
   const tempName = getSpliceLocationDefaultName(nextSortOrder - 1);
+  const arrivedAt = nowISO();
   if (isDemo){
     node.splice_locations = node.splice_locations || [];
     node.splice_locations.push({
       id: `loc-${Date.now()}`,
       label: null,
       location_label: tempName,
-      gps: null,
+      gps: arrivalGPS,
       photo: null,
       taken_at: null,
       completed: false,
@@ -29861,6 +29865,7 @@ async function addSpliceLocation(){
       work_description: "",
       photosBySlot: {},
       sort_order: nextSortOrder,
+      created_at: arrivedAt,
       isEditingName: true,
     });
     renderLocations();
@@ -29877,6 +29882,9 @@ async function addSpliceLocation(){
       label: null,
       terminal_ports: DEFAULT_TERMINAL_PORTS,
       sort_order: nextSortOrder,
+      gps_lat: arrivalGPS.lat,
+      gps_lng: arrivalGPS.lng,
+      gps_accuracy_m: arrivalGPS.accuracy_m ?? null,
     })
     .select("id, label, location_label, gps_lat, gps_lng, gps_accuracy_m, photo_path, taken_at, completed, terminal_ports, sort_order, created_at, work_codes, work_description")
     .maybeSingle();
