@@ -194,6 +194,7 @@ const state = {
   billingStatus: null,
   lastGPS: null,
   lastProof: null,
+  pendingPhotoCaptureContexts: {},
   lastLocationSentAt: 0,
   lastLocationSent: null,
   cameraStream: null,
@@ -703,8 +704,8 @@ const I18N = {
       issuerLabel: "Issuer",
       recipientLabel: "Recipient",
       mediaTitle: "Media",
-      mediaSubtitle: "Add images from camera or gallery.",
-      addMedia: "Add media",
+      mediaSubtitle: "Reference uploads only. These do not count as live proof.",
+      addMedia: "Upload reference media",
       codesTitle: "Billing codes",
       codesSubtitle: "Add the billing codes used at this location.",
       entriesTitle: "Entries",
@@ -1034,8 +1035,8 @@ const I18N = {
       issuerLabel: "Emisor",
       recipientLabel: "Receptor",
       mediaTitle: "Media",
-      mediaSubtitle: "Agrega imágenes desde cámara o galería.",
-      addMedia: "Agregar media",
+      mediaSubtitle: "Solo cargas de referencia. No cuentan como prueba en vivo.",
+      addMedia: "Subir media de referencia",
       codesTitle: "Códigos de facturación",
       codesSubtitle: "Agrega los códigos de facturación usados en esta ubicación.",
       entriesTitle: "Entradas",
@@ -2212,6 +2213,16 @@ function debugLog(label, payload){
   if (!DEBUG) return;
   try{
     console.error(label, payload);
+  } catch {}
+}
+
+function logPhotoFlowError(stage, error, details = {}){
+  try{
+    console.error(`[photo-flow] ${stage}`, {
+      message: getErrorMessage(error),
+      details,
+      error,
+    });
   } catch {}
 }
 
@@ -5590,7 +5601,7 @@ function buildSiteMarkerPopupHtml(site, {
   const photoUploadRow = canManagePhotos ? `
     <div class="scSitePopup-actions" style="margin-top:8px;">
       <input type="file" accept="image/*" multiple data-popup-field="photo-file" />
-      <button type="button" class="scSitePopup-action" data-popup-action="upload-photo" data-popup-site-id="${escapeHtml(siteId)}">Upload photo</button>
+      <button type="button" class="scSitePopup-action" data-popup-action="upload-photo" data-popup-site-id="${escapeHtml(siteId)}">Upload reference media</button>
     </div>
   ` : "";
   const total = Math.max(1, Number(pageTotal) || 1);
@@ -10215,7 +10226,7 @@ function canViewLabor(){
 
 function canViewDispatch(){
   if (CONTROL_CENTER_DEV_MODE) return true;
-  return isPrivilegedRole();
+  return hasAuthenticatedSession();
 }
 
 function canViewInvoiceVault(){
@@ -10597,11 +10608,19 @@ function initSplash() {
   });
 
   document.querySelectorAll(".sp-ws-tile").forEach(function(tile) {
-    tile.addEventListener("click", function() {
+    tile.addEventListener("click", function(event) {
+      event.preventDefault();
+      event.stopPropagation();
       const wsKey = tile.getAttribute("data-ws-key");
       if (wsKey) {
         sessionStorage.setItem("sc_workspace_intent", wsKey);
         showWorkspaceContextOnAuth(wsKey);
+      }
+      if (hasAuthenticatedSession()){
+        sessionStorage.removeItem("sc_workspace_intent");
+        dismissSplash();
+        setTimeout(() => openWorkspaceIntent(wsKey), 650);
+        return;
       }
       openSignInUi("splash-gateway");
       dismissSplash("#login");
@@ -17296,13 +17315,19 @@ const _WS_INTENT_NAV_MAP = {
   admin: "admin",
 };
 const _WS_INTENT_LABELS = {
-  technician: "I&R Specialist",
-  splicer: "OSP Specialist",
-  drop_crew: "Dropline Specialist",
-  warehouse: "Logistics Specialist",
-  dispatch: "Operations Control",
+  technician: "I & R Tech",
+  splicer: "OSP Splicer",
+  drop_crew: "Drop Crew",
+  warehouse: "Warehouse",
+  dispatch: "Operations",
   admin: "Administration",
 };
+function openWorkspaceIntent(wsKey){
+  const target = _WS_INTENT_NAV_MAP[String(wsKey || "")];
+  if (!target) return false;
+  navigateTo(target);
+  return true;
+}
 function showWorkspaceContextOnAuth(wsKey){
   const ctx = document.getElementById("auth-workspace-context");
   const nameEl = document.getElementById("auth-ws-name");
@@ -18650,7 +18675,7 @@ async function extractExifGps(blob){
   }
 }
 
-async function uploadSiteMediaForSite(file, site, gps, capturedAt){
+async function uploadSiteMediaForSite(file, site, gps, capturedAt, options = {}){
   if (!site || !file) return null;
   const uploadPath = await uploadProofPhoto(file, site.id, "site-media", {
     orgId: state.profile?.org_id || state.activeProject?.org_id || null,
@@ -18658,30 +18683,47 @@ async function uploadSiteMediaForSite(file, site, gps, capturedAt){
     locationId: site.id,
   });
   if (!uploadPath) return null;
+  const payload = {
+    site_id: site.id,
+    media_path: uploadPath,
+    created_by: state.user?.id || null,
+    gps_lat: gps?.lat ?? null,
+    gps_lng: gps?.lng ?? null,
+    gps_accuracy_m: gps?.accuracy ?? gps?.accuracy_m ?? null,
+    created_at: capturedAt || new Date().toISOString(),
+    source: String(options.source || "reference_upload"),
+    proof_type: String(options.proofType || ""),
+    is_live_proof: Boolean(options.isLiveProof),
+    backfilled: Boolean(options.backfilled),
+    device_user_agent: String(options.deviceUserAgent || navigator.userAgent || ""),
+    captured_at_locked: Boolean(options.capturedAtLocked ?? true),
+    gps_locked: Boolean(options.gpsLocked ?? true),
+  };
   let { error } = await state.client
     .from("site_media")
-    .insert({
-      site_id: site.id,
-      media_path: uploadPath,
-      created_by: state.user?.id || null,
-      gps_lat: gps?.lat ?? null,
-      gps_lng: gps?.lng ?? null,
-      gps_accuracy_m: gps?.accuracy ?? null,
-      created_at: capturedAt || new Date().toISOString(),
-    });
+    .insert(payload);
   if (error && isMissingColumnError(error, "created_by")){
+    const fallbackPayload = { ...payload };
+    delete fallbackPayload.created_by;
+    ({ error } = await state.client
+      .from("site_media")
+      .insert(fallbackPayload));
+  }
+  if (error && ["source", "proof_type", "is_live_proof", "backfilled", "device_user_agent", "captured_at_locked", "gps_locked"].some((col) => isMissingColumnError(error, col))){
     ({ error } = await state.client
       .from("site_media")
       .insert({
         site_id: site.id,
         media_path: uploadPath,
+        created_by: state.user?.id || null,
         gps_lat: gps?.lat ?? null,
         gps_lng: gps?.lng ?? null,
-        gps_accuracy_m: gps?.accuracy ?? null,
+        gps_accuracy_m: gps?.accuracy ?? gps?.accuracy_m ?? null,
         created_at: capturedAt || new Date().toISOString(),
       }));
   }
   if (error){
+    logPhotoFlowError("site media insert failed", error, { siteId: site.id, uploadPath, source: payload.source });
     toast("Media save error", error.message);
     return null;
   }
@@ -21317,7 +21359,7 @@ function renderMapFieldPanel(){
     </div>
     <div class="map-field-location-meta">${escapeHtml(coordText)}</div>
     <div class="row" style="gap:8px; flex-wrap:wrap;">
-      <button class="btn secondary small" type="button" data-map-field-action="photo" data-site-id="${selected.id}">Add Photo</button>
+      <button class="btn secondary small" type="button" data-map-field-action="photo" data-site-id="${selected.id}">Upload Reference Media</button>
       <button class="btn ghost small" type="button" data-map-field-action="note" data-site-id="${selected.id}">Add Note</button>
       <button class="btn ghost small" type="button" data-map-field-action="open" data-site-id="${selected.id}">Open Location</button>
       <button class="btn ghost small" type="button" data-map-field-action="complete" data-site-id="${selected.id}">Mark Complete</button>
@@ -21383,8 +21425,8 @@ function setMapFieldCreateOpen(open){
   if (open){
     $("mapFieldLocationName")?.focus();
   } else {
-    // Clear queued photos when form closes
-    state.map._pendingPhotos = [];
+    state.map._pendingProofPhotos = [];
+    state.map._pendingPhotoCapture = null;
     const preview = $("mapFieldPhotoPreview");
     if (preview) preview.innerHTML = "";
     const photoInput = $("mapFieldPhotoInput");
@@ -21616,6 +21658,63 @@ async function appendMapFieldBillingCodesToSiteNotes(site, billingRows){
   return true;
 }
 
+function renderMapFieldPendingProofs(){
+  const preview = $("mapFieldPhotoPreview");
+  if (!preview) return;
+  preview.replaceChildren();
+  const pending = Array.isArray(state.map._pendingProofPhotos) ? state.map._pendingProofPhotos : [];
+  pending.forEach((entry, index) => {
+    const thumb = document.createElement("div");
+    thumb.style.cssText = "width:68px;min-height:86px;border-radius:10px;overflow:hidden;position:relative;border:1px solid rgba(55,138,221,0.22);flex-shrink:0;background:rgba(255,255,255,0.03);display:flex;flex-direction:column;";
+    const img = document.createElement("img");
+    img.style.cssText = "width:100%;height:56px;object-fit:cover;";
+    img.src = entry.previewUrl;
+    thumb.appendChild(img);
+
+    const meta = document.createElement("div");
+    meta.style.cssText = "padding:6px;font-size:10px;line-height:1.3;color:rgba(255,255,255,0.78);";
+    const gpsText = formatPhotoGpsMeta(entry.gps);
+    meta.innerHTML = `<div style="font-weight:800;">VERIFIED LIVE</div><div>${escapeHtml(gpsText)}</div>`;
+    thumb.appendChild(meta);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.style.cssText = "position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.72);border:none;color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;";
+    removeBtn.textContent = "\u00d7";
+    removeBtn.addEventListener("click", () => {
+      const rows = Array.isArray(state.map._pendingProofPhotos) ? state.map._pendingProofPhotos.slice() : [];
+      rows.splice(index, 1);
+      state.map._pendingProofPhotos = rows;
+      renderMapFieldPendingProofs();
+    });
+    thumb.appendChild(removeBtn);
+    preview.appendChild(thumb);
+  });
+}
+
+async function handleMapFieldTakePhotoClick(){
+  const input = $("mapFieldPhotoInput");
+  if (!(input instanceof HTMLInputElement)) return false;
+  const gps = state.map.myLocation || await requestMapCurrentLocation({ center: false, silent: false });
+  if (!gps){
+    toast("GPS required", "A GPS lock is required before taking a live proof photo.");
+    return false;
+  }
+  state.map._pendingPhotoCapture = {
+    gps: {
+      lat: gps.lat,
+      lng: gps.lng,
+      accuracy_m: gps.accuracy_m ?? gps.accuracy ?? null,
+    },
+    captured_at: gps.captured_at || nowISO(),
+    source: "camera",
+    proof_type: "live_field_proof",
+    device_user_agent: navigator.userAgent || "",
+  };
+  input.click();
+  return true;
+}
+
 async function createFieldLocationFromCurrentGps(){
   const gps = state.map.myLocation || await requestMapCurrentLocation({ center: false, silent: false });
   if (!gps){
@@ -21649,40 +21748,41 @@ async function createFieldLocationFromCurrentGps(){
     setMapFieldSelectedSite(createdSiteId);
   }
   // Upload any queued photos to the newly created site
-  const pendingPhotos = state.map._pendingPhotos || [];
-  if (pendingPhotos.length > 0 && state.activeSite){
-    const site = state.activeSite;
-    const photoGps = gps ? { lat: gps.lat, lng: gps.lng, accuracy: gps.accuracy } : null;
-    const capturedAt = gps?.captured_at || new Date().toISOString();
+  const pendingPhotos = state.map._pendingProofPhotos || [];
+  if (pendingPhotos.length > 0 && createdSite){
+    const site = createdSite;
     let uploaded = 0;
-    for (const file of pendingPhotos){
-      const result = await uploadSiteMediaForSite(file, site, photoGps, capturedAt);
+    for (const pending of pendingPhotos){
+      const result = await uploadSiteMediaForSite(
+        pending.file,
+        site,
+        pending.gps,
+        pending.captured_at,
+        {
+          source: "camera",
+          proofType: pending.proof_type || "live_field_proof",
+          isLiveProof: true,
+          backfilled: false,
+          deviceUserAgent: pending.device_user_agent || navigator.userAgent || "",
+        }
+      );
+      if (!result){
+        logPhotoFlowError("map field proof upload failed", new Error("site media insert returned null"), {
+          siteId: site.id,
+          fileName: pending.file?.name || "",
+        });
+      }
       if (result) uploaded++;
     }
     if (uploaded > 0){
       toast("Photos uploaded", `${uploaded} photo${uploaded > 1 ? "s" : ""} attached to ${name || "location"}.`);
     }
   }
-  state.map._pendingPhotos = [];
+  state.map._pendingProofPhotos = [];
+  state.map._pendingPhotoCapture = null;
   const preview = $("mapFieldPhotoPreview");
   if (preview) preview.innerHTML = "";
   const capturedAt = gps.captured_at || nowISO();
-  const docGps = {
-    lat: gps.lat,
-    lng: gps.lng,
-    accuracy: gps.accuracy_m ?? gps.accuracy ?? null,
-  };
-  const pendingDocs = Array.isArray(state.map._pendingDocs) ? state.map._pendingDocs.slice() : [];
-  if (createdSite && pendingDocs.length){
-    for (const file of pendingDocs){
-      const uploadPath = await uploadSiteMediaForSite(file, createdSite, docGps, capturedAt);
-      if (uploadPath){
-        toast("File uploaded", `${file.name} attached to ${getSiteDisplayName(createdSite)}.`, "success");
-      }
-    }
-  }
-  state.map._pendingDocs = [];
-  renderMapFieldPendingDocs();
 
   const billingInput = $("mapFieldBillingCodes");
   const billingRows = parseMapFieldBillingCodeLines(billingInput?.value || "");
@@ -22414,6 +22514,25 @@ function renderSitePanel(){
   const site = state.activeSite;
   const isPending = Boolean(site?.is_pending);
   const disabled = !site || isPending;
+  const renderSiteMediaBadges = (item) => {
+    const chips = [];
+    if (item?.is_live_proof){
+      chips.push("VERIFIED LIVE");
+    } else if (item?.backfilled || item?.source === "backfill_upload"){
+      chips.push("BACKFILL UPLOAD");
+    } else {
+      chips.push("REFERENCE UPLOAD");
+    }
+    if (item?.gpsLat != null && item?.gpsLng != null){
+      chips.push("GPS LOCKED");
+    }
+    if (item?.created_at){
+      chips.push("CAPTURE TIME LOCKED");
+    }
+    return chips.length
+      ? `<div class="row" style="gap:6px; flex-wrap:wrap; margin-top:6px;">${chips.map((chip) => `<span class="chip">${escapeHtml(chip)}</span>`).join("")}</div>`
+      : "";
+  };
   if (subtitle){
     if (!site){
       subtitle.textContent = t("noSiteSelected");
@@ -22492,6 +22611,7 @@ function renderSitePanel(){
         <button class="media-card" type="button" data-action="openMedia" data-index="${idx}">
           ${item.previewUrl ? `<img src="${item.previewUrl}" alt="media" />` : ""}
           <div class="media-meta">${escapeHtml(new Date(item.created_at).toLocaleString())}</div>
+          ${renderSiteMediaBadges(item)}
         </button>
       `).join("");
     }
@@ -22586,17 +22706,25 @@ async function loadSiteMedia(siteId){
   }
   let { data, error } = await state.client
     .from("site_media")
-    .select("id, site_id, media_path, created_by, gps_lat, gps_lng, gps_accuracy_m, created_at")
+    .select("id, site_id, media_path, created_by, gps_lat, gps_lng, gps_accuracy_m, created_at, source, proof_type, is_live_proof, backfilled, device_user_agent, captured_at_locked, gps_locked")
     .eq("site_id", siteId)
     .order("created_at", { ascending: false });
   if (error && isMissingColumnError(error, "created_by")){
     ({ data, error } = await state.client
       .from("site_media")
-      .select("id, site_id, media_path, gps_lat, gps_lng, gps_accuracy_m, created_at")
+      .select("id, site_id, media_path, gps_lat, gps_lng, gps_accuracy_m, created_at, source, proof_type, is_live_proof, backfilled, device_user_agent, captured_at_locked, gps_locked")
+      .eq("site_id", siteId)
+      .order("created_at", { ascending: false }));
+  }
+  if (error && ["source", "proof_type", "is_live_proof", "backfilled", "device_user_agent", "captured_at_locked", "gps_locked"].some((col) => isMissingColumnError(error, col))){
+    ({ data, error } = await state.client
+      .from("site_media")
+      .select("id, site_id, media_path, created_by, gps_lat, gps_lng, gps_accuracy_m, created_at")
       .eq("site_id", siteId)
       .order("created_at", { ascending: false }));
   }
   if (error){
+    logPhotoFlowError("site media load failed", error, { siteId });
     toast("Media load error", error.message);
     state.siteMedia = [];
     setCachedSitePhotos(siteId, []);
@@ -22608,7 +22736,20 @@ async function loadSiteMedia(siteId){
     const previewUrl = row.media_path
       ? (/^https?:\/\//i.test(String(row.media_path)) ? String(row.media_path) : await getPublicOrSignedUrl("proof-photos", row.media_path))
       : "";
-    withUrls.push({ ...row, previewUrl });
+    withUrls.push({
+      ...row,
+      previewUrl,
+      gpsLat: row?.gps_lat ?? null,
+      gpsLng: row?.gps_lng ?? null,
+      gpsAccuracyM: row?.gps_accuracy_m ?? null,
+      source: row?.source || "reference_upload",
+      proof_type: row?.proof_type || "",
+      is_live_proof: Boolean(row?.is_live_proof),
+      backfilled: Boolean(row?.backfilled),
+      device_user_agent: row?.device_user_agent || "",
+      captured_at_locked: row?.captured_at_locked !== false,
+      gps_locked: row?.gps_locked !== false,
+    });
   }
   state.siteMedia = withUrls;
   setCachedSitePhotos(siteId, withUrls.map((row) => ({
@@ -22828,37 +22969,16 @@ async function addSiteMedia(file){
     renderSitePanel();
     return;
   }
-  const uploadPath = await uploadProofPhoto(file, site.id, "site-media", {
-    orgId: state.profile?.org_id || state.activeProject?.org_id || null,
-    projectId: site.project_id || state.activeProject?.id || null,
-    locationId: site.id,
+  const uploadPath = await uploadSiteMediaForSite(file, site, finalGps, capturedAt, {
+    source: "reference_upload",
+    proofType: "",
+    isLiveProof: false,
+    backfilled: false,
+    deviceUserAgent: navigator.userAgent || "",
+    gpsLocked: Boolean(finalGps),
+    capturedAtLocked: true,
   });
-  if (!uploadPath) return;
-  let { error } = await state.client
-    .from("site_media")
-    .insert({
-      site_id: site.id,
-      media_path: uploadPath,
-      created_by: state.user?.id || null,
-      gps_lat: finalGps?.lat ?? null,
-      gps_lng: finalGps?.lng ?? null,
-      gps_accuracy_m: finalGps?.accuracy ?? null,
-      created_at: capturedAt,
-    });
-  if (error && isMissingColumnError(error, "created_by")){
-    ({ error } = await state.client
-      .from("site_media")
-      .insert({
-        site_id: site.id,
-        media_path: uploadPath,
-        gps_lat: finalGps?.lat ?? null,
-        gps_lng: finalGps?.lng ?? null,
-        gps_accuracy_m: finalGps?.accuracy ?? null,
-        created_at: capturedAt,
-      }));
-  }
-  if (error){
-    toast("Media save error", error.message);
+  if (!uploadPath){
     return;
   }
   await loadSiteMedia(site.id);
@@ -23997,13 +24117,14 @@ function renderLocations(){
       if (url) window.open(url, "_blank", "noopener");
       return;
     }
-    const retakeBtn = e.target.closest("[data-action='retakeSlotPhoto']");
-    if (retakeBtn){
+    const openCameraBtn = e.target.closest("[data-action='openSlotCamera']");
+    if (openCameraBtn){
       e.preventDefault();
       e.stopPropagation();
-      const inputId = retakeBtn.dataset.inputId;
-      const input = list.querySelector(`input[type="file"][data-input-id="${inputId}"]`);
-      if (input) input.click();
+      const inputId = openCameraBtn.dataset.inputId;
+      if (inputId){
+        await prepareSlotCameraCapture(inputId);
+      }
       return;
     }
     const btn = e.target.closest("button");
@@ -24183,6 +24304,43 @@ function getSlotInputId(locId, slotKey){
   return `slot-${String(locId || "").replace(/[^a-zA-Z0-9_-]/g, "_")}-${String(slotKey || "").replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 }
 
+function formatPhotoGpsMeta(gps){
+  if (!gps || !Number.isFinite(Number(gps.lat)) || !Number.isFinite(Number(gps.lng))){
+    return "GPS missing";
+  }
+  const accuracy = Number.isFinite(Number(gps.accuracy_m))
+    ? ` (+/-${Math.round(Number(gps.accuracy_m))}m)`
+    : "";
+  return `${Number(gps.lat).toFixed(6)}, ${Number(gps.lng).toFixed(6)}${accuracy}`;
+}
+
+function getPhotoVerificationChips(photo){
+  if (!photo) return [];
+  const chips = [];
+  if (photo.backfilled || photo.source === "backfill_upload"){
+    chips.push("BACKFILL UPLOAD");
+  } else {
+    chips.push("VERIFIED LIVE");
+  }
+  if (photo.gps){
+    chips.push("GPS LOCKED");
+  }
+  if (photo.taken_at){
+    chips.push("CAPTURE TIME LOCKED");
+  }
+  return chips;
+}
+
+function renderPhotoVerificationChips(photo){
+  const chips = getPhotoVerificationChips(photo);
+  if (!chips.length) return "";
+  return `
+    <div class="row" style="gap:6px; flex-wrap:wrap; width:100%; margin-top:8px;">
+      ${chips.map((chip) => `<span class="chip">${escapeHtml(chip)}</span>`).join("")}
+    </div>
+  `;
+}
+
 function renderSpliceSlotCard(loc, slotKey, isRequired){
   const photo = loc.photosBySlot?.[slotKey];
   const label = getSlotLabel(slotKey);
@@ -24200,24 +24358,29 @@ function renderSpliceSlotCard(loc, slotKey, isRequired){
   const placeholder = `
     <div class="slot-placeholder">
       <div class="camera-icon" aria-hidden="true"></div>
-      <div style="font-size:12px;font-weight:700;color:rgba(55,138,221,0.9);margin-top:4px;">📷 Tap to take photo</div>
-      <div class="muted small" style="font-size:10px;">Opens device camera</div>
+      <div style="font-size:12px;font-weight:700;color:rgba(55,138,221,0.9);margin-top:4px;">Tap to take live proof photo</div>
+      <div class="muted small" style="font-size:10px;">GPS is required before camera opens</div>
     </div>
   `;
   const inputId = getSlotInputId(loc.id, slotKey);
   const inputEl = `<input id="${inputId}" class="file-input-hidden" type="file" accept="image/*" capture="environment" data-location-id="${loc.id}" data-slot-key="${slotKey}" data-input-id="${inputId}" />`;
   if (!photo){
     return `
-      <label class="photo-slot ${isRequired ? "photo-slot-required" : "extra"}" for="${inputId}" style="${isRequired ? "border:1.5px solid rgba(55,138,221,0.35);background:rgba(55,138,221,0.04);" : ""}">
+      <div class="photo-slot ${isRequired ? "photo-slot-required" : "extra"}" style="${isRequired ? "border:1.5px solid rgba(55,138,221,0.35);background:rgba(55,138,221,0.04);" : ""}">
         ${inputEl}
         <div class="row" style="justify-content:space-between; width:100%;">
           <div class="slot-title">${escapeHtml(label)}</div>
           ${badge}
         </div>
         ${placeholder}
-      </label>
+        <div class="row" style="justify-content:flex-end; width:100%; margin-top:8px;">
+          <button type="button" class="btn secondary small" data-action="openSlotCamera" data-input-id="${inputId}" ${demoAttrs}>Take Photo</button>
+        </div>
+      </div>
     `;
   }
+  const gpsMeta = photo?.gps ? formatPhotoGpsMeta(photo.gps) : (photo?.backfilled ? "No in-app GPS lock" : "GPS missing");
+  const retakeLabel = photo?.backfilled ? "Replace Backfill Upload" : "Retake Live Proof";
   return `
     <div class="photo-slot ${isRequired ? "" : "extra"}">
       ${inputEl}
@@ -24227,8 +24390,10 @@ function renderSpliceSlotCard(loc, slotKey, isRequired){
       </div>
       ${thumb}
       <div class="slot-meta">${timestamp || "Timestamp pending"}</div>
+      <div class="muted small" style="width:100%;">${escapeHtml(gpsMeta)}</div>
+      ${renderPhotoVerificationChips(photo)}
       <div class="row" style="justify-content:flex-end; width:100%;">
-        ${locked ? "" : `<button type="button" class="btn ghost small" data-action="retakeSlotPhoto" data-input-id="${inputId}" ${demoAttrs}>Upload / Retake</button>`}
+        ${locked ? "" : `<button type="button" class="btn ghost small" data-action="openSlotCamera" data-input-id="${inputId}" ${demoAttrs}>${escapeHtml(retakeLabel)}</button>`}
         ${locked ? "" : `<button type="button" class="btn ghost small" data-action="removeSlotPhoto" data-location-id="${loc.id}" data-slot-key="${slotKey}" ${demoAttrs}>Remove</button>`}
       </div>
     </div>
@@ -24529,6 +24694,30 @@ async function deleteSpliceLocation(locationId, options = {}){
   return true;
 }
 
+async function prepareSlotCameraCapture(inputId){
+  const input = document.querySelector(`input[type="file"][data-input-id="${inputId}"]`);
+  if (!(input instanceof HTMLInputElement)) return false;
+  const gps = await getCurrentGps({ enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
+  if (!gps){
+    toast("GPS required", "A live GPS lock is required before taking a proof photo.");
+    return false;
+  }
+  const captureContext = {
+    gps: {
+      lat: gps.lat,
+      lng: gps.lng,
+      accuracy_m: Number.isFinite(gps.accuracy) ? gps.accuracy : null,
+    },
+    captured_at: nowISO(),
+    source: "camera",
+    device_user_agent: navigator.userAgent || "",
+  };
+  state.lastGPS = { ...captureContext.gps };
+  state.pendingPhotoCaptureContexts[inputId] = captureContext;
+  input.click();
+  return true;
+}
+
 async function handleSpliceSlotPhotoUpload(locationId, slotKey, file){
   const node = state.activeNode;
   if (!node) return;
@@ -24545,21 +24734,39 @@ async function handleSpliceSlotPhotoUpload(locationId, slotKey, file){
     toast("Billing locked", "Photos are locked after billing is ready.");
     return;
   }
-  const takenAt = nowISO();
+  const inputId = getSlotInputId(locationId, slotKey);
+  const captureContext = state.pendingPhotoCaptureContexts[inputId] || null;
+  delete state.pendingPhotoCaptureContexts[inputId];
+  const gps = captureContext?.gps || null;
+  const takenAt = captureContext?.captured_at || nowISO();
+  if (!gps){
+    toast("GPS required", "Live proof photos need a fresh GPS lock before they can be saved.");
+    return;
+  }
   const previewUrl = URL.createObjectURL(file);
   loc.photosBySlot = loc.photosBySlot || {};
-  loc.photosBySlot[slotKey] = { previewUrl, taken_at: takenAt, pending: true };
+  loc.photosBySlot[slotKey] = {
+    previewUrl,
+    taken_at: takenAt,
+    pending: true,
+    gps,
+    source: "camera",
+    proof_type: slotKey,
+    device_user_agent: captureContext?.device_user_agent || navigator.userAgent || "",
+  };
   renderLocations();
   renderProofChecklist();
 
   if (isDemo){
-    loc.photosBySlot[slotKey] = { previewUrl, taken_at: takenAt };
+    loc.photosBySlot[slotKey] = { previewUrl, taken_at: takenAt, gps, source: "camera", proof_type: slotKey };
     renderLocations();
     renderProofChecklist();
     return;
   }
 
-  const uploadPath = await uploadProofPhoto(file, node.id, `splice-location/${locationId}`);
+  const uploadPath = await uploadProofPhoto(file, node.id, `splice-location/${locationId}`, {
+    locationId,
+  });
   if (!uploadPath){
     delete loc.photosBySlot[slotKey];
     renderLocations();
@@ -24567,23 +24774,37 @@ async function handleSpliceSlotPhotoUpload(locationId, slotKey, file){
     return;
   }
 
-  const gps = state.lastGPS;
-  const { data, error } = await state.client
+  const splicePhotoPayload = {
+    splice_location_id: loc.id,
+    slot_key: slotKey,
+    photo_path: uploadPath,
+    taken_at: takenAt,
+    gps_lat: gps?.lat ?? null,
+    gps_lng: gps?.lng ?? null,
+    gps_accuracy_m: gps?.accuracy_m ?? null,
+    uploaded_by: state.user?.id || null,
+    source: "camera",
+    proof_type: slotKey,
+    device_user_agent: captureContext?.device_user_agent || navigator.userAgent || "",
+  };
+  let { data, error } = await state.client
     .from("splice_location_photos")
-    .upsert({
-      splice_location_id: loc.id,
-      slot_key: slotKey,
-      photo_path: uploadPath,
-      taken_at: takenAt,
-      gps_lat: gps?.lat ?? null,
-      gps_lng: gps?.lng ?? null,
-      gps_accuracy_m: gps?.accuracy_m ?? null,
-      uploaded_by: state.user?.id || null,
-    }, { onConflict: "splice_location_id,slot_key" })
-    .select("photo_path, taken_at, gps_lat, gps_lng, gps_accuracy_m")
+    .upsert(splicePhotoPayload, { onConflict: "splice_location_id,slot_key" })
+    .select("photo_path, taken_at, gps_lat, gps_lng, gps_accuracy_m, source, proof_type, device_user_agent, backfilled")
     .maybeSingle();
+  if (error && ["proof_type", "device_user_agent"].some((col) => isMissingColumnError(error, col))){
+    const fallbackPayload = { ...splicePhotoPayload };
+    delete fallbackPayload.proof_type;
+    delete fallbackPayload.device_user_agent;
+    ({ data, error } = await state.client
+      .from("splice_location_photos")
+      .upsert(fallbackPayload, { onConflict: "splice_location_id,slot_key" })
+      .select("photo_path, taken_at, gps_lat, gps_lng, gps_accuracy_m, source, backfilled")
+      .maybeSingle());
+  }
 
   if (error){
+    logPhotoFlowError("splice proof insert failed", error, { locationId: loc.id, slotKey, uploadPath });
     delete loc.photosBySlot[slotKey];
     renderLocations();
     renderProofChecklist();
@@ -24598,6 +24819,10 @@ async function handleSpliceSlotPhotoUpload(locationId, slotKey, file){
       ? { lat: data.gps_lat, lng: data.gps_lng, accuracy_m: data.gps_accuracy_m }
       : null,
     previewUrl,
+    source: data?.source || "camera",
+    proof_type: data?.proof_type || slotKey,
+    device_user_agent: data?.device_user_agent || captureContext?.device_user_agent || "",
+    backfilled: Boolean(data?.backfilled),
   };
   await loadSplicePhotos(node.id, [loc]);
   renderLocations();
@@ -24816,6 +25041,7 @@ async function uploadBackfillPhoto(file, projectId, nodeId, locationId, photoTyp
     .from("proof-photos")
     .upload(path, file, { contentType: file.type });
   if (error){
+    logPhotoFlowError("backfill storage upload failed", error, { path, nodeId, locationId, photoType });
     toast("Upload failed", error.message);
     return null;
   }
@@ -24860,12 +25086,26 @@ async function handleBackfillPhotoUpload(photoType, file){
   const exifTakenAt = file.lastModified ? new Date(file.lastModified).toISOString() : null;
   const takenAt = exifTakenAt || nowISO();
   loc.photosBySlot = loc.photosBySlot || {};
-  loc.photosBySlot[slotKey] = { previewUrl, taken_at: takenAt, pending: true, backfilled: true };
+  loc.photosBySlot[slotKey] = {
+    previewUrl,
+    taken_at: takenAt,
+    pending: true,
+    backfilled: true,
+    source: "backfill_upload",
+    proof_type: photoType,
+    device_user_agent: navigator.userAgent || "",
+  };
   renderLocations();
   renderProofChecklist();
 
   if (isDemo){
-    loc.photosBySlot[slotKey] = { previewUrl, taken_at: takenAt, backfilled: true };
+    loc.photosBySlot[slotKey] = {
+      previewUrl,
+      taken_at: takenAt,
+      backfilled: true,
+      source: "backfill_upload",
+      proof_type: photoType,
+    };
     renderLocations();
     renderProofChecklist();
     return;
@@ -24879,22 +25119,36 @@ async function handleBackfillPhotoUpload(photoType, file){
     return;
   }
 
-  const { data, error } = await state.client
+  const backfillPayload = {
+    splice_location_id: loc.id,
+    slot_key: slotKey,
+    photo_path: uploadPath,
+    taken_at: takenAt,
+    uploaded_by: state.user?.id || null,
+    source: "backfill_upload",
+    backfilled: true,
+    exif_taken_at: exifTakenAt,
+    proof_type: photoType,
+    device_user_agent: navigator.userAgent || "",
+  };
+  let { data, error } = await state.client
     .from("splice_location_photos")
-    .upsert({
-      splice_location_id: loc.id,
-      slot_key: slotKey,
-      photo_path: uploadPath,
-      taken_at: takenAt,
-      uploaded_by: state.user?.id || null,
-      source: "upload",
-      backfilled: true,
-      exif_taken_at: exifTakenAt,
-    }, { onConflict: "splice_location_id,slot_key" })
-    .select("photo_path, taken_at")
+    .upsert(backfillPayload, { onConflict: "splice_location_id,slot_key" })
+    .select("photo_path, taken_at, source, backfilled, proof_type, device_user_agent")
     .maybeSingle();
+  if (error && ["proof_type", "device_user_agent"].some((col) => isMissingColumnError(error, col))){
+    const fallbackPayload = { ...backfillPayload };
+    delete fallbackPayload.proof_type;
+    delete fallbackPayload.device_user_agent;
+    ({ data, error } = await state.client
+      .from("splice_location_photos")
+      .upsert(fallbackPayload, { onConflict: "splice_location_id,slot_key" })
+      .select("photo_path, taken_at, source, backfilled")
+      .maybeSingle());
+  }
 
   if (error){
+    logPhotoFlowError("backfill insert failed", error, { locationId: loc.id, slotKey, uploadPath, photoType });
     delete loc.photosBySlot[slotKey];
     renderLocations();
     renderProofChecklist();
@@ -24906,7 +25160,10 @@ async function handleBackfillPhotoUpload(photoType, file){
     path: data?.photo_path || uploadPath,
     taken_at: data?.taken_at || takenAt,
     previewUrl,
-    backfilled: true,
+    backfilled: Boolean(data?.backfilled ?? true),
+    source: data?.source || "backfill_upload",
+    proof_type: data?.proof_type || photoType,
+    device_user_agent: data?.device_user_agent || navigator.userAgent || "",
   };
   await loadNodeProofStatus(node.id);
   renderLocations();
@@ -24929,6 +25186,7 @@ async function uploadProofPhoto(file, nodeId, prefix, ctx = {}){
     .from("proof-photos")
     .upload(path, file, { contentType: file.type });
   if (error){
+    logPhotoFlowError("proof storage upload failed", error, { path, nodeId, prefix });
     toast("Upload failed", error.message);
     return null;
   }
@@ -28340,11 +28598,18 @@ async function loadSplicePhotos(nodeId, locs){
   }
   if (!state.client || !locs.length) return;
   const locIds = locs.map((loc) => loc.id);
-  const { data, error } = await state.client
+  let { data, error } = await state.client
     .from("splice_location_photos")
-    .select("splice_location_id, slot_key, photo_path, taken_at, gps_lat, gps_lng, gps_accuracy_m")
+    .select("splice_location_id, slot_key, photo_path, taken_at, gps_lat, gps_lng, gps_accuracy_m, source, backfilled, proof_type, device_user_agent")
     .in("splice_location_id", locIds);
+  if (error && ["proof_type", "device_user_agent"].some((col) => isMissingColumnError(error, col))){
+    ({ data, error } = await state.client
+      .from("splice_location_photos")
+      .select("splice_location_id, slot_key, photo_path, taken_at, gps_lat, gps_lng, gps_accuracy_m, source, backfilled")
+      .in("splice_location_id", locIds));
+  }
   if (error){
+    logPhotoFlowError("splice photos load failed", error, { nodeId, locationCount: locIds.length });
     toast("Photos load error", error.message);
     return;
   }
@@ -28362,6 +28627,10 @@ async function loadSplicePhotos(nodeId, locs){
       gps: row.gps_lat != null && row.gps_lng != null
         ? { lat: row.gps_lat, lng: row.gps_lng, accuracy_m: row.gps_accuracy_m }
         : null,
+      source: row.source || (row.backfilled ? "backfill_upload" : "camera"),
+      backfilled: Boolean(row.backfilled),
+      proof_type: row.proof_type || row.slot_key,
+      device_user_agent: row.device_user_agent || "",
     };
   }
   locs.forEach((loc) => {
@@ -29646,7 +29915,7 @@ function renderBackfillPanel(){
   const select = $("backfillLocationSelect");
   if (!panel || !select) return;
   const node = state.activeNode;
-  const allowed = isOwner() && Boolean(state.nodeProofStatus?.backfill_allowed) && !isDemo;
+  const allowed = isOwnerOrAdmin() && Boolean(state.nodeProofStatus?.backfill_allowed) && !isDemo;
   if (!node || !allowed){
     panel.style.display = "none";
     return;
@@ -30728,9 +30997,8 @@ async function postLoginBootstrap(client, user){
       const _wsIntent = sessionStorage.getItem("sc_workspace_intent");
       if (_wsIntent) {
         sessionStorage.removeItem("sc_workspace_intent");
-        const _wsTarget = _WS_INTENT_NAV_MAP[_wsIntent];
-        if (_wsTarget && !pendingRedirect && !hasInvoiceHashRoute(window.location.hash || "") && !hasRedlineHashRoute(window.location.hash || "")) {
-          setTimeout(() => navigateTo(_wsTarget), 200);
+        if (!pendingRedirect && !hasInvoiceHashRoute(window.location.hash || "") && !hasRedlineHashRoute(window.location.hash || "")) {
+          setTimeout(() => openWorkspaceIntent(_wsIntent), 200);
         }
       }
     }
@@ -32079,15 +32347,6 @@ function wireUI(){
   const mapFieldPanel = $("mapFieldPanel");
   if (mapFieldPanel){
     mapFieldPanel.addEventListener("click", async (e) => {
-      const removeDocBtn = e.target.closest("[data-map-field-doc-remove]");
-      if (removeDocBtn){
-        const index = Number(removeDocBtn.dataset.mapFieldDocRemove);
-        if (Number.isFinite(index) && Array.isArray(state.map._pendingDocs)){
-          state.map._pendingDocs.splice(index, 1);
-          renderMapFieldPendingDocs();
-        }
-        return;
-      }
       const actionBtn = e.target.closest("[data-map-field-action]");
       if (actionBtn){
         const action = String(actionBtn.dataset.mapFieldAction || "");
@@ -32113,7 +32372,7 @@ function wireUI(){
           if (mediaInput){
             mediaInput.click();
           } else {
-            toast("Location opened", "Add photo in location details.");
+            toast("Location opened", "Upload reference media in location details.");
           }
           return;
         }
@@ -32157,24 +32416,15 @@ function wireUI(){
         setMapFieldCreateOpen(false);
         return;
       }
+      if (id === "btnMapFieldTakePhoto"){
+        await handleMapFieldTakePhotoClick();
+        return;
+      }
       if (id === "btnMapFieldCreateLocation"){
         await createFieldLocationFromCurrentGps();
       }
     });
     mapFieldPanel.addEventListener("change", (e) => {
-      const docInput = e.target.closest("#mapFieldDocInput");
-      if (docInput){
-        const files = Array.from(docInput.files || []).filter(Boolean);
-        if (files.length){
-          if (!Array.isArray(state.map._pendingDocs)){
-            state.map._pendingDocs = [];
-          }
-          state.map._pendingDocs.push(...files);
-          renderMapFieldPendingDocs();
-        }
-        docInput.value = "";
-        return;
-      }
       const select = e.target.closest("#mapFieldStatusSelect");
       if (select){
         const siteId = select.dataset.siteId;
@@ -32183,31 +32433,29 @@ function wireUI(){
         return;
       }
       const photoInput = e.target.closest("#mapFieldPhotoInput");
-      if (photoInput && photoInput.files.length){
-        const preview = $("mapFieldPhotoPreview");
-        if (!preview) return;
-        if (!state.map._pendingPhotos) state.map._pendingPhotos = [];
-        for (const file of photoInput.files){
-          state.map._pendingPhotos.push(file);
-          const thumb = document.createElement("div");
-          thumb.style.cssText = "width:56px;height:56px;border-radius:8px;overflow:hidden;position:relative;border:1px solid rgba(55,138,221,0.2);flex-shrink:0;";
-          const img = document.createElement("img");
-          img.style.cssText = "width:100%;height:100%;object-fit:cover;";
-          img.src = URL.createObjectURL(file);
-          thumb.appendChild(img);
-          const removeBtn = document.createElement("button");
-          removeBtn.type = "button";
-          removeBtn.style.cssText = "position:absolute;top:1px;right:1px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,0.7);border:none;color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;";
-          removeBtn.textContent = "\u00d7";
-          const fileRef = file;
-          removeBtn.addEventListener("click", () => {
-            state.map._pendingPhotos = (state.map._pendingPhotos || []).filter(f => f !== fileRef);
-            thumb.remove();
-          });
-          thumb.appendChild(removeBtn);
-          preview.appendChild(thumb);
-        }
+      if (photoInput){
+        const file = photoInput.files?.[0] || null;
+        const captureMeta = state.map._pendingPhotoCapture || null;
         photoInput.value = "";
+        if (!file) return;
+        if (!captureMeta?.gps){
+          toast("GPS required", "Take Photo must capture GPS before the proof photo can be attached.");
+          return;
+        }
+        if (!Array.isArray(state.map._pendingProofPhotos)){
+          state.map._pendingProofPhotos = [];
+        }
+        state.map._pendingProofPhotos.push({
+          file,
+          previewUrl: URL.createObjectURL(file),
+          gps: captureMeta.gps,
+          captured_at: captureMeta.captured_at || nowISO(),
+          source: "camera",
+          proof_type: captureMeta.proof_type || "live_field_proof",
+          device_user_agent: captureMeta.device_user_agent || navigator.userAgent || "",
+        });
+        state.map._pendingPhotoCapture = null;
+        renderMapFieldPendingProofs();
       }
     });
   }
