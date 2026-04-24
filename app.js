@@ -16312,13 +16312,13 @@ async function handleLocationImport(file){
     return;
   }
   const activeProjectId = state.activeProject?.id || null;
-  if (!activeProjectId){
-    toast("Project required", "Select a project before importing.");
-    return;
-  }
-
   dlog("Import handler reached, file selected:", file.name);
   const name = file.name.toLowerCase();
+  const isKmzFile = name.endsWith(".kmz");
+  if (!activeProjectId && !isKmzFile){
+    toast("Project required", "Select a project before importing ZIP, CSV, or PDF packages.");
+    return;
+  }
   const syncToken = (state.map.evidenceSyncToken || 0) + 1;
   state.map.evidenceSyncToken = syncToken;
   let rows = [];
@@ -16461,6 +16461,13 @@ async function handleLocationImport(file){
   state.importPreview.validation = validation;
   state.importPreview.preview = renderImportPreviewMarkers(validation.validRows);
   renderKmzPreviewFeatures(kmzAllRows, file.name || "KMZ Import");
+
+  if (!activeProjectId){
+    const featureCount = kmzAllRows.length || rows.length || 0;
+    toast("KMZ loaded", `Loaded ${featureCount} map feature${featureCount === 1 ? "" : "s"}. Select a project to save or import locations.`);
+    return;
+  }
+
   await syncMaterialRequirementsFromKmzRows(kmzAllRows, {
     projectId: activeProjectId,
     replaceExisting: true,
@@ -16475,10 +16482,6 @@ async function importLocationsFile(file){
   if (!file) return;
   if (!state.activeProject){
     toast("Project required", "Select a project before importing.");
-    return;
-  }
-  if (!isPrivilegedRole()){
-    toast("Not allowed", "Only authorized team members can import.");
     return;
   }
   if (isDemoUser()){
@@ -18187,28 +18190,14 @@ function renderProjectsList(){
 function updateProjectScopedControls(){
   const importBtn = $("btnImportLocations");
   const hasProject = Boolean(state.activeProject);
-  const demoLocked = isDemoUser();
-  const allowed = SpecCom.helpers.isRoot() || isPrivilegedRole();
   if (importBtn){
     importBtn.style.display = "";
-    if (SpecCom.helpers.isRoot()){
-      importBtn.disabled = !hasProject;
-      importBtn.title = hasProject ? "" : "Select a project first.";
-    } else {
-      importBtn.disabled = !hasProject || !allowed || demoLocked;
-      if (!hasProject){
-        importBtn.title = "Select a project first.";
-      } else if (demoLocked){
-        importBtn.title = t("availableInProduction");
-      } else if (!allowed){
-        importBtn.title = "Authorized access required.";
-      } else {
-        importBtn.title = "";
-      }
-    }
+    importBtn.disabled = false;
+    importBtn.title = hasProject
+      ? ""
+      : "KMZ files can be loaded without a project. Select a project for ZIP, CSV, PDF, or database import.";
   }
 
-  const canManageProjects = canCreateProjects();
   const createBtn = $("btnProjectsCreate");
   const emptyCreateBtn = $("btnProjectsEmptyCreate");
   if (createBtn) createBtn.style.display = "";
