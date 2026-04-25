@@ -10221,7 +10221,7 @@ function getProductionAllowedViews(){
 
 function canViewLabor(){
   if (CONTROL_CENTER_DEV_MODE) return true;
-  return isPrivilegedRole();
+  return hasAuthenticatedSession();
 }
 
 function canViewDispatch(){
@@ -10236,7 +10236,7 @@ function canViewInvoiceVault(){
 
 function canCreateProjects(){
   if (CONTROL_CENTER_DEV_MODE) return true;
-  return isPrivilegedRole();
+  return hasAuthenticatedSession();
 }
 
 const DEMO_CINEMATIC_SESSION_KEY = "speccom_demo_cinematic_intro";
@@ -11315,11 +11315,6 @@ SpecCom.helpers.editProject = async function(){
   const project = state.activeProject;
   if (!project){
     toast("Project required", "Select a project first.");
-    return;
-  }
-  const canEdit = isPrivilegedRole();
-  if (!canEdit){
-    toast("Not allowed", "Authorized access required.");
     return;
   }
   const nextName = prompt("Edit project name", project.name || "");
