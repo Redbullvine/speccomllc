@@ -289,6 +289,8 @@ const state = {
     ruidosoEvidenceByEnclosure: new Map(),
     ruidosoEvidenceByCoord: new Map(),
     ruidosoEvidenceEnclosureCounts: new Map(),
+    ruidosoPhotoArchive: null,
+    ruidosoPhotoArchivePromise: null,
     kmzNodeIndex: new Map(),
     kmzRootNodeId: "",
     kmzOverlayGroups: null,
@@ -1252,6 +1254,7 @@ const INVOICE_INTRO_DURATION_SECONDS = 4;
 const WAREHOUSE_SCAN_ITEMS_KEY = "speccom.warehouse.scanItems.v1";
 const TECH_SIM_KEY = "speccom.tech.simulation.v1";
 const RUIDOSO_INVOICES_KEY = "speccom.ruidoso.invoices.v1";
+const RUIDOSO_1635CA_PHOTO_ARCHIVE_URL = "./assets/ruidoso_1635ca_photo_links.csv";
 const KMZ_PHOTO_OVERRIDES_KEY_PREFIX = "speccom.kmzPhotoOverrides.";
 const INVOICE_FILES_BUCKET = "invoice-files";
 const KMZ_SNAPSHOT_TABLE = "project_kmz_snapshots";
@@ -2572,6 +2575,8 @@ function normalizePopupPhotos(items){
         gpsLat: Number.isFinite(Number(item?.gpsLat)) ? Number(item.gpsLat) : null,
         gpsLng: Number.isFinite(Number(item?.gpsLng)) ? Number(item.gpsLng) : null,
         gpsAccuracyM: Number.isFinite(Number(item?.gpsAccuracyM)) ? Number(item.gpsAccuracyM) : null,
+        source: item?.source || "",
+        readonly: Boolean(item?.readonly),
       };
     })
     .filter(Boolean)
@@ -2603,6 +2608,7 @@ async function fetchSitePhotosForMapPopup(siteId){
   if (!key) return [];
   const cached = state.map.sitePhotosBySiteId.get(key);
   if (Array.isArray(cached)) return cached;
+  const archiveSite = (state.projectSites || []).find((row) => toSiteIdKey(row?.id) === key) || null;
   if (isDemo){
     const rows = (state.demo.siteMedia || [])
       .filter((row) => toSiteIdKey(row?.site_id) === key)
@@ -2614,9 +2620,28 @@ async function fetchSitePhotosForMapPopup(siteId){
         createdAt: row?.created_at || "",
       }))
       .filter((row) => row.url);
-    return setCachedSitePhotos(key, rows);
+    if (rows.length) return setCachedSitePhotos(key, rows);
+    const archivePhotos = await getRuidosoArchivePhotosForSite(archiveSite);
+    return setCachedSitePhotos(key, archivePhotos.map((row) => ({
+      id: row?.id || "",
+      createdBy: "",
+      url: String(row?.previewUrl || row?.media_path || "").trim(),
+      createdAt: row?.created_at || "",
+      source: row?.source || "",
+      readonly: Boolean(row?.readonly),
+    })).filter((row) => row.url));
   }
-  if (!state.client) return setCachedSitePhotos(key, []);
+  if (!state.client){
+    const archivePhotos = await getRuidosoArchivePhotosForSite(archiveSite);
+    return setCachedSitePhotos(key, archivePhotos.map((row) => ({
+      id: row?.id || "",
+      createdBy: "",
+      url: String(row?.previewUrl || row?.media_path || "").trim(),
+      createdAt: row?.created_at || "",
+      source: row?.source || "",
+      readonly: Boolean(row?.readonly),
+    })).filter((row) => row.url));
+  }
   let { data, error } = await state.client
     .from("site_media")
     .select("id, media_path, created_by, created_at, gps_lat, gps_lng, gps_accuracy_m")
@@ -2633,7 +2658,15 @@ async function fetchSitePhotosForMapPopup(siteId){
   }
   if (error){
     debugLog("[map] popup photo fetch failed", error);
-    return setCachedSitePhotos(key, []);
+    const archivePhotos = await getRuidosoArchivePhotosForSite(archiveSite);
+    return setCachedSitePhotos(key, archivePhotos.map((row) => ({
+      id: row?.id || "",
+      createdBy: "",
+      url: String(row?.previewUrl || row?.media_path || "").trim(),
+      createdAt: row?.created_at || "",
+      source: row?.source || "",
+      readonly: Boolean(row?.readonly),
+    })).filter((row) => row.url));
   }
   const rows = [];
   for (const row of data || []){
@@ -2661,6 +2694,17 @@ async function fetchSitePhotosForMapPopup(siteId){
       gpsLng: row?.gps_lng ?? null,
       gpsAccuracyM: row?.gps_accuracy_m ?? null,
     });
+  }
+  if (!rows.length){
+    const archivePhotos = await getRuidosoArchivePhotosForSite(archiveSite);
+    return setCachedSitePhotos(key, archivePhotos.map((row) => ({
+      id: row?.id || "",
+      createdBy: "",
+      url: String(row?.previewUrl || row?.media_path || "").trim(),
+      createdAt: row?.created_at || "",
+      source: row?.source || "",
+      readonly: Boolean(row?.readonly),
+    })).filter((row) => row.url));
   }
   return setCachedSitePhotos(key, rows);
 }
@@ -11544,6 +11588,7 @@ SpecCom.helpers.renderMediaViewer = function(){
 };
 
 function canDeleteSiteMediaItem(item){
+  if (item?.readonly || item?.source === "ruidoso_archive" || /^ruidoso-archive-/i.test(String(item?.id || ""))) return false;
   if (SpecCom.helpers.isRoot()) return true;
   const uploadedBy = toSiteIdKey(item?.created_by || item?.uploaded_by);
   const userId = toSiteIdKey(state.user?.id);
@@ -14872,6 +14917,163 @@ function getRuidosoSiteEvidence(site){
   const coordKey = makeRuidosoCoordKey(coords?.lat, coords?.lng);
   if (coordKey && byCoord.has(coordKey)) return byCoord.get(coordKey);
   return null;
+}
+
+function isRuidoso1635PhotoArchiveCandidate(site){
+  if (!site) return false;
+  const projectText = [
+    state.activeProject?.name,
+    state.activeProject?.title,
+    state.activeProject?.job_number,
+  ].join(" ");
+  const siteText = [
+    site?.name,
+    getSiteDisplayName(site),
+    site?.notes,
+    site?.location_label,
+    site?.label,
+  ].join(" ");
+  return /ruidoso|1635\s*ca|ruidosonetworkpoint/i.test(`${projectText} ${siteText}`);
+}
+
+function getRuidosoArchiveSiteEnclosures(site){
+  const out = new Set();
+  [
+    site?.name,
+    getSiteDisplayName(site),
+    site?.notes,
+    site?.location_label,
+    site?.label,
+    site?.drop_number,
+  ].forEach((value) => {
+    const text = String(value || "").trim();
+    if (!text) return;
+    const pointMatch = text.match(/RuidosoNetworkPoint[-_\s]*(\d+)/i);
+    if (pointMatch?.[1]){
+      out.add(normalizeRuidosoEnclosure(pointMatch[1]));
+    }
+    const enclosure = normalizeRuidosoEnclosure(extractEnclosureToken(text));
+    if (enclosure) out.add(enclosure);
+  });
+  return Array.from(out).filter(Boolean);
+}
+
+function getRuidosoArchiveCreatedAt(value){
+  const parsed = new Date(value || "");
+  if (Number.isFinite(parsed.getTime())) return parsed.toISOString();
+  return "2026-01-01T00:00:00.000Z";
+}
+
+function makeRuidosoArchivePhotoRow({
+  url,
+  loc,
+  date,
+  source = "RUIDOSO archive",
+  tech = "",
+  photoIndex = "",
+  rowIndex = 0,
+} = {}){
+  const cleanUrl = String(url || "").trim();
+  if (!/^https?:\/\//i.test(cleanUrl)) return null;
+  const parsed = parseRuidosoPhotoLoc(loc || "");
+  const enclosure = normalizeRuidosoEnclosure(parsed.enclosure || extractEnclosureToken(loc));
+  return {
+    id: `ruidoso-archive-${fnv1aHash(`${loc}|${photoIndex}|${cleanUrl}|${rowIndex}`)}`,
+    site_id: "",
+    media_path: cleanUrl,
+    previewUrl: cleanUrl,
+    created_by: "",
+    gps_lat: null,
+    gps_lng: null,
+    gps_accuracy_m: null,
+    created_at: getRuidosoArchiveCreatedAt(date),
+    source: "ruidoso_archive",
+    proof_type: "archive_photo",
+    is_live_proof: false,
+    backfilled: true,
+    device_user_agent: "",
+    captured_at_locked: true,
+    gps_locked: false,
+    readonly: true,
+    ruidoso_loc: String(loc || "").trim(),
+    ruidoso_enclosure: enclosure,
+    ruidoso_source: String(source || "").trim(),
+    ruidoso_tech: String(tech || "").trim(),
+    ruidoso_photo_index: String(photoIndex || "").trim(),
+  };
+}
+
+async function loadRuidoso1635PhotoArchive(){
+  if (state.map.ruidosoPhotoArchive) return state.map.ruidosoPhotoArchive;
+  if (state.map.ruidosoPhotoArchivePromise) return state.map.ruidosoPhotoArchivePromise;
+  state.map.ruidosoPhotoArchivePromise = (async () => {
+    const empty = { byEnclosure: new Map(), all: [] };
+    try{
+      const resp = await fetch(RUIDOSO_1635CA_PHOTO_ARCHIVE_URL, { cache: "force-cache" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const rows = parseCsv(await resp.text());
+      if (!rows.length) return empty;
+      const headers = (rows[0] || []).map(SpecCom.helpers.normalizeImportHeader);
+      const locIdx = findHeaderIndex(headers, ["loc", "location", "location_name"]);
+      const urlIdx = findHeaderIndex(headers, ["photo_url", "url"]);
+      const dateIdx = findHeaderIndex(headers, ["date", "taken_at", "created_at"]);
+      const sourceIdx = findHeaderIndex(headers, ["source"]);
+      const techIdx = findHeaderIndex(headers, ["tech", "technician"]);
+      const photoIdx = findHeaderIndex(headers, ["photo_index", "index"]);
+      if (locIdx < 0 || urlIdx < 0) return empty;
+
+      const byEnclosure = new Map();
+      const all = [];
+      rows.slice(1).forEach((row, rowIndex) => {
+        const item = makeRuidosoArchivePhotoRow({
+          loc: row[locIdx] || "",
+          url: row[urlIdx] || "",
+          date: dateIdx >= 0 ? row[dateIdx] : "",
+          source: sourceIdx >= 0 ? row[sourceIdx] : "",
+          tech: techIdx >= 0 ? row[techIdx] : "",
+          photoIndex: photoIdx >= 0 ? row[photoIdx] : "",
+          rowIndex,
+        });
+        if (!item?.ruidoso_enclosure) return;
+        all.push(item);
+        if (!byEnclosure.has(item.ruidoso_enclosure)) byEnclosure.set(item.ruidoso_enclosure, []);
+        byEnclosure.get(item.ruidoso_enclosure).push(item);
+      });
+
+      const archive = { byEnclosure, all };
+      state.map.ruidosoPhotoArchive = archive;
+      return archive;
+    } catch (error){
+      debugLog("[ruidoso archive] photo archive load failed", error);
+      return empty;
+    } finally {
+      state.map.ruidosoPhotoArchivePromise = null;
+    }
+  })();
+  return state.map.ruidosoPhotoArchivePromise;
+}
+
+async function getRuidosoArchivePhotosForSite(site){
+  if (!isRuidoso1635PhotoArchiveCandidate(site)) return [];
+  const enclosures = getRuidosoArchiveSiteEnclosures(site);
+  if (!enclosures.length) return [];
+  const archive = await loadRuidoso1635PhotoArchive();
+  const seen = new Set();
+  const out = [];
+  enclosures.forEach((enclosure) => {
+    (archive.byEnclosure.get(enclosure) || []).forEach((item) => {
+      const key = String(item?.media_path || item?.previewUrl || "").trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      out.push({ ...item, site_id: site?.id || "" });
+    });
+  });
+  return out.sort((a, b) => {
+    const at = new Date(a.created_at || 0).getTime() || 0;
+    const bt = new Date(b.created_at || 0).getTime() || 0;
+    if (at !== bt) return at - bt;
+    return String(a.ruidoso_photo_index || "").localeCompare(String(b.ruidoso_photo_index || ""), undefined, { numeric: true });
+  });
 }
 
 function primeSitePopupCachesFromRuidosoEvidence(rows = null){
@@ -22511,7 +22713,9 @@ function renderSitePanel(){
   const disabled = !site || isPending;
   const renderSiteMediaBadges = (item) => {
     const chips = [];
-    if (item?.is_live_proof){
+    if (item?.source === "ruidoso_archive"){
+      chips.push("RUIDOSO ARCHIVE");
+    } else if (item?.is_live_proof){
       chips.push("VERIFIED LIVE");
     } else if (item?.backfilled || item?.source === "backfill_upload"){
       chips.push("BACKFILL UPLOAD");
@@ -22689,13 +22893,20 @@ async function saveSiteName(){
 }
 
 async function loadSiteMedia(siteId){
+  const siteKey = toSiteIdKey(siteId);
+  const archiveSite = (state.projectSites || []).find((row) => toSiteIdKey(row?.id) === siteKey) || null;
   if (isDemo){
     state.siteMedia = (state.demo.siteMedia || []).filter((row) => row.site_id === siteId);
+    if (!state.siteMedia.length){
+      state.siteMedia = await getRuidosoArchivePhotosForSite(archiveSite);
+    }
     setCachedSitePhotos(siteId, state.siteMedia.map((row) => ({
       id: row?.id || "",
       createdBy: row?.created_by || "",
       url: String(row?.previewUrl || row?.media_path || "").trim(),
       createdAt: row?.created_at || "",
+      source: row?.source || "",
+      readonly: Boolean(row?.readonly),
     })).filter((row) => row.url));
     return;
   }
@@ -22746,13 +22957,25 @@ async function loadSiteMedia(siteId){
       gps_locked: row?.gps_locked !== false,
     });
   }
-  state.siteMedia = withUrls;
+  state.siteMedia = withUrls.length ? withUrls : await getRuidosoArchivePhotosForSite(archiveSite);
   setCachedSitePhotos(siteId, withUrls.map((row) => ({
     id: row?.id || "",
     createdBy: row?.created_by || "",
     url: String(row?.previewUrl || "").trim(),
     createdAt: row?.created_at || "",
+    source: row?.source || "",
+    readonly: Boolean(row?.readonly),
   })).filter((row) => row.url));
+  if (!withUrls.length && state.siteMedia.length){
+    setCachedSitePhotos(siteId, state.siteMedia.map((row) => ({
+      id: row?.id || "",
+      createdBy: row?.created_by || "",
+      url: String(row?.previewUrl || row?.media_path || "").trim(),
+      createdAt: row?.created_at || "",
+      source: row?.source || "",
+      readonly: Boolean(row?.readonly),
+    })).filter((row) => row.url));
+  }
 }
 
 async function loadSiteCodes(siteId){
@@ -33684,6 +33907,8 @@ async function _wpResolvePhotoUrl(rawPath){
 async function _wpFetchProjectPhotoEntries(){
   const projectId = String(state.activeProject?.id || "").trim();
   const byKey = new Map();
+  let projectSitesForPhotos = (state.projectSites || [])
+    .filter((site) => !projectId || String(site?.project_id || "") === projectId);
   const siteNameById = new Map((state.projectSites || [])
     .filter((site) => !projectId || String(site?.project_id || "") === projectId)
     .map((site) => [String(site?.id || ""), getSiteDisplayName(site) || site?.name || "site"]));
@@ -33718,8 +33943,7 @@ async function _wpFetchProjectPhotoEntries(){
       });
     }
   } else if (state.client && projectId){
-    let sites = (state.projectSites || [])
-      .filter((site) => String(site?.project_id || "") === projectId);
+    let sites = projectSitesForPhotos;
     if (!sites.length){
       const { data, error } = await state.client
         .from("sites")
@@ -33732,6 +33956,7 @@ async function _wpFetchProjectPhotoEntries(){
         if (siteId) siteNameById.set(siteId, getSiteDisplayName(site) || site?.name || "site");
       });
     }
+    projectSitesForPhotos = sites;
     const siteIds = Array.from(new Set(sites.map((site) => String(site?.id || "")).filter(Boolean)));
     const chunkSize = 200;
     for (let i = 0; i < siteIds.length; i += chunkSize){
@@ -33751,6 +33976,20 @@ async function _wpFetchProjectPhotoEntries(){
           source: "site_media",
         });
       }
+    }
+  }
+
+  for (const site of projectSitesForPhotos){
+    const archivePhotos = await getRuidosoArchivePhotosForSite(site);
+    for (const photo of archivePhotos){
+      await addEntry({
+        id: photo?.id || "",
+        siteId: site?.id || "",
+        siteName: getSiteDisplayName(site) || site?.name || "",
+        mediaPath: photo?.previewUrl || photo?.media_path || "",
+        createdAt: photo?.created_at || "",
+        source: "ruidoso_archive",
+      });
     }
   }
 
