@@ -33644,6 +33644,139 @@ function _wpWorkOrdersToCsv(wos){
   return [headers.join(","), ...rows].join("\r\n");
 }
 
+function _wpSafeFilenamePart(value, fallback = "item"){
+  const clean = String(value || "")
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return (clean || fallback).slice(0, 80);
+}
+
+function _wpPhotoExtension(url, contentType = ""){
+  const type = String(contentType || "").toLowerCase();
+  if (type.includes("png")) return "png";
+  if (type.includes("webp")) return "webp";
+  if (type.includes("gif")) return "gif";
+  if (type.includes("heic")) return "heic";
+  if (type.includes("heif")) return "heif";
+  const cleanUrl = String(url || "").split("?")[0].toLowerCase();
+  const match = cleanUrl.match(/\.([a-z0-9]{2,5})$/i);
+  if (match?.[1] && ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif"].includes(match[1])){
+    return match[1] === "jpeg" ? "jpg" : match[1];
+  }
+  return "jpg";
+}
+
+async function _wpResolvePhotoUrl(rawPath){
+  const value = String(rawPath || "").trim();
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  try {
+    return await getPublicOrSignedUrl("proof-photos", value);
+  } catch (error) {
+    debugLog("[work package] photo URL resolve failed", error);
+    return "";
+  }
+}
+
+async function _wpFetchProjectPhotoEntries(){
+  const projectId = String(state.activeProject?.id || "").trim();
+  const byKey = new Map();
+  const siteNameById = new Map((state.projectSites || [])
+    .filter((site) => !projectId || String(site?.project_id || "") === projectId)
+    .map((site) => [String(site?.id || ""), getSiteDisplayName(site) || site?.name || "site"]));
+
+  const addEntry = async ({ id = "", siteId = "", siteName = "", mediaPath = "", createdAt = "", source = "cache" } = {}) => {
+    const resolvedUrl = await _wpResolvePhotoUrl(mediaPath);
+    if (!resolvedUrl) return;
+    const cleanSiteId = String(siteId || "").trim();
+    const key = `${cleanSiteId}|${String(id || "").trim()}|${resolvedUrl}`;
+    if (byKey.has(key)) return;
+    byKey.set(key, {
+      id: String(id || "").trim(),
+      siteId: cleanSiteId,
+      siteName: String(siteName || siteNameById.get(cleanSiteId) || cleanSiteId || "site").trim(),
+      url: resolvedUrl,
+      mediaPath: String(mediaPath || "").trim(),
+      createdAt: String(createdAt || "").trim(),
+      source,
+    });
+  };
+
+  if (isDemo){
+    const demoRows = (state.demo.siteMedia || [])
+      .filter((row) => !projectId || siteNameById.has(String(row?.site_id || "")));
+    for (const row of demoRows){
+      await addEntry({
+        id: row?.id || "",
+        siteId: row?.site_id || "",
+        mediaPath: row?.previewUrl || row?.media_path || "",
+        createdAt: row?.created_at || "",
+        source: "demo",
+      });
+    }
+  } else if (state.client && projectId){
+    let sites = (state.projectSites || [])
+      .filter((site) => String(site?.project_id || "") === projectId);
+    if (!sites.length){
+      const { data, error } = await state.client
+        .from("sites")
+        .select("id, name, project_id")
+        .eq("project_id", projectId);
+      if (error) throw error;
+      sites = data || [];
+      sites.forEach((site) => {
+        const siteId = String(site?.id || "");
+        if (siteId) siteNameById.set(siteId, getSiteDisplayName(site) || site?.name || "site");
+      });
+    }
+    const siteIds = Array.from(new Set(sites.map((site) => String(site?.id || "")).filter(Boolean)));
+    const chunkSize = 200;
+    for (let i = 0; i < siteIds.length; i += chunkSize){
+      const chunk = siteIds.slice(i, i + chunkSize);
+      const { data, error } = await state.client
+        .from("site_media")
+        .select("id, site_id, media_path, created_at")
+        .in("site_id", chunk)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      for (const row of data || []){
+        await addEntry({
+          id: row?.id || "",
+          siteId: row?.site_id || "",
+          mediaPath: row?.media_path || "",
+          createdAt: row?.created_at || "",
+          source: "site_media",
+        });
+      }
+    }
+  }
+
+  for (const [siteId, photos] of state.map.sitePhotosBySiteId.entries()){
+    if (projectId && siteNameById.size && !siteNameById.has(String(siteId || ""))) continue;
+    if (!Array.isArray(photos)) continue;
+    for (const photo of photos){
+      await addEntry({
+        id: photo?.id || "",
+        siteId,
+        mediaPath: photo?.url || photo?.storage_url || photo?.src || "",
+        createdAt: photo?.createdAt || photo?.created_at || "",
+        source: "cache",
+      });
+    }
+  }
+
+  return Array.from(byKey.values());
+}
+
+function _wpPhotoManifestToCsv(rows){
+  const headers = ["filename", "status", "site_id", "site_name", "media_id", "created_at", "url", "error"];
+  const body = (Array.isArray(rows) ? rows : []).map((row) => headers.map((key) => escapeCsv(row?.[key] || "")).join(","));
+  return [headers.join(","), ...body].join("\r\n");
+}
+
 async function buildWorkPackage({ includeInvoices, includeWorkOrders, includeRedlines, includePhotos }){
   _wpSetStatus("Gathering data…", false);
   const JSZip = await loadJsZip();
@@ -33699,25 +33832,66 @@ async function buildWorkPackage({ includeInvoices, includeWorkOrders, includeRed
 
   if (includePhotos){
     _wpSetStatus("Fetching photos… (this may take a moment)", false);
-    const photoEntries = [];
-    state.map.sitePhotosBySiteId.forEach((photos) => {
-      if (Array.isArray(photos)) photoEntries.push(...photos);
+    const photoEntries = await _wpFetchProjectPhotoEntries();
+    const uniqueByUrl = new Map();
+    photoEntries.forEach((photo) => {
+      const url = String(photo?.url || "").trim();
+      if (!url) return;
+      if (!uniqueByUrl.has(url)) uniqueByUrl.set(url, []);
+      uniqueByUrl.get(url).push(photo);
     });
+    const uniquePhotoGroups = Array.from(uniqueByUrl.entries()).map(([url, entries]) => ({ url, entries }));
+    const manifestRows = [];
+    const usedFilenames = new Set();
     let fetched = 0;
-    for (const photo of photoEntries.slice(0, 40)){
-      const url = photo.url || photo.storage_url || photo.src;
-      if (!url) continue;
-      try {
-        const resp = await fetch(url, { mode: "cors" });
-        if (!resp.ok) continue;
-        const buf = await resp.arrayBuffer();
-        const ext = url.includes(".png") ? "png" : url.includes(".webp") ? "webp" : "jpg";
-        const fname = photo.id ? `${photo.id}.${ext}` : `photo_${fetched}.${ext}`;
-        zip.file(`photos/${fname}`, buf);
-        fetched += 1;
-      } catch {}
+    const batchSize = 6;
+    for (let i = 0; i < uniquePhotoGroups.length; i += batchSize){
+      const batch = uniquePhotoGroups.slice(i, i + batchSize);
+      const results = await Promise.all(batch.map(async (group, batchIdx) => {
+        const first = group.entries[0] || {};
+        const ordinal = i + batchIdx + 1;
+        try {
+          const resp = await fetch(group.url, { mode: "cors" });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const buf = await resp.arrayBuffer();
+          const ext = _wpPhotoExtension(group.url, resp.headers.get("content-type") || "");
+          const sitePart = _wpSafeFilenamePart(first.siteName || first.siteId || "site", "site");
+          const idPart = _wpSafeFilenamePart(first.id || `photo-${ordinal}`, `photo-${ordinal}`);
+          let fname = `${String(ordinal).padStart(4, "0")}_${sitePart}_${idPart}.${ext}`;
+          let suffix = 2;
+          while (usedFilenames.has(fname)){
+            fname = `${String(ordinal).padStart(4, "0")}_${sitePart}_${idPart}_${suffix}.${ext}`;
+            suffix += 1;
+          }
+          usedFilenames.add(fname);
+          return { ok: true, group, fname, buf };
+        } catch (error) {
+          return { ok: false, group, fname: "", error: getErrorMessage(error) };
+        }
+      }));
+      results.forEach((result) => {
+        if (result.ok){
+          zip.file(`photos/${result.fname}`, result.buf);
+          fetched += 1;
+        }
+        result.group.entries.forEach((entry) => {
+          manifestRows.push({
+            filename: result.fname || "",
+            status: result.ok ? "bundled" : "failed",
+            site_id: entry.siteId || "",
+            site_name: entry.siteName || "",
+            media_id: entry.id || "",
+            created_at: entry.createdAt || "",
+            url: result.group.url || "",
+            error: result.ok ? "" : (result.error || "Fetch failed"),
+          });
+        });
+      });
+      _wpSetStatus(`Bundled ${fetched} of ${uniquePhotoGroups.length} photo(s)…`, false);
     }
-    if (fetched) _wpSetStatus(`Bundled ${fetched} photo(s)…`, false);
+    if (manifestRows.length){
+      zip.file("photos/photos_manifest.csv", _wpPhotoManifestToCsv(manifestRows));
+    }
   }
 
   _wpSetStatus("Building ZIP…", false);
