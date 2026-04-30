@@ -14952,6 +14952,11 @@ function getRuidosoArchiveSiteEnclosures(site){
     if (pointMatch?.[1]){
       out.add(normalizeRuidosoEnclosure(pointMatch[1]));
     }
+    // Extract "1635CA_XX" node designator (e.g. from site name "1635CA_02" → key "1635CA_02")
+    const nodeKeyMatch = text.match(/1635\s*CA[_]?(\w+)/i);
+    if (nodeKeyMatch?.[1]){
+      out.add(normalizeRuidosoEnclosure(`1635CA_${nodeKeyMatch[1]}`));
+    }
     const enclosure = normalizeRuidosoEnclosure(extractEnclosureToken(text));
     if (enclosure) out.add(enclosure);
   });
@@ -14976,7 +14981,13 @@ function makeRuidosoArchivePhotoRow({
   const cleanUrl = String(url || "").trim();
   if (!/^https?:\/\//i.test(cleanUrl)) return null;
   const parsed = parseRuidosoPhotoLoc(loc || "");
-  const enclosure = normalizeRuidosoEnclosure(parsed.enclosure || extractEnclosureToken(loc));
+  // Key by the node designator (e.g. "1635CA_02") extracted from the left part of the loc
+  // (e.g. "NODE54_1635CA_02-1704" → "1635CA_02"), not the numeric drop suffix.
+  const locLeft = String(loc || "").split("-").slice(0, -1).join("-");
+  const nodeKeyMatch = locLeft.match(/1635\s*CA[_]?(\w+)/i);
+  const enclosure = nodeKeyMatch
+    ? normalizeRuidosoEnclosure(`1635CA_${nodeKeyMatch[1]}`)
+    : normalizeRuidosoEnclosure(parsed.enclosure || extractEnclosureToken(loc));
   return {
     id: `ruidoso-archive-${fnv1aHash(`${loc}|${photoIndex}|${cleanUrl}|${rowIndex}`)}`,
     site_id: "",
