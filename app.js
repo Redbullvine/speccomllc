@@ -23938,6 +23938,7 @@ async function seedDemoNode(){
 function renderLocations(){
   const wrap = $("locations");
   wrap.innerHTML = "";
+  syncNodeWorkspaceControls();
   const node = state.activeNode;
   if (!node){
     wrap.innerHTML = `<div class="muted small">${t("openNodePrompt")}</div>`;
@@ -25003,6 +25004,35 @@ function clearProof(){
   state.cameraInvalidated = false;
   setProofStatus();
   renderProofPreview();
+}
+
+function syncNodeWorkspaceControls(){
+  const closeBtn = $("btnCloseNode");
+  if (closeBtn){
+    closeBtn.hidden = !state.activeNode;
+  }
+}
+
+function refreshActiveNodeWorkspace(){
+  syncNodeWorkspaceControls();
+  renderLocations();
+  renderInventory();
+  renderInvoicePanel();
+  renderAllowedQuantities();
+  renderAlerts();
+  renderProofChecklist();
+  renderBillingDetail();
+  updateKPI();
+}
+
+function closeActiveNodeWorkspace(){
+  if (!state.activeNode) return;
+  state.activeNode = null;
+  clearProof();
+  const input = $("nodeNumber");
+  if (input) input.value = "";
+  refreshActiveNodeWorkspace();
+  toast("Site closed", "Open a site when you are ready to continue.");
 }
 
 function clearUsageProof(){
@@ -31868,6 +31898,10 @@ function wireUI(){
   const btnNewNode = $("btnNewNode");
   if (btnNewNode){
     btnNewNode.addEventListener("click", () => createNode($("nodeNumber").value));
+  }
+  const btnCloseNode = $("btnCloseNode");
+  if (btnCloseNode){
+    btnCloseNode.addEventListener("click", () => closeActiveNodeWorkspace());
   }
 
   // Admin workspace tab buttons (static buttons in index.html)

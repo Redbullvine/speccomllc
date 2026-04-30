@@ -1727,8 +1727,17 @@
 
         <section id="viewNodes" class="view">
           <div class="card">
-            <h1 data-i18n="nodesTitle">Site workspace</h1>
-            <div class="muted small" data-i18n="nodesSubtitle">Only one ACTIVE site at a time. Finish splicing before moving to the next site.</div>
+            <div class="node-workspace-header">
+              <div>
+                <h1 data-i18n="nodesTitle">Site workspace</h1>
+                <div class="muted small" data-i18n="nodesSubtitle">Only one ACTIVE site at a time. Finish splicing before moving to the next site.</div>
+              </div>
+              <button id="btnCloseNode" class="node-close-btn" type="button" aria-label="Close site workspace" title="Close site workspace" hidden>
+                <svg viewBox="0 0 18 18" aria-hidden="true">
+                  <path d="M4.5 4.5l9 9M13.5 4.5l-9 9"></path>
+                </svg>
+              </button>
+            </div>
 
             <div class="row" style="margin-bottom:12px;">
               <input id="nodeNumber" class="input" placeholder="Enter site number (example: SITE-1001)" data-i18n-placeholder="nodeNumberPlaceholder" />
