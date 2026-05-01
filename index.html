@@ -1320,9 +1320,93 @@
       color: rgba(245, 158, 11, 0.85);
       margin: 4px 0 2px;
     }
+
+    /* ===== LIGHT MODE ===== */
+    body.theme-light {
+      --app-bg: #eef2f8;
+      --card-bg: rgba(255,255,255,0.97);
+      --card-border: rgba(55,138,221,0.18);
+      --text-primary: #0f1f38;
+      --text-muted: rgba(50,85,130,0.85);
+      --text-dim: rgba(70,100,145,0.65);
+    }
+    body.theme-light, body.theme-light .page, body.theme-light .container,
+    body.theme-light .content, body.theme-light #viewDashboard, body.theme-light #viewApp,
+    body.theme-light #app-content, body.theme-light #home-view, body.theme-light main {
+      background: var(--app-bg);
+      color: var(--text-primary);
+    }
+    body.theme-light .speccom-bg {
+      background:
+        radial-gradient(circle at 30% 40%, rgba(55,138,221,0.07), transparent 55%),
+        radial-gradient(circle at 80% 20%, rgba(80,150,255,0.05), transparent 60%),
+        linear-gradient(180deg, #d8e8f8 0%, #eef2f8 100%);
+    }
+    body.theme-light .speccom-bg::after { opacity: 0.06; }
+    body.theme-light #command-header {
+      background: rgba(255,255,255,0.88);
+      border-color: rgba(55,138,221,0.14);
+      box-shadow: 0 2px 20px rgba(0,30,80,0.08);
+    }
+    body.theme-light #command-header::before {
+      background: linear-gradient(90deg, transparent, rgba(55,138,221,0.2), rgba(29,158,117,0.15), transparent);
+    }
+    body.theme-light .cmd-name { color: #0f1f38; }
+    body.theme-light .cmd-role { color: rgba(60,90,130,0.65); }
+    body.theme-light .cmd-proj-badge { color: #1a7a5e; }
+    body.theme-light .cmd-proj-label { color: rgba(60,90,130,0.5); }
+    body.theme-light .cmd-action { border-color: rgba(55,138,221,0.18); color: rgba(25,65,140,0.75); }
+    body.theme-light .cmd-action:hover { border-color: rgba(55,138,221,0.45); color: #1e4a9a; background: rgba(55,138,221,0.06); }
+    body.theme-light .section-label { color: rgba(60,90,130,0.5); }
+    body.theme-light .ws-card, body.theme-light .msg-card {
+      background: rgba(255,255,255,0.93);
+      border-color: rgba(55,138,221,0.13);
+      box-shadow: 0 2px 16px rgba(0,30,80,0.07);
+    }
+    body.theme-light .ws-title { color: #0f1f38; }
+    body.theme-light .ws-eyebrow,
+    body.theme-light .gateway-kicker,
+    body.theme-light .gateway-focus-kicker { color: rgba(35,100,200,0.75); }
+    body.theme-light .ws-desc { color: rgba(50,85,130,0.75); }
+    body.theme-light .ws-open { color: rgba(55,138,221,0.85); }
+    body.theme-light .ws-tag {
+      color: rgba(35,90,190,0.8);
+      background: rgba(55,138,221,0.07);
+      border-color: rgba(55,138,221,0.14);
+    }
+    body.theme-light .gateway-hero, body.theme-light .gateway-focus {
+      background: rgba(255,255,255,0.9);
+      border-color: rgba(55,138,221,0.13);
+    }
+    body.theme-light .gateway-hero::before, body.theme-light .gateway-focus::before {
+      background:
+        radial-gradient(circle at top right, rgba(55,138,221,0.05), transparent 38%),
+        radial-gradient(circle at bottom left, rgba(29,158,117,0.04), transparent 32%);
+    }
+    body.theme-light .gateway-title { color: #0f1f38; }
+    body.theme-light .gateway-copy { color: rgba(50,85,130,0.8); }
+    body.theme-light .gateway-focus-title { color: #0f1f38; }
+    body.theme-light .gateway-focus-summary { color: rgba(50,85,130,0.75); }
+    body.theme-light .gateway-stat-card {
+      background: rgba(235,245,255,0.85);
+      border-color: rgba(55,138,221,0.12);
+    }
+    body.theme-light .gateway-stat-card strong { color: #0f1f38; }
+    body.theme-light .gateway-stat-card span { color: rgba(50,85,130,0.7); }
+    body.theme-light .gateway-pill, body.theme-light .gateway-focus-pills span {
+      color: rgba(35,90,190,0.85);
+      background: rgba(55,138,221,0.07);
+      border-color: rgba(55,138,221,0.18);
+    }
+    body.theme-light .gateway-secondary-btn {
+      color: rgba(35,90,190,0.9);
+      background: rgba(55,138,221,0.08);
+      border-color: rgba(55,138,221,0.2);
+    }
   </style>
 </head>
 <body>
+  <script>if(localStorage.getItem('speccom-theme')==='light')document.body.classList.add('theme-light');</script>
   <div id="splash-screen">
     <svg class="sp-fiber-bg" viewBox="0 0 800 540" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
       <path class="sp-strand sp-f1" d="M-20,80 C100,120 200,60 340,140 S560,200 820,100"/>
@@ -1427,6 +1511,18 @@
       <button id="btnHome" class="nav-pill" type="button">Home</button>
       <button id="btnTimesheet" class="nav-pill" type="button">Timesheet</button>
       <button id="btnMapToggle" class="nav-pill" type="button">Map</button>
+      <button class="nav-util" id="theme-toggle-btn" title="Toggle light / dark mode" type="button">
+        <svg id="theme-icon-dark" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M13.5 9A5.5 5.5 0 0 1 7 2.5a5.5 5.5 0 1 0 6.5 6.5z"/>
+        </svg>
+        <svg id="theme-icon-light" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="display:none">
+          <circle cx="8" cy="8" r="3"/>
+          <line x1="8" y1="1" x2="8" y2="3"/><line x1="8" y1="13" x2="8" y2="15"/>
+          <line x1="1" y1="8" x2="3" y2="8"/><line x1="13" y1="8" x2="15" y2="8"/>
+          <line x1="3.34" y1="3.34" x2="4.75" y2="4.75"/><line x1="11.25" y1="11.25" x2="12.66" y2="12.66"/>
+          <line x1="3.34" y1="12.66" x2="4.75" y2="11.25"/><line x1="11.25" y1="4.75" x2="12.66" y2="3.34"/>
+        </svg>
+      </button>
       <button class="nav-util" id="nav-scanner-btn" title="Scanner" type="button">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <rect x="2" y="2" width="4" height="4" rx="1"/>
@@ -3041,6 +3137,23 @@
   </nav>
   </div>
 
+  <script>
+    (function(){
+      function syncThemeIcon(isLight){
+        var dark = document.getElementById('theme-icon-dark');
+        var light = document.getElementById('theme-icon-light');
+        if(dark) dark.style.display = isLight ? 'none' : '';
+        if(light) light.style.display = isLight ? '' : 'none';
+      }
+      syncThemeIcon(document.body.classList.contains('theme-light'));
+      var btn = document.getElementById('theme-toggle-btn');
+      if(btn) btn.addEventListener('click', function(){
+        var isLight = document.body.classList.toggle('theme-light');
+        localStorage.setItem('speccom-theme', isLight ? 'light' : 'dark');
+        syncThemeIcon(isLight);
+      });
+    })();
+  </script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
