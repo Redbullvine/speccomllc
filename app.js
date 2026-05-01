@@ -30080,10 +30080,6 @@ function renderDemoShowcaseHome(){
         </article>
       `).join("")}
     </div>
-    <div class="section-label">Quick Field Log</div>
-    <div style="padding:0 20px 16px;">
-      ${renderFieldOpsStudioShell()}
-    </div>
     <div style="display:none;" aria-hidden="true" id="home-secondary-data">
       <div id="weather-card">
         <span id="wx-location"></span><span id="wx-proj-ref"></span>
@@ -30104,7 +30100,6 @@ function renderDemoShowcaseHome(){
   void loadWeather(citySeed, String(state.activeProject?.id || state.activeProject?.name || "").trim());
   currentMsgTab = "company";
   void loadBoardMessages("company");
-  bindFieldOpsStudioUi(wrap);
 }
 
 function renderProofChecklist(){
