@@ -2189,54 +2189,6 @@
                 <div class="redline-legend-row"><span class="redline-legend-dot" style="background:#ffd60a;"></span><span>Slack Added</span></div>
                 <div class="redline-legend-row"><span class="redline-legend-dot" style="background:#16a34a;"></span><span>Resolved</span></div>
               </div>
-              <div id="mapFieldPanel" class="map-field-panel">
-                <div id="mapFieldPanelHeader" class="row" style="justify-content:space-between; align-items:center; gap:8px;">
-                  <div class="site-panel-title">Field Location</div>
-                  <div class="row" style="gap:8px;">
-                    <button id="btnMapFieldHide" class="btn ghost small" type="button">Hide</button>
-                    <button id="btnMapUseMyLocation" class="btn secondary small" type="button">Use My Current Location</button>
-                  </div>
-                </div>
-                <div id="mapFieldGpsState" class="muted small" style="margin-top:6px;">GPS not captured yet.</div>
-                <div id="mapFieldNearbyActions" class="map-field-actions" style="margin-top:8px;"></div>
-                <div id="mapFieldCreateWrap" class="map-field-create" hidden>
-                  <button id="btnMapFieldCreateClose" class="btn ghost small map-field-create-close" type="button" aria-label="Close create location form">Close</button>
-                  <div class="muted small">Create new location from current GPS</div>
-                  <input id="mapFieldLocationName" class="input compact" type="text" placeholder="Location code / name" />
-                  <select id="mapFieldLocationType" class="input compact">
-                    <option value="Node">Node</option>
-                    <option value="Closure">Closure</option>
-                    <option value="MST">MST</option>
-                    <option value="Pedestal">Pedestal</option>
-                    <option value="Handhole">Handhole</option>
-                    <option value="Splice Point">Splice Point</option>
-                    <option value="Other">Other</option>
-                  </select>
-                  <textarea id="mapFieldLocationNotes" class="input compact" rows="2" placeholder="Optional notes"></textarea>
-                  <div style="margin-top:6px;">
-                    <div class="muted small" style="margin-bottom:6px;">Live proof photo: camera only. GPS is locked at capture time.</div>
-                    <button id="btnMapFieldTakePhoto" class="btn secondary small" type="button" style="display:inline-flex;align-items:center;gap:6px;">
-                      <svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="14" height="11" rx="2"/><circle cx="9" cy="10" r="3"/><path d="M6 4l1-2h4l1 2"/></svg>
-                      Take Photo
-                    </button>
-                    <input id="mapFieldPhotoInput" type="file" accept="image/*" capture="environment" hidden />
-                    <div id="mapFieldPhotoPreview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>
-                  </div>
-                  <div style="margin-top:8px;border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;">
-                    <div class="muted small" style="margin-bottom:4px;">Billing Codes Used</div>
-                    <div style="color:rgba(255,255,255,0.5);font-size:11px;margin-bottom:6px;">One per line: CODE qty &nbsp;(e.g. FBSP-2 3)</div>
-                    <textarea id="mapFieldBillingCodes" class="input compact" rows="3"
-                      placeholder="e.g.&#10;FBSP-2 3&#10;FBOSC-12 1&#10;FBTERM 4"></textarea>
-                  </div>
-                  <div class="row" style="justify-content:flex-end; gap:8px; flex-wrap:wrap; margin-top:8px;">
-                    <button id="btnMapFieldDismissCreate" class="btn ghost small" type="button">Close</button>
-                    <button id="btnMapFieldCancelCreate" class="btn ghost small" type="button">Cancel</button>
-                    <button id="btnMapFieldCreateLocation" class="btn secondary small" type="button">Create Location Here</button>
-                  </div>
-                </div>
-                <div id="mapFieldLocationCard" class="map-field-location-card" hidden></div>
-              </div>
-              <button id="btnMapFieldShow" class="btn secondary small map-field-show-btn" type="button" style="display:none;">Field</button>
               <button id="btnLayersShow" class="map-menu-btn" type="button" aria-label="Show Layers" style="display:none; right:14px; left:auto; top:16px;">
                 Layers
               </button>
@@ -2260,15 +2212,79 @@
                 </div>
               </aside>
             </main>
-            <aside id="mapDetailsDrawer" class="map-details-drawer">
-              <div class="map-details-header">
-                <div id="mapDetailsTitle" class="site-panel-title">Feature details</div>
-                <button id="btnMapDetailsClose" class="btn ghost small" type="button">Close</button>
+            <div id="map-float-panel">
+              <div id="map-float-drag-handle">
+                <svg width="10" height="14" viewBox="0 0 10 14" aria-hidden="true" style="flex-shrink:0;">
+                  <circle cx="2.5" cy="2.5" r="1.5" fill="rgba(140,175,210,0.4)"/>
+                  <circle cx="7.5" cy="2.5" r="1.5" fill="rgba(140,175,210,0.4)"/>
+                  <circle cx="2.5" cy="7" r="1.5" fill="rgba(140,175,210,0.4)"/>
+                  <circle cx="7.5" cy="7" r="1.5" fill="rgba(140,175,210,0.4)"/>
+                  <circle cx="2.5" cy="11.5" r="1.5" fill="rgba(140,175,210,0.4)"/>
+                  <circle cx="7.5" cy="11.5" r="1.5" fill="rgba(140,175,210,0.4)"/>
+                </svg>
+                <span class="map-float-label">Map Tools</span>
+                <button id="btnMapFieldShow" class="btn secondary small" type="button" style="display:none;font-size:11px;padding:3px 8px;min-height:auto;">Field</button>
+                <button id="map-float-minimize" type="button" title="Minimize panel">−</button>
               </div>
-              <div id="mapDetailsBody" class="map-details-body">
-                <div class="muted small">Select a feature and click View Details.</div>
+              <div id="map-float-body">
+                <div id="mapFieldPanel" class="map-field-panel">
+                  <div id="mapFieldPanelHeader" class="row" style="justify-content:space-between; align-items:center; gap:8px;">
+                    <div class="site-panel-title">Field Location</div>
+                    <div class="row" style="gap:8px;">
+                      <button id="btnMapFieldHide" class="btn ghost small" type="button">Hide</button>
+                      <button id="btnMapUseMyLocation" class="btn secondary small" type="button">Use My Current Location</button>
+                    </div>
+                  </div>
+                  <div id="mapFieldGpsState" class="muted small" style="margin-top:6px;">GPS not captured yet.</div>
+                  <div id="mapFieldNearbyActions" class="map-field-actions" style="margin-top:8px;"></div>
+                  <div id="mapFieldCreateWrap" class="map-field-create" hidden>
+                    <button id="btnMapFieldCreateClose" class="btn ghost small map-field-create-close" type="button" aria-label="Close create location form">Close</button>
+                    <div class="muted small">Create new location from current GPS</div>
+                    <input id="mapFieldLocationName" class="input compact" type="text" placeholder="Location code / name" />
+                    <select id="mapFieldLocationType" class="input compact">
+                      <option value="Node">Node</option>
+                      <option value="Closure">Closure</option>
+                      <option value="MST">MST</option>
+                      <option value="Pedestal">Pedestal</option>
+                      <option value="Handhole">Handhole</option>
+                      <option value="Splice Point">Splice Point</option>
+                      <option value="Other">Other</option>
+                    </select>
+                    <textarea id="mapFieldLocationNotes" class="input compact" rows="2" placeholder="Optional notes"></textarea>
+                    <div style="margin-top:6px;">
+                      <div class="muted small" style="margin-bottom:6px;">Live proof photo: camera only. GPS is locked at capture time.</div>
+                      <button id="btnMapFieldTakePhoto" class="btn secondary small" type="button" style="display:inline-flex;align-items:center;gap:6px;">
+                        <svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="14" height="11" rx="2"/><circle cx="9" cy="10" r="3"/><path d="M6 4l1-2h4l1 2"/></svg>
+                        Take Photo
+                      </button>
+                      <input id="mapFieldPhotoInput" type="file" accept="image/*" capture="environment" hidden />
+                      <div id="mapFieldPhotoPreview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>
+                    </div>
+                    <div style="margin-top:8px;border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;">
+                      <div class="muted small" style="margin-bottom:4px;">Billing Codes Used</div>
+                      <div style="color:rgba(255,255,255,0.5);font-size:11px;margin-bottom:6px;">One per line: CODE qty &nbsp;(e.g. FBSP-2 3)</div>
+                      <textarea id="mapFieldBillingCodes" class="input compact" rows="3"
+                        placeholder="e.g.&#10;FBSP-2 3&#10;FBOSC-12 1&#10;FBTERM 4"></textarea>
+                    </div>
+                    <div class="row" style="justify-content:flex-end; gap:8px; flex-wrap:wrap; margin-top:8px;">
+                      <button id="btnMapFieldDismissCreate" class="btn ghost small" type="button">Close</button>
+                      <button id="btnMapFieldCancelCreate" class="btn ghost small" type="button">Cancel</button>
+                      <button id="btnMapFieldCreateLocation" class="btn secondary small" type="button">Create Location Here</button>
+                    </div>
+                  </div>
+                  <div id="mapFieldLocationCard" class="map-field-location-card" hidden></div>
+                </div>
+                <aside id="mapDetailsDrawer" class="map-details-drawer">
+                  <div class="map-details-header">
+                    <div id="mapDetailsTitle" class="site-panel-title">Feature details</div>
+                    <button id="btnMapDetailsClose" class="btn ghost small" type="button">Close</button>
+                  </div>
+                  <div id="mapDetailsBody" class="map-details-body">
+                    <div class="muted small">Select a feature and click View Details.</div>
+                  </div>
+                </aside>
               </div>
-            </aside>
+            </div>
           </div>
           <div id="redlineEditorBackdrop" class="redline-editor-backdrop" hidden>
             <div class="card redline-editor">
@@ -3138,6 +3154,24 @@
   </div>
 
   <script>
+    (function(){
+      var fp = document.getElementById('map-float-panel');
+      var fh = document.getElementById('map-float-drag-handle');
+      var fb = document.getElementById('map-float-body');
+      var fm = document.getElementById('map-float-minimize');
+      if(fp && fh){
+        var dr=false,sx,sy,sl,st;
+        try{var s=JSON.parse(localStorage.getItem('speccom-map-fp')||'null');if(s){fp.style.left=Math.max(0,Math.min(s.x,window.innerWidth-100))+'px';fp.style.top=Math.max(0,Math.min(s.y,window.innerHeight-50))+'px';}}catch(e){}
+        function savePos(){try{localStorage.setItem('speccom-map-fp',JSON.stringify({x:parseInt(fp.style.left)||14,y:parseInt(fp.style.top)||14}));}catch(e){}}
+        fh.addEventListener('mousedown',function(e){if(e.target.closest('button'))return;dr=true;sx=e.clientX;sy=e.clientY;var r=fp.getBoundingClientRect();sl=r.left;st=r.top;fh.classList.add('is-dragging');e.preventDefault();});
+        document.addEventListener('mousemove',function(e){if(!dr)return;fp.style.left=Math.max(0,Math.min(sl+e.clientX-sx,window.innerWidth-fp.offsetWidth))+'px';fp.style.top=Math.max(0,Math.min(st+e.clientY-sy,window.innerHeight-50))+'px';});
+        document.addEventListener('mouseup',function(){if(!dr)return;dr=false;fh.classList.remove('is-dragging');savePos();});
+        fh.addEventListener('touchstart',function(e){if(e.target.closest('button'))return;var t=e.touches[0];dr=true;sx=t.clientX;sy=t.clientY;var r=fp.getBoundingClientRect();sl=r.left;st=r.top;e.preventDefault();},{passive:false});
+        document.addEventListener('touchmove',function(e){if(!dr)return;var t=e.touches[0];fp.style.left=Math.max(0,Math.min(sl+t.clientX-sx,window.innerWidth-fp.offsetWidth))+'px';fp.style.top=Math.max(0,Math.min(st+t.clientY-sy,window.innerHeight-50))+'px';e.preventDefault();},{passive:false});
+        document.addEventListener('touchend',function(){if(!dr)return;dr=false;savePos();});
+        if(fm&&fb){fm.addEventListener('click',function(){var c=fb.style.display==='none';fb.style.display=c?'':'none';fm.textContent=c?'−':'+';});}
+      }
+    })();
     (function(){
       function syncThemeIcon(isLight){
         var dark = document.getElementById('theme-icon-dark');
