@@ -1616,6 +1616,9 @@ body.map-create-open #mapSidebarToggle{
   opacity:0 !important;
   pointer-events:none !important;
 }
+body.map-create-open .map-floating-places{
+  display:none !important;
+}
 .redline-entry-btn{
   position:absolute;
   top:14px;
@@ -3759,6 +3762,12 @@ body.map-mode .map-menu-btn .hamburger span{
 }
 body.map-mode .map-menu-btn.is-active{
   background:rgba(17,24,39,0.72);
+}
+body.map-mode #mapSidebarToggle{
+  display:none !important;
+}
+#gisSidebarBackdrop{
+  display:none !important;
 }
 body.map-mode .gis-sidebar{
   position:absolute;
@@ -6803,6 +6812,167 @@ label,
   overflow-y:auto;
   overflow-x:hidden;
 }
+#map-float-panel .gis-sidebar,
+body.map-mode #map-float-panel .gis-sidebar,
+body.sidebar-collapsed #map-float-panel .gis-sidebar{
+  position:static;
+  top:auto;
+  left:auto;
+  z-index:auto;
+  width:auto;
+  min-width:0;
+  max-width:none;
+  max-height:none;
+  opacity:1;
+  pointer-events:auto;
+  transform:none;
+  transition:none;
+}
+#map-float-panel .gis-drawer,
+body.map-mode #map-float-panel .gis-drawer,
+body.map-mode #map-float-panel .right-drawer{
+  position:static;
+  width:auto;
+  min-width:0;
+  max-width:none;
+  max-height:none;
+  height:auto;
+  border:none;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  overflow:visible;
+}
+#map-float-panel .wired-sidebar-top,
+body.map-mode #map-float-panel .wired-sidebar-top{
+  display:flex;
+  justify-content:flex-end;
+  padding:10px 12px 0;
+}
+#map-float-panel .wired-project-pill,
+body.map-mode #map-float-panel .wired-project-pill{
+  color:rgba(210,226,245,0.74);
+  background:transparent;
+  border:none;
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  text-align:right;
+}
+#map-float-panel .sidebar-header,
+body.map-mode #map-float-panel .sidebar-header{
+  position:static;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px 12px;
+  border-top:1px solid rgba(55,138,221,0.14);
+  border-bottom:1px solid rgba(55,138,221,0.12);
+  background:transparent;
+}
+#map-float-panel .sidebar-title,
+body.map-mode #map-float-panel .sidebar-title{
+  color:#f8fbff;
+  font-size:15px;
+  line-height:1.2;
+  letter-spacing:.04em;
+  font-weight:900;
+}
+#map-float-panel .sidebar-header-actions,
+body.map-mode #map-float-panel .sidebar-header-actions{
+  position:static;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+#map-float-panel #btnPlacesHide{
+  display:none;
+}
+#map-float-panel #btnImportLocations,
+body.map-mode #map-float-panel #btnImportLocations{
+  min-height:32px;
+  padding:5px 9px;
+  border-radius:8px;
+  border-color:rgba(125,170,220,0.22);
+  background:rgba(255,255,255,0.06);
+  color:rgba(223,236,250,0.88);
+  font-size:11px;
+}
+#map-float-panel .sidebar-tabs,
+body.map-mode #map-float-panel .sidebar-tabs{
+  display:flex;
+  gap:6px;
+  padding:8px 12px 0;
+  border-bottom:none;
+  background:transparent;
+}
+#map-float-panel .sidebar-tabs .btn,
+body.map-mode #map-float-panel .sidebar-tabs .btn{
+  min-height:30px;
+  padding:5px 10px;
+  border-radius:8px;
+  border-color:rgba(125,170,220,0.18);
+  color:rgba(190,215,245,0.72);
+}
+#map-float-panel .sidebar-tabs .btn.is-active,
+body.map-mode #map-float-panel .sidebar-tabs .btn.is-active{
+  background:rgba(55,138,221,0.18);
+  border-color:rgba(120,188,245,0.42);
+  color:#f8fbff;
+}
+#map-float-panel .sidebar-body,
+body.map-mode #map-float-panel .sidebar-body{
+  padding:10px 12px 12px;
+}
+#map-float-panel .map-layer-card,
+body.map-mode #map-float-panel .map-layer-card{
+  border:none;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  padding:0;
+}
+#map-float-panel label[for="kmzTreeSearch"],
+body.map-mode #map-float-panel label[for="kmzTreeSearch"]{
+  color:rgba(190,215,245,0.72);
+  display:block !important;
+  margin-bottom:6px;
+}
+#map-float-panel .map-search-row{
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) auto;
+  gap:8px;
+}
+#map-float-panel #kmzTreeSearch,
+body.map-mode #map-float-panel #kmzTreeSearch{
+  width:100%;
+  min-width:0;
+  max-width:none;
+  display:block !important;
+  border-color:rgba(125,170,220,0.24);
+  background:rgba(255,255,255,0.08);
+  color:#f8fbff;
+}
+#map-float-panel #kmzTreeSearch::placeholder{
+  color:rgba(190,215,245,0.5);
+}
+#map-float-panel #btnKmzTreeSearch{
+  min-height:40px;
+  border-radius:10px;
+}
+#map-float-panel .kmz-tree,
+body.map-mode #map-float-panel .kmz-tree{
+  max-height:26vh;
+}
+#map-float-panel .kmz-tree-row,
+body.map-mode #map-float-panel .kmz-tree-row{
+  color:rgba(235,244,255,0.9);
+}
+#map-float-panel .kmz-tree-empty{
+  color:rgba(190,215,245,0.72);
+}
 /* Strip positional styles from panels inside the float container */
 #map-float-panel .map-field-panel{
   position:static;
@@ -6810,6 +6980,7 @@ label,
   z-index:auto;
   width:auto;
   border:none;
+  border-top:1px solid rgba(55,138,221,0.14);
   border-radius:0;
   background:transparent;
   box-shadow:none;
