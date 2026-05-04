@@ -549,7 +549,7 @@ const I18N = {
     dprCommentsLabel: "Comments / Needs Addressed",
     dprCommentsPlaceholder: "Anything needs addressed?",
     dprReadOnlyNote: "Read-only access. Ask an authorized team member to update.",
-    dprNoProject: "Select a project to view the report.",
+    dprNoProject: "Select a project to continue with this project-based tool.",
     dprNoMetrics: "Generate a report to see metrics.",
     dprMetricSites: "Sites created today",
     dprMetricSplice: "Splice locations created today",
@@ -618,7 +618,7 @@ const I18N = {
     dispatchAssignUnassigned: "Unassigned",
     dispatchModalTitle: "Work order",
     laborTitle: "Labor",
-    laborNoProject: "Select a project to view labor.",
+    laborNoProject: "Select a project to continue with this project-based tool.",
     laborNoRows: "No technician labor logged yet.",
     laborTechLabel: "Technician",
     laborDateLabel: "Work date",
@@ -676,7 +676,7 @@ const I18N = {
       sitePanelTitle: "Site panel",
       noSiteSelected: "No site selected.",
       siteStatusPending: "Pending sync",
-      mapStatusNoProject: "Select a project to view sites.",
+      mapStatusNoProject: "Select a project to view field sites.",
       mapStatusNoSites: "No sites yet. Drop a pin to add one.",
       mapStatusSites: "{count} sites",
       pinMissingGps: "GPS unavailable",
@@ -734,8 +734,8 @@ const I18N = {
     languageOptionPortuguese: "Portuguese",
     languageHelp: "Changes apply immediately and sync to your profile.",
     saveLanguage: "Save language",
-    selectProjectNodes: "Select a project to see sites.",
-    selectProjectLocations: "Select a project to see locations.",
+    selectProjectNodes: "Select a project to continue with this project-based tool.",
+    selectProjectLocations: "Select a project to view billing locations.",
     startLabel: "Start",
     continueLabel: "Continue",
     completeLabel: "Completed",
@@ -3028,6 +3028,15 @@ function setActiveView(viewId, { syncHash = true } = {}){
   if (syncHash){
     syncHashForView(viewId);
   }
+
+  dlog("[route] setActiveView", {
+    view: viewId,
+    hash: window.location.hash,
+    projectId: state.activeProject?.id || null,
+    projectName: state.activeProject?.name || null,
+    contextType: state.activeProject ? "project" : "company",
+    userId: state.user?.id || null,
+  });
 }
 
 function openDemoFeature(featureId){
@@ -22090,6 +22099,13 @@ function setSiteSearchBanner(message = ""){
 }
 
 function updateSiteSearchUiSummary(resultSet){
+  dlog("[search] location search results", {
+    query: resultSet.rawQuery || null,
+    resultCount: (resultSet.rows || []).length,
+    totalVisible: getVisibleSites().length,
+    projectId: state.activeProject?.id || null,
+    contextType: state.activeProject ? "project" : "company",
+  });
   const clearBtn = $("btnClearMapSearch");
   if (clearBtn){
     clearBtn.style.display = resultSet.rawQuery ? "" : "none";
@@ -22195,6 +22211,12 @@ async function loadProjectSites(projectId){
   state.map.siteCodesBySiteId.clear();
   state.map.sitePhotosBySiteId.clear();
   await loadProjectFieldPhotos(projectId);
+  dlog("[data] loadProjectSites complete", {
+    projectId,
+    siteCount: state.projectSites.length,
+    photoCount: (state.map.fieldPhotos || []).length,
+    pendingCount: (state.pendingSites || []).length,
+  });
   primeSitePopupCachesFromRuidosoEvidence(state.projectSites);
   const visibleIds = new Set(getVisibleSites().map((site) => toSiteIdKey(site?.id)));
   if (state.activeSite && !visibleIds.has(toSiteIdKey(state.activeSite.id))){
@@ -24138,12 +24160,23 @@ function setActiveProjectById(id){
   if (activeViewId === "viewSupervisor" && state.features.dispatch){
     loadDispatchTechnicians();
     loadDispatchWorkOrders();
+    renderSupervisorOverview();
+  }
+  if (activeViewId === "viewMap"){
+    refreshLocations();
+    renderSiteList();
   }
   refreshMaterialProjectData({ silent: true });
   if (activeViewId === "viewAdmin"){
     loadAdminMaterialSettings();
   }
   forcePlainMapRedlineState();
+
+  dlog("[project] setActiveProjectById", {
+    projectId: next?.id || null,
+    projectName: next?.name || null,
+    activeView: activeViewId,
+  });
 }
 
 async function saveCurrentProjectPreference(projectId){
@@ -30887,6 +30920,15 @@ async function initAuth(){
   });
   SpecCom.helpers.applyAuthModeFromHash();
   window.addEventListener("hashchange", () => {
+    // Redirect presentation/client-review routes to standalone presentation page
+    const _rawHash = (window.location.hash || "").slice(1);
+    const _topRoute = _rawHash.split("/")[0].toLowerCase();
+    if (_topRoute === "presentation" || _topRoute === "client-review") {
+      const _slug = _rawHash.split("/")[1] || "";
+      window.location.href = "./presentation.html" + (_slug ? "#" + _slug : "");
+      return;
+    }
+
     SpecCom.helpers.applyAuthModeFromHash();
     if (!state.user){
       storePostAuthRedirect();
@@ -30901,6 +30943,17 @@ async function initAuth(){
     syncInvoiceDeepLinkFromUrl({ activateView: true });
     syncRedlineDeepLinkFromUrl({ activateView: true });
   });
+
+  // Redirect presentation/client-review hash routes on initial load
+  {
+    const _initHash = (window.location.hash || "").slice(1);
+    const _initRoute = _initHash.split("/")[0].toLowerCase();
+    if (_initRoute === "presentation" || _initRoute === "client-review") {
+      const _initSlug = _initHash.split("/")[1] || "";
+      window.location.href = "./presentation.html" + (_initSlug ? "#" + _initSlug : "");
+      return;
+    }
+  }
 
   if (window.location.pathname.endsWith("/demo-login")){
     await demoLogin();

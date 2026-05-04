@@ -1,0 +1,1274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <title>SpecCom | Field Operations Presentation</title>
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg"/>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Exo+2:wght@200;300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    :root{
+      --bg:#050810;
+      --surface:#0a1424;
+      --card:#0d1c38;
+      --blue:#378ADD;
+      --teal:#1D9E75;
+      --text:#f0f6ff;
+      --muted:rgba(140,175,210,0.65);
+      --dim:rgba(100,140,180,0.45);
+      --border:rgba(55,138,221,0.12);
+      --brand:"Rajdhani",sans-serif;
+      --ui:"Exo 2",sans-serif;
+    }
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;overflow-x:hidden;}
+    a{color:inherit;text-decoration:none;}
+    button{font-family:var(--ui);cursor:pointer;}
+    input{font-family:var(--ui);}
+
+    /* STARFIELD */
+    #starfield{position:fixed;inset:0;z-index:0;pointer-events:none;}
+    .fiber-bg{position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.4;}
+
+    /* CORNER BRACKETS */
+    .cb{position:fixed;width:20px;height:20px;opacity:.3;z-index:5;pointer-events:none;}
+    .cb.tl{top:12px;left:12px;border-top:1px solid var(--blue);border-left:1px solid var(--blue);}
+    .cb.tr{top:12px;right:12px;border-top:1px solid var(--blue);border-right:1px solid var(--blue);}
+    .cb.bl{bottom:12px;left:12px;border-bottom:1px solid var(--blue);border-left:1px solid var(--blue);}
+    .cb.br{bottom:12px;right:12px;border-bottom:1px solid var(--blue);border-right:1px solid var(--blue);}
+
+    /* GLOW ORBS */
+    .go{position:fixed;border-radius:50%;filter:blur(70px);pointer-events:none;z-index:1;}
+    .go1{width:380px;height:380px;background:rgba(55,138,221,.07);top:-100px;left:-100px;animation:orbFloat 10s ease-in-out infinite;}
+    .go2{width:300px;height:300px;background:rgba(29,158,117,.05);bottom:-80px;right:-80px;animation:orbFloat 13s ease-in-out infinite reverse;}
+    @keyframes orbFloat{0%,100%{transform:translate(0,0)}50%{transform:translate(22px,-18px)}}
+
+    /* ANIMATIONS */
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes slideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes scaleIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
+    @keyframes spGlow{0%,100%{filter:drop-shadow(0 0 16px rgba(55,138,221,.5))}50%{filter:drop-shadow(0 0 30px rgba(55,138,221,.85))}}
+    @keyframes progressBar{from{width:0}to{width:var(--target-w,100%)}}
+    @keyframes shimmer{0%{left:-80%}100%{left:120%}}
+    @keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
+
+    /* ======================== ENTRY SCREEN ======================== */
+    #pres-entry{
+      position:fixed;inset:0;z-index:100;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      padding:24px;gap:0;
+      transition:opacity .6s ease,transform .6s ease;
+    }
+    #pres-entry.out{opacity:0;transform:translateY(-20px);pointer-events:none;}
+
+    .entry-badge{
+      font-size:9px;letter-spacing:3px;text-transform:uppercase;
+      color:var(--blue);border:1px solid rgba(55,138,221,.3);
+      padding:4px 14px;border-radius:20px;margin-bottom:28px;
+      animation:fadeIn .6s ease .2s both;
+    }
+    .entry-logo{
+      display:flex;align-items:center;gap:14px;margin-bottom:20px;
+      animation:scaleIn .7s cubic-bezier(.16,1,.3,1) .4s both;
+    }
+    .entry-logo-mark{width:52px;height:46px;animation:spGlow 3s ease-in-out infinite;}
+    .entry-logo-word{font-family:var(--brand);font-size:54px;font-weight:700;letter-spacing:.02em;line-height:.9;color:#f4f8ff;text-shadow:0 0 12px rgba(90,160,255,.3);}
+    .entry-title{
+      font-family:var(--brand);font-size:22px;font-weight:700;letter-spacing:3px;
+      text-align:center;color:rgba(200,225,255,.95);margin-bottom:10px;
+      animation:slideUp .6s ease .6s both;
+    }
+    .entry-sub{
+      font-size:12px;color:var(--muted);text-align:center;line-height:1.8;
+      max-width:520px;margin-bottom:36px;
+      animation:slideUp .6s ease .75s both;
+    }
+    .entry-form{
+      display:flex;flex-direction:column;gap:12px;width:100%;max-width:340px;
+      animation:slideUp .6s ease .9s both;
+    }
+    .entry-field{
+      display:flex;flex-direction:column;gap:5px;
+    }
+    .entry-label{font-size:10px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;}
+    .entry-input{
+      background:rgba(10,20,44,.8);border:1px solid rgba(55,138,221,.2);
+      color:var(--text);font-size:13px;padding:10px 14px;border-radius:8px;
+      outline:none;transition:border-color .2s;
+    }
+    .entry-input:focus{border-color:rgba(55,138,221,.5);}
+    .entry-input::placeholder{color:var(--dim);}
+    .entry-btn{
+      margin-top:8px;padding:13px;border-radius:10px;
+      background:var(--blue);border:none;color:#fff;
+      font-family:var(--brand);font-size:15px;font-weight:700;letter-spacing:2.5px;
+      transition:all .2s;box-shadow:0 0 28px rgba(55,138,221,.25);
+    }
+    .entry-btn:hover{background:#4a9de8;transform:translateY(-2px);box-shadow:0 0 44px rgba(55,138,221,.4);}
+    .entry-skip{
+      margin-top:14px;font-size:11px;color:var(--dim);text-align:center;cursor:pointer;
+      animation:fadeIn .5s ease 1.3s both;transition:color .2s;
+    }
+    .entry-skip:hover{color:var(--muted);}
+    .entry-streak{
+      width:280px;height:1px;margin:20px 0;position:relative;
+      background:linear-gradient(90deg,transparent,rgba(55,138,221,.25),transparent);
+      animation:slideUp .6s ease .7s both;
+    }
+    .entry-streak::after{
+      content:'';position:absolute;top:0;left:-40%;width:40%;height:1px;
+      background:linear-gradient(90deg,transparent,rgba(255,255,255,.8),transparent);
+      animation:shimmer 2.5s ease-in-out infinite;
+    }
+    .entry-note{font-size:10px;color:var(--dim);margin-top:6px;text-align:center;letter-spacing:1px;}
+
+    /* ======================== MAIN DASHBOARD ======================== */
+    #pres-main{
+      display:none;flex-direction:column;min-height:100vh;position:relative;z-index:10;
+    }
+    #pres-main.active{display:flex;}
+
+    /* TOP NAV */
+    .pres-nav{
+      position:sticky;top:0;z-index:50;
+      display:flex;align-items:center;gap:12px;
+      padding:0 20px;height:54px;
+      background:rgba(5,8,16,.92);border-bottom:1px solid var(--border);
+      backdrop-filter:blur(8px);
+    }
+    .nav-logo-mark{width:28px;height:25px;flex-shrink:0;}
+    .nav-brand{font-family:var(--brand);font-size:20px;font-weight:700;letter-spacing:.02em;color:#f4f8ff;}
+    .nav-sep{width:1px;height:18px;background:var(--border);flex-shrink:0;}
+    .nav-company{font-size:12px;color:var(--muted);font-weight:500;flex:1;}
+    .nav-badge{
+      font-size:9px;letter-spacing:2px;text-transform:uppercase;padding:3px 10px;
+      border-radius:10px;background:rgba(55,138,221,.12);color:var(--blue);
+      border:1px solid rgba(55,138,221,.2);white-space:nowrap;
+    }
+    .nav-exit{
+      background:none;border:1px solid rgba(255,255,255,.1);color:var(--muted);
+      font-size:10px;letter-spacing:1.5px;padding:5px 12px;border-radius:6px;
+      transition:all .18s;white-space:nowrap;
+    }
+    .nav-exit:hover{color:var(--text);border-color:rgba(255,255,255,.2);}
+
+    /* CONTENT */
+    .pres-content{
+      flex:1;padding:28px 20px 60px;max-width:1080px;width:100%;margin:0 auto;
+      display:flex;flex-direction:column;gap:40px;
+    }
+
+    /* SECTION HEADER */
+    .sec-header{margin-bottom:16px;}
+    .sec-title{font-family:var(--brand);font-size:18px;font-weight:700;letter-spacing:2px;color:rgba(200,225,255,.9);}
+    .sec-sub{font-size:11px;color:var(--muted);margin-top:4px;}
+    .sec-divider{width:100%;height:1px;background:var(--border);margin-bottom:20px;}
+
+    /* KPI CARDS */
+    .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
+    .kpi-card{
+      background:var(--card);border:1px solid var(--border);border-radius:12px;
+      padding:14px 16px;position:relative;overflow:hidden;
+    }
+    .kpi-card::before{
+      content:'';position:absolute;top:0;left:0;right:0;height:2px;
+      background:linear-gradient(90deg,transparent,var(--kpi-color,var(--blue)),transparent);
+    }
+    .kpi-val{font-family:var(--brand);font-size:30px;font-weight:700;color:var(--kpi-color,var(--blue));line-height:1;}
+    .kpi-label{font-size:10px;color:var(--muted);margin-top:5px;line-height:1.4;}
+    .kpi-card.alert{--kpi-color:#D39A44;}
+    .kpi-card.blocked{--kpi-color:#991b1b;}
+    .kpi-card.green{--kpi-color:#1D9E75;}
+    .kpi-card.purple{--kpi-color:#7F77DD;}
+
+    /* PROJECT CARDS */
+    .proj-grid{display:grid;gap:12px;}
+    .proj-card{
+      background:var(--card);border:1px solid var(--border);border-radius:14px;
+      padding:16px 18px;cursor:pointer;transition:border-color .2s,transform .15s;
+      position:relative;overflow:hidden;
+    }
+    .proj-card:hover{border-color:rgba(55,138,221,.3);transform:translateX(3px);}
+    .proj-card::before{
+      content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+      background:var(--proj-color,var(--blue));border-radius:3px 0 0 3px;
+    }
+    .proj-top{display:flex;align-items:flex-start;gap:12px;margin-bottom:8px;}
+    .proj-info{flex:1;min-width:0;}
+    .proj-name{font-family:var(--brand);font-size:15px;font-weight:700;color:rgba(220,235,255,.95);margin-bottom:3px;}
+    .proj-meta{font-size:10px;color:var(--muted);}
+    .proj-status{
+      font-size:9px;letter-spacing:1.5px;text-transform:uppercase;
+      padding:3px 10px;border-radius:10px;white-space:nowrap;flex-shrink:0;
+      border:1px solid currentColor;
+    }
+    .proj-desc{font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:10px;}
+    .proj-stats{display:flex;gap:16px;flex-wrap:wrap;}
+    .proj-stat{font-size:10px;color:var(--dim);}
+    .proj-stat strong{color:var(--muted);font-weight:600;}
+    .proj-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px;}
+    .proj-tag{font-size:9px;padding:2px 8px;border-radius:8px;background:rgba(255,255,255,.04);color:var(--dim);border:1px solid rgba(255,255,255,.06);}
+    .proj-expand{font-size:10px;color:var(--blue);margin-top:8px;opacity:.7;}
+
+    /* WORKSPACE CARDS */
+    .ws-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;}
+    .ws-card{
+      background:var(--card);border:1px solid var(--border);border-radius:14px;
+      padding:16px 15px;cursor:pointer;transition:border-color .2s,transform .2s,box-shadow .2s;
+      position:relative;overflow:hidden;
+    }
+    .ws-card:hover{transform:translateY(-3px);box-shadow:0 8px 32px rgba(0,0,0,.4);}
+    .ws-icon{
+      width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+      margin-bottom:10px;color:var(--ws-accent,var(--blue));background:var(--ws-icon-bg,rgba(55,138,221,.1));
+    }
+    .ws-icon svg{width:20px;height:20px;}
+    .ws-title{font-family:var(--brand);font-size:14px;font-weight:700;margin-bottom:4px;color:rgba(220,235,255,.95);}
+    .ws-sub{font-size:10px;color:var(--muted);line-height:1.5;margin-bottom:8px;}
+    .ws-chips{display:flex;flex-wrap:wrap;gap:3px;}
+    .ws-chip{font-size:9px;padding:2px 7px;border-radius:8px;background:rgba(255,255,255,.04);color:var(--dim);border:1px solid rgba(255,255,255,.05);}
+
+    /* REDUCE / ORGANIZE CARDS */
+    .reduce-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;}
+    .reduce-card{
+      background:var(--card);border:1px solid var(--border);border-radius:12px;
+      padding:14px 16px;display:flex;align-items:flex-start;gap:12px;
+    }
+    .reduce-icon{font-size:22px;flex-shrink:0;margin-top:2px;}
+    .reduce-label{font-size:13px;font-weight:600;margin-bottom:3px;color:rgba(210,230,255,.9);}
+    .reduce-desc{font-size:11px;color:var(--muted);line-height:1.5;}
+
+    .organize-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;}
+    .organize-card{
+      background:var(--card);border:1px solid var(--border);border-radius:10px;
+      padding:12px 14px;display:flex;align-items:center;gap:9px;
+      font-size:12px;font-weight:500;color:rgba(190,215,255,.85);
+    }
+    .organize-icon{font-size:18px;}
+
+    /* MILESTONE BAR */
+    .milestone-list{display:flex;flex-direction:column;gap:6px;margin-top:8px;}
+    .milestone{display:flex;align-items:center;gap:8px;font-size:11px;}
+    .milestone-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+    .milestone-dot.done{background:var(--teal);}
+    .milestone-dot.pending{background:rgba(140,175,210,.25);border:1px solid var(--dim);}
+    .milestone-text{color:var(--muted);}
+    .milestone-text.done{color:rgba(180,210,255,.8);}
+
+    /* ======================== MODAL OVERLAY ======================== */
+    .modal-overlay{
+      position:fixed;inset:0;z-index:200;
+      background:rgba(5,8,16,.85);backdrop-filter:blur(6px);
+      display:flex;align-items:center;justify-content:center;padding:20px;
+      opacity:0;pointer-events:none;transition:opacity .25s;
+    }
+    .modal-overlay.open{opacity:1;pointer-events:auto;}
+    .modal-box{
+      background:#0a1424;border:1px solid rgba(55,138,221,.18);border-radius:18px;
+      box-shadow:0 0 80px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.04);
+      width:100%;max-width:680px;max-height:88vh;display:flex;flex-direction:column;
+      animation:scaleIn .22s cubic-bezier(.16,1,.3,1);
+    }
+    .modal-header{
+      display:flex;align-items:center;gap:12px;
+      padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0;
+    }
+    .modal-title{font-family:var(--brand);font-size:16px;font-weight:700;letter-spacing:1.5px;flex:1;}
+    .modal-close{
+      background:none;border:1px solid rgba(255,255,255,.1);color:var(--muted);
+      width:30px;height:30px;border-radius:8px;font-size:16px;transition:all .15s;
+    }
+    .modal-close:hover{color:var(--text);border-color:rgba(255,255,255,.2);}
+    .modal-body{flex:1;overflow-y:auto;padding:20px;}
+    .modal-body::-webkit-scrollbar{width:3px;}
+    .modal-body::-webkit-scrollbar-thumb{background:rgba(55,138,221,.2);border-radius:2px;}
+
+    /* ======================== UPLOAD CENTER ======================== */
+    .upload-center{display:flex;flex-direction:column;gap:20px;}
+    .upload-sample-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px;}
+    .upload-sample-btn{
+      display:flex;align-items:center;gap:6px;
+      padding:7px 14px;border-radius:8px;font-size:11px;font-weight:500;
+      background:rgba(10,20,44,.8);border:1px solid rgba(55,138,221,.2);color:var(--muted);
+      transition:all .18s;
+    }
+    .upload-sample-btn:hover{border-color:rgba(55,138,221,.4);color:var(--text);}
+    .upload-sample-btn .usb-icon{font-size:14px;}
+    .upload-drop-zone{
+      border:2px dashed rgba(55,138,221,.2);border-radius:14px;
+      padding:36px 20px;text-align:center;
+      transition:border-color .2s,background .2s;cursor:pointer;
+      position:relative;
+    }
+    .upload-drop-zone.drag-over{border-color:rgba(55,138,221,.5);background:rgba(55,138,221,.04);}
+    .upload-drop-zone:hover{border-color:rgba(55,138,221,.3);}
+    .drop-icon{font-size:32px;margin-bottom:10px;}
+    .drop-title{font-size:14px;font-weight:600;color:rgba(200,225,255,.9);margin-bottom:5px;}
+    .drop-sub{font-size:11px;color:var(--muted);line-height:1.6;}
+    .drop-types{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-top:12px;}
+    .drop-type{font-size:9px;padding:2px 8px;border-radius:6px;background:rgba(55,138,221,.08);color:var(--blue);border:1px solid rgba(55,138,221,.15);}
+    #upload-file-input{display:none;}
+
+    /* UPLOAD REVIEW */
+    .upload-review{display:flex;flex-direction:column;gap:14px;}
+    .review-file-card{
+      background:rgba(5,8,16,.6);border:1px solid var(--border);border-radius:12px;
+      padding:14px 16px;display:flex;align-items:center;gap:14px;
+    }
+    .review-file-icon{font-size:28px;flex-shrink:0;}
+    .review-file-info{flex:1;min-width:0;}
+    .review-file-name{font-size:13px;font-weight:600;color:rgba(220,235,255,.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .review-file-meta{font-size:10px;color:var(--muted);margin-top:3px;}
+    .review-category{display:inline-block;padding:2px 10px;border-radius:8px;font-size:10px;background:rgba(55,138,221,.12);color:var(--blue);border:1px solid rgba(55,138,221,.2);margin-top:6px;}
+    .review-dest-label{font-size:10px;color:var(--dim);margin-bottom:4px;letter-spacing:1.5px;text-transform:uppercase;}
+    .review-dest{font-size:12px;color:var(--muted);padding:8px 12px;background:rgba(5,8,16,.5);border-radius:8px;border:1px solid var(--border);}
+    .review-context-label{font-size:10px;color:var(--dim);margin-bottom:6px;letter-spacing:1.5px;text-transform:uppercase;}
+    .review-context-btns{display:flex;flex-wrap:wrap;gap:6px;}
+    .ctx-btn{
+      padding:5px 12px;border-radius:8px;font-size:10px;
+      background:rgba(5,8,16,.5);border:1px solid var(--border);color:var(--muted);
+      transition:all .15s;
+    }
+    .ctx-btn.active{background:rgba(55,138,221,.12);border-color:rgba(55,138,221,.35);color:var(--blue);}
+    .review-action-btn{
+      padding:12px;border-radius:10px;font-family:var(--brand);font-size:14px;font-weight:700;letter-spacing:2px;
+      background:var(--blue);border:none;color:#fff;transition:all .2s;
+      box-shadow:0 0 22px rgba(55,138,221,.2);
+    }
+    .review-action-btn:hover{background:#4a9de8;transform:translateY(-1px);}
+
+    /* UPLOAD PROGRESS */
+    .upload-progress{display:flex;flex-direction:column;gap:12px;align-items:center;padding:24px 0;}
+    .progress-title{font-size:14px;font-weight:600;color:rgba(200,225,255,.9);}
+    .progress-bar-wrap{width:100%;height:6px;background:rgba(255,255,255,.05);border-radius:3px;overflow:hidden;}
+    .progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--teal),var(--blue));border-radius:3px;transition:width .3s ease;}
+    .progress-step{font-size:11px;color:var(--muted);text-align:center;}
+
+    /* UPLOAD RESULT */
+    .upload-result{display:flex;flex-direction:column;gap:12px;}
+    .result-header{display:flex;align-items:center;gap:10px;}
+    .result-check{width:32px;height:32px;border-radius:50%;background:rgba(29,158,117,.15);border:1px solid rgba(29,158,117,.3);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+    .result-title{font-size:14px;font-weight:600;color:rgba(29,158,117,.9);}
+    .result-note{font-size:10px;color:var(--dim);font-style:italic;}
+    .result-summary{font-size:12px;color:var(--muted);padding:10px 14px;background:rgba(5,8,16,.5);border-radius:8px;border:1px solid var(--border);}
+    .result-details{display:flex;flex-direction:column;gap:5px;}
+    .result-detail{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);}
+    .result-detail::before{content:"✓";color:var(--teal);font-size:10px;flex-shrink:0;}
+    .result-again{
+      padding:10px;border-radius:8px;font-size:11px;font-weight:600;letter-spacing:1.5px;
+      background:transparent;border:1px solid rgba(55,138,221,.2);color:var(--blue);
+      transition:all .18s;margin-top:4px;
+    }
+    .result-again:hover{background:rgba(55,138,221,.08);}
+
+    /* WORKSPACE PREVIEW MODAL */
+    .ws-preview{display:flex;flex-direction:column;gap:14px;}
+    .ws-preview-kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+    .wp-kpi{background:rgba(5,8,16,.5);border:1px solid var(--border);border-radius:10px;padding:12px 14px;}
+    .wp-kval{font-family:var(--brand);font-size:24px;font-weight:700;color:var(--blue);}
+    .wp-klabel{font-size:10px;color:var(--muted);margin-top:3px;}
+    .ws-preview-note{font-size:11px;color:var(--dim);font-style:italic;padding:10px 14px;background:rgba(5,8,16,.4);border-radius:8px;border:1px solid var(--border);}
+    .ws-preview-list{display:flex;flex-direction:column;gap:8px;}
+    .wpl-item{
+      display:flex;align-items:center;gap:12px;
+      padding:10px 14px;background:rgba(5,8,16,.5);border-radius:10px;border:1px solid var(--border);
+    }
+    .wpl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+    .wpl-text{flex:1;font-size:12px;color:var(--muted);}
+    .wpl-val{font-size:11px;color:var(--dim);}
+
+    /* PROJECT DETAIL MODAL */
+    .proj-detail{display:flex;flex-direction:column;gap:16px;}
+    .pd-section-title{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);margin-bottom:8px;}
+    .pd-stat-row{display:flex;gap:16px;flex-wrap:wrap;}
+    .pd-stat{text-align:center;flex:1;min-width:70px;padding:10px;background:rgba(5,8,16,.5);border-radius:8px;border:1px solid var(--border);}
+    .pd-stat-val{font-family:var(--brand);font-size:22px;font-weight:700;color:var(--blue);}
+    .pd-stat-label{font-size:10px;color:var(--muted);margin-top:3px;}
+    .pd-milestones{display:flex;flex-direction:column;gap:7px;}
+    .pd-milestone{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:rgba(5,8,16,.4);}
+    .pd-ms-icon{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;}
+    .pd-ms-icon.done{background:rgba(29,158,117,.15);border:1px solid rgba(29,158,117,.3);color:var(--teal);}
+    .pd-ms-icon.pending{background:rgba(140,175,210,.05);border:1px solid rgba(140,175,210,.15);color:var(--dim);}
+    .pd-ms-text{font-size:12px;}
+    .pd-ms-text.done{color:rgba(180,210,255,.8);}
+    .pd-ms-text.pending{color:var(--muted);}
+    .pd-crew{font-size:12px;color:var(--muted);padding:10px 14px;background:rgba(5,8,16,.4);border-radius:8px;border:1px solid var(--border);}
+    .pd-invoice{display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(127,119,221,.06);border-radius:8px;border:1px solid rgba(127,119,221,.15);}
+    .pd-invoice-label{font-size:11px;color:var(--muted);}
+    .pd-invoice-ref{font-size:13px;font-weight:600;color:#9d99e8;margin-left:auto;}
+
+    /* TOAST */
+    #pres-toast{
+      position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:9999;
+      background:#0d1c38;border:1px solid rgba(55,138,221,.25);color:var(--text);
+      padding:10px 22px;border-radius:10px;font-size:12px;
+      opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;
+      box-shadow:0 4px 24px rgba(0,0,0,.5);
+    }
+    #pres-toast.show{opacity:1;}
+
+    /* PRESENTATION NOTE BANNER */
+    .pres-note-banner{
+      background:rgba(55,138,221,.06);border:1px solid rgba(55,138,221,.15);
+      border-radius:10px;padding:10px 16px;
+      font-size:11px;color:var(--muted);text-align:center;
+      letter-spacing:.5px;
+    }
+    .pres-note-banner strong{color:var(--blue);}
+
+    /* SCROLL FADE SECTIONS */
+    .pres-section{animation:fadeIn .4s ease both;}
+
+    /* RESPONSIVE */
+    @media(max-width:600px){
+      .kpi-grid{grid-template-columns:repeat(2,1fr);}
+      .ws-grid{grid-template-columns:repeat(2,1fr);}
+      .entry-logo-word{font-size:38px;}
+    }
+  </style>
+</head>
+<body>
+
+<!-- STARFIELD -->
+<canvas id="starfield"></canvas>
+<svg class="fiber-bg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice">
+  <path class="sp-strand sp-f1" d="M-20 120 Q200 80 400 180 T820 140"/>
+  <path class="sp-strand sp-f2" d="M-20 300 Q180 260 380 320 T820 280"/>
+  <path class="sp-strand sp-f1" d="M-20 420 Q220 380 480 440 T820 400"/>
+</svg>
+<div class="go go1"></div>
+<div class="go go2"></div>
+<div class="cb tl"></div><div class="cb tr"></div>
+<div class="cb bl"></div><div class="cb br"></div>
+
+<!-- ======================== ENTRY SCREEN ======================== -->
+<div id="pres-entry">
+  <div class="entry-badge">Field Operations Presentation</div>
+  <div class="entry-logo">
+    <svg class="entry-logo-mark" viewBox="0 0 52 46" fill="none">
+      <path d="M26 2L4 14v18l22 12 22-12V14L26 2z" stroke="#378ADD" stroke-width="1.5" fill="none"/>
+      <path d="M26 2L4 14l22 12 22-12L26 2z" stroke="#378ADD" stroke-width="1" fill="rgba(55,138,221,.08)"/>
+      <path d="M4 14v18l22 12" stroke="#1D9E75" stroke-width="1" fill="none" opacity=".7"/>
+      <path d="M26 26v10" stroke="#378ADD" stroke-width="1.5" opacity=".6"/>
+      <circle cx="26" cy="22" r="3" fill="#378ADD" opacity=".8"/>
+    </svg>
+    <span class="entry-logo-word">SpecCom</span>
+  </div>
+  <div class="entry-title">Field Operations Presentation</div>
+  <div class="entry-sub">
+    A private walkthrough showing how SpecCom can reduce paperwork, organize field operations,
+    protect job records, and give supervisors a clearer view of company work.
+  </div>
+  <div class="entry-streak"></div>
+  <div class="entry-form">
+    <div class="entry-field">
+      <label class="entry-label" for="company-input">Company Name <span style="opacity:.5">(optional)</span></label>
+      <input id="company-input" class="entry-input" type="text" placeholder="e.g. K&amp;S Electric" autocomplete="off"/>
+    </div>
+    <div class="entry-field">
+      <label class="entry-label" for="invite-input">Invite Code <span style="opacity:.5">(optional)</span></label>
+      <input id="invite-input" class="entry-input" type="text" placeholder="Leave blank for general walkthrough" autocomplete="off"/>
+    </div>
+    <button class="entry-btn" id="enter-btn" onclick="enterPresentation()">Enter Presentation</button>
+  </div>
+  <div class="entry-skip" onclick="enterPresentation()">Skip — Open General Walkthrough</div>
+  <div class="entry-note" style="margin-top:18px;">Read-only presentation · No account required · No data stored</div>
+</div>
+
+<!-- ======================== MAIN DASHBOARD ======================== -->
+<div id="pres-main">
+  <!-- NAV -->
+  <nav class="pres-nav">
+    <svg class="nav-logo-mark" viewBox="0 0 52 46" fill="none">
+      <path d="M26 2L4 14v18l22 12 22-12V14L26 2z" stroke="#378ADD" stroke-width="1.5" fill="none"/>
+      <path d="M4 14v18l22 12" stroke="#1D9E75" stroke-width="1" fill="none" opacity=".7"/>
+      <circle cx="26" cy="22" r="3" fill="#378ADD" opacity=".8"/>
+    </svg>
+    <span class="nav-brand">SpecCom</span>
+    <div class="nav-sep"></div>
+    <span class="nav-company" id="nav-company-name">Field Operations Team</span>
+    <span class="nav-badge">Client Presentation</span>
+    <button class="nav-exit" onclick="exitPresentation()">Exit</button>
+  </nav>
+
+  <!-- CONTENT -->
+  <div class="pres-content">
+
+    <!-- PRESENTATION NOTE -->
+    <div class="pres-note-banner pres-section">
+      <strong>Sample Workflow Presentation</strong> — All data shown is representative of typical telecom field operations. No production records are accessed.
+    </div>
+
+    <!-- SECTION 1: FIELD OPERATIONS OVERVIEW -->
+    <div class="pres-section" id="section-overview">
+      <div class="sec-header">
+        <div class="sec-title">Field Operations Overview</div>
+        <div class="sec-sub">Live summary of active projects, crews, documentation, and alerts</div>
+      </div>
+      <div class="kpi-grid" id="kpi-grid"></div>
+    </div>
+
+    <!-- SECTION 2: PROJECTS -->
+    <div class="pres-section" id="section-projects">
+      <div class="sec-header">
+        <div class="sec-title">Active Project Workload</div>
+        <div class="sec-sub">OSP, splicing, drops, cabinet, warehouse, and billing projects</div>
+      </div>
+      <div class="proj-grid" id="proj-grid"></div>
+    </div>
+
+    <!-- SECTION 3: WORKSPACES -->
+    <div class="pres-section" id="section-workspaces">
+      <div class="sec-header">
+        <div class="sec-title">Workspaces</div>
+        <div class="sec-sub">Select a workspace to see a sample workflow</div>
+      </div>
+      <div class="ws-grid" id="ws-grid"></div>
+    </div>
+
+    <!-- SECTION 4: WHAT SPECCOM REDUCES -->
+    <div class="pres-section" id="section-reduces">
+      <div class="sec-header">
+        <div class="sec-title">What SpecCom Reduces</div>
+        <div class="sec-sub">The daily friction points that slow down telecom field teams</div>
+      </div>
+      <div class="reduce-grid" id="reduce-grid"></div>
+    </div>
+
+    <!-- SECTION 5: WHAT SPECCOM ORGANIZES -->
+    <div class="pres-section" id="section-organizes">
+      <div class="sec-header">
+        <div class="sec-title">What SpecCom Organizes</div>
+        <div class="sec-sub">Every category of field and office data in one platform</div>
+      </div>
+      <div class="organize-grid" id="organize-grid"></div>
+    </div>
+
+  </div><!-- /pres-content -->
+</div><!-- /pres-main -->
+
+<!-- ======================== PROJECT DETAIL MODAL ======================== -->
+<div class="modal-overlay" id="proj-modal" onclick="closeProjModal(event)">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title" id="proj-modal-title">Project Detail</div>
+      <button class="modal-close" onclick="closeProjModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="proj-detail" id="proj-modal-body"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== WORKSPACE PREVIEW MODAL ======================== -->
+<div class="modal-overlay" id="ws-modal" onclick="closeWsModal(event)">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title" id="ws-modal-title">Workspace Preview</div>
+      <button class="modal-close" onclick="closeWsModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="ws-modal-body"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== UPLOAD CENTER MODAL ======================== -->
+<div class="modal-overlay" id="upload-modal" onclick="closeUploadModal(event)">
+  <div class="modal-box" style="max-width:720px;">
+    <div class="modal-header">
+      <div class="modal-title">Upload Center</div>
+      <button class="modal-close" onclick="closeUploadModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="upload-center" id="upload-center-body"></div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="pres-toast"></div>
+
+<!-- DATA -->
+<script src="./presentation-data.js"></script>
+
+<script>
+"use strict";
+
+// ======================== STARFIELD ========================
+const cvs = document.getElementById("starfield");
+const ctx = cvs.getContext("2d");
+let stars = [], warp = 0;
+function initStars(){
+  cvs.width = innerWidth; cvs.height = innerHeight;
+  stars = [];
+  for(let i=0;i<260;i++) stars.push({x:Math.random()*cvs.width-cvs.width/2,y:Math.random()*cvs.height-cvs.height/2,z:Math.random()*1000});
+}
+function drawStars(){
+  ctx.fillStyle = "rgba(5,8,16,0.25)"; ctx.fillRect(0,0,cvs.width,cvs.height);
+  const cx=cvs.width/2,cy=cvs.height/2;
+  for(const s of stars){
+    s.z -= 0.6 + warp*20;
+    if(s.z<=0){s.z=1000;s.x=Math.random()*cvs.width-cx;s.y=Math.random()*cvs.height-cy;}
+    const sx=(s.x/s.z)*300+cx,sy=(s.y/s.z)*300+cy;
+    const r=Math.max(.3,(1-s.z/1000)*1.3),b=Math.min(1,(1-s.z/1000)*1.4);
+    ctx.fillStyle=`rgba(180,210,255,${b})`;
+    ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();
+  }
+  requestAnimationFrame(drawStars);
+}
+addEventListener("resize",()=>{cvs.width=innerWidth;cvs.height=innerHeight;});
+initStars();drawStars();
+
+// ======================== TOAST ========================
+let _toastTimer;
+function toast(msg, dur=2800){
+  const t = document.getElementById("pres-toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(()=>t.classList.remove("show"), dur);
+}
+
+// ======================== CLIENT CONFIG ========================
+function detectClientFromHash(){
+  const h = (location.hash || "").replace("#","").split("/");
+  const slug = h[1] || h[0] || "";
+  const clients = window.PRESENTATION_CONFIG?.clients || {};
+  return clients[slug] || null;
+}
+
+let activeClient = detectClientFromHash() || window.PRESENTATION_CONFIG?.defaultClient || {
+  clientName: "Telecom Operations Team",
+  presentationTitle: "SpecCom Field Operations Presentation",
+  accentColor: "#378ADD",
+};
+
+// Invite codes → client config lookup
+const INVITE_CODES = {
+  "KSELECTRIC": "ks-electric",
+  "KSE2026": "ks-electric",
+};
+
+// ======================== ENTRY ========================
+function enterPresentation(){
+  const companyInput = document.getElementById("company-input");
+  const inviteInput = document.getElementById("invite-input");
+  const company = companyInput?.value?.trim() || "";
+  const invite = (inviteInput?.value?.trim() || "").toUpperCase();
+
+  if(invite && INVITE_CODES[invite]){
+    const slug = INVITE_CODES[invite];
+    activeClient = window.PRESENTATION_CONFIG.clients[slug] || activeClient;
+  }
+  if(company) activeClient = {...activeClient, clientName: company};
+
+  // Transition
+  const entry = document.getElementById("pres-entry");
+  entry.classList.add("out");
+  warp = 1;
+  setTimeout(()=>{
+    warp = 0;
+    entry.style.display = "none";
+    const main = document.getElementById("pres-main");
+    main.classList.add("active");
+    initDashboard();
+  }, 580);
+
+  // Dev logging
+  console.info("[SpecCom Presentation] Entered presentation mode", {
+    clientName: activeClient.clientName,
+    clientSlug: activeClient.clientSlug,
+    marketFocus: activeClient.marketFocus,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+function exitPresentation(){
+  if(confirm("Exit the presentation walkthrough?")){
+    window.location.href = "./index.html";
+  }
+}
+
+// ======================== DASHBOARD INIT ========================
+function initDashboard(){
+  const navName = document.getElementById("nav-company-name");
+  if(navName) navName.textContent = activeClient.clientName;
+
+  document.title = `SpecCom | ${activeClient.clientName} — Field Operations`;
+
+  renderKPIs();
+  renderProjects();
+  renderWorkspaces();
+  renderReduces();
+  renderOrganizes();
+  initUploadCenter();
+
+  console.info("[SpecCom Presentation] Dashboard loaded", {
+    projectCount: (window.PRESENTATION_PROJECTS||[]).length,
+    workspaceCount: (window.PRESENTATION_WORKSPACES||[]).length,
+    kpis: window.PRESENTATION_KPIS,
+    dataSource: "presentation-data.js (sample workflow data)",
+  });
+}
+
+// ======================== KPIs ========================
+function renderKPIs(){
+  const grid = document.getElementById("kpi-grid");
+  if(!grid) return;
+  const k = window.PRESENTATION_KPIS || {};
+  const cards = [
+    {val:k.activeJobs,      label:"Active Jobs",          cls:""},
+    {val:k.blockedJobs,     label:"Blocked Jobs",          cls:"blocked"},
+    {val:k.crewsWorking,    label:"Crews Working",         cls:"green"},
+    {val:k.photosCaptured,  label:"Photos Captured",       cls:""},
+    {val:k.invoicesReadyForReview, label:"Invoices Ready", cls:"purple"},
+    {val:k.materialAlerts,  label:"Material Alerts",       cls:"alert"},
+    {val:k.sitesDocumented, label:"Sites Documented",      cls:"green"},
+    {val:k.totalProjects,   label:"Total Projects",        cls:""},
+  ];
+  grid.innerHTML = cards.map(c=>`
+    <div class="kpi-card ${c.cls}">
+      <div class="kpi-val">${c.val}</div>
+      <div class="kpi-label">${c.label}</div>
+    </div>
+  `).join("");
+}
+
+// ======================== PROJECTS ========================
+function renderProjects(){
+  const grid = document.getElementById("proj-grid");
+  if(!grid) return;
+  const projects = window.PRESENTATION_PROJECTS || [];
+  grid.innerHTML = projects.map(p=>`
+    <div class="proj-card" style="--proj-color:${p.statusColor}" onclick="openProjModal('${p.id}')">
+      <div class="proj-top">
+        <div class="proj-info">
+          <div class="proj-name">${escHtml(p.name)}</div>
+          <div class="proj-meta">${escHtml(p.type)} &nbsp;·&nbsp; ${escHtml(p.location)}</div>
+        </div>
+        <span class="proj-status" style="color:${p.statusColor}">${escHtml(p.status)}</span>
+      </div>
+      <div class="proj-desc">${escHtml(p.description)}</div>
+      <div class="proj-stats">
+        <span class="proj-stat"><strong>${p.taskCount}</strong> Tasks</span>
+        <span class="proj-stat"><strong>${p.photoCount}</strong> Photos</span>
+        <span class="proj-stat"><strong>${p.noteCount}</strong> Notes</span>
+        ${p.materialCount ? `<span class="proj-stat"><strong>${p.materialCount}</strong> Materials</span>` : ""}
+        ${p.redlineMarkers ? `<span class="proj-stat"><strong>${p.redlineMarkers}</strong> Redlines</span>` : ""}
+      </div>
+      <div class="proj-tags">${(p.tags||[]).map(t=>`<span class="proj-tag">${escHtml(t)}</span>`).join("")}</div>
+      <div class="proj-expand">View details →</div>
+    </div>
+  `).join("");
+}
+
+// ======================== PROJECT MODAL ========================
+function openProjModal(projId){
+  const p = (window.PRESENTATION_PROJECTS||[]).find(x=>x.id===projId);
+  if(!p) return;
+  document.getElementById("proj-modal-title").textContent = p.name;
+  const body = document.getElementById("proj-modal-body");
+  const doneCount = (p.milestones||[]).filter(m=>m.done).length;
+  const totalMs = (p.milestones||[]).length;
+  body.innerHTML = `
+    <div class="pd-section-title">Project Overview</div>
+    <div class="pd-crew">${escHtml(p.type)} &nbsp;·&nbsp; ${escHtml(p.location)}<br/><br/>
+      <strong style="color:rgba(180,210,255,.7)">Assigned:</strong> ${escHtml(p.assignedCrew)}</div>
+    <div style="margin-top:4px;"></div>
+    <div class="pd-section-title">Documentation</div>
+    <div class="pd-stat-row">
+      <div class="pd-stat"><div class="pd-stat-val">${p.taskCount}</div><div class="pd-stat-label">Tasks</div></div>
+      <div class="pd-stat"><div class="pd-stat-val">${p.photoCount}</div><div class="pd-stat-label">Photos</div></div>
+      <div class="pd-stat"><div class="pd-stat-val">${p.noteCount}</div><div class="pd-stat-label">Notes</div></div>
+      ${p.materialCount ? `<div class="pd-stat"><div class="pd-stat-val">${p.materialCount}</div><div class="pd-stat-label">Materials</div></div>` : ""}
+    </div>
+    <div style="margin-top:4px;"></div>
+    <div class="pd-section-title">Progress — ${doneCount}/${totalMs} Complete</div>
+    <div class="pd-milestones">
+      ${(p.milestones||[]).map(m=>`
+        <div class="pd-milestone">
+          <div class="pd-ms-icon ${m.done?'done':'pending'}">${m.done?'✓':'○'}</div>
+          <div class="pd-ms-text ${m.done?'done':'pending'}">${escHtml(m.label)}</div>
+        </div>
+      `).join("")}
+    </div>
+    ${p.invoiceRef ? `
+      <div style="margin-top:4px;"></div>
+      <div class="pd-section-title">Billing Reference</div>
+      <div class="pd-invoice">
+        <div class="pd-invoice-label">Invoice / Reference</div>
+        <div class="pd-invoice-ref">${escHtml(p.invoiceRef)}</div>
+      </div>
+    ` : ""}
+  `;
+  document.getElementById("proj-modal").classList.add("open");
+
+  console.info("[SpecCom Presentation] Opened project detail", {project: p.name, id: p.id});
+}
+
+function closeProjModal(e){
+  if(e && e.target !== document.getElementById("proj-modal")) return;
+  document.getElementById("proj-modal").classList.remove("open");
+}
+
+// ======================== WORKSPACES ========================
+function renderWorkspaces(){
+  const grid = document.getElementById("ws-grid");
+  if(!grid) return;
+  const ws = window.PRESENTATION_WORKSPACES || [];
+  grid.innerHTML = ws.map(w=>`
+    <div class="ws-card" style="--ws-accent:${w.accent};--ws-icon-bg:${hexToRgba(w.accent,.10)}" onclick="openWsModal('${w.key}')">
+      <div class="ws-icon">${w.icon}</div>
+      <div class="ws-title">${escHtml(w.title)}</div>
+      <div class="ws-sub">${escHtml(w.summary)}</div>
+      <div class="ws-chips">${(w.chips||[]).map(c=>`<span class="ws-chip">${escHtml(c)}</span>`).join("")}</div>
+    </div>
+  `).join("");
+}
+
+function hexToRgba(hex, alpha){
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// ======================== WORKSPACE MODAL ========================
+const WS_PREVIEWS = {
+  overview: {
+    title: "Operations Control",
+    kpis: [{v:14,l:"Active Jobs"},{v:2,l:"Blocked"},{v:8,l:"Crews Working"}],
+    items: [
+      {dot:"#1D9E75", text:"Enterprise FTTH Expansion — On Track", val:"Active"},
+      {dot:"#D39A44", text:"Ruidoso Node 54 — Closeout Package Pending", val:"In Review"},
+      {dot:"#991b1b", text:"Ozark Cabinet — Awaiting Materials", val:"Blocked"},
+      {dot:"#7F77DD", text:"Daleville Drop Batch — 31 of 44 Complete", val:"Active"},
+      {dot:"#1D9E75", text:"Invoice Verification — Ready for Office Review", val:"Ready"},
+    ],
+    note: "Operations Control gives supervisors a live view of crew activity, blocked jobs, and daily documentation without making follow-up calls.",
+  },
+  projects: {
+    title: "OSP / Splicing Workspace",
+    kpis: [{v:6,l:"Projects"},{v:11,l:"Redline Markers"},{v:222,l:"Field Photos"}],
+    items: [
+      {dot:"#7F77DD", text:"Ruidoso Node 54 — Splice Verification", val:"In Review"},
+      {dot:"#1D9E75", text:"Enterprise FTTH — Route Splicing", val:"Active"},
+      {dot:"#D39A44", text:"Ozark Cabinet — Fiber Jumpers", val:"Pending"},
+    ],
+    note: "OSP / Splicing workspace ties splice work, fiber counts, KMZ redlines, and billing codes to each project.",
+  },
+  technician: {
+    title: "I&R Technician Workspace",
+    kpis: [{v:7,l:"Open Tickets"},{v:3,l:"Completed Today"},{v:22,l:"Photos Captured"}],
+    items: [
+      {dot:"#1D9E75", text:"WO-2026-0441 — Daleville Service Install", val:"In Progress"},
+      {dot:"#D39A44", text:"WO-2026-0438 — Trouble Call — 210 Elm St", val:"En Route"},
+      {dot:"#1D9E75", text:"WO-2026-0432 — Drop Complete — 344 Oak Rd", val:"Completed"},
+      {dot:"#7F77DD", text:"WO-2026-0427 — Customer Request — Node 9", val:"Closed"},
+    ],
+    note: "Technicians can clock in, accept work orders, capture field photos with GPS, and mark completions — all from mobile without selecting a project first.",
+  },
+  drops: {
+    title: "Drop Crew Workspace",
+    kpis: [{v:44,l:"Drop Jobs"},{v:31,l:"Completed"},{v:13,l:"Remaining"}],
+    items: [
+      {dot:"#1D9E75", text:"114 Pine St — Drop Complete + Photo", val:"Done"},
+      {dot:"#1D9E75", text:"220 River Rd — Drop Complete + GPS", val:"Done"},
+      {dot:"#D39A44", text:"87 Cedar Ave — Scheduled Tomorrow", val:"Pending"},
+      {dot:"#D39A44", text:"399 Main Blvd — Awaiting Access", val:"Pending"},
+    ],
+    note: "Drop crew batch completions with address notes and proof photos feed directly into billing records.",
+  },
+  warehouse: {
+    title: "Warehouse Workspace",
+    kpis: [{v:112,l:"Items Tracked"},{v:3,l:"Low Stock Alerts"},{v:48,l:"Items Scanned Today"}],
+    items: [
+      {dot:"#991b1b", text:"SC-12-TERM — Stock critically low (2 remaining)", val:"Alert"},
+      {dot:"#D39A44", text:"FBR-SM-500 — Below reorder point", val:"Low"},
+      {dot:"#1D9E75", text:"CLOSURE-6PK — Received 24 units", val:"OK"},
+      {dot:"#1D9E75", text:"SPLICE-TRAY — 36 on hand", val:"OK"},
+    ],
+    note: "Warehouse scanning connects material usage to project records, so billing and closeout packages stay accurate.",
+  },
+  billing: {
+    title: "Billing / Invoices Workspace",
+    kpis: [{v:6,l:"Invoices Ready"},{v:3,l:"Pending Approval"},{v:2,l:"Under Review"}],
+    items: [
+      {dot:"#7F77DD", text:"TDS-2026-0222 — $5,009.00 — Ready to Approve", val:"Ready"},
+      {dot:"#D39A44", text:"TDS-BATCH-FEB — $14,320.00 — In Review", val:"Review"},
+      {dot:"#1D9E75", text:"TDS-2026-0215 — $4,826.75 — Approved", val:"Done"},
+      {dot:"#1D9E75", text:"TDS-2026-0207 — $3,595.00 — Approved", val:"Done"},
+    ],
+    note: "Invoice workspace lets office staff compare field photos, work documentation, and billing line items side by side before approving.",
+  },
+  map: {
+    title: "Map / Redlines Workspace",
+    kpis: [{v:11,l:"Redline Markers"},{v:7,l:"Sites Pinned"},{v:94,l:"GPS Photos"},{v:3,l:"KMZ Layers"}],
+    items: [
+      {dot:"#1D9E75", text:"Ruidoso Node 54 — KMZ redlines loaded", val:"Active"},
+      {dot:"#7F77DD", text:"Enterprise Zone 3 — Route overlay active", val:"Active"},
+      {dot:"#378ADD", text:"Daleville — 31 GPS photo pins on map", val:"Pinned"},
+    ],
+    note: "The map workspace displays KMZ routes, field photo GPS pins, splice locations, and redline annotations in one view.",
+  },
+  upload: {
+    title: "Upload Center",
+    kpis: [{v:8,l:"File Types Supported"},{v:4,l:"Routing Workflows"},{v:0,l:"Manual Re-entry Needed"}],
+    items: [
+      {dot:"#00bcd4", text:"KMZ / KML — Routes to Map Workspace", val:"Auto"},
+      {dot:"#7F77DD", text:"PDF Invoice — Routes to Invoice Parser", val:"Auto"},
+      {dot:"#1D9E75", text:"Field Photos — Routes to GPS Photo Flow", val:"Auto"},
+      {dot:"#D39A44", text:"Excel / CSV — Routes to Material Import", val:"Auto"},
+      {dot:"#378ADD", text:"ZIP Package — Routes to Closeout Review", val:"Auto"},
+    ],
+    note: "Upload Center detects file types automatically and routes each file to the correct workflow — no manual sorting required.",
+  },
+};
+
+function openWsModal(wsKey){
+  if(wsKey === "upload"){
+    openUploadModal();
+    return;
+  }
+  const preview = WS_PREVIEWS[wsKey];
+  const ws = (window.PRESENTATION_WORKSPACES||[]).find(w=>w.key===wsKey);
+  if(!preview || !ws) return;
+
+  document.getElementById("ws-modal-title").textContent = preview.title;
+  const body = document.getElementById("ws-modal-body");
+  body.innerHTML = `
+    <div class="ws-preview">
+      <div class="ws-preview-kpi">
+        ${preview.kpis.map(k=>`<div class="wp-kpi"><div class="wp-kval">${k.v}</div><div class="wp-klabel">${escHtml(k.l)}</div></div>`).join("")}
+      </div>
+      <div class="ws-preview-note">${escHtml(preview.note)}</div>
+      <div class="ws-preview-list">
+        ${(preview.items||[]).map(item=>`
+          <div class="wpl-item">
+            <div class="wpl-dot" style="background:${item.dot}"></div>
+            <div class="wpl-text">${escHtml(item.text)}</div>
+            <div class="wpl-val">${escHtml(item.val)}</div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+  document.getElementById("ws-modal").classList.add("open");
+
+  console.info("[SpecCom Presentation] Opened workspace preview", {workspace: wsKey});
+}
+
+function closeWsModal(e){
+  if(e && e.target !== document.getElementById("ws-modal")) return;
+  document.getElementById("ws-modal").classList.remove("open");
+}
+
+// ======================== REDUCES / ORGANIZES ========================
+function renderReduces(){
+  const grid = document.getElementById("reduce-grid");
+  if(!grid) return;
+  const items = window.PRESENTATION_REDUCES || [];
+  grid.innerHTML = items.map(r=>`
+    <div class="reduce-card">
+      <div class="reduce-icon">${r.icon}</div>
+      <div>
+        <div class="reduce-label">${escHtml(r.label)}</div>
+        <div class="reduce-desc">${escHtml(r.desc)}</div>
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderOrganizes(){
+  const grid = document.getElementById("organize-grid");
+  if(!grid) return;
+  const items = window.PRESENTATION_ORGANIZES || [];
+  grid.innerHTML = items.map(o=>`
+    <div class="organize-card">
+      <div class="organize-icon">${o.icon}</div>
+      <span>${escHtml(o.label)}</span>
+    </div>
+  `).join("");
+}
+
+// ======================== UPLOAD CENTER ========================
+let uploadState = "drop"; // drop | review | progress | result
+let currentSample = null;
+let selectedContext = "company";
+
+function initUploadCenter(){
+  renderUploadDrop();
+}
+
+function openUploadModal(){
+  renderUploadDrop();
+  document.getElementById("upload-modal").classList.add("open");
+  console.info("[SpecCom Presentation] Opened Upload Center");
+}
+
+function closeUploadModal(e){
+  if(e && e.target !== document.getElementById("upload-modal")) return;
+  document.getElementById("upload-modal").classList.remove("open");
+  renderUploadDrop();
+}
+
+function renderUploadDrop(){
+  uploadState = "drop";
+  const body = document.getElementById("upload-center-body");
+  if(!body) return;
+  const samples = window.PRESENTATION_UPLOAD_SAMPLES || [];
+  body.innerHTML = `
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+      Bring in photos, PDFs, invoices, spreadsheets, KMZ maps, ZIP files, and closeout packages from one place.
+    </div>
+
+    <div style="font-size:10px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;margin-bottom:8px;">Sample Workflows</div>
+    <div class="upload-sample-bar">
+      ${samples.map(s=>`
+        <button class="upload-sample-btn" onclick="runSampleUpload('${s.id}')">
+          <span class="usb-icon">${s.icon}</span>${escHtml(s.label)}
+        </button>
+      `).join("")}
+    </div>
+
+    <div class="upload-drop-zone" id="upload-drop-zone" onclick="document.getElementById('upload-file-input').click()"
+         ondragover="event.preventDefault();this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="handleFileDrop(event)">
+      <div class="drop-icon">📂</div>
+      <div class="drop-title">Drag files here or click to browse</div>
+      <div class="drop-sub">
+        SpecCom detects file type automatically and routes to the correct workflow.<br/>
+        No manual sorting required.
+      </div>
+      <div class="drop-types">
+        <span class="drop-type">KMZ</span>
+        <span class="drop-type">KML</span>
+        <span class="drop-type">PDF</span>
+        <span class="drop-type">Photos</span>
+        <span class="drop-type">Excel</span>
+        <span class="drop-type">CSV</span>
+        <span class="drop-type">ZIP</span>
+        <span class="drop-type">TXT</span>
+        <span class="drop-type">DOC</span>
+      </div>
+    </div>
+    <input type="file" id="upload-file-input" style="display:none" onchange="handleFileSelect(this)"
+           accept=".kmz,.kml,.pdf,.jpg,.jpeg,.png,.xlsx,.xls,.csv,.zip,.txt,.doc,.docx"/>
+  `;
+}
+
+function handleFileDrop(e){
+  e.preventDefault();
+  document.getElementById("upload-drop-zone")?.classList.remove("drag-over");
+  const file = e.dataTransfer?.files?.[0];
+  if(file) reviewFile(file.name, file.size);
+}
+
+function handleFileSelect(input){
+  const file = input?.files?.[0];
+  if(file) reviewFile(file.name, file.size);
+  input.value = "";
+}
+
+function runSampleUpload(sampleId){
+  const sample = (window.PRESENTATION_UPLOAD_SAMPLES||[]).find(s=>s.id===sampleId);
+  if(!sample) return;
+  currentSample = sample;
+  renderUploadReview(sample.filename, null, sample);
+}
+
+function detectFileCategory(name){
+  const ext = (name||"").split(".").pop().toLowerCase();
+  const cats = {
+    kmz:"Map / Redline File", kml:"Map / Redline File",
+    pdf:"Invoice / Billing Document",
+    jpg:"Field Photo", jpeg:"Field Photo", png:"Field Photo",
+    xlsx:"Spreadsheet / Material Import", xls:"Spreadsheet / Material Import",
+    csv:"Data / Import File",
+    zip:"Batch Package / Closeout",
+    txt:"Text Document",
+    doc:"Document", docx:"Document",
+  };
+  return cats[ext] || "General Document";
+}
+
+function detectDestination(name){
+  const ext = (name||"").split(".").pop().toLowerCase();
+  const dests = {
+    kmz:"Map Workspace → Import Route", kml:"Map Workspace → Import Route",
+    pdf:"Invoice Workspace → Parse PDF",
+    jpg:"Photos Workspace → GPS-Tagged Upload", jpeg:"Photos Workspace → GPS-Tagged Upload", png:"Photos Workspace → GPS-Tagged Upload",
+    xlsx:"Warehouse / Project → Material Import", xls:"Warehouse / Project → Material Import",
+    csv:"Data Import → Column Mapping",
+    zip:"Batch Review → Closeout Package",
+    txt:"General Documents → Attach to Record",
+    doc:"General Documents → Attach to Record", docx:"General Documents → Attach to Record",
+  };
+  return dests[ext] || "General Storage → Hold for Review";
+}
+
+function detectAction(name){
+  const ext = (name||"").split(".").pop().toLowerCase();
+  const acts = {
+    kmz:"Import Map", kml:"Import Map",
+    pdf:"Parse Invoice",
+    jpg:"Add Field Photos", jpeg:"Add Field Photos", png:"Add Field Photos",
+    xlsx:"Import Materials", xls:"Import Materials",
+    csv:"Import Data",
+    zip:"Review Package",
+    txt:"Attach Document", doc:"Attach Document", docx:"Attach Document",
+  };
+  return acts[ext] || "Store as Document";
+}
+
+function reviewFile(filename, size, sample){
+  uploadState = "review";
+  currentSample = sample || null;
+  selectedContext = "company";
+  const body = document.getElementById("upload-center-body");
+  if(!body) return;
+  const category = sample?.category || detectFileCategory(filename);
+  const destination = sample?.destination || detectDestination(filename);
+  const action = sample?.action || detectAction(filename);
+  const ext = (filename||"").split(".").pop().toLowerCase();
+  const iconMap = {kmz:"📍",kml:"📍",pdf:"📄",jpg:"📷",jpeg:"📷",png:"📷",xlsx:"📊",xls:"📊",csv:"📊",zip:"📦",txt:"📝",doc:"📝",docx:"📝"};
+  const fileIcon = iconMap[ext] || "📁";
+  const sizeStr = size ? `${Math.round(size/1024)} KB` : "Sample file";
+
+  body.innerHTML = `
+    <div class="upload-review">
+      <div class="review-file-card">
+        <div class="review-file-icon">${fileIcon}</div>
+        <div class="review-file-info">
+          <div class="review-file-name">${escHtml(filename)}</div>
+          <div class="review-file-meta">${sizeStr} &nbsp;·&nbsp; .${ext.toUpperCase()}</div>
+          <div class="review-category">${escHtml(category)}</div>
+        </div>
+      </div>
+      <div>
+        <div class="review-dest-label">Suggested Destination</div>
+        <div class="review-dest">${escHtml(destination)}</div>
+      </div>
+      <div>
+        <div class="review-context-label">Attach To</div>
+        <div class="review-context-btns">
+          <button class="ctx-btn ${selectedContext==="none"?"active":""}" onclick="setUploadContext('none',this)">No context yet</button>
+          <button class="ctx-btn ${selectedContext==="company"?"active":""}" onclick="setUploadContext('company',this)">Company</button>
+          <button class="ctx-btn ${selectedContext==="project"?"active":""}" onclick="setUploadContext('project',this)">Project</button>
+          <button class="ctx-btn ${selectedContext==="ticket"?"active":""}" onclick="setUploadContext('ticket',this)">Ticket / Work Order</button>
+          <button class="ctx-btn ${selectedContext==="location"?"active":""}" onclick="setUploadContext('location',this)">Location / Address</button>
+        </div>
+      </div>
+      <button class="review-action-btn" onclick="startUploadProgress('${escHtml(action).replace(/'/g,"\\'")}','${escHtml(filename).replace(/'/g,"\\'")}')">
+        ${escHtml(action)}
+      </button>
+      <button class="result-again" onclick="renderUploadDrop()" style="margin-top:0;">← Back to Upload Center</button>
+    </div>
+  `;
+}
+
+function setUploadContext(ctx, btn){
+  selectedContext = ctx;
+  document.querySelectorAll(".ctx-btn").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+}
+
+const PROGRESS_STEPS = [
+  "Reading file...",
+  "Detecting file structure...",
+  "Mapping fields...",
+  "Validating data...",
+  "Processing complete",
+];
+
+function startUploadProgress(action, filename){
+  uploadState = "progress";
+  const body = document.getElementById("upload-center-body");
+  if(!body) return;
+  body.innerHTML = `
+    <div class="upload-progress">
+      <div class="progress-title">${escHtml(action)} — ${escHtml(filename)}</div>
+      <div class="progress-bar-wrap" style="width:100%;">
+        <div class="progress-bar-fill" id="prog-fill" style="width:0%;"></div>
+      </div>
+      <div class="progress-step" id="prog-step">Preparing...</div>
+    </div>
+  `;
+  let step = 0, pct = 0;
+  const fill = document.getElementById("prog-fill");
+  const stepEl = document.getElementById("prog-step");
+  const interval = setInterval(()=>{
+    step++;
+    pct = Math.min(100, Math.round((step / PROGRESS_STEPS.length) * 100));
+    if(fill) fill.style.width = pct + "%";
+    if(stepEl) stepEl.textContent = PROGRESS_STEPS[step-1] || "Complete";
+    if(step >= PROGRESS_STEPS.length){
+      clearInterval(interval);
+      setTimeout(()=>showUploadResult(filename), 400);
+    }
+  }, 480);
+}
+
+function showUploadResult(filename){
+  uploadState = "result";
+  const sample = currentSample;
+  const body = document.getElementById("upload-center-body");
+  if(!body) return;
+  const result = sample?.simulatedResult || {
+    title: "Sample Import Preview",
+    summary: "File processed successfully.",
+    details: ["File accepted and routed to destination", "Ready for review"],
+  };
+  body.innerHTML = `
+    <div class="upload-result">
+      <div class="result-header">
+        <div class="result-check">✓</div>
+        <div>
+          <div class="result-title">${escHtml(result.title)}</div>
+          <div class="result-note">Presentation workflow — no data stored</div>
+        </div>
+      </div>
+      <div class="result-summary">${escHtml(result.summary)}</div>
+      <div class="result-details">
+        ${(result.details||[]).map(d=>`<div class="result-detail">${escHtml(d)}</div>`).join("")}
+      </div>
+      <button class="review-action-btn" onclick="renderUploadDrop()">Upload Another File</button>
+      <button class="result-again" onclick="closeUploadModal()">Close Upload Center</button>
+    </div>
+  `;
+  console.info("[SpecCom Presentation] Upload simulation complete", {file: filename, sample: sample?.id});
+}
+
+// ======================== UTILS ========================
+function escHtml(str){
+  return String(str||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// ======================== KEYBOARD ========================
+document.addEventListener("keydown", e=>{
+  if(e.key === "Escape"){
+    document.querySelectorAll(".modal-overlay.open").forEach(m=>m.classList.remove("open"));
+    renderUploadDrop();
+  }
+  if(e.key === "Enter" && document.getElementById("pres-entry") && !document.getElementById("pres-entry").classList.contains("out")){
+    enterPresentation();
+  }
+});
+
+// ======================== AUTO-DETECT CLIENT FROM HASH ========================
+(function(){
+  const h = (location.hash || "").replace("#","").toLowerCase();
+  if(h === "ks-electric" || h === "ks"){
+    activeClient = window.PRESENTATION_CONFIG.clients["ks-electric"] || activeClient;
+    const ci = document.getElementById("company-input");
+    if(ci) ci.value = activeClient.clientName;
+  }
+})();
+
+console.info("[SpecCom Presentation] Page loaded", {
+  hash: location.hash,
+  clientDetected: activeClient.clientSlug || "none",
+  dataFile: "presentation-data.js",
+});
+</script>
+</body>
+</html>
