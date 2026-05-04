@@ -143,10 +143,21 @@
     .comparison-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;min-height:470px}
     .workflow-panel{
       position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.09);border-radius:8px;
-      background:linear-gradient(180deg,#102541 0%,#0b1728 100%);
-      min-height:470px;
+      background:
+        radial-gradient(circle at 20% 12%,rgba(96,178,235,.22),transparent 28%),
+        linear-gradient(180deg,#14345d 0%,#102541 38%,#0b1728 100%);
+      min-height:470px;box-shadow:inset 0 1px 0 rgba(255,255,255,.08),inset 0 -40px 70px rgba(0,0,0,.28);
     }
-    .workflow-panel.scattered{background:linear-gradient(180deg,#1e2531 0%,#0e1420 100%)}
+    .workflow-panel.scattered{
+      background:
+        radial-gradient(circle at 18% 14%,rgba(211,154,68,.15),transparent 26%),
+        linear-gradient(180deg,#293545 0%,#1e2531 40%,#0e1420 100%);
+    }
+    .workflow-panel::after{
+      content:"";position:absolute;inset:0;z-index:2;
+      background:linear-gradient(180deg,transparent 0 65%,rgba(0,0,0,.16));
+      pointer-events:none;
+    }
     .panel-label{
       position:absolute;z-index:5;left:14px;top:14px;right:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;
     }
@@ -157,33 +168,63 @@
     }
     .scattered .sample-id{color:#d0b887}
     .scattered .workflow-name{color:#fff0c9}
-    .stage{position:absolute;inset:0}
+    .stage{position:absolute;inset:0;z-index:1}
+    .sun{position:absolute;left:42px;top:64px;width:48px;height:48px;border-radius:50%;background:linear-gradient(145deg,#fff1a9,#e9a940);box-shadow:0 0 34px rgba(255,215,120,.42)}
+    .cloud{position:absolute;left:138px;top:74px;width:86px;height:24px;border-radius:999px;background:rgba(239,248,255,.2);box-shadow:26px -8px 0 4px rgba(239,248,255,.16),58px 1px 0 -2px rgba(239,248,255,.18)}
+    .cloud.small{left:auto;right:72px;top:116px;width:54px;height:16px;opacity:.72;box-shadow:18px -5px 0 2px rgba(239,248,255,.15),38px 1px 0 -3px rgba(239,248,255,.16)}
+    .fiber-wire{position:absolute;left:-7%;right:-7%;top:105px;height:42px;border-top:2px solid rgba(190,226,255,.62);border-radius:50%;transform:rotate(-2deg)}
+    .fiber-wire.two{top:130px;border-color:rgba(190,226,255,.34);transform:rotate(-1deg)}
+    .fiber-wire::after{content:"";position:absolute;left:42%;top:-5px;width:9px;height:9px;border-radius:50%;background:#dbeeff;box-shadow:70px 5px 0 -2px rgba(219,238,255,.65),138px 1px 0 -3px rgba(219,238,255,.55)}
     .sky-line{position:absolute;left:0;right:0;top:38%;height:1px;background:rgba(255,255,255,.08)}
-    .road{position:absolute;left:0;right:0;bottom:0;height:31%;background:linear-gradient(180deg,#17202d,#111720)}
-    .road::before{content:"";position:absolute;left:0;right:0;top:36%;height:2px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.35) 0 42px,transparent 42px 76px)}
-    .shoulder{position:absolute;left:0;right:0;bottom:31%;height:15%;background:linear-gradient(180deg,#1f4b47,#1a3432)}
-    .hills{position:absolute;left:-6%;right:-6%;bottom:42%;height:30%;background:linear-gradient(145deg,transparent 0 18%,rgba(31,82,77,.62) 18% 37%,transparent 37% 52%,rgba(29,67,73,.7) 52% 75%,transparent 75%);opacity:.65}
-    .pole{position:absolute;right:14%;bottom:31%;width:10px;height:210px;background:#6b4d31;border-radius:4px;box-shadow:inset -2px 0 0 rgba(0,0,0,.22)}
-    .pole::before{content:"";position:absolute;left:-45px;top:25px;width:100px;height:8px;border-radius:4px;background:#6b4d31}
-    .pole::after{content:"";position:absolute;left:-140px;right:-78px;top:12px;height:2px;background:rgba(180,220,255,.7);box-shadow:0 18px 0 rgba(180,220,255,.4)}
-    .pedestal{position:absolute;right:24%;bottom:31%;width:34px;height:54px;border-radius:8px 8px 4px 4px;background:#3f6d75;border:2px solid rgba(255,255,255,.16)}
-    .splice{position:absolute;right:17%;bottom:48%;width:44px;height:21px;border-radius:14px;background:#263242;border:2px solid rgba(255,255,255,.18);transform:rotate(-5deg)}
-    .truck{position:absolute;left:13%;bottom:21%;width:235px;height:104px;transform-origin:50% 100%}
-    .truck-bed{position:absolute;left:46px;bottom:27px;width:125px;height:43px;border-radius:8px 8px 4px 4px;background:#d9edf7;border:3px solid #91b9ca}
-    .truck-cab{position:absolute;left:145px;bottom:27px;width:66px;height:58px;border-radius:8px 14px 4px 4px;background:#eff8fb;border:3px solid #91b9ca}
-    .truck-cab::before{content:"";position:absolute;right:9px;top:8px;width:31px;height:20px;border-radius:4px;background:#6fb3df}
-    .truck-bumper{position:absolute;left:22px;bottom:25px;width:30px;height:14px;border-radius:4px;background:#9eb1bd}
-    .wheel{position:absolute;bottom:11px;width:34px;height:34px;border-radius:50%;background:#151a21;border:6px solid #465260}
-    .wheel.one{left:62px}.wheel.two{left:165px}
-    .boom{position:absolute;left:69px;bottom:72px;width:122px;height:9px;border-radius:5px;background:#e4c154;transform:rotate(-28deg);transform-origin:left center}
-    .bucket{position:absolute;left:164px;bottom:122px;width:32px;height:25px;border-radius:4px;background:#e8d47a;border:3px solid #ac8d21}
-    .worker{position:absolute;left:50%;bottom:26%;width:42px;height:88px;opacity:0;transform:translateX(-45px)}
-    .hardhat{position:absolute;left:10px;top:0;width:24px;height:13px;border-radius:13px 13px 3px 3px;background:#f4c247}
-    .head{position:absolute;left:12px;top:13px;width:20px;height:20px;border-radius:50%;background:#c88f63}
-    .vest{position:absolute;left:7px;top:35px;width:30px;height:34px;border-radius:7px 7px 5px 5px;background:#f38f2f;border-left:7px solid #e7f05d;border-right:7px solid #e7f05d}
-    .legs{position:absolute;left:11px;top:68px;width:7px;height:20px;background:#223146;box-shadow:13px 0 0 #223146}
-    .cones{position:absolute;left:29%;bottom:28%;display:flex;gap:9px;opacity:0;transform:translateY(8px)}
+    .road{position:absolute;left:0;right:0;bottom:0;height:31%;background:linear-gradient(180deg,#1c2735,#111720)}
+    .road::before{content:"";position:absolute;left:0;right:0;top:36%;height:3px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.42) 0 42px,transparent 42px 76px)}
+    .road::after{content:"";position:absolute;left:0;right:0;top:0;height:13px;background:linear-gradient(180deg,rgba(255,255,255,.07),transparent)}
+    .shoulder{position:absolute;left:0;right:0;bottom:31%;height:15%;background:linear-gradient(180deg,#29655b,#1a3432)}
+    .grass{position:absolute;left:0;right:0;bottom:42%;height:23px;background:repeating-linear-gradient(105deg,rgba(88,173,102,.65) 0 3px,transparent 3px 12px);opacity:.42}
+    .hills{position:absolute;left:-6%;right:-6%;bottom:42%;height:30%;background:linear-gradient(145deg,transparent 0 18%,rgba(42,118,97,.72) 18% 37%,transparent 37% 52%,rgba(37,87,91,.76) 52% 75%,transparent 75%);opacity:.72}
+    .work-sign{position:absolute;left:18px;bottom:44%;width:76px;height:45px}
+    .work-sign::before{content:"";position:absolute;left:36px;top:39px;width:5px;height:42px;background:#7b8ca0;border-radius:3px}
+    .work-sign::after{content:"OSP WORK";position:absolute;inset:0;display:grid;place-items:center;border-radius:5px;background:#f0bf4d;color:#17202d;border:3px solid #7c5923;font-size:10px;font-weight:900;letter-spacing:.08em;transform:rotate(-2deg)}
+    .pole{position:absolute;right:14%;bottom:31%;width:12px;height:214px;background:linear-gradient(90deg,#8f6a43,#5d3f26);border-radius:5px;box-shadow:inset -2px 0 0 rgba(0,0,0,.22),10px 16px 22px rgba(0,0,0,.18)}
+    .pole::before{content:"";position:absolute;left:-48px;top:26px;width:108px;height:9px;border-radius:4px;background:linear-gradient(180deg,#8f6a43,#5d3f26)}
+    .pole::after{content:"";position:absolute;left:-142px;right:-84px;top:12px;height:2px;background:rgba(180,220,255,.72);box-shadow:0 18px 0 rgba(180,220,255,.43),0 36px 0 rgba(180,220,255,.24)}
+    .pole-band{position:absolute;right:calc(14% - 5px);bottom:58%;width:23px;height:8px;border-radius:8px;background:#2a3444;border:1px solid rgba(255,255,255,.18)}
+    .pedestal{position:absolute;right:24%;bottom:31%;width:38px;height:60px;border-radius:10px 10px 5px 5px;background:linear-gradient(160deg,#6eb0ae,#2f6870);border:2px solid rgba(255,255,255,.18);box-shadow:0 12px 24px rgba(0,0,0,.24)}
+    .pedestal::before{content:"";position:absolute;left:8px;right:8px;top:11px;height:4px;border-radius:4px;background:rgba(255,255,255,.35);box-shadow:0 10px 0 rgba(255,255,255,.18)}
+    .splice{position:absolute;right:17%;bottom:48%;width:50px;height:24px;border-radius:16px;background:linear-gradient(180deg,#36445a,#1f2939);border:2px solid rgba(255,255,255,.22);transform:rotate(-5deg);box-shadow:0 10px 18px rgba(0,0,0,.22)}
+    .splice::before{content:"";position:absolute;left:8px;right:8px;top:9px;height:3px;border-radius:3px;background:rgba(255,255,255,.22)}
+    .truck{position:absolute;left:13%;bottom:21%;width:246px;height:112px;transform-origin:50% 100%;filter:drop-shadow(0 18px 18px rgba(0,0,0,.25))}
+    .truck-shadow{position:absolute;left:48px;right:20px;bottom:4px;height:14px;border-radius:50%;background:rgba(0,0,0,.32)}
+    .truck-bed{position:absolute;left:45px;bottom:29px;width:132px;height:47px;border-radius:9px 9px 5px 5px;background:linear-gradient(180deg,#f4fbff,#c5dfee);border:3px solid #88aabd}
+    .truck-bed::before{content:"";position:absolute;left:9px;right:12px;top:10px;height:4px;border-radius:4px;background:linear-gradient(90deg,var(--blue),var(--teal))}
+    .truck-bed::after{content:"SPECCOM";position:absolute;left:20px;top:19px;font-size:10px;font-weight:900;letter-spacing:.08em;color:#2e5574}
+    .truck-cab{position:absolute;left:151px;bottom:29px;width:72px;height:63px;border-radius:9px 17px 5px 5px;background:linear-gradient(180deg,#ffffff,#d9edf7);border:3px solid #88aabd}
+    .truck-cab::before{content:"";position:absolute;right:10px;top:8px;width:34px;height:22px;border-radius:5px;background:linear-gradient(145deg,#a8defa,#3d94c7);border:2px solid rgba(36,78,108,.28)}
+    .truck-cab::after{content:"";position:absolute;left:9px;bottom:10px;width:36px;height:4px;border-radius:4px;background:var(--teal)}
+    .truck-bumper{position:absolute;left:22px;bottom:27px;width:32px;height:15px;border-radius:4px;background:#9eb1bd;box-shadow:184px 0 0 -3px #9eb1bd}
+    .truck-light{position:absolute;right:16px;bottom:45px;width:9px;height:7px;border-radius:5px;background:#ffe68e;box-shadow:-184px 1px 0 #dd6254}
+    .stabilizer{position:absolute;left:50px;bottom:24px;width:58px;height:5px;border-radius:4px;background:#657383;transform:rotate(-8deg)}
+    .stabilizer::after{content:"";position:absolute;right:-6px;top:4px;width:16px;height:7px;border-radius:5px;background:#657383}
+    .wheel{position:absolute;bottom:11px;width:36px;height:36px;border-radius:50%;background:radial-gradient(circle,#26313f 0 28%,#111820 29% 55%,#465260 56% 100%);border:4px solid #1c2430}
+    .wheel.one{left:63px}.wheel.two{left:171px}
+    .boom{position:absolute;left:71px;bottom:77px;width:131px;height:10px;border-radius:5px;background:linear-gradient(90deg,#f5d875,#d6a72e);transform:rotate(-29deg);transform-origin:left center;box-shadow:0 4px 0 rgba(0,0,0,.12)}
+    .boom::after{content:"";position:absolute;left:45px;top:2px;width:72px;height:2px;background:rgba(255,255,255,.45)}
+    .bucket{position:absolute;left:174px;bottom:130px;width:34px;height:28px;border-radius:5px;background:linear-gradient(180deg,#f4df82,#d3ae35);border:3px solid #9f7f1d;box-shadow:0 8px 14px rgba(0,0,0,.18)}
+    .worker{position:absolute;left:50%;bottom:26%;width:48px;height:94px;opacity:0;transform:translateX(-45px);filter:drop-shadow(0 10px 10px rgba(0,0,0,.24))}
+    .hardhat{position:absolute;left:10px;top:0;width:28px;height:15px;border-radius:15px 15px 4px 4px;background:#f4c247;border-bottom:3px solid #cc921e}
+    .hardhat::after{content:"";position:absolute;left:11px;top:-4px;width:6px;height:14px;border-radius:5px;background:#f7d464}
+    .head{position:absolute;left:13px;top:14px;width:22px;height:22px;border-radius:50%;background:#c88f63}
+    .head::before{content:"";position:absolute;left:6px;top:8px;width:3px;height:3px;border-radius:50%;background:#162033;box-shadow:8px 0 0 #162033}
+    .head::after{content:"";position:absolute;left:7px;top:15px;width:9px;height:3px;border-radius:8px;background:rgba(80,38,24,.42)}
+    .vest{position:absolute;left:7px;top:38px;width:34px;height:36px;border-radius:7px 7px 5px 5px;background:#f38f2f;border-left:8px solid #e7f05d;border-right:8px solid #e7f05d}
+    .vest::before{content:"";position:absolute;left:12px;top:0;width:4px;height:36px;background:rgba(255,255,255,.32)}
+    .arm{position:absolute;top:42px;width:8px;height:28px;border-radius:8px;background:#c88f63;transform-origin:50% 4px}
+    .arm.left{left:2px;transform:rotate(22deg)}.arm.right{right:3px;transform:rotate(-24deg)}
+    .legs{position:absolute;left:12px;top:73px;width:8px;height:20px;background:#223146;box-shadow:15px 0 0 #223146}
+    .boots{position:absolute;left:9px;top:91px;width:13px;height:5px;border-radius:5px;background:#101820;box-shadow:17px 0 0 #101820}
+    .cones{position:absolute;left:29%;bottom:28%;display:flex;gap:9px;opacity:0;transform:translateY(8px);filter:drop-shadow(0 8px 7px rgba(0,0,0,.22))}
     .cone{width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;border-bottom:34px solid #f47d33;position:relative}
+    .cone::before{content:"";position:absolute;left:-8px;bottom:-24px;width:16px;height:5px;background:rgba(255,255,255,.86);border-radius:3px}
     .cone::after{content:"";position:absolute;left:-15px;bottom:-39px;width:30px;height:6px;border-radius:3px;background:#d35c1c}
     .overlay{position:absolute;inset:auto 18px 18px 18px;z-index:7;display:grid;justify-items:start;gap:10px}
     .overlay-card{
@@ -222,6 +263,19 @@
       border-left:3px solid var(--blue);padding:10px 12px;background:rgba(55,138,221,.1);
       color:#e4f2ff;font-size:13px;line-height:1.5;border-radius:0 8px 8px 0;
     }
+    .review-visual{display:flex;align-items:center;gap:11px;margin-bottom:10px}
+    .supervisor-icon,.worker-search-icon{
+      width:56px;height:52px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);
+      position:relative;flex:0 0 auto;
+    }
+    .supervisor-icon::before{content:"";position:absolute;left:18px;top:8px;width:20px;height:20px;border-radius:50%;background:#c88f63}
+    .supervisor-icon::after{content:"";position:absolute;left:12px;right:12px;bottom:8px;height:20px;border-radius:8px 8px 4px 4px;background:#496e93;box-shadow:19px -4px 0 -7px #dcefff}
+    .tablet-icon{position:absolute;right:5px;bottom:6px;width:20px;height:26px;border-radius:4px;background:#dbeeff;border:3px solid #172234}
+    .tablet-icon::after{content:"";position:absolute;left:4px;right:4px;top:5px;height:3px;background:var(--teal);box-shadow:0 7px 0 var(--blue)}
+    .worker-search-icon::before{content:"";position:absolute;left:19px;top:8px;width:19px;height:19px;border-radius:50%;background:#c88f63;box-shadow:0 -7px 0 -2px #f4c247}
+    .worker-search-icon::after{content:"?";position:absolute;right:7px;top:4px;width:17px;height:17px;border-radius:50%;display:grid;place-items:center;background:#f0bf4d;color:#17202d;font-size:12px;font-weight:900}
+    .lost-bubble{position:absolute;left:7px;bottom:7px;width:21px;height:27px;border-radius:5px;background:#101927;border:2px solid #dcefff;transform:rotate(-8deg)}
+    .lost-bubble::after{content:"";position:absolute;left:5px;right:5px;top:6px;height:3px;background:#db5b5b;box-shadow:0 7px 0 #d39a44}
     .approval{border-color:rgba(29,158,117,.46);background:rgba(29,158,117,.13)}
     .warning{border-color:rgba(211,154,68,.5);background:rgba(211,154,68,.13)}
     .caption-row{
@@ -604,18 +658,26 @@
             <span class="workflow-name">${label}</span>
           </div>
           <div class="stage" aria-hidden="true">
+            <div class="sun"></div>
+            <div class="cloud"></div>
+            <div class="cloud small"></div>
+            <div class="fiber-wire"></div>
+            <div class="fiber-wire two"></div>
             <div class="hills"></div>
             <div class="sky-line"></div>
             <div class="shoulder"></div>
+            <div class="grass"></div>
+            <div class="work-sign"></div>
             <div class="pole"></div>
+            <div class="pole-band"></div>
             <div class="pedestal"></div>
             <div class="splice"></div>
             <div class="road"></div>
             <div class="truck">
-              <div class="boom"></div><div class="bucket"></div><div class="truck-bed"></div><div class="truck-cab"></div><div class="truck-bumper"></div>
+              <div class="truck-shadow"></div><div class="stabilizer"></div><div class="boom"></div><div class="bucket"></div><div class="truck-bed"></div><div class="truck-cab"></div><div class="truck-bumper"></div><div class="truck-light"></div>
               <div class="wheel one"></div><div class="wheel two"></div>
             </div>
-            <div class="worker"><div class="hardhat"></div><div class="head"></div><div class="vest"></div><div class="legs"></div></div>
+            <div class="worker"><div class="hardhat"></div><div class="head"></div><div class="vest"></div><div class="arm left"></div><div class="arm right"></div><div class="legs"></div><div class="boots"></div></div>
             <div class="cones"><div class="cone"></div><div class="cone"></div><div class="cone"></div></div>
           </div>
           <div class="overlay">${renderOverlay(panelData)}</div>
@@ -651,9 +713,16 @@
         `;
       }
       if(panelData.type === "review"){
+        const reviewIcon = panelData.listType === "lost"
+          ? `<div class="worker-search-icon"><div class="lost-bubble"></div></div>`
+          : `<div class="supervisor-icon"><div class="tablet-icon"></div></div>`;
         return `
           <div class="overlay-card ${panelData.tone || ""}">
             <h4>${esc(panelData.title)}</h4>
+            <div class="review-visual">
+              ${reviewIcon}
+              <p>${esc(panelData.listType === "lost" ? "The work was completed, but the proof trail is scattered." : "The proof trail is already attached to the completed work.")}</p>
+            </div>
             ${panelData.preface ? `<p style="margin-bottom:10px">${esc(panelData.preface)}</p>` : ""}
             <div class="${panelData.listType === "lost" ? "lost-stack" : "proof-bundle"}">
               ${(panelData.items || []).map(item => `<div class="${panelData.listType === "lost" ? "lost-line" : "proof-line"}">${esc(item)}</div>`).join("")}
