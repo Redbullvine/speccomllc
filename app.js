@@ -31682,6 +31682,15 @@ function wireUI(){
       handleTechnicianShiftAction(btn.dataset.techShiftAction, btn.dataset.techItemId);
     });
   }
+  const techSummaryToggle = $("btnTechSummaryToggle");
+  if (techSummaryToggle){
+    techSummaryToggle.addEventListener("click", () => {
+      const body = $("techSummaryBody");
+      if (!body) return;
+      const open = body.classList.toggle("is-open");
+      techSummaryToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  }
   const techCloseoutCancelBtn = $("btnTechCloseoutCancel");
   if (techCloseoutCancelBtn){
     techCloseoutCancelBtn.addEventListener("click", () => {

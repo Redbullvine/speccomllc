@@ -4555,6 +4555,32 @@ body.map-mode .map-canvas .leaflet-control-zoom a{
   position: sticky;
   top: 0;
 }
+.tech-summary-toggle {
+  display: none;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+}
+.tech-summary-chevron {
+  display: none;
+  width: 18px;
+  height: 18px;
+  color: var(--muted, #94a3b8);
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+.tech-summary-toggle[aria-expanded="true"] .tech-summary-chevron {
+  transform: rotate(180deg);
+}
+.tech-summary-body {
+  display: block;
+}
 .tech-orders-card {}
 
 /* Work order cards - bigger tap targets for field use */
@@ -4670,6 +4696,10 @@ body.map-mode .map-canvas .leaflet-control-zoom a{
     overflow: visible;
   }
   .tech-summary-card { position: static; }
+  .tech-summary-toggle { display: flex; }
+  .tech-summary-chevron { display: block; }
+  .tech-summary-body { display: none; }
+  .tech-summary-body.is-open { display: block; }
   .tech-clock-bar {
     padding: 8px 12px;
     position: sticky;

@@ -1967,11 +1967,16 @@
             <!-- RIGHT COLUMN: shift summary + location trail -->
             <div class="tech-side-col">
               <div class="card tech-summary-card">
-                <h2 class="tech-section-title">Shift Summary</h2>
-                <div id="techSummary" style="margin-top:12px;"></div>
-                <div class="hr"></div>
-                <h3 style="margin-bottom:6px;">Location trail</h3>
-                <div id="techLocationTrail" class="muted small"></div>
+                <button class="tech-summary-toggle" id="btnTechSummaryToggle" aria-expanded="false" aria-controls="techSummaryBody" type="button">
+                  <h2 class="tech-section-title">Shift Summary</h2>
+                  <svg class="tech-summary-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg>
+                </button>
+                <div id="techSummaryBody" class="tech-summary-body">
+                  <div id="techSummary" style="margin-top:12px;"></div>
+                  <div class="hr"></div>
+                  <h3 style="margin-bottom:6px;">Location trail</h3>
+                  <div id="techLocationTrail" class="muted small"></div>
+                </div>
               </div>
             </div>
 
