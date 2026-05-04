@@ -29,6 +29,9 @@
     /* STARFIELD */
     #starfield{position:fixed;inset:0;z-index:0;pointer-events:none;}
     .fiber-bg{position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.4;}
+    .sp-strand{fill:none;stroke-linecap:round;}
+    .sp-f1{stroke:rgba(55,138,221,.18);stroke-width:1.5;}
+    .sp-f2{stroke:rgba(29,158,117,.14);stroke-width:1;}
 
     /* CORNER BRACKETS */
     .cb{position:fixed;width:20px;height:20px;opacity:.3;z-index:5;pointer-events:none;}
@@ -139,7 +142,7 @@
     .nav-logo-mark{width:28px;height:25px;flex-shrink:0;}
     .nav-brand{font-family:var(--brand);font-size:20px;font-weight:700;letter-spacing:.02em;color:#f4f8ff;}
     .nav-sep{width:1px;height:18px;background:var(--border);flex-shrink:0;}
-    .nav-company{font-size:12px;color:var(--muted);font-weight:500;flex:1;}
+    .nav-company{font-size:12px;color:var(--muted);font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
     .nav-badge{
       font-size:9px;letter-spacing:2px;text-transform:uppercase;padding:3px 10px;
       border-radius:10px;background:rgba(55,138,221,.12);color:var(--blue);
@@ -363,7 +366,7 @@
 
     /* WORKSPACE PREVIEW MODAL */
     .ws-preview{display:flex;flex-direction:column;gap:14px;}
-    .ws-preview-kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+    .ws-preview-kpi{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;}
     .wp-kpi{background:rgba(5,8,16,.5);border:1px solid var(--border);border-radius:10px;padding:12px 14px;}
     .wp-kval{font-family:var(--brand);font-size:24px;font-weight:700;color:var(--blue);}
     .wp-klabel{font-size:10px;color:var(--muted);margin-top:3px;}
@@ -424,6 +427,14 @@
       .kpi-grid{grid-template-columns:repeat(2,1fr);}
       .ws-grid{grid-template-columns:repeat(2,1fr);}
       .entry-logo-word{font-size:38px;}
+      .reduce-grid{grid-template-columns:1fr;}
+    }
+    @media(max-width:480px){
+      .nav-badge{display:none;}
+      .pres-content{padding:16px 12px 48px;}
+      .modal-box{border-radius:12px;}
+      .entry-logo-word{font-size:32px;}
+      .entry-sub{font-size:11px;}
     }
   </style>
 </head>
@@ -684,9 +695,7 @@ function enterPresentation(){
 }
 
 function exitPresentation(){
-  if(confirm("Exit the presentation walkthrough?")){
-    window.location.href = "./index.html";
-  }
+  window.location.href = "./index.html";
 }
 
 // ======================== DASHBOARD INIT ========================

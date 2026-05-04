@@ -270,7 +270,7 @@ window.PRESENTATION_UPLOAD_SAMPLES = [
 
 window.PRESENTATION_WORKSPACES = [
   {
-    key: "operations",
+    key: "overview",
     title: "Operations Control",
     icon: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="16" height="13" rx="2"/><path d="M7 8h6M7 12h4"/></svg>`,
     accent: "#378ADD",
@@ -279,7 +279,7 @@ window.PRESENTATION_WORKSPACES = [
     preview: "overview",
   },
   {
-    key: "osp-splicing",
+    key: "projects",
     title: "OSP / Splicing",
     icon: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 10h14"/><path d="M7 5l-4 5 4 5"/><path d="M13 5l4 5-4 5"/></svg>`,
     accent: "#7F77DD",
@@ -288,7 +288,7 @@ window.PRESENTATION_WORKSPACES = [
     preview: "projects",
   },
   {
-    key: "ir-tech",
+    key: "technician",
     title: "I&R Technician",
     icon: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l2.5 2.5"/></svg>`,
     accent: "#378ADD",
@@ -297,7 +297,7 @@ window.PRESENTATION_WORKSPACES = [
     preview: "technician",
   },
   {
-    key: "drop-crew",
+    key: "drops",
     title: "Drop Crew",
     icon: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3C7.24 3 5 5.24 5 8c0 4.5 5 9 5 9s5-4.5 5-9c0-2.76-2.24-5-5-5z"/><circle cx="10" cy="8" r="2"/></svg>`,
     accent: "#1D9E75",
@@ -324,7 +324,7 @@ window.PRESENTATION_WORKSPACES = [
     preview: "billing",
   },
   {
-    key: "map-redlines",
+    key: "map",
     title: "Map / Redlines",
     icon: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="16" height="13" rx="1.5"/><path d="M2 8h16"/><circle cx="7" cy="12" r="1.5" fill="currentColor"/><circle cx="13" cy="12" r="1.5" fill="currentColor"/><path d="M7 12l6 0" stroke-dasharray="2 2"/></svg>`,
     accent: "#1D9E75",
@@ -333,7 +333,7 @@ window.PRESENTATION_WORKSPACES = [
     preview: "map",
   },
   {
-    key: "upload-center",
+    key: "upload",
     title: "Upload Center",
     icon: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 13V4M6 8l4-4 4 4"/><path d="M4 14v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>`,
     accent: "#00bcd4",
