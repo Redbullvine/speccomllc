@@ -18051,6 +18051,15 @@ async function saveProfilePageDetails(){
   }
   state.profile = state.profile || {};
   state.profile.display_name = updates.display_name;
+  // Re-broadcast updated name to presence channel
+  if (_presenceChannel) {
+    _presenceChannel.track({
+      user_id: state.user.id,
+      display_name: updates.display_name || state.user.email || "User",
+      role: state.profile.role || "",
+      online_at: new Date().toISOString(),
+    }).catch(() => {});
+  }
   state.profile.preferred_language = updates.preferred_language;
   applyLanguage(updates.preferred_language);
   syncLanguageControls();
@@ -31612,6 +31621,7 @@ async function postLoginBootstrap(client, user){
       loadLiveBoard();
       subscribeLiveBoard();
       initLiveBoardUI();
+      subscribePresence();
     }, 800);
     // fake markers now placed from ensureMyLocationMarker once GPS is known
     syncPendingSites();
@@ -35086,4 +35096,118 @@ function initLiveBoardUI(){
       if (menu) menu.style.display = "none";
     });
   }
+}
+
+// ============================================================
+// REALTIME PRESENCE — who's online right now
+// ============================================================
+let _presenceChannel = null;
+
+function renderOnlineUsers(presenceState){
+  const rail = document.getElementById("online-users-rail");
+  const badge = document.getElementById("online-count-badge");
+  const recipientSel = document.getElementById("liveboardRecipient");
+  if (!rail) return;
+
+  const entries = Object.values(presenceState || {}).flat();
+  const myId = state.user?.id || "";
+
+  // Sort: me first, then alphabetical
+  entries.sort((a, b) => {
+    if (a.user_id === myId) return -1;
+    if (b.user_id === myId) return 1;
+    return (a.display_name || "").localeCompare(b.display_name || "");
+  });
+
+  if (badge) badge.textContent = `${entries.length} online`;
+
+  rail.innerHTML = entries.map(u => {
+    const isMe = u.user_id === myId;
+    const name = escapeHtml(u.display_name || "User");
+    const role = escapeHtml(u.role || "");
+    const shortRole = role.slice(0, 10);
+    return `<button class="online-chip${isMe ? " is-me" : ""}" type="button"
+        data-uid="${escapeHtml(u.user_id)}"
+        data-name="${name}"
+        title="${name}${role ? " · " + role : ""}${isMe ? " (You)" : " — click to DM"}">
+      <span class="online-chip-dot"></span>
+      <span class="online-chip-name">${name}${isMe ? " ✦" : ""}</span>
+      ${shortRole ? `<span class="online-chip-role">${shortRole}</span>` : ""}
+    </button>`;
+  }).join("");
+
+  // Click chip → switch to DM and pre-select that user
+  rail.querySelectorAll(".online-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      const uid = chip.dataset.uid;
+      const name = chip.dataset.name;
+      if (uid === myId) return; // clicking yourself does nothing
+      const modeEl = document.getElementById("liveboardMode");
+      if (modeEl) {
+        modeEl.value = "dm";
+        modeEl.dispatchEvent(new Event("change"));
+      }
+      if (recipientSel) {
+        // Ensure option exists
+        let opt = recipientSel.querySelector(`option[value="${uid}"]`);
+        if (!opt) {
+          opt = document.createElement("option");
+          opt.value = uid;
+          opt.textContent = `${name} (${uid.slice(0,8)}…)`;
+          recipientSel.appendChild(opt);
+        }
+        recipientSel.value = uid;
+        recipientSel.style.display = "";
+      }
+      const input = document.getElementById("liveboardInput");
+      if (input) input.focus();
+    });
+  });
+
+  // Also keep recipient dropdown in sync with who's online
+  if (recipientSel) {
+    const existing = new Set(Array.from(recipientSel.options).map(o => o.value));
+    entries.forEach(u => {
+      if (u.user_id === myId) return;
+      if (!existing.has(u.user_id)) {
+        const opt = document.createElement("option");
+        opt.value = u.user_id;
+        opt.textContent = `${u.display_name || "User"} (${u.user_id.slice(0,8)}…)`;
+        recipientSel.appendChild(opt);
+      }
+    });
+  }
+}
+
+async function subscribePresence(){
+  if (!state.client || !state.user) return;
+  if (_presenceChannel) return;
+
+  const myName = state.profile?.display_name || state.user.email || "User";
+  const myRole = state.profile?.role || "";
+
+  _presenceChannel = state.client.channel("room:speccom-online", {
+    config: { presence: { key: state.user.id } },
+  });
+
+  _presenceChannel
+    .on("presence", { event: "sync" }, () => {
+      renderOnlineUsers(_presenceChannel.presenceState());
+    })
+    .on("presence", { event: "join" }, () => {
+      renderOnlineUsers(_presenceChannel.presenceState());
+    })
+    .on("presence", { event: "leave" }, () => {
+      renderOnlineUsers(_presenceChannel.presenceState());
+    })
+    .subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        await _presenceChannel.track({
+          user_id: state.user.id,
+          display_name: myName,
+          role: myRole,
+          online_at: new Date().toISOString(),
+        });
+      }
+    });
 }

@@ -7299,39 +7299,79 @@ body.map-mode #map-float-panel{
   0%,100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
-.liveboard-feed {
-  flex: 1;
-  overflow: hidden;
-  white-space: nowrap;
+/* Online presence rail (replaces scrolling feed) */
+.online-count-badge {
   font-family: "Exo 2", sans-serif;
-  font-size: 12px;
-  color: rgba(200,220,205,0.8);
-  display: flex;
-  align-items: center;
-  gap: 0;
-}
-.liveboard-feed-msg {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding-right: 28px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: rgba(29,122,69,0.9);
   white-space: nowrap;
   flex-shrink: 0;
-  animation: lbScroll 30s linear infinite;
 }
-@keyframes lbScroll {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-100%); }
+.online-users-rail {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
 }
-.liveboard-msg-name {
-  color: #c8a96e;
-  font-weight: 600;
+.online-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(29,122,69,0.12);
+  border: 1px solid rgba(29,122,69,0.3);
+  border-radius: 20px;
+  padding: 3px 10px 3px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.2s, border-color 0.2s;
+  max-width: 150px;
+}
+.online-chip:hover {
+  background: rgba(29,122,69,0.25);
+  border-color: rgba(29,122,69,0.6);
+}
+.online-chip.is-me {
+  background: rgba(200,169,110,0.12);
+  border-color: rgba(200,169,110,0.3);
+}
+.online-chip.is-me:hover {
+  background: rgba(200,169,110,0.22);
+  border-color: #c8a96e;
+}
+.online-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #1d7a45;
+  flex-shrink: 0;
+  animation: lbPulse 2.5s ease-in-out infinite;
+}
+.online-chip.is-me .online-chip-dot { background: #c8a96e; }
+.online-chip-name {
+  font-family: "Exo 2", sans-serif;
   font-size: 11px;
+  font-weight: 600;
+  color: rgba(200,230,210,0.9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
 }
-.liveboard-msg-body {
-  color: rgba(200,230,210,0.85);
-  font-size: 12px;
+.online-chip.is-me .online-chip-name { color: #c8a96e; }
+.online-chip-role {
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  color: rgba(140,180,150,0.6);
+  text-transform: uppercase;
 }
+/* keep legacy feed classes in case referenced elsewhere */
+.liveboard-feed { display: none; }
+.liveboard-feed-msg { display: none; }
+.liveboard-msg-name { color: #c8a96e; font-weight: 600; font-size: 11px; }
+.liveboard-msg-body { color: rgba(200,230,210,0.85); font-size: 12px; }
 .liveboard-compose {
   display: flex;
   align-items: center;
