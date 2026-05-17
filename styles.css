@@ -7228,3 +7228,268 @@ body.map-mode #map-float-panel{
     max-height:62vh;
   }
 }
+
+/* ===== HAMBURGER NAV BUTTON ===== */
+.nav-hamburger {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  width: 44px;
+  height: 44px;
+  background: transparent;
+  border: 1px solid rgba(29,122,69,0.3);
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 10px;
+  transition: border-color 0.2s, background 0.2s;
+  flex-shrink: 0;
+}
+.nav-hamburger span {
+  display: block;
+  width: 18px;
+  height: 1.5px;
+  background: rgba(200,169,110,0.85);
+  border-radius: 2px;
+  transition: background 0.2s;
+}
+.nav-hamburger:hover {
+  border-color: rgba(200,169,110,0.6);
+  background: rgba(29,122,69,0.08);
+}
+.nav-hamburger:hover span { background: #c8a96e; }
+
+/* ===== LIVE BOARD ===== */
+.liveboard {
+  background: rgba(5,12,6,0.96);
+  border-bottom: 1px solid rgba(29,122,69,0.25);
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  height: 46px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 200;
+  backdrop-filter: blur(8px);
+}
+.liveboard-ticker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 0;
+  overflow: hidden;
+  padding: 0 12px;
+  border-right: 1px solid rgba(29,122,69,0.2);
+  min-width: 0;
+}
+.liveboard-ticker-label {
+  font-family: "Rajdhani", sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  color: #1d7a45;
+  border: 1px solid rgba(29,122,69,0.5);
+  padding: 2px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  animation: lbPulse 2s ease-in-out infinite;
+}
+@keyframes lbPulse {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.liveboard-feed {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: "Exo 2", sans-serif;
+  font-size: 12px;
+  color: rgba(200,220,205,0.8);
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.liveboard-feed-msg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 28px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  animation: lbScroll 30s linear infinite;
+}
+@keyframes lbScroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+.liveboard-msg-name {
+  color: #c8a96e;
+  font-weight: 600;
+  font-size: 11px;
+}
+.liveboard-msg-body {
+  color: rgba(200,230,210,0.85);
+  font-size: 12px;
+}
+.liveboard-compose {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  flex-shrink: 0;
+  max-width: 480px;
+  width: 100%;
+}
+@media (max-width: 700px) {
+  .liveboard { height: auto; flex-direction: column; }
+  .liveboard-ticker { border-right: none; border-bottom: 1px solid rgba(29,122,69,0.2); height: 32px; padding: 0 10px; }
+  .liveboard-compose { max-width: 100%; padding: 6px 10px; }
+}
+.liveboard-mode-select {
+  background: rgba(5,14,7,0.9);
+  border: 1px solid rgba(29,122,69,0.3);
+  color: rgba(200,220,205,0.8);
+  font-family: "Exo 2", sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  min-width: 0;
+  height: 30px;
+}
+.liveboard-recipient {
+  background: rgba(5,14,7,0.9);
+  border: 1px solid rgba(200,169,110,0.3);
+  color: rgba(200,220,205,0.9);
+  font-family: "Exo 2", sans-serif;
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  width: 130px;
+  flex-shrink: 0;
+  height: 30px;
+}
+.liveboard-input {
+  flex: 1;
+  background: rgba(5,14,7,0.9);
+  border: 1px solid rgba(29,122,69,0.25);
+  color: rgba(220,240,225,0.9);
+  font-family: "Exo 2", sans-serif;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  min-width: 0;
+  height: 30px;
+  transition: border-color 0.2s;
+}
+.liveboard-input:focus {
+  outline: none;
+  border-color: rgba(29,122,69,0.6);
+}
+.liveboard-input::placeholder { color: rgba(140,180,150,0.45); }
+.liveboard-send-btn {
+  background: rgba(29,122,69,0.2);
+  border: 1px solid rgba(29,122,69,0.5);
+  color: rgba(180,230,195,0.9);
+  font-family: "Rajdhani", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  height: 30px;
+  transition: background 0.2s, border-color 0.2s;
+  white-space: nowrap;
+}
+.liveboard-send-btn:hover {
+  background: rgba(29,122,69,0.35);
+  border-color: rgba(29,122,69,0.8);
+}
+
+/* ===== TEAM TRUCK MARKERS ===== */
+.team-truck-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  background: rgba(5,12,6,0.9);
+  border: 2px solid rgba(29,122,69,0.8);
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5), 0 0 0 0 rgba(29,122,69,0.4);
+  animation: truckPulse 3s ease-in-out infinite;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.team-truck-marker:hover {
+  border-color: #c8a96e;
+  transform: scale(1.15);
+}
+.team-truck-marker svg { width: 16px; height: 16px; }
+.team-truck-marker.is-me {
+  border-color: #c8a96e;
+  background: rgba(5,12,6,0.95);
+}
+@keyframes truckPulse {
+  0%,100% { box-shadow: 0 2px 8px rgba(0,0,0,0.5), 0 0 0 0 rgba(29,122,69,0.5); }
+  50% { box-shadow: 0 2px 8px rgba(0,0,0,0.5), 0 0 0 6px rgba(29,122,69,0); }
+}
+.team-truck-popup {
+  background: rgba(5,12,6,0.97) !important;
+  border: 1px solid rgba(29,122,69,0.5) !important;
+  border-radius: 8px !important;
+  color: #e8f0ea !important;
+  font-family: "Exo 2", sans-serif !important;
+  font-size: 12px !important;
+  padding: 0 !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5) !important;
+}
+.team-truck-popup .leaflet-popup-content-wrapper {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+.team-truck-popup .leaflet-popup-content {
+  margin: 0 !important;
+  padding: 10px 14px !important;
+  min-width: 160px;
+}
+.team-truck-popup .leaflet-popup-tip-container { display: none; }
+.team-truck-popup-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: #e8f0ea;
+  margin-bottom: 3px;
+}
+.team-truck-popup-id {
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: #c8a96e;
+  font-family: monospace;
+}
+.team-truck-popup-role {
+  font-size: 10px;
+  color: rgba(160,200,170,0.7);
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ===== MENU SECTION ICONS ===== */
+.menu-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.menu-link svg { flex-shrink: 0; opacity: 0.7; }
+.menu-link:hover svg { opacity: 1; }
+
+/* ===== MAP-MODE body layout ===== */
+body.map-mode .liveboard { display: flex !important; }

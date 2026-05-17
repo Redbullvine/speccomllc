@@ -181,6 +181,7 @@ const state = {
     busy: false,
     siteMap: new Map(),
     importPreview: null,
+    bidImportPreview: null,
     billingWindow: null,
   },
   workCodes: [],
@@ -3142,6 +3143,7 @@ function startLocationPolling(){
   if (state.locationPollId != null) return;
   state.locationPollId = setInterval(() => {
     refreshLocations();
+    refreshTeamLocations();
   }, 15000);
 }
 
@@ -11075,8 +11077,8 @@ function getDefaultView({ allowHash = false } = {}){
     const hashView = parseViewFromHash();
     if (hashView && isViewAllowed(hashView)) return hashView;
   }
+  if (isViewAllowed("viewMap")) return "viewMap";
   if (isViewAllowed("viewDashboard")) return "viewDashboard";
-  if (isFieldRole() && isViewAllowed("viewMap")) return "viewMap";
   return "viewDashboard";
 }
 
@@ -11551,6 +11553,56 @@ SpecCom.helpers.closeMediaViewer = function(){
   state.mediaViewer.open = false;
 };
 
+SpecCom.helpers.ensureStandalonePhotoViewer = function(){
+  let modal = document.getElementById("standalonePhotoViewerModal");
+  if (modal) return modal;
+  modal = document.createElement("div");
+  modal.id = "standalonePhotoViewerModal";
+  modal.className = "modal";
+  modal.style.display = "none";
+  modal.innerHTML = `
+    <div class="card modal-card photo-viewer-card">
+      <div class="modal-header">
+        <h2 id="standalonePhotoViewerTitle">Photo</h2>
+        <button id="btnStandalonePhotoViewerClose" class="btn ghost small" type="button">Close</button>
+      </div>
+      <img id="standalonePhotoViewerImg" src="" alt="Proof photo" />
+      <div class="row" style="justify-content:flex-end; margin-top:10px;">
+        <a id="standalonePhotoViewerOriginal" class="btn ghost small" href="#" target="_blank" rel="noopener noreferrer">Open original</a>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.querySelector("#btnStandalonePhotoViewerClose")?.addEventListener("click", () => {
+    SpecCom.helpers.closeStandalonePhotoViewer();
+  });
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) SpecCom.helpers.closeStandalonePhotoViewer();
+  });
+  return modal;
+};
+
+SpecCom.helpers.openStandalonePhotoViewer = function(url, title = "Photo"){
+  const cleanUrl = String(url || "").trim();
+  if (!cleanUrl) return;
+  const modal = SpecCom.helpers.ensureStandalonePhotoViewer();
+  const img = modal.querySelector("#standalonePhotoViewerImg");
+  const titleEl = modal.querySelector("#standalonePhotoViewerTitle");
+  const original = modal.querySelector("#standalonePhotoViewerOriginal");
+  if (titleEl) titleEl.textContent = title || "Photo";
+  if (img) img.src = cleanUrl;
+  if (original) original.href = cleanUrl;
+  modal.style.display = "";
+};
+
+SpecCom.helpers.closeStandalonePhotoViewer = function(){
+  const modal = document.getElementById("standalonePhotoViewerModal");
+  if (!modal) return;
+  modal.style.display = "none";
+  const img = modal.querySelector("#standalonePhotoViewerImg");
+  if (img) img.src = "";
+};
+
 SpecCom.helpers.navigateMedia = function(delta){
   const items = state.siteMedia || [];
   if (!items.length) return;
@@ -11728,6 +11780,109 @@ SpecCom.helpers.renderInvoiceImportPreview = function(){
   }
   if (exportBtn) exportBtn.style.display = total ? "" : "none";
   if (applyBtn) applyBtn.style.display = total ? "" : "none";
+};
+
+function getImportRowValue(row, keys){
+  const normalizedKeys = keys.map((key) => SpecCom.helpers.normalizeImportHeader(key));
+  for (const key of normalizedKeys){
+    const direct = String(row?.[key] || "").trim();
+    if (direct) return direct;
+  }
+  const entries = Object.entries(row || {});
+  for (const [key, value] of entries){
+    const cleanKey = SpecCom.helpers.normalizeImportHeader(key);
+    if (!cleanKey) continue;
+    if (normalizedKeys.some((needle) => needle && (cleanKey.includes(needle) || needle.includes(cleanKey)))){
+      const cleanValue = String(value || "").trim();
+      if (cleanValue) return cleanValue;
+    }
+  }
+  return "";
+}
+
+SpecCom.helpers.parseBidWorkbook = async function(file){
+  if (!file) throw new Error("No file selected.");
+  const name = String(file.name || "").toLowerCase();
+  if (!name.endsWith(".xlsx") && !name.endsWith(".xls")){
+    throw new Error("Unsupported file type. Upload .xlsx or .xls.");
+  }
+  if (!window.XLSX){
+    throw new Error("XLSX parser unavailable. Refresh and try again.");
+  }
+  const data = await file.arrayBuffer();
+  const workbook = window.XLSX.read(data, { type: "array" });
+  const sheetName = workbook.SheetNames?.[0];
+  if (!sheetName) return { fileName: file.name || "workbook", sheetName: "", rows: [], items: [] };
+  const sheet = workbook.Sheets[sheetName];
+  const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
+  if (!rows.length) return { fileName: file.name || "workbook", sheetName, rows: [], items: [] };
+  const headers = rows[0].map(SpecCom.helpers.normalizeImportHeader);
+  const parsedRows = rows.slice(1).filter((r) => r && r.length).map((r, idx) => {
+    const row = Object.fromEntries(headers.map((h, i) => [h, String(r[i] ?? "").trim()]));
+    row.__rowNumber = idx + 2;
+    return row;
+  });
+  const items = parsedRows.map((row) => {
+    const code = getImportRowValue(row, ["code", "item", "item code", "bid item", "material code", "part", "sku"]);
+    const description = getImportRowValue(row, ["description", "item description", "scope", "material", "material name"]);
+    const qty = getImportRowValue(row, ["qty", "quantity", "units", "count"]);
+    const unitRate = getImportRowValue(row, ["unit rate", "rate", "unit price", "price", "cost"]);
+    return {
+      rowNumber: row.__rowNumber,
+      code,
+      description,
+      qty,
+      unit_rate: unitRate,
+    };
+  }).filter((item) => item.code || item.description || item.qty || item.unit_rate);
+  return { fileName: file.name || "workbook", sheetName, rows: parsedRows, items };
+};
+
+SpecCom.helpers.renderBidImportPreview = function(){
+  const summary = $("bidImportSummary");
+  const list = $("bidImportList");
+  const applyBtn = $("btnBidImportApply");
+  const data = state.invoiceAgent.bidImportPreview;
+  if (!summary || !list) return;
+  if (!data){
+    summary.textContent = "";
+    list.innerHTML = "";
+    if (applyBtn) applyBtn.style.display = "none";
+    return;
+  }
+  const items = Array.isArray(data.items) ? data.items : [];
+  summary.textContent = items.length
+    ? `Parsed ${items.length} bid rows from ${data.sheetName || data.fileName}.`
+    : "No bid rows found.";
+  list.innerHTML = items.slice(0, 80).map((item) => (
+    `<div class="muted small">Row ${item.rowNumber}: ${escapeHtml(item.code || "No code")} | ${escapeHtml(item.description || "No description")} | Qty ${escapeHtml(item.qty || "-")} | Rate ${escapeHtml(item.unit_rate || "-")}</div>`
+  )).join("");
+  if (applyBtn) applyBtn.style.display = items.length ? "" : "none";
+};
+
+SpecCom.helpers.applyBidImport = function(){
+  const data = state.invoiceAgent.bidImportPreview;
+  const items = Array.isArray(data?.items) ? data.items : [];
+  if (!items.length){
+    toast("Bid import", "Choose a workbook with bid rows first.", "error");
+    return;
+  }
+  createOfficeInvoiceDraft();
+  const draft = state.officeInvoices.draft;
+  draft.line_items = items.map((item) => ({
+    id: `office-line-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    code: item.code || "",
+    description: item.description || "",
+    qty: item.qty || "",
+    unit_rate: item.unit_rate || "",
+  }));
+  draft.notes = `Imported from bid workbook: ${data.fileName || "workbook"}`;
+  draft.updated_at = nowISO();
+  persistOfficeInvoiceState();
+  renderInvoicePanel();
+  SpecCom.helpers.closeInvoiceAgentModal?.();
+  setActiveView("viewInvoices");
+  toast("Bid workbook imported", `${draft.line_items.length} line items added to a draft invoice.`);
 };
 
 SpecCom.helpers.exportInvoiceImportCsv = function(){
@@ -17568,6 +17723,7 @@ function openSignInUi(source = "unknown"){
 
 function renderSupervisorOverview(){
   const metricsEl = $("supervisorMetrics");
+  const escalationsEl = $("supervisorEscalations");
   const activeJobsEl = $("supervisorActiveJobs");
   const blockedEl = $("supervisorBlocked");
   const crewEl = $("supervisorCrewStatus");
@@ -17575,6 +17731,7 @@ function renderSupervisorOverview(){
   if (!state.activeProject){
     const msg = `<div class="muted small">${t("laborNoProject")}</div>`;
     metricsEl.innerHTML = msg;
+    if (escalationsEl) escalationsEl.innerHTML = msg;
     activeJobsEl.innerHTML = msg;
     blockedEl.innerHTML = msg;
     crewEl.innerHTML = msg;
@@ -17583,6 +17740,7 @@ function renderSupervisorOverview(){
   if (!canViewDispatch()){
     const msg = `<div class="muted small">Supervisor visibility is limited to privileged roles.</div>`;
     metricsEl.innerHTML = msg;
+    if (escalationsEl) escalationsEl.innerHTML = msg;
     activeJobsEl.innerHTML = msg;
     blockedEl.innerHTML = msg;
     crewEl.innerHTML = msg;
@@ -17594,6 +17752,16 @@ function renderSupervisorOverview(){
   const blockedRows = rows.filter((row) => String(row.status || "").toUpperCase() === "BLOCKED");
   const completedRows = rows.filter((row) => String(row.status || "").toUpperCase() === "COMPLETE");
   const unassignedRows = rows.filter((row) => !row.assigned_to_user_id);
+  const nowMs = Date.now();
+  const lateRows = activeRows.filter((row) => {
+    const scheduled = row.scheduled_start ? new Date(row.scheduled_start).getTime() : 0;
+    return Number.isFinite(scheduled) && scheduled > 0 && scheduled < nowMs;
+  });
+  const escalationRows = [
+    ...blockedRows.map((row) => ({ type: "Blocked", row })),
+    ...lateRows.map((row) => ({ type: "Past due", row })),
+    ...unassignedRows.filter((row) => Number(row.priority || 0) >= 4).map((row) => ({ type: "High priority unassigned", row })),
+  ];
   metricsEl.innerHTML = `
     <div class="kpi">
       <div class="tile"><div class="label">Active Jobs</div><div class="value">${activeRows.length}</div></div>
@@ -17602,6 +17770,26 @@ function renderSupervisorOverview(){
       <div class="tile"><div class="label">Completed</div><div class="value">${completedRows.length}</div></div>
     </div>
   `;
+  if (escalationsEl){
+    if (!escalationRows.length){
+      escalationsEl.innerHTML = `
+        <div style="font-weight:900;">No escalations open</div>
+        <div class="muted small">Blocked, late, and high-priority unassigned work will appear here automatically.</div>
+      `;
+    } else {
+      escalationsEl.innerHTML = escalationRows.slice(0, 8).map(({ type, row }) => {
+        const assigned = (state.workOrders.technicians || []).find((tech) => tech.id === row.assigned_to_user_id)?.name || "Unassigned";
+        const scheduled = row.scheduled_start ? new Date(row.scheduled_start).toLocaleString() : "Unscheduled";
+        return `
+          <div class="note supervisor-escalation-item">
+            <div style="font-weight:900;">${escapeHtml(type)}: ${escapeHtml(row.customer_label || row.type || "Work order")}</div>
+            <div class="muted small">${escapeHtml(scheduled)} | ${escapeHtml(assigned)} | Priority ${escapeHtml(String(row.priority ?? "-"))}</div>
+            <div class="muted small">${escapeHtml(row.address || row.notes || "No detail logged.")}</div>
+          </div>
+        `;
+      }).join("");
+    }
+  }
   if (!activeRows.length){
     activeJobsEl.innerHTML = `<div class="muted small">No active jobs in queue.</div>`;
   } else {
@@ -24377,7 +24565,7 @@ function renderLocations(){
       e.preventDefault();
       e.stopPropagation();
       const url = openPhoto.dataset.url;
-      if (url) window.open(url, "_blank", "noopener");
+      if (url) SpecCom.helpers.openStandalonePhotoViewer(url, "Proof photo");
       return;
     }
     const openCameraBtn = e.target.closest("[data-action='openSlotCamera']");
@@ -29662,6 +29850,10 @@ function runShowcaseAction(action){
   }
   if (action.type === "view"){
     const primaryTarget = String(action.target || "").trim();
+    if (hasViewTarget(primaryTarget) && !isViewAllowed(primaryTarget)){
+      toast("Control Center", "That workspace is not available for this account.", "error");
+      return;
+    }
     const candidateViews = [
       primaryTarget,
       ...(Array.isArray(action.fallbackViews) ? action.fallbackViews : []),
@@ -29694,6 +29886,73 @@ function runShowcaseAction(action){
   }
   openProjectsModal();
   toast("Control Center", "Opening Projects.");
+}
+
+function clickFileInputById(id, unavailableMessage){
+  const input = $(id);
+  if (!input){
+    toast("Upload Center", unavailableMessage || "That upload tool is not available here.", "error");
+    return false;
+  }
+  input.click();
+  return true;
+}
+
+function openPendingUploadsFromHome(){
+  const panel = $("pendingUploadsModal");
+  const backdrop = $("pendingUploadsBackdrop");
+  if (!panel || !backdrop){
+    toast("Upload Center", "Pending uploads are not available on this device.", "error");
+    return;
+  }
+  backdrop.style.display = "flex";
+  panel.style.display = "block";
+  void renderPendingUploadsList();
+}
+
+function runHomeUploadShortcut(shortcut){
+  const key = String(shortcut || "").trim();
+  if (!key) return;
+  if (key === "map-photo"){
+    if (!isViewAllowed("viewMap")){
+      toast("Upload Center", "Map photo upload is not available for this account.", "error");
+      return;
+    }
+    setActiveView("viewMap");
+    clickFileInputById("photoUpload", "Map photo upload is unavailable.");
+    return;
+  }
+  if (key === "map-import"){
+    if (!isViewAllowed("viewMap")){
+      toast("Upload Center", "Map import is not available for this account.", "error");
+      return;
+    }
+    setActiveView("viewMap");
+    clickFileInputById("importLocationsInput", "Map import is unavailable.");
+    return;
+  }
+  if (key === "invoice-zip"){
+    if (!isViewAllowed("viewInvoices")){
+      toast("Upload Center", "Invoice imports are not available for this account.", "error");
+      return;
+    }
+    setActiveView("viewInvoices");
+    renderInvoicePanel();
+    clickFileInputById("ksInvoiceZipInput", "Invoice ZIP import is unavailable.");
+    return;
+  }
+  if (key === "invoice-file"){
+    if (!isViewAllowed("viewInvoices") || !canViewInvoiceVault()){
+      toast("Upload Center", "Invoice file access is not available for this account.", "error");
+      return;
+    }
+    setActiveView("viewInvoices");
+    clickFileInputById("invoiceFileInput", "Invoice file upload is unavailable.");
+    return;
+  }
+  if (key === "pending"){
+    openPendingUploadsFromHome();
+  }
 }
 
 const FIELD_OPS_STUDIO_KEY = "speccom.fieldOpsStudio.v1";
@@ -30113,6 +30372,21 @@ function renderDemoShowcaseHome(){
         </article>
       `).join("")}
     </div>
+    <section class="upload-center" aria-label="Upload Center">
+      <div class="upload-center-head">
+        <div>
+          <div class="upload-center-kicker">Upload Center</div>
+          <div class="upload-center-title">Files, photos, maps, and invoices</div>
+        </div>
+        <button class="upload-action upload-action-queue" type="button" data-upload-shortcut="pending">Pending Queue</button>
+      </div>
+      <div class="upload-center-grid">
+        <button class="upload-action upload-action-primary" type="button" data-upload-shortcut="map-photo">Field Photos</button>
+        <button class="upload-action" type="button" data-upload-shortcut="map-import">KMZ / CSV / PDF</button>
+        <button class="upload-action" type="button" data-upload-shortcut="invoice-zip">Invoice ZIP</button>
+        <button class="upload-action" type="button" data-upload-shortcut="invoice-file">Invoice File</button>
+      </div>
+    </section>
     <div style="display:none;" aria-hidden="true" id="home-secondary-data">
       <div id="weather-card">
         <span id="wx-location"></span><span id="wx-proj-ref"></span>
@@ -31310,10 +31584,17 @@ async function postLoginBootstrap(client, user){
       }
     }
     startLocationPolling();
+    setTimeout(() => {
+      refreshTeamLocations();
+      subscribeTeamLocations();
+      loadLiveBoard();
+      subscribeLiveBoard();
+      initLiveBoardUI();
+    }, 800);
     syncPendingSites();
   }
   setWhoami();
-  
+
   // Add online/offline event listeners for offline photo queue
   window.addEventListener('online', () => {
     console.log('[App] Online event detected');
@@ -32338,6 +32619,12 @@ function wireUI(){
   const demoShowcaseHome = $("demoShowcaseHome");
   if (demoShowcaseHome){
     demoShowcaseHome.addEventListener("click", (e) => {
+      const uploadShortcut = e.target.closest("[data-upload-shortcut]");
+      if (uploadShortcut && demoShowcaseHome.contains(uploadShortcut)){
+        e.preventDefault();
+        runHomeUploadShortcut(uploadShortcut.dataset.uploadShortcut);
+        return;
+      }
       const trigger = e.target.closest("[data-showcase-action]");
       if (!trigger || !demoShowcaseHome.contains(trigger)) return;
       const action = parseShowcaseAction(trigger.dataset.showcaseAction);
@@ -32804,6 +33091,15 @@ function wireUI(){
   if (invoiceAgentBtn){
     invoiceAgentBtn.addEventListener("click", () => SpecCom.helpers.openInvoiceAgentModal());
   }
+  const officeBidWorkbookBtn = $("btnOfficeBidWorkbook");
+  if (officeBidWorkbookBtn){
+    officeBidWorkbookBtn.addEventListener("click", () => {
+      SpecCom.helpers.openInvoiceAgentModal();
+      const input = $("bidImportInput");
+      if (input) input.click();
+      else toast("Bid import", "Bid workbook import is unavailable.", "error");
+    });
+  }
   const siteList = $("siteList");
   if (siteList){
     siteList.addEventListener("click", async (e) => {
@@ -32930,6 +33226,29 @@ function wireUI(){
   if (invoiceImportApply){
     invoiceImportApply.addEventListener("click", async () => {
       await SpecCom.helpers.applyInvoiceImport();
+    });
+  }
+  const bidImportBtn = $("btnBidImport");
+  const bidImportInput = $("bidImportInput");
+  if (bidImportBtn && bidImportInput){
+    bidImportBtn.addEventListener("click", () => bidImportInput.click());
+    bidImportInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0] || null;
+      try{
+        state.invoiceAgent.bidImportPreview = await SpecCom.helpers.parseBidWorkbook(file);
+        SpecCom.helpers.renderBidImportPreview();
+      } catch (err){
+        console.error(err);
+        toast("Bid import failed", err.message || "Bid import failed.", "error");
+      } finally {
+        e.target.value = "";
+      }
+    });
+  }
+  const bidImportApply = $("btnBidImportApply");
+  if (bidImportApply){
+    bidImportApply.addEventListener("click", () => {
+      SpecCom.helpers.applyBidImport();
     });
   }
   const invoiceAgentSelectAll = $("invoiceAgentSelectAll");
@@ -34432,4 +34751,218 @@ if (document.readyState === "loading"){
   window.addEventListener("DOMContentLoaded", startApp);
 } else {
   startApp();
+}
+
+// ============================================================
+// TEAM LOCATION MARKERS (live truck icons on map)
+// ============================================================
+const teamMarkers = new Map(); // user_id → { marker, profile }
+
+async function refreshTeamLocations(){
+  if (!state.client || !state.user || isDemo) return;
+  if (!state.map?.instance) return;
+  try {
+    const { data: locs } = await state.client
+      .from("user_locations")
+      .select("user_id, lat, lng, heading, updated_at");
+    if (!locs?.length) return;
+
+    const userIds = locs.map(r => r.user_id);
+    const { data: profiles } = await state.client
+      .from("profiles")
+      .select("id, display_name, role")
+      .in("id", userIds);
+    const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+
+    const seen = new Set();
+    locs.forEach(loc => {
+      if (!loc.lat || !loc.lng) return;
+      const uid = loc.user_id;
+      seen.add(uid);
+      const profile = profileMap.get(uid) || {};
+      const name = profile.display_name || "Field User";
+      const role = profile.role || "";
+      const isMe = uid === state.user.id;
+      const latlng = [loc.lat, loc.lng];
+
+      if (teamMarkers.has(uid)) {
+        teamMarkers.get(uid).marker.setLatLng(latlng);
+      } else {
+        const icon = window.L.divIcon({
+          className: "",
+          html: `<div class="team-truck-marker${isMe ? " is-me" : ""}" title="${name}">
+            <svg viewBox="0 0 20 20" fill="none" stroke="${isMe ? "#c8a96e" : "#1d7a45"}" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg">
+              <rect x="1" y="7" width="12" height="8" rx="1.5"/>
+              <path d="M13 10h3l2 3v2h-2"/>
+              <circle cx="4.5" cy="16" r="1.5" fill="${isMe ? "#c8a96e" : "#1d7a45"}" stroke="none"/>
+              <circle cx="13.5" cy="16" r="1.5" fill="${isMe ? "#c8a96e" : "#1d7a45"}" stroke="none"/>
+            </svg>
+          </div>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+          popupAnchor: [0, -20],
+        });
+        const marker = window.L.marker(latlng, { icon, zIndexOffset: 1000 });
+        const popupHtml = `<div class="team-truck-popup-name">${escapeHtml(name)}</div>
+          <div class="team-truck-popup-id">${escapeHtml(uid)}</div>
+          ${role ? `<div class="team-truck-popup-role">${escapeHtml(role)}</div>` : ""}`;
+        marker.bindPopup(popupHtml, {
+          className: "team-truck-popup",
+          closeButton: false,
+          offset: [0, -10],
+        });
+        marker.on("mouseover", () => marker.openPopup());
+        marker.on("mouseout", () => marker.closePopup());
+        marker.addTo(state.map.instance);
+        teamMarkers.set(uid, { marker, profile });
+      }
+    });
+
+    // Remove stale markers
+    teamMarkers.forEach((entry, uid) => {
+      if (!seen.has(uid)) {
+        entry.marker.remove();
+        teamMarkers.delete(uid);
+      }
+    });
+  } catch(e) {
+    dlog("[teamLocs] error", e);
+  }
+}
+
+// ============================================================
+// LIVE BOARD
+// ============================================================
+let lbMessages = [];
+let lbChannel = null;
+
+async function loadLiveBoard(){
+  if (!state.client || !state.user || isDemo) return;
+  try {
+    const { data } = await state.client
+      .from("messages")
+      .select("id, sender_id, body, created_at, channel, recipient_id")
+      .eq("channel", "BOARD")
+      .order("created_at", { ascending: false })
+      .limit(30);
+    lbMessages = (data || []).reverse();
+    const senderIds = [...new Set(lbMessages.map(m => m.sender_id))];
+    if (senderIds.length) {
+      const { data: profiles } = await state.client
+        .from("profiles")
+        .select("id, display_name")
+        .in("id", senderIds);
+      (profiles || []).forEach(p => {
+        if (p?.id) state.map.userNames = state.map.userNames || new Map();
+        state.map.userNames?.set(p.id, p.display_name || "");
+      });
+    }
+    renderLiveBoard();
+  } catch(e) {
+    dlog("[liveboard] load error", e);
+  }
+}
+
+function renderLiveBoard(){
+  const feed = document.getElementById("liveboard-feed");
+  if (!feed) return;
+  if (!lbMessages.length) {
+    feed.innerHTML = `<span class="liveboard-feed-msg"><span class="liveboard-msg-body" style="color:rgba(140,180,150,0.5);">No messages yet — say something!</span></span>`;
+    return;
+  }
+  const html = lbMessages.slice(-15).map(msg => {
+    const name = state.map?.userNames?.get(msg.sender_id) || "User";
+    const body = String(msg.body || "").slice(0, 120);
+    return `<span class="liveboard-feed-msg"><span class="liveboard-msg-name">${escapeHtml(name)}:</span><span class="liveboard-msg-body">${escapeHtml(body)}</span></span>`;
+  }).join("");
+  feed.innerHTML = html;
+}
+
+async function sendLiveBoardMessage(){
+  const input = document.getElementById("liveboardInput");
+  const modeEl = document.getElementById("liveboardMode");
+  const recipientEl = document.getElementById("liveboardRecipient");
+  if (!input || !state.client || !state.user) return;
+  const body = String(input.value || "").trim();
+  if (!body) return;
+  const mode = modeEl?.value || "board";
+  const recipientId = mode === "dm" ? String(recipientEl?.value || "").trim() : null;
+  if (mode === "dm" && !recipientId) {
+    alert("Enter a recipient User ID for direct messages.");
+    return;
+  }
+  const orgId = typeof getMessageOrgId === "function" ? getMessageOrgId() : null;
+  const payload = {
+    sender_id: state.user.id,
+    channel: mode === "dm" ? "DM" : "BOARD",
+    body,
+    org_id: orgId || null,
+    project_id: state.activeProject?.id || null,
+  };
+  if (mode === "dm") payload.recipient_id = recipientId;
+  try {
+    const { error } = await state.client.from("messages").insert(payload);
+    if (error) { dlog("[liveboard] send error", error); return; }
+    input.value = "";
+    await loadLiveBoard();
+  } catch(e) {
+    dlog("[liveboard] send exception", e);
+  }
+}
+
+function subscribeLiveBoard(){
+  if (!state.client || lbChannel) return;
+  lbChannel = state.client
+    .channel("liveboard-messages")
+    .on("postgres_changes", {
+      event: "INSERT",
+      schema: "public",
+      table: "messages",
+      filter: "channel=eq.BOARD",
+    }, (payload) => {
+      lbMessages.push(payload.new);
+      if (lbMessages.length > 30) lbMessages.shift();
+      renderLiveBoard();
+    })
+    .subscribe();
+}
+
+function subscribeTeamLocations(){
+  if (!state.client || state._teamLocChannel) return;
+  state._teamLocChannel = state.client
+    .channel("team-locations")
+    .on("postgres_changes", {
+      event: "*",
+      schema: "public",
+      table: "user_locations",
+    }, () => {
+      refreshTeamLocations();
+    })
+    .subscribe();
+}
+
+function initLiveBoardUI(){
+  const sendBtn = document.getElementById("btnLiveboardSend");
+  const input = document.getElementById("liveboardInput");
+  const modeEl = document.getElementById("liveboardMode");
+  const recipientEl = document.getElementById("liveboardRecipient");
+  if (sendBtn) sendBtn.addEventListener("click", sendLiveBoardMessage);
+  if (input) input.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendLiveBoardMessage(); }
+  });
+  if (modeEl && recipientEl) {
+    modeEl.addEventListener("change", () => {
+      recipientEl.style.display = modeEl.value === "dm" ? "" : "none";
+    });
+  }
+  if (sendBtn) {
+    const menuUploadBtn = document.getElementById("btnMenuUploadProject");
+    if (menuUploadBtn) {
+      menuUploadBtn.addEventListener("click", () => {
+        const uploadInput = document.getElementById("kmzUploadInput") || document.querySelector('input[type="file"][accept*="kmz"]');
+        if (uploadInput) uploadInput.click();
+        document.getElementById("menuModal").style.display = "none";
+      });
+    }
+  }
 }

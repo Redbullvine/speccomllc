@@ -1737,9 +1737,9 @@
       class="nav-logo-img"
     />
     <div class="nav-tools">
-      <button id="btnHome" class="nav-pill" type="button">Home</button>
-      <button id="btnTimesheet" class="nav-pill" type="button">Timesheet</button>
-      <button id="btnMapToggle" class="nav-pill" type="button">Map</button>
+      <button id="btnMenu" class="nav-hamburger" type="button" aria-label="Open menu" title="Menu">
+        <span></span><span></span><span></span>
+      </button>
       <button class="nav-util" id="theme-toggle-btn" title="Toggle light / dark mode" type="button">
         <svg id="theme-icon-dark" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M13.5 9A5.5 5.5 0 0 1 7 2.5a5.5 5.5 0 1 0 6.5 6.5z"/>
@@ -2314,6 +2314,21 @@
         </section>
 
         <section id="viewMap" class="view">
+          <div id="liveboard" class="liveboard" style="display:none;">
+            <div id="liveboard-ticker" class="liveboard-ticker">
+              <span class="liveboard-ticker-label">LIVE</span>
+              <div id="liveboard-feed" class="liveboard-feed"></div>
+            </div>
+            <div id="liveboard-compose" class="liveboard-compose">
+              <select id="liveboardMode" class="liveboard-mode-select">
+                <option value="board">Board</option>
+                <option value="dm">Direct</option>
+              </select>
+              <input id="liveboardRecipient" class="liveboard-recipient" type="text" placeholder="User ID..." style="display:none;" maxlength="100" />
+              <input id="liveboardInput" class="liveboard-input" type="text" placeholder="Say something to the team..." maxlength="500" />
+              <button id="btnLiveboardSend" class="liveboard-send-btn" type="button">Send</button>
+            </div>
+          </div>
           <div id="mapWorkspace" class="map-workspace">
             <button id="mapSidebarToggle" class="map-menu-btn" type="button" aria-label="Toggle Places" aria-expanded="true">
               <span class="hamburger">
@@ -2933,17 +2948,61 @@
           <button id="btnMenuClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
         </div>
         <div class="menu-section">
-          <div class="muted small menu-title">Workspace Gateway</div>
-          <button class="menu-link" type="button" data-view="viewDashboard">Workspace Gateway</button>
-          <button class="menu-link" type="button" data-view="viewTechnician">I&amp;R Specialist</button>
-          <button class="menu-link" type="button" data-view="viewMap">OSP Specialist / Proof Map</button>
-          <button class="menu-link" type="button" data-view="viewDispatch">Operations Control</button>
-          <button class="menu-link" type="button" data-view="viewSupervisor">Supervisor Overview</button>
-          <button class="menu-link" type="button" data-view="viewInvoices">Billing Desk</button>
-          <button class="menu-link" type="button" data-view="viewCatalog">Logistics Specialist</button>
-          <button class="menu-link" type="button" data-view="viewWarehouseScan">Scanner Lane</button>
-          <button class="menu-link" type="button" data-view="viewAdmin">Administration <span class="status-pill" style="margin-left:8px; background:rgba(238,131,93,0.18); color:#EE835D; border:1px solid rgba(238,131,93,0.35);">Admin</span></button>
-          <button id="btnMenuMessages" class="menu-link" type="button">Messaging</button>
+          <div class="muted small menu-title">Navigation</div>
+          <button class="menu-link" type="button" data-view="viewMap">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5.5"/><path d="M7 4v3l2 1.5"/></svg>
+            Home
+          </button>
+          <button class="menu-link" type="button" data-view="viewDispatch">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="10" height="8" rx="1"/><path d="M4 6h6M4 9h4"/></svg>
+            Management
+          </button>
+          <button class="menu-link" type="button" data-view="viewAdmin">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="2"/><path d="M7 1.5v2M7 10.5v2M1.5 7h2M10.5 7h2"/></svg>
+            Administration
+          </button>
+          <button class="menu-link" type="button" data-view="viewTechnician">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2" width="8" height="10" rx="1.5"/><path d="M5 5h4M5 7.5h4M5 10h2"/></svg>
+            I &amp; R Technician
+          </button>
+          <button class="menu-link" type="button" data-view="viewNodes">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 7h10M5 4l-3 3 3 3M9 4l3 3-3 3"/></svg>
+            OSP Specialist
+          </button>
+          <button class="menu-link" type="button" data-view="viewTechnician" data-ws-key="drop_crew">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 7.5L7 2.5l5 5"/><path d="M4 7V12h6V7"/><path d="M6.5 12V9h1v3"/></svg>
+            Drop Crew
+          </button>
+          <button class="menu-link" type="button" data-view="viewCatalog">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="10" height="10" rx="1"/><path d="M2 6h10M6.5 2v10"/></svg>
+            Warehouse
+          </button>
+        </div>
+        <div class="menu-section">
+          <div class="muted small menu-title">Projects</div>
+          <button class="menu-link" type="button" data-view="viewDashboard">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="4" height="4" rx="0.5"/><rect x="8" y="2" width="4" height="4" rx="0.5"/><rect x="2" y="8" width="4" height="4" rx="0.5"/><rect x="8" y="8" width="4" height="4" rx="0.5"/></svg>
+            Active Projects
+          </button>
+          <button class="menu-link" type="button" data-view="viewDashboard">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h10v8H2z"/><path d="M5 2h4v2H5z"/></svg>
+            Saved Projects
+          </button>
+          <button id="btnMenuUploadProject" class="menu-link" type="button">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 9v2.5h10V9"/><path d="M7 2v7"/><path d="M4.5 4.5L7 2l2.5 2.5"/></svg>
+            Upload Project
+          </button>
+          <button id="btnMenuOpenRedline" class="menu-link" type="button">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 10.5L5 7l3 3L13 3"/><circle cx="13" cy="3" r="1" fill="currentColor" stroke="none"/></svg>
+            Redline Project
+          </button>
+        </div>
+        <div class="menu-section">
+          <div class="muted small menu-title">Account</div>
+          <button id="btnMenuMessages" class="menu-link" type="button">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="3" width="11" height="8" rx="1"/><path d="M4 6h6M4 8.5h4"/></svg>
+            Messages
+          </button>
           <button id="btnMenuSignIn" class="menu-link" type="button" data-i18n="signIn" style="display:none;">Sign in</button>
           <button id="btnMenuSignOut" class="menu-link" type="button" data-i18n="signOut">Sign out</button>
         </div>
@@ -2957,7 +3016,6 @@
         </div>
         <div class="menu-section">
           <div class="muted small menu-title">Advanced Map Tools</div>
-          <button id="btnMenuOpenRedline" class="menu-link" type="button">Open Redline</button>
           <button id="btnMenuAddSpliceDetails" class="menu-link" type="button">Add Splice Details</button>
         </div>
       </div>
