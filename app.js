@@ -21619,20 +21619,42 @@ function ensureMyLocationMarker(coord){
   if (!state.map.instance || !window.L || !coord) return;
   const latLng = [coord.lat, coord.lng];
   if (!state.map.myLocationMarker){
-    state.map.myLocationMarker = window.L.circleMarker(latLng, {
-      radius: 9,
-      color: "#ffffff",
-      fillColor: MAP_MY_LOCATION_COLOR,
-      fillOpacity: 0.95,
-      weight: 3,
+    const myName = state.profile?.display_name || state.user?.email || "Me";
+    const myIcon = window.L.divIcon({
+      className: "",
+      html: `<div class="team-truck-marker is-me" title="${myName}">
+        <svg viewBox="0 0 22 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="3" width="13" height="9" rx="1.5" fill="rgba(200,169,110,0.25)" stroke="#c8a96e" stroke-width="1.4"/>
+          <path d="M14 6h4l2.5 4v3h-2.5" fill="rgba(200,169,110,0.15)" stroke="#c8a96e" stroke-width="1.4" stroke-linejoin="round"/>
+          <circle cx="4.5" cy="13.5" r="1.8" fill="#c8a96e"/>
+          <circle cx="14.5" cy="13.5" r="1.8" fill="#c8a96e"/>
+          <line x1="3" y1="6.5" x2="11" y2="6.5" stroke="#1d7a45" stroke-width="0.8" stroke-opacity="0.8"/>
+          <line x1="3" y1="8.5" x2="9" y2="8.5" stroke="#1d7a45" stroke-width="0.8" stroke-opacity="0.6"/>
+        </svg>
+      </div>`,
+      iconSize: [36, 28],
+      iconAnchor: [18, 22],
+      popupAnchor: [0, -24],
+    });
+    state.map.myLocationMarker = window.L.marker(latLng, {
+      icon: myIcon,
+      zIndexOffset: 1100,
       pane: MAP_PANES.pending,
-      bubblingMouseEvents: false,
     });
     state.map.myLocationMarker.addTo(state.map.instance);
-    state.map.myLocationMarker.bindTooltip("My location", { direction: "top", opacity: 0.95 });
+    const myUid = state.user?.id || "";
+    state.map.myLocationMarker.bindPopup(
+      `<div class="team-truck-popup-name">${escapeHtml(myName)} <span style="color:#c8a96e;font-size:10px;">(You)</span></div>
+       <div class="team-truck-popup-id" style="cursor:pointer;" onclick="navigator.clipboard.writeText('${myUid}');this.textContent='Copied!';setTimeout(()=>this.textContent='${myUid}',2000)">${escapeHtml(myUid)}</div>`,
+      { className: "team-truck-popup", closeButton: false, offset: [0, -8] }
+    );
+    state.map.myLocationMarker.on("mouseover", () => state.map.myLocationMarker.openPopup());
+    state.map.myLocationMarker.on("mouseout", () => state.map.myLocationMarker.closePopup());
   } else {
     state.map.myLocationMarker.setLatLng(latLng);
   }
+  // Place fake demo neighbours around real location once we know it
+  if (!fakeDemoMarkersPlaced) placeFakeTeamMarkers(coord);
 }
 
 function setMapFieldSelectedSite(siteId){
@@ -31591,7 +31613,7 @@ async function postLoginBootstrap(client, user){
       subscribeLiveBoard();
       initLiveBoardUI();
     }, 800);
-    setTimeout(() => placeFakeTeamMarkers(), 1400);
+    // fake markers now placed from ensureMyLocationMarker once GPS is known
     syncPendingSites();
   }
   setWhoami();
@@ -34843,16 +34865,14 @@ const FAKE_EMPLOYEES = [
 ];
 let fakeDemoMarkersPlaced = false;
 
-function placeFakeTeamMarkers(){
-  if (!state.map?.instance) {
-    setTimeout(placeFakeTeamMarkers, 1200);
-    return;
-  }
+function placeFakeTeamMarkers(gpsCoord){
+  if (!state.map?.instance) return;
   if (fakeDemoMarkersPlaced) return;
   fakeDemoMarkersPlaced = true;
-  const center = state.map.instance.getCenter();
-  const baseLat = center.lat;
-  const baseLng = center.lng;
+  // Prefer actual GPS so fake trucks appear near the real user
+  const ref = gpsCoord || state.map.myLocation || state.map.instance.getCenter();
+  const baseLat = ref.lat ?? ref.lat;
+  const baseLng = ref.lng ?? ref.lng;
   FAKE_EMPLOYEES.forEach(emp => {
     const latlng = [baseLat + emp.dlat, baseLng + emp.dlng];
     const icon = window.L.divIcon({
