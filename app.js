@@ -31591,6 +31591,7 @@ async function postLoginBootstrap(client, user){
       subscribeLiveBoard();
       initLiveBoardUI();
     }, 800);
+    setTimeout(() => placeFakeTeamMarkers(), 1400);
     syncPendingSites();
   }
   setWhoami();
@@ -34828,6 +34829,59 @@ async function refreshTeamLocations(){
   } catch(e) {
     dlog("[teamLocs] error", e);
   }
+}
+
+// ============================================================
+// FAKE DEMO TEAM MARKERS (shown until real user_locations load)
+// ============================================================
+const FAKE_EMPLOYEES = [
+  { id: "demo-001", name: "Jake Morales",   role: "I&R Technician",  dlat:  0.012, dlng:  0.018 },
+  { id: "demo-002", name: "Sierra Taft",    role: "OSP Specialist",  dlat: -0.008, dlng:  0.025 },
+  { id: "demo-003", name: "Marcus Webb",    role: "Drop Crew",       dlat:  0.020, dlng: -0.014 },
+  { id: "demo-004", name: "Priya Okonkwo",  role: "Warehouse",       dlat: -0.015, dlng: -0.022 },
+  { id: "demo-005", name: "Cole Hendricks", role: "Supervisor",      dlat:  0.005, dlng:  0.040 },
+];
+let fakeDemoMarkersPlaced = false;
+
+function placeFakeTeamMarkers(){
+  if (!state.map?.instance) return;
+  if (fakeDemoMarkersPlaced) return;
+  fakeDemoMarkersPlaced = true;
+  const center = state.map.instance.getCenter();
+  const baseLat = center.lat;
+  const baseLng = center.lng;
+  FAKE_EMPLOYEES.forEach(emp => {
+    const latlng = [baseLat + emp.dlat, baseLng + emp.dlng];
+    const icon = window.L.divIcon({
+      className: "",
+      html: `<div class="team-truck-marker" title="${emp.name}">
+        <svg viewBox="0 0 22 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="3" width="13" height="9" rx="1.5" fill="rgba(29,122,69,0.25)" stroke="#1d7a45" stroke-width="1.4"/>
+          <path d="M14 6h4l2.5 4v3h-2.5" fill="rgba(29,122,69,0.15)" stroke="#1d7a45" stroke-width="1.4" stroke-linejoin="round"/>
+          <circle cx="4.5" cy="13.5" r="1.8" fill="#1d7a45"/>
+          <circle cx="14.5" cy="13.5" r="1.8" fill="#1d7a45"/>
+          <line x1="3" y1="6.5" x2="11" y2="6.5" stroke="#c8a96e" stroke-width="0.8" stroke-opacity="0.7"/>
+          <line x1="3" y1="8.5" x2="9" y2="8.5" stroke="#c8a96e" stroke-width="0.8" stroke-opacity="0.5"/>
+        </svg>
+      </div>`,
+      iconSize: [36, 28],
+      iconAnchor: [18, 22],
+      popupAnchor: [0, -24],
+    });
+    const marker = window.L.marker(latlng, { icon, zIndexOffset: 900 });
+    const popupHtml = `<div class="team-truck-popup-name">${escapeHtml(emp.name)}</div>
+      <div class="team-truck-popup-id">${escapeHtml(emp.id)}</div>
+      <div class="team-truck-popup-role">${escapeHtml(emp.role)}</div>`;
+    marker.bindPopup(popupHtml, {
+      className: "team-truck-popup",
+      closeButton: false,
+      offset: [0, -8],
+    });
+    marker.on("mouseover", () => marker.openPopup());
+    marker.on("mouseout", () => marker.closePopup());
+    marker.addTo(state.map.instance);
+    teamMarkers.set(emp.id, { marker, profile: emp });
+  });
 }
 
 // ============================================================

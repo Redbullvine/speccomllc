@@ -7277,7 +7277,7 @@ body.map-mode #map-float-panel{
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1 1 0;
+  flex: 0 0 220px;
   overflow: hidden;
   padding: 0 12px;
   border-right: 1px solid rgba(29,122,69,0.2);
@@ -7337,9 +7337,8 @@ body.map-mode #map-float-panel{
   align-items: center;
   gap: 6px;
   padding: 0 10px;
-  flex-shrink: 0;
-  max-width: 480px;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 @media (max-width: 700px) {
   .liveboard { height: auto; flex-direction: column; }
@@ -7353,11 +7352,11 @@ body.map-mode #map-float-panel{
   font-family: "Exo 2", sans-serif;
   font-size: 11px;
   letter-spacing: 0.5px;
-  padding: 6px 8px;
+  padding: 6px 6px;
   border-radius: 6px;
   cursor: pointer;
-  flex-shrink: 0;
-  min-width: 0;
+  flex: 0 0 72px;
+  width: 72px;
   height: 30px;
 }
 .liveboard-recipient {
