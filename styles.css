@@ -7359,17 +7359,43 @@ body.map-mode #map-float-panel{
   width: 72px;
   height: 30px;
 }
-.liveboard-recipient {
+.liveboard-recipient-select {
   background: rgba(5,14,7,0.9);
-  border: 1px solid rgba(200,169,110,0.3);
-  color: rgba(200,220,205,0.9);
+  border: 1px solid rgba(200,169,110,0.4);
+  color: rgba(220,200,160,0.9);
   font-family: "Exo 2", sans-serif;
   font-size: 11px;
-  padding: 6px 8px;
+  padding: 6px 6px;
   border-radius: 6px;
-  width: 130px;
+  flex: 0 0 160px;
+  width: 160px;
+  height: 30px;
+  cursor: pointer;
+}
+.liveboard-myid-btn {
+  background: transparent;
+  border: 1px solid rgba(200,169,110,0.35);
+  color: rgba(200,169,110,0.7);
+  font-family: "Rajdhani", sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  cursor: pointer;
   flex-shrink: 0;
   height: 30px;
+  white-space: nowrap;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+.liveboard-myid-btn:hover {
+  border-color: #c8a96e;
+  color: #c8a96e;
+  background: rgba(200,169,110,0.08);
+}
+.liveboard-myid-btn.copied {
+  border-color: #1d7a45;
+  color: #1d7a45;
 }
 .liveboard-input {
   flex: 1;

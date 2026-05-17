@@ -2324,8 +2324,11 @@
                 <option value="board">Board</option>
                 <option value="dm">Direct</option>
               </select>
-              <input id="liveboardRecipient" class="liveboard-recipient" type="text" placeholder="User ID..." style="display:none;" maxlength="100" />
+              <select id="liveboardRecipient" class="liveboard-recipient-select" style="display:none;">
+                <option value="">— pick user —</option>
+              </select>
               <input id="liveboardInput" class="liveboard-input" type="text" placeholder="Say something to the team..." maxlength="500" />
+              <button id="btnMyId" class="liveboard-myid-btn" type="button" title="Click to copy your User ID">MY ID</button>
               <button id="btnLiveboardSend" class="liveboard-send-btn" type="button">Send</button>
             </div>
           </div>

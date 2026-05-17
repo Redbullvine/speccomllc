@@ -34844,7 +34844,10 @@ const FAKE_EMPLOYEES = [
 let fakeDemoMarkersPlaced = false;
 
 function placeFakeTeamMarkers(){
-  if (!state.map?.instance) return;
+  if (!state.map?.instance) {
+    setTimeout(placeFakeTeamMarkers, 1200);
+    return;
+  }
   if (fakeDemoMarkersPlaced) return;
   fakeDemoMarkersPlaced = true;
   const center = state.map.instance.getCenter();
@@ -34942,7 +34945,7 @@ async function sendLiveBoardMessage(){
   const mode = modeEl?.value || "board";
   const recipientId = mode === "dm" ? String(recipientEl?.value || "").trim() : null;
   if (mode === "dm" && !recipientId) {
-    alert("Enter a recipient User ID for direct messages.");
+    alert("Select a recipient for direct messages.");
     return;
   }
   const orgId = typeof getMessageOrgId === "function" ? getMessageOrgId() : null;
@@ -34995,28 +34998,72 @@ function subscribeTeamLocations(){
     .subscribe();
 }
 
+async function populateLiveBoardRecipients(){
+  const sel = document.getElementById("liveboardRecipient");
+  if (!sel || !state.client || !state.user) return;
+  try {
+    const { data: profiles } = await state.client
+      .from("profiles")
+      .select("id, display_name")
+      .neq("id", state.user.id);
+    if (!profiles?.length) return;
+    // Keep first blank option, rebuild rest
+    while (sel.options.length > 1) sel.remove(1);
+    profiles.forEach(p => {
+      const name = p.display_name || "Unknown";
+      const shortId = p.id.slice(0, 8) + "…";
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = `${name} (${shortId})`;
+      opt.title = p.id;
+      sel.appendChild(opt);
+    });
+  } catch(e) { dlog("[liveboard] recipients error", e); }
+}
+
 function initLiveBoardUI(){
   const sendBtn = document.getElementById("btnLiveboardSend");
   const input = document.getElementById("liveboardInput");
   const modeEl = document.getElementById("liveboardMode");
-  const recipientEl = document.getElementById("liveboardRecipient");
+  const recipientSel = document.getElementById("liveboardRecipient");
+  const myIdBtn = document.getElementById("btnMyId");
+
   if (sendBtn) sendBtn.addEventListener("click", sendLiveBoardMessage);
   if (input) input.addEventListener("keydown", e => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendLiveBoardMessage(); }
   });
-  if (modeEl && recipientEl) {
+  if (modeEl && recipientSel) {
     modeEl.addEventListener("change", () => {
-      recipientEl.style.display = modeEl.value === "dm" ? "" : "none";
+      const isDm = modeEl.value === "dm";
+      recipientSel.style.display = isDm ? "" : "none";
+      if (isDm) populateLiveBoardRecipients();
     });
   }
-  if (sendBtn) {
-    const menuUploadBtn = document.getElementById("btnMenuUploadProject");
-    if (menuUploadBtn) {
-      menuUploadBtn.addEventListener("click", () => {
-        const uploadInput = document.getElementById("kmzUploadInput") || document.querySelector('input[type="file"][accept*="kmz"]');
-        if (uploadInput) uploadInput.click();
-        document.getElementById("menuModal").style.display = "none";
+
+  if (myIdBtn) {
+    myIdBtn.addEventListener("click", () => {
+      const uid = state.user?.id || "";
+      if (!uid) return;
+      navigator.clipboard.writeText(uid).then(() => {
+        myIdBtn.textContent = "COPIED!";
+        myIdBtn.classList.add("copied");
+        setTimeout(() => {
+          myIdBtn.textContent = "MY ID";
+          myIdBtn.classList.remove("copied");
+        }, 2000);
+      }).catch(() => {
+        prompt("Your User ID (copy this):", uid);
       });
-    }
+    });
+  }
+
+  const menuUploadBtn = document.getElementById("btnMenuUploadProject");
+  if (menuUploadBtn) {
+    menuUploadBtn.addEventListener("click", () => {
+      const uploadInput = document.getElementById("kmzUploadInput") || document.querySelector('input[type="file"][accept*="kmz"]');
+      if (uploadInput) uploadInput.click();
+      const menu = document.getElementById("menuModal");
+      if (menu) menu.style.display = "none";
+    });
   }
 }
