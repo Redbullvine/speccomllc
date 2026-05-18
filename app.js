@@ -22450,7 +22450,9 @@ async function loadProjectSites(projectId){
     const resultSet = getSiteSearchResultSet();
     updateMapMarkers(resultSet.rows);
     renderDerivedMapLayers(resultSet.rows);
-    syncMapToSearchResults(resultSet);
+    // Do NOT call syncMapToSearchResults here — that runs fitBounds across all
+    // project sites and zooms the map way out on every background refresh.
+    // syncMapToSearchResults is for explicit user searches only.
   }
 }
 
