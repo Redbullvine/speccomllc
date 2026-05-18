@@ -21894,8 +21894,9 @@ async function openLocationForField(siteId, { center = true, forAdd = false } = 
   setMapFieldSelectedSite(siteId);
   const popupOpened = await openSitePopupForSiteId(siteId, { center, syncSelection: true });
   if (forAdd && !popupOpened){
-    setActiveView("viewNodes");
-    toast("Site opened", "Add splice locations and capture proof photos below.");
+    // Stay on map — navigating to viewNodes hides the map container and causes tile reload
+    // artifacts ("Map data not yet available") when the user returns to the map view.
+    renderMapFieldPanel();
   }
 }
 
@@ -21950,6 +21951,18 @@ async function openOrCreateSpliceAtCurrentLocation({ center = true, hidePanel = 
   if (!siteId){
     toast("Location captured", "No nearby assigned splice location, and this account cannot create new pins for this project.");
     return null;
+  }
+  // A concurrent loadProjectSites (from background polling or initial setActiveView call)
+  // may have overwritten state.projectSites with server data fetched before this site was
+  // created, evicting it from state. If that happened, reload now so openLocationForField
+  // can find the site.
+  const siteKey = toSiteIdKey(siteId);
+  if (!getVisibleSites().find((s) => toSiteIdKey(s?.id) === siteKey)){
+    await loadProjectSites(state.activeProject?.id || null);
+  }
+  // Restore GPS view in case something moved the map during the async site operations
+  if (center && state.map.instance){
+    state.map.instance.setView([gps.lat, gps.lng], Math.max(state.map.instance.getZoom() || 0, 17));
   }
   await openLocationForField(siteId, { center: true, forAdd: true });
   focusSiteOnMap(siteId);
