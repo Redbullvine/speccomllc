@@ -1885,8 +1885,10 @@ function queueMapInvalidate(delays = 120){
   if (!isMapViewActive() || !state.map.instance) return;
   const delayList = Array.isArray(delays) ? delays : [delays];
   const runInvalidate = () => {
+    if (!state.map.instance) return;
     try{
-      state.map.instance.invalidateSize(true);
+      // pan:false prevents the map from jumping when the container resizes (especially on RDP)
+      state.map.instance.invalidateSize({ animate: false, pan: false });
     } catch {}
   };
   window.requestAnimationFrame(runInvalidate);
@@ -21899,6 +21901,8 @@ async function openLocationForField(siteId, { center = true, forAdd = false } = 
 
 async function requestMapCurrentLocation({ center = false, silent = false } = {}){
   ensureMap();
+  // Set the timestamp immediately so concurrent setActiveView calls don't spawn duplicate GPS requests
+  state.map.lastFieldGpsCheckAt = Date.now();
   const gps = await getCurrentGps({ enableHighAccuracy: true, timeout: 12000, maximumAge: 12000 });
   if (!gps){
     if (!silent){
@@ -35054,6 +35058,8 @@ async function populateLiveBoardRecipients(){
 }
 
 function initLiveBoardUI(){
+  const lb = document.getElementById("liveboard");
+  if (lb) lb.style.removeProperty("display");
   const sendBtn = document.getElementById("btnLiveboardSend");
   const input = document.getElementById("liveboardInput");
   const modeEl = document.getElementById("liveboardMode");

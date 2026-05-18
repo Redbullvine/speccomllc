@@ -7276,8 +7276,8 @@ body.map-mode #map-float-panel{
 .liveboard-ticker {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex: 0 0 220px;
+  gap: 8px;
+  flex: 1 1 auto;
   overflow: hidden;
   padding: 0 12px;
   border-right: 1px solid rgba(29,122,69,0.2);
@@ -7367,22 +7367,38 @@ body.map-mode #map-float-panel{
   color: rgba(140,180,150,0.6);
   text-transform: uppercase;
 }
-/* keep legacy feed classes in case referenced elsewhere */
-.liveboard-feed { display: none; }
-.liveboard-feed-msg { display: none; }
-.liveboard-msg-name { color: #c8a96e; font-weight: 600; font-size: 11px; }
-.liveboard-msg-body { color: rgba(200,230,210,0.85); font-size: 12px; }
+.liveboard-feed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+.liveboard-feed-msg {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 300px;
+}
+.liveboard-msg-name { color: #c8a96e; font-weight: 600; font-size: 11px; flex-shrink: 0; }
+.liveboard-msg-body { color: rgba(200,230,210,0.85); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
 .liveboard-compose {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 0 10px;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
 }
 @media (max-width: 700px) {
   .liveboard { height: auto; flex-direction: column; }
-  .liveboard-ticker { border-right: none; border-bottom: 1px solid rgba(29,122,69,0.2); height: 32px; padding: 0 10px; }
+  .liveboard-ticker { flex: none; border-right: none; border-bottom: 1px solid rgba(29,122,69,0.2); height: 32px; padding: 0 10px; width: 100%; }
   .liveboard-compose { max-width: 100%; padding: 6px 10px; }
 }
 .liveboard-mode-select {
