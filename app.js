@@ -31776,7 +31776,9 @@ function wireUI(){
   initMapWorkspaceUi();
   window.addEventListener("resize", () => {
     applyDrawerUiState();
-    queueMapInvalidate(120);
+    if (state.map.instance && isMapViewActive()){
+      try { state.map.instance.invalidateSize({ animate: false, pan: false }); } catch {}
+    }
   });
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.addEventListener("click", () => setActiveView(btn.dataset.view));
