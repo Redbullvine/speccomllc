@@ -41,6 +41,7 @@ const FIELD_SUBCONTRACTOR_USER_IDS = new Set([
   "ce9c87b7-4232-48ce-9687-cc15c18dd9e5",
 ]);
 const FIELD_SUBCONTRACTOR_ALLOWED_VIEWS = new Set([
+  "viewOnboarding",
   "viewMap",
   "viewNodes",
   "viewPhotos",
@@ -253,6 +254,8 @@ const state = {
   messageIdentityMap: new Map(),
   messageFilter: "board",
   messageMode: "board",
+  messagePopup: null,
+  messagePopupTimer: 0,
   dpr: {
     reportId: null,
     projectId: null,
@@ -21060,10 +21063,14 @@ async function saveDailyProgressComments(){
 }
 
 const MESSAGE_READ_KEY = "messages_last_read_";
+const MESSAGE_POPUP_VISIBLE_MS = 16000;
+let messageNotificationChannel = null;
 
 function getMessageIdentityLabel(userId){
   if (!userId) return t("messageSenderUnknown");
   if (userId === state.user?.id) return t("messageSenderYou");
+  const mapName = state.map?.userNames?.get?.(userId);
+  if (mapName) return mapName;
   return state.messageIdentityMap.get(userId) || `User ${String(userId).slice(0, 6)}`;
 }
 
@@ -21258,6 +21265,100 @@ function markMessagesRead(){
   if (!latest) return;
   setLastMessageReadAt(state.messageFilter, latest);
   updateMessagesBadge();
+}
+
+function getMessageFilterForRow(msg){
+  return String(msg?.channel || "BOARD").toUpperCase() === "DM" ? "direct" : "board";
+}
+
+function isIncomingMessageForCurrentUser(msg){
+  if (!msg || !state.user?.id) return false;
+  if (String(msg.sender_id || "") === String(state.user.id)) return false;
+  const channel = String(msg.channel || "BOARD").toUpperCase();
+  if (channel === "DM"){
+    return String(msg.recipient_id || "") === String(state.user.id);
+  }
+  if (channel && channel !== "BOARD") return false;
+  const orgId = getMessageOrgId();
+  if (!SpecCom.helpers.isRoot() && msg.org_id && orgId && String(msg.org_id) !== String(orgId)){
+    return false;
+  }
+  return true;
+}
+
+function hideMessagePopup(){
+  if (state.messagePopupTimer){
+    clearTimeout(state.messagePopupTimer);
+    state.messagePopupTimer = 0;
+  }
+  state.messagePopup = null;
+  const popup = $("messagePopup");
+  if (popup) popup.style.display = "none";
+}
+
+function showMessagePopup(msg){
+  const popup = $("messagePopup");
+  if (!popup || !isIncomingMessageForCurrentUser(msg)) return;
+  const filter = getMessageFilterForRow(msg);
+  const modal = $("messagesModal");
+  if (modal && modal.style.display !== "none" && state.messageFilter === filter){
+    return;
+  }
+  const senderEl = $("messagePopupSender");
+  const bodyEl = $("messagePopupBody");
+  const sender = getMessageIdentityLabel(msg.sender_id);
+  const label = filter === "direct" ? `Direct from ${sender}` : `${sender} on Main Board`;
+  const body = String(msg.body || "").replace(/\s+/g, " ").trim() || "Open messages";
+  state.messagePopup = { id: msg.id || "", filter };
+  popup.dataset.filter = filter;
+  popup.dataset.messageId = String(msg.id || "");
+  if (senderEl) senderEl.textContent = label;
+  if (bodyEl) bodyEl.textContent = body.length > 140 ? `${body.slice(0, 137)}...` : body;
+  popup.style.display = "";
+  if (state.messagePopupTimer) clearTimeout(state.messagePopupTimer);
+  state.messagePopupTimer = window.setTimeout(() => {
+    hideMessagePopup();
+  }, MESSAGE_POPUP_VISIBLE_MS);
+}
+
+function openMessagePopupThread(){
+  const popup = $("messagePopup");
+  const filter = popup?.dataset?.filter || state.messagePopup?.filter || "direct";
+  hideMessagePopup();
+  setMessagesFilter(filter === "direct" ? "direct" : "board");
+  openMessagesModal();
+}
+
+async function handleIncomingMessageNotification(msg){
+  if (!isIncomingMessageForCurrentUser(msg)) return;
+  const filter = getMessageFilterForRow(msg);
+  const matchesCurrentFilter = filter === state.messageFilter;
+  if (matchesCurrentFilter){
+    const exists = (state.messages || []).some((row) => String(row?.id || "") === String(msg.id || ""));
+    if (!exists){
+      state.messages = [msg, ...(state.messages || [])].slice(0, 200);
+    }
+    updateMessagesBadge();
+  }
+  showMessagePopup(msg);
+  const modal = $("messagesModal");
+  if (modal && modal.style.display !== "none"){
+    await loadMessages();
+  }
+}
+
+function subscribeMessageNotifications(){
+  if (!state.client || messageNotificationChannel) return;
+  messageNotificationChannel = state.client
+    .channel("message-notifications")
+    .on("postgres_changes", {
+      event: "INSERT",
+      schema: "public",
+      table: "messages",
+    }, (payload) => {
+      void handleIncomingMessageNotification(payload.new);
+    })
+    .subscribe();
 }
 
 async function loadMessages(){
@@ -32500,6 +32601,7 @@ async function postLoginBootstrap(client, user){
       subscribeTeamLocations();
       loadLiveBoard();
       subscribeLiveBoard();
+      subscribeMessageNotifications();
       initLiveBoardUI();
       subscribePresence();
     }, 800);
@@ -33592,6 +33694,10 @@ function wireUI(){
   const messagesCloseBtn = $("btnMessagesClose");
   if (messagesCloseBtn){
     messagesCloseBtn.addEventListener("click", () => closeMessagesModal());
+  }
+  const messagePopup = $("messagePopup");
+  if (messagePopup){
+    messagePopup.addEventListener("click", () => openMessagePopupThread());
   }
   const sendMessageBtn = $("btnSendMessage");
   if (sendMessageBtn){
@@ -35964,6 +36070,7 @@ async function populateLiveBoardRecipients(){
     profiles.forEach(p => {
       const name = p.display_name || "Unknown";
       const shortId = p.id.slice(0, 8) + "…";
+      if (p.id) state.messageIdentityMap.set(p.id, name);
       const opt = document.createElement("option");
       opt.value = p.id;
       opt.textContent = `${name} (${shortId})`;

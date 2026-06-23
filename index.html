@@ -3037,6 +3037,12 @@
       </div>
     </div>
 
+    <button id="messagePopup" class="message-popup" type="button" style="display:none;" aria-live="polite">
+      <span class="message-popup-label">New message</span>
+      <span id="messagePopupSender" class="message-popup-sender">SpecCom</span>
+      <span id="messagePopupBody" class="message-popup-body">Open messages</span>
+    </button>
+
     <div id="menuModal" class="modal" style="display:none;">
       <div class="card modal-card" style="max-width:420px;">
         <div class="modal-header">
@@ -3098,6 +3104,10 @@
           <button id="btnMenuMessages" class="menu-link" type="button">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="3" width="11" height="8" rx="1"/><path d="M4 6h6M4 8.5h4"/></svg>
             Messages
+          </button>
+          <button class="menu-link" type="button" data-view="viewOnboarding">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="1.8" width="10" height="10.5" rx="1.4"/><path d="M4.5 5h5M4.5 7.5h5M4.5 10h3"/><path d="M5 1.8h4"/></svg>
+            Onboarding
           </button>
           <button id="btnMenuSignIn" class="menu-link" type="button" data-i18n="signIn" style="display:none;">Sign in</button>
           <button id="btnMenuSignOut" class="menu-link" type="button" data-i18n="signOut">Sign out</button>

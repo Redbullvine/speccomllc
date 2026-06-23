@@ -2986,6 +2986,48 @@ body.map-create-open .map-floating-places{
   color: var(--muted);
   background: rgba(5,14,7,.45);
 }
+.message-popup{
+  position: fixed;
+  right: 18px;
+  bottom: 88px;
+  z-index: 7200;
+  width: min(360px, calc(100vw - 32px));
+  text-align: left;
+  border: 1px solid rgba(200,169,110,.7);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: rgba(4,12,7,.96);
+  color: rgba(238,248,240,.96);
+  box-shadow: 0 18px 42px rgba(0,0,0,.35);
+  cursor: pointer;
+}
+.message-popup:hover{
+  border-color: #c8a96e;
+  background: rgba(7,20,10,.98);
+}
+.message-popup-label{
+  display:block;
+  color:#c8a96e;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+.message-popup-sender{
+  display:block;
+  margin-top:4px;
+  font-weight:900;
+}
+.message-popup-body{
+  display:block;
+  margin-top:3px;
+  color:rgba(218,235,222,.82);
+  font-size:13px;
+  line-height:1.35;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
 .segmented{
   display:flex;
   gap:8px;
