@@ -1939,6 +1939,96 @@
           </div>
         </section>
 
+        <section id="viewOnboarding" class="view onboarding-view">
+          <div class="onboarding-shell">
+            <div class="onboarding-topbar">
+              <div>
+                <div class="onboarding-kicker">Subcontractor Onboarding</div>
+                <h1>Complete your packet</h1>
+                <p>Finish your profile, upload required documents, sign acknowledgments, and submit for admin review.</p>
+              </div>
+              <button class="btn ghost small" type="button" data-onboarding-action="refresh">Refresh</button>
+            </div>
+
+            <div id="onboardingStatusNotice" class="onboarding-notice"></div>
+
+            <div class="onboarding-progress-card">
+              <div class="row" style="justify-content:space-between; align-items:center;">
+                <div>
+                  <div class="muted small">Packet progress</div>
+                  <strong id="onboardingProgressText">0 of 7 complete</strong>
+                </div>
+                <span id="onboardingStatusBadge" class="onboarding-badge">Draft</span>
+              </div>
+              <div class="onboarding-progress-track" aria-hidden="true">
+                <div id="onboardingProgressBar" class="onboarding-progress-bar" style="width:0%;"></div>
+              </div>
+            </div>
+
+            <div id="onboardingChecklist" class="onboarding-checklist"></div>
+
+            <div class="onboarding-grid">
+              <form id="subcontractorProfileForm" class="onboarding-panel" autocomplete="on">
+                <div class="onboarding-panel-head">
+                  <h2>Profile</h2>
+                  <span class="muted small">Saved as draft until submitted</span>
+                </div>
+                <div class="onboarding-form-grid">
+                  <label>Full name<input id="subFullName" class="input" autocomplete="name" /></label>
+                  <label>Company<input id="subCompanyName" class="input" autocomplete="organization" /></label>
+                  <label>Phone<input id="subPhone" class="input" autocomplete="tel" inputmode="tel" /></label>
+                  <label>Email<input id="subEmail" class="input" autocomplete="email" inputmode="email" /></label>
+                  <label>Address<input id="subAddress1" class="input" autocomplete="address-line1" /></label>
+                  <label>Apt / unit<input id="subAddress2" class="input" autocomplete="address-line2" /></label>
+                  <label>City<input id="subCity" class="input" autocomplete="address-level2" /></label>
+                  <label>State<input id="subState" class="input" autocomplete="address-level1" maxlength="2" /></label>
+                  <label>ZIP<input id="subZip" class="input" autocomplete="postal-code" inputmode="numeric" /></label>
+                  <label>Emergency contact<input id="subEmergencyName" class="input" /></label>
+                  <label>Emergency phone<input id="subEmergencyPhone" class="input" inputmode="tel" /></label>
+                </div>
+                <div class="onboarding-actions">
+                  <button id="btnOnboardingSaveDraft" class="btn secondary" type="button" data-onboarding-action="saveDraft">Save Draft</button>
+                </div>
+              </form>
+
+              <div class="onboarding-panel">
+                <div class="onboarding-panel-head">
+                  <h2>Documents</h2>
+                  <span class="muted small">Private uploads, opened with signed URLs</span>
+                </div>
+                <div id="onboardingDocuments" class="onboarding-doc-list"></div>
+                <input id="subcontractorDocumentInput" type="file" accept="image/*,.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none;" />
+              </div>
+            </div>
+
+            <div class="onboarding-panel">
+              <div class="onboarding-panel-head">
+                <h2>Agreements</h2>
+                <div id="onboardingAgreementTabs" class="onboarding-tabs"></div>
+              </div>
+              <div id="onboardingAgreementContent" class="onboarding-agreement-copy"></div>
+              <label class="onboarding-consent">
+                <input id="onboardingSignatureConsent" type="checkbox" />
+                <span>I agree that my electronic signature has the same effect as a handwritten signature.</span>
+              </label>
+              <label class="onboarding-sign-name">Signer name<input id="onboardingSignerName" class="input" autocomplete="name" /></label>
+              <canvas id="onboardingSignaturePad" class="onboarding-signature-pad" width="720" height="220" aria-label="Signature pad"></canvas>
+              <div class="onboarding-actions">
+                <button class="btn ghost" type="button" data-onboarding-action="clearSignature">Clear</button>
+                <button class="btn secondary" type="button" data-onboarding-action="saveAgreement">Save Signature</button>
+              </div>
+            </div>
+
+            <div class="onboarding-submit-bar">
+              <div>
+                <strong>Ready for review?</strong>
+                <div id="onboardingSubmitHelp" class="muted small">Complete all required cards before submitting.</div>
+              </div>
+              <button id="btnOnboardingSubmit" class="btn" type="button" data-onboarding-action="submit">Submit for Review</button>
+            </div>
+          </div>
+        </section>
+
         <section id="viewTechnician" class="view tech-workspace">
 
           <!-- TOP: Clock bar — always visible, never buried -->
@@ -2760,6 +2850,7 @@
                 <div class="row" style="gap:8px; flex-wrap:wrap;">
                   <button class="btn ghost small" type="button" data-admin-tab="companies">Companies</button>
                   <button class="btn ghost small" type="button" data-admin-tab="users">Users</button>
+                  <button class="btn ghost small" type="button" data-admin-tab="onboarding">Onboarding</button>
                   <button class="btn ghost small" type="button" data-admin-tab="projects">Projects</button>
                 </div>
               </div>
@@ -2985,11 +3076,11 @@
         </div>
         <div class="menu-section">
           <div class="muted small menu-title">Projects</div>
-          <button class="menu-link" type="button" data-view="viewDashboard">
+          <button class="menu-link" type="button" data-view="viewDashboard" data-projects-menu="true">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="4" height="4" rx="0.5"/><rect x="8" y="2" width="4" height="4" rx="0.5"/><rect x="2" y="8" width="4" height="4" rx="0.5"/><rect x="8" y="8" width="4" height="4" rx="0.5"/></svg>
             Active Projects
           </button>
-          <button class="menu-link" type="button" data-view="viewDashboard">
+          <button class="menu-link" type="button" data-view="viewDashboard" data-projects-menu="true">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h10v8H2z"/><path d="M5 2h4v2H5z"/></svg>
             Saved Projects
           </button>

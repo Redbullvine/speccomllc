@@ -37,6 +37,14 @@ const supabaseReady = (async () => {
 
 const AUTHENTICATED_ACCESS_CODE = "AUTHENTICATED";
 const APP_ACCESS_OPTIONS = [AUTHENTICATED_ACCESS_CODE];
+const FIELD_SUBCONTRACTOR_USER_IDS = new Set([
+  "ce9c87b7-4232-48ce-9687-cc15c18dd9e5",
+]);
+const FIELD_SUBCONTRACTOR_ALLOWED_VIEWS = new Set([
+  "viewMap",
+  "viewNodes",
+  "viewPhotos",
+]);
 
 const SHOWCASE_GROUPS = [
   { key: "office", title: "Office", summary: "Invoicing, billing review, reporting, approvals." },
@@ -168,6 +176,21 @@ const state = {
     lastIntroMode: "",
   },
   invoiceFiles: [],
+  onboarding: {
+    profile: null,
+    documents: [],
+    agreements: [],
+    missing: [],
+    loading: false,
+    saving: false,
+    activeAgreementType: "subcontractor_agreement",
+    signaturePadBound: false,
+    signatureDirty: false,
+    adminRows: [],
+    adminDocuments: [],
+    adminAgreements: [],
+    adminLoading: false,
+  },
   pendingSites: [],
   billingLocations: [],
   billingLocation: null,
@@ -487,11 +510,28 @@ function isTds(x){
   return getRoleCode() === "TDS";
 }
 
+function isSubcontractorRole(roleCode = getRoleCode()){
+  const role = String(roleCode || "").trim().toUpperCase();
+  return role === "SUBCONTRACTOR" || role === "SUB";
+}
+
+function isFieldSubcontractorMode(){
+  const userId = String(state.user?.id || state.session?.user?.id || "").trim().toLowerCase();
+  return Boolean(userId && FIELD_SUBCONTRACTOR_USER_IDS.has(userId));
+}
+
+function isOnboardingAdminRole(roleCode = getRoleCode()){
+  const role = String(roleCode || "").trim().toUpperCase();
+  return ["ROOT", "OWNER", "ADMIN", "OFFICE", "SUPPORT"].includes(role);
+}
+
 function formatRoleLabel(roleCode){
   if (!state.user) return "-";
   const labels = {
     ROOT: "Root", OWNER: "Owner", ADMIN: "Admin",
+    OFFICE: "Office", SUPPORT: "Support",
     PRIME: "Prime", TDS: "TDS", SUB: "Sub",
+    SUBCONTRACTOR: "Subcontractor",
     SPLICER: "Splicer", TECHNICIAN: "Technician",
   };
   return labels[String(roleCode || "").toUpperCase()] || roleCode || "Authenticated";
@@ -1258,6 +1298,21 @@ const RUIDOSO_INVOICES_KEY = "speccom.ruidoso.invoices.v1";
 const RUIDOSO_1635CA_PHOTO_ARCHIVE_URL = "./assets/ruidoso_1635ca_photo_links.csv";
 const KMZ_PHOTO_OVERRIDES_KEY_PREFIX = "speccom.kmzPhotoOverrides.";
 const INVOICE_FILES_BUCKET = "invoice-files";
+const SUBCONTRACTOR_DOCUMENTS_BUCKET = "subcontractor-documents";
+const SUBCONTRACTOR_AGREEMENT_VERSION = "2026-06";
+const SUBCONTRACTOR_REQUIRED_DOCUMENTS = [
+  { type: "w9", label: "W-9", detail: "Tax form upload. Do not enter SSN or TIN into SpecCom fields." },
+  { type: "driver_license", label: "Driver License / ID", detail: "Government photo ID or driver license copy." },
+  { type: "insurance_coi", label: "Insurance COI", detail: "Certificate of Insurance naming Spec Com, LLC as additional insured." },
+];
+const SUBCONTRACTOR_OPTIONAL_DOCUMENTS = [
+  { type: "direct_deposit", label: "Direct Deposit", detail: "Optional payment setup document." },
+  { type: "other", label: "Other Packet File", detail: "I-9, bucket truck rental, workers comp exemption, or other admin-requested forms." },
+];
+const SUBCONTRACTOR_REQUIRED_AGREEMENTS = [
+  { type: "subcontractor_agreement", label: "Subcontractor Agreement" },
+  { type: "safety_acknowledgment", label: "Safety / Work Rules" },
+];
 const KMZ_SNAPSHOT_TABLE = "project_kmz_snapshots";
 const KMZ_SNAPSHOT_SAVE_DEBOUNCE_MS = 900;
 const SIDEBAR_MIN_WIDTH = 320;
@@ -2942,6 +2997,12 @@ function hasAuthenticatedSession(){
 function syncMobileBottomNav(viewId){
   const nav = $("mobileBottomNav");
   if (!nav) return;
+  const fieldMode = isFieldSubcontractorMode();
+  const homeBtn = nav.querySelector('button[data-mobile-nav="home"]');
+  const homeLabel = homeBtn?.querySelector("span");
+  if (homeLabel) homeLabel.textContent = fieldMode ? "Projects" : "Home";
+  const timeBtn = nav.querySelector('button[data-mobile-nav="timesheet"]');
+  if (timeBtn) timeBtn.style.display = fieldMode ? "none" : "";
   const activeKey = (() => {
     if (viewId === "viewDashboard") return "home";
     if (viewId === "viewTechnician") return "timesheet";
@@ -2957,6 +3018,12 @@ function setActiveView(viewId, { syncHash = true } = {}){
   if (!CONTROL_CENTER_DEV_MODE && !hasAuthenticatedSession()){
     applySignedOutUi("set-active-view-blocked");
     return;
+  }
+  if (isFieldSubcontractorMode() && !FIELD_SUBCONTRACTOR_ALLOWED_VIEWS.has(viewId)){
+    viewId = "viewMap";
+  }
+  if (isSubcontractorOnboardingLocked() && viewId !== "viewOnboarding"){
+    viewId = "viewOnboarding";
   }
   if (viewId !== "viewWarehouseScan"){
     stopWarehouseScanCamera();
@@ -2975,6 +3042,10 @@ function setActiveView(viewId, { syncHash = true } = {}){
   if (viewId === "viewAdmin"){
     renderAdminWorkspace(_activeAdminTab || "users");
     loadAdminMaterialSettings();
+  }
+  if (viewId === "viewOnboarding"){
+    renderSubcontractorOnboarding();
+    void loadSubcontractorOnboarding();
   }
   if (viewId === "viewTechnician"){
     if (state.features.labor) loadTechnicianTimesheet();
@@ -10204,7 +10275,7 @@ SpecCom.helpers.isRoot = function(){
 
 SpecCom.helpers.isSupport = function(){
   if (isBreakGlassUser()) return true;
-  return ["ROOT", "ADMIN"].includes(getRoleCode());
+  return ["ROOT", "ADMIN", "OFFICE", "SUPPORT"].includes(getRoleCode());
 };
 
 SpecCom.helpers.isPlatformAdmin = function(){
@@ -10223,16 +10294,16 @@ function isOwner(){
 
 function isOwnerOrAdmin(){
   if (isBreakGlassUser()) return true;
-  return ["ROOT", "OWNER", "ADMIN"].includes(getRoleCode());
+  return ["ROOT", "OWNER", "ADMIN", "OFFICE", "SUPPORT"].includes(getRoleCode());
 }
 
 function isPrivilegedRole(roleCode = getRoleCode()){
   if (isBreakGlassUser()) return true;
-  return ["ROOT", "OWNER", "ADMIN", "PRIME"].includes(String(roleCode || "").toUpperCase());
+  return ["ROOT", "OWNER", "ADMIN", "OFFICE", "SUPPORT", "PRIME"].includes(String(roleCode || "").toUpperCase());
 }
 
 function isFieldRole(roleCode = getRoleCode()){
-  return ["TDS", "SUB", "SPLICER", "TECHNICIAN"].includes(String(roleCode || "").toUpperCase());
+  return ["TDS", "SUB", "SUBCONTRACTOR", "SPLICER", "TECHNICIAN"].includes(String(roleCode || "").toUpperCase());
 }
 
 function getShowcaseAccountEmails(){
@@ -10273,7 +10344,7 @@ function canShowModule(moduleKey){
 }
 
 function getProductionAllowedViews(){
-  return new Set(["viewDashboard", "viewTechnician", "viewNodes", "viewPhotos", "viewBilling", "viewInvoices", "viewMap", "viewCatalog", "viewWarehouseScan", "viewAlerts", "viewAdmin", "viewSettings", "viewLabor", "viewDispatch", "viewSupervisor", "viewDailyReport"]);
+  return new Set(["viewDashboard", "viewOnboarding", "viewTechnician", "viewNodes", "viewPhotos", "viewBilling", "viewInvoices", "viewMap", "viewCatalog", "viewWarehouseScan", "viewAlerts", "viewAdmin", "viewSettings", "viewLabor", "viewDispatch", "viewSupervisor", "viewDailyReport"]);
 }
 
 function canViewLabor(){
@@ -10294,6 +10365,734 @@ function canViewInvoiceVault(){
 function canCreateProjects(){
   if (CONTROL_CENTER_DEV_MODE) return true;
   return hasAuthenticatedSession();
+}
+
+function getOnboardingStatus(){
+  return String(state.onboarding?.profile?.onboarding_status || "draft").trim().toLowerCase();
+}
+
+function isSubcontractorOnboardingLocked(){
+  if (isFieldSubcontractorMode()) return false;
+  if (!state.user || !isSubcontractorRole()) return false;
+  return getOnboardingStatus() !== "approved";
+}
+
+function isOnboardingApproved(){
+  return getOnboardingStatus() === "approved";
+}
+
+function normalizeDocumentType(type){
+  const next = String(type || "").trim().toLowerCase();
+  return ["w9", "driver_license", "insurance_coi", "direct_deposit", "other"].includes(next) ? next : "other";
+}
+
+function getOnboardingDocumentConfig(type){
+  const normalized = normalizeDocumentType(type);
+  return [...SUBCONTRACTOR_REQUIRED_DOCUMENTS, ...SUBCONTRACTOR_OPTIONAL_DOCUMENTS]
+    .find((item) => item.type === normalized) || { type: normalized, label: "Other Packet File", detail: "" };
+}
+
+function getAgreementConfig(type){
+  const normalized = String(type || "").trim() || "subcontractor_agreement";
+  return SUBCONTRACTOR_REQUIRED_AGREEMENTS.find((item) => item.type === normalized) || SUBCONTRACTOR_REQUIRED_AGREEMENTS[0];
+}
+
+function getLatestRowsByType(rows, typeField, dateField){
+  const map = new Map();
+  (rows || []).forEach((row) => {
+    const type = String(row?.[typeField] || "").trim();
+    if (!type) return;
+    const prev = map.get(type);
+    const prevTime = prev?.[dateField] ? new Date(prev[dateField]).getTime() : 0;
+    const rowTime = row?.[dateField] ? new Date(row[dateField]).getTime() : 0;
+    if (!prev || rowTime >= prevTime) map.set(type, row);
+  });
+  return map;
+}
+
+function getLatestOnboardingDocument(type, rows = state.onboarding.documents){
+  return getLatestRowsByType(rows, "document_type", "uploaded_at").get(normalizeDocumentType(type)) || null;
+}
+
+function getLatestOnboardingAgreement(type, rows = state.onboarding.agreements){
+  return getLatestRowsByType(rows, "agreement_type", "signed_at").get(String(type || "").trim()) || null;
+}
+
+function isDocumentComplete(type, rows = state.onboarding.documents){
+  const doc = getLatestOnboardingDocument(type, rows);
+  return Boolean(doc && String(doc.status || "uploaded").toLowerCase() !== "rejected");
+}
+
+function isAgreementComplete(type, rows = state.onboarding.agreements){
+  const agreement = getLatestOnboardingAgreement(type, rows);
+  return Boolean(agreement?.accepted_terms && String(agreement?.signature_data || "").trim());
+}
+
+function computeOnboardingChecklist(profile = state.onboarding.profile, documents = state.onboarding.documents, agreements = state.onboarding.agreements){
+  const hasText = (value) => Boolean(String(value || "").trim());
+  const profileComplete = hasText(profile?.full_name) && hasText(profile?.phone) && hasText(profile?.email)
+    && hasText(profile?.address_line1) && hasText(profile?.city) && hasText(profile?.state) && hasText(profile?.zip);
+  const emergencyComplete = hasText(profile?.emergency_contact_name) && hasText(profile?.emergency_contact_phone);
+  return [
+    { key: "profile", label: "Profile and address", complete: profileComplete },
+    { key: "emergency", label: "Emergency contact", complete: emergencyComplete },
+    { key: "w9", label: "W-9 uploaded", complete: isDocumentComplete("w9", documents) },
+    { key: "driver_license", label: "Driver license / ID uploaded", complete: isDocumentComplete("driver_license", documents) },
+    { key: "insurance_coi", label: "Insurance COI uploaded", complete: isDocumentComplete("insurance_coi", documents) },
+    { key: "subcontractor_agreement", label: "Subcontractor agreement signed", complete: isAgreementComplete("subcontractor_agreement", agreements) },
+    { key: "safety_acknowledgment", label: "Safety / work rules signed", complete: isAgreementComplete("safety_acknowledgment", agreements) },
+  ];
+}
+
+function sanitizeStorageFileName(fileName){
+  const raw = String(fileName || "document").trim() || "document";
+  return raw
+    .replace(/[\\/:*?"<>|#%{}~&]+/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 140);
+}
+
+function formatOnboardingStatus(status){
+  const normalized = String(status || "draft").toLowerCase();
+  const labels = {
+    draft: "Draft",
+    submitted: "Submitted",
+    missing_info: "Needs Corrections",
+    approved: "Approved",
+    rejected: "Rejected",
+    uploaded: "Uploaded",
+    accepted: "Accepted",
+    missing: "Missing",
+  };
+  return labels[normalized] || normalized;
+}
+
+function onboardingStatusClass(status){
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "approved" || normalized === "accepted") return "is-good";
+  if (normalized === "submitted" || normalized === "uploaded") return "is-waiting";
+  if (normalized === "missing_info" || normalized === "rejected") return "is-bad";
+  return "";
+}
+
+function getOnboardingProfilePayload(){
+  return {
+    user_id: state.user?.id || null,
+    full_name: String($("subFullName")?.value || "").trim() || null,
+    company_name: String($("subCompanyName")?.value || "").trim() || null,
+    phone: String($("subPhone")?.value || "").trim() || null,
+    email: String($("subEmail")?.value || "").trim() || null,
+    address_line1: String($("subAddress1")?.value || "").trim() || null,
+    address_line2: String($("subAddress2")?.value || "").trim() || null,
+    city: String($("subCity")?.value || "").trim() || null,
+    state: String($("subState")?.value || "").trim().toUpperCase() || null,
+    zip: String($("subZip")?.value || "").trim() || null,
+    emergency_contact_name: String($("subEmergencyName")?.value || "").trim() || null,
+    emergency_contact_phone: String($("subEmergencyPhone")?.value || "").trim() || null,
+  };
+}
+
+function syncOnboardingProfileForm(){
+  const profile = state.onboarding.profile || {};
+  const defaults = {
+    subFullName: profile.full_name || getProfileDisplayName(),
+    subCompanyName: profile.company_name || "",
+    subPhone: profile.phone || "",
+    subEmail: profile.email || state.user?.email || "",
+    subAddress1: profile.address_line1 || "",
+    subAddress2: profile.address_line2 || "",
+    subCity: profile.city || "",
+    subState: profile.state || "",
+    subZip: profile.zip || "",
+    subEmergencyName: profile.emergency_contact_name || "",
+    subEmergencyPhone: profile.emergency_contact_phone || "",
+  };
+  Object.entries(defaults).forEach(([id, value]) => {
+    const el = $(id);
+    if (el && document.activeElement !== el) el.value = value || "";
+  });
+}
+
+function renderOnboardingAgreementCopy(type){
+  const target = $("onboardingAgreementContent");
+  if (!target) return;
+  const agreementType = String(type || state.onboarding.activeAgreementType || "subcontractor_agreement");
+  if (agreementType === "safety_acknowledgment"){
+    target.innerHTML = `
+      <h3>Safety and Work Rules Acknowledgment</h3>
+      <p>I agree to follow Spec Com project safety requirements, customer site rules, traffic control instructions, and all applicable laws while performing field work.</p>
+      <p>I understand that I am responsible for using qualified workers, safe practices, required personal protective equipment, and properly maintained tools and equipment.</p>
+      <p>I will report unsafe conditions, incidents, damage, customer concerns, and work blockers promptly. I will not begin or continue work when conditions are unsafe or outside the approved scope.</p>
+      <p>I will keep project information, customer information, maps, work orders, and operational documents confidential and use them only for approved Spec Com work.</p>
+    `;
+    return;
+  }
+  target.innerHTML = `
+    <h3>Subcontractor Agreement Summary</h3>
+    <p>I understand that I am performing work as an independent subcontractor and not as an employee of Spec Com, LLC.</p>
+    <p>I am responsible for work authorization, business licensing, insurance, qualified labor, safe work practices, tools, equipment, taxes, and compliance with applicable project requirements.</p>
+    <p>I agree to follow safety rules, protect confidential project and customer information, and complete work according to approved written scopes, work orders, and instructions.</p>
+    <p>Payment terms are per approved work order or written agreement. This onboarding flow does not include rate sheets or K&S pricing.</p>
+  `;
+}
+
+function clearOnboardingSignaturePad(){
+  const canvas = $("onboardingSignaturePad");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "rgba(255,255,255,0.96)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = "rgba(16,24,40,0.28)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(28, canvas.height - 44);
+  ctx.lineTo(canvas.width - 28, canvas.height - 44);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(71,85,105,0.65)";
+  ctx.font = "15px system-ui, sans-serif";
+  ctx.fillText("Sign here", 28, canvas.height - 54);
+  state.onboarding.signatureDirty = false;
+}
+
+function bindOnboardingSignaturePad(){
+  const canvas = $("onboardingSignaturePad");
+  if (!canvas || state.onboarding.signaturePadBound) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  state.onboarding.signaturePadBound = true;
+  let drawing = false;
+  const getPoint = (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const source = event.touches?.[0] || event.changedTouches?.[0] || event;
+    return {
+      x: ((source.clientX - rect.left) / rect.width) * canvas.width,
+      y: ((source.clientY - rect.top) / rect.height) * canvas.height,
+    };
+  };
+  const start = (event) => {
+    event.preventDefault();
+    drawing = true;
+    if (!state.onboarding.signatureDirty){
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "rgba(255,255,255,0.96)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    const point = getPoint(event);
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y);
+    state.onboarding.signatureDirty = true;
+  };
+  const move = (event) => {
+    if (!drawing) return;
+    event.preventDefault();
+    const point = getPoint(event);
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#111827";
+    ctx.lineTo(point.x, point.y);
+    ctx.stroke();
+  };
+  const stop = (event) => {
+    if (!drawing) return;
+    event.preventDefault();
+    drawing = false;
+  };
+  canvas.addEventListener("pointerdown", start);
+  canvas.addEventListener("pointermove", move);
+  canvas.addEventListener("pointerup", stop);
+  canvas.addEventListener("pointerleave", stop);
+  canvas.addEventListener("touchstart", start, { passive: false });
+  canvas.addEventListener("touchmove", move, { passive: false });
+  canvas.addEventListener("touchend", stop, { passive: false });
+}
+
+function renderSubcontractorOnboarding(){
+  const shell = $("viewOnboarding");
+  if (!shell) return;
+  bindOnboardingSignaturePad();
+  if (!$("onboardingSignaturePad")?.dataset.ready){
+    const canvas = $("onboardingSignaturePad");
+    if (canvas) canvas.dataset.ready = "true";
+    clearOnboardingSignaturePad();
+  }
+
+  syncOnboardingProfileForm();
+  const profile = state.onboarding.profile || {};
+  const status = getOnboardingStatus();
+  const statusBadge = $("onboardingStatusBadge");
+  if (statusBadge){
+    statusBadge.textContent = formatOnboardingStatus(status);
+    statusBadge.className = `onboarding-badge ${onboardingStatusClass(status)}`;
+  }
+
+  const checklist = computeOnboardingChecklist();
+  const completeCount = checklist.filter((item) => item.complete).length;
+  const progress = checklist.length ? Math.round((completeCount / checklist.length) * 100) : 0;
+  setText("onboardingProgressText", `${completeCount} of ${checklist.length} complete`);
+  const bar = $("onboardingProgressBar");
+  if (bar) bar.style.width = `${progress}%`;
+
+  const notice = $("onboardingStatusNotice");
+  if (notice){
+    const adminNotes = String(profile.admin_notes || "").trim();
+    if (status === "submitted"){
+      notice.innerHTML = `<strong>Submitted for review.</strong><span>Spec Com admin will review your packet before field access is unlocked.</span>`;
+      notice.className = "onboarding-notice is-waiting";
+    } else if (status === "missing_info" || status === "rejected"){
+      notice.innerHTML = `<strong>${status === "rejected" ? "Packet rejected." : "Corrections requested."}</strong><span>${escapeHtml(adminNotes || "Review the highlighted items below and resubmit when ready.")}</span>`;
+      notice.className = "onboarding-notice is-bad";
+    } else if (status === "approved"){
+      notice.innerHTML = `<strong>Approved.</strong><span>Your normal SpecCom access is unlocked.</span>`;
+      notice.className = "onboarding-notice is-good";
+    } else {
+      notice.innerHTML = `<strong>Draft packet.</strong><span>You can save and come back before submitting.</span>`;
+      notice.className = "onboarding-notice";
+    }
+  }
+
+  const checklistWrap = $("onboardingChecklist");
+  if (checklistWrap){
+    checklistWrap.innerHTML = checklist.map((item) => `
+      <div class="onboarding-check-card ${item.complete ? "is-complete" : ""}">
+        <span class="onboarding-check-icon">${item.complete ? "✓" : ""}</span>
+        <span>${escapeHtml(item.label)}</span>
+      </div>
+    `).join("");
+  }
+
+  const docWrap = $("onboardingDocuments");
+  if (docWrap){
+    const renderDoc = (config, required) => {
+      const doc = getLatestOnboardingDocument(config.type);
+      const docStatus = doc ? String(doc.status || "uploaded").toLowerCase() : "missing";
+      const rejected = docStatus === "rejected";
+      return `
+        <div class="onboarding-doc-card ${required ? "is-required" : ""} ${rejected ? "is-rejected" : ""}">
+          <div class="onboarding-doc-main">
+            <div>
+              <div class="onboarding-doc-title">${escapeHtml(config.label)}${required ? " *" : ""}</div>
+              <div class="muted small">${escapeHtml(config.detail || "")}</div>
+              ${doc ? `<div class="muted small">${escapeHtml(doc.file_name || "Uploaded file")} · ${doc.uploaded_at ? escapeHtml(new Date(doc.uploaded_at).toLocaleDateString()) : ""}</div>` : ""}
+              ${doc?.expires_at ? `<div class="muted small">Expires ${escapeHtml(new Date(doc.expires_at).toLocaleDateString())}</div>` : ""}
+              ${rejected && doc?.rejection_reason ? `<div class="onboarding-error">${escapeHtml(doc.rejection_reason)}</div>` : ""}
+            </div>
+            <span class="onboarding-badge ${onboardingStatusClass(docStatus)}">${escapeHtml(doc ? formatOnboardingStatus(docStatus) : "Missing")}</span>
+          </div>
+          <div class="onboarding-doc-actions">
+            <button class="btn secondary small" type="button" data-onboarding-action="chooseDocument" data-doc-type="${escapeHtml(config.type)}">Upload</button>
+            ${doc ? `<button class="btn ghost small" type="button" data-onboarding-action="openDocument" data-doc-id="${escapeHtml(doc.id)}">Open</button>` : ""}
+          </div>
+        </div>
+      `;
+    };
+    docWrap.innerHTML = [
+      ...SUBCONTRACTOR_REQUIRED_DOCUMENTS.map((config) => renderDoc(config, true)),
+      ...SUBCONTRACTOR_OPTIONAL_DOCUMENTS.map((config) => renderDoc(config, false)),
+    ].join("");
+  }
+
+  const tabs = $("onboardingAgreementTabs");
+  if (tabs){
+    tabs.innerHTML = SUBCONTRACTOR_REQUIRED_AGREEMENTS.map((item) => {
+      const signed = isAgreementComplete(item.type);
+      const active = state.onboarding.activeAgreementType === item.type;
+      return `<button class="onboarding-tab ${active ? "is-active" : ""}" type="button" data-onboarding-action="selectAgreement" data-agreement-type="${escapeHtml(item.type)}">${escapeHtml(item.label)}${signed ? " ✓" : ""}</button>`;
+    }).join("");
+  }
+  renderOnboardingAgreementCopy(state.onboarding.activeAgreementType);
+  const signer = $("onboardingSignerName");
+  if (signer && !String(signer.value || "").trim()) signer.value = profile.full_name || getProfileDisplayName();
+  const submitBtn = $("btnOnboardingSubmit");
+  if (submitBtn) submitBtn.disabled = completeCount < checklist.length || status === "submitted";
+  const submitHelp = $("onboardingSubmitHelp");
+  if (submitHelp){
+    const missing = checklist.filter((item) => !item.complete).map((item) => item.label);
+    submitHelp.textContent = missing.length ? `Missing: ${missing.join(", ")}` : (status === "submitted" ? "Your packet is waiting for admin review." : "All required items are complete.");
+  }
+}
+
+async function loadSubcontractorOnboarding({ ensureProfile = true } = {}){
+  if (!state.client || !state.user?.id || isDemo) {
+    renderSubcontractorOnboarding();
+    return;
+  }
+  state.onboarding.loading = true;
+  try{
+    let { data: profile, error: profileError } = await state.client
+      .from("subcontractor_profiles")
+      .select("*")
+      .eq("user_id", state.user.id)
+      .maybeSingle();
+    if (profileError) throw profileError;
+    if (!profile && ensureProfile && isSubcontractorRole()){
+      const payload = {
+        user_id: state.user.id,
+        full_name: getProfileDisplayName(),
+        email: state.user.email || null,
+      };
+      const { data: inserted, error: insertError } = await state.client
+        .from("subcontractor_profiles")
+        .insert(payload)
+        .select("*")
+        .single();
+      if (insertError) throw insertError;
+      profile = inserted;
+    }
+    const [{ data: docs, error: docsError }, { data: agreements, error: agreementsError }] = await Promise.all([
+      state.client.from("subcontractor_documents").select("*").eq("user_id", state.user.id).order("uploaded_at", { ascending: false }),
+      state.client.from("subcontractor_agreements").select("*").eq("user_id", state.user.id).order("signed_at", { ascending: false }),
+    ]);
+    if (docsError) throw docsError;
+    if (agreementsError) throw agreementsError;
+    state.onboarding.profile = profile || null;
+    state.onboarding.documents = docs || [];
+    state.onboarding.agreements = agreements || [];
+  } catch (error){
+    toast("Onboarding load failed", error.message || String(error), "error");
+  } finally {
+    state.onboarding.loading = false;
+    renderSubcontractorOnboarding();
+  }
+}
+
+async function saveSubcontractorDraft({ silent = false } = {}){
+  if (!state.client || !state.user?.id){
+    toast("Onboarding", "Sign in to save your packet.", "error");
+    return false;
+  }
+  const payload = getOnboardingProfilePayload();
+  payload.user_id = state.user.id;
+  state.onboarding.saving = true;
+  const { data, error } = await state.client
+    .from("subcontractor_profiles")
+    .upsert(payload, { onConflict: "user_id" })
+    .select("*")
+    .single();
+  state.onboarding.saving = false;
+  if (error){
+    toast("Draft save failed", error.message || "Could not save onboarding draft.", "error");
+    return false;
+  }
+  state.onboarding.profile = data;
+  renderSubcontractorOnboarding();
+  if (!silent) toast("Draft saved", "Your onboarding packet draft is saved.");
+  return true;
+}
+
+async function uploadSubcontractorDocument(type, file){
+  if (!file || !state.client || !state.user?.id) return;
+  const documentType = normalizeDocumentType(type);
+  const fileName = sanitizeStorageFileName(file.name || "document");
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const filePath = `${state.user.id}/${documentType}/${stamp}-${fileName}`;
+  const { error: uploadError } = await state.client.storage
+    .from(SUBCONTRACTOR_DOCUMENTS_BUCKET)
+    .upload(filePath, file, { upsert: false, contentType: file.type || "application/octet-stream" });
+  if (uploadError){
+    toast("Upload failed", uploadError.message || "Could not upload file.", "error");
+    return;
+  }
+  const { error: insertError } = await state.client
+    .from("subcontractor_documents")
+    .insert({
+      user_id: state.user.id,
+      document_type: documentType,
+      file_path: filePath,
+      file_name: file.name || fileName,
+      mime_type: file.type || null,
+    });
+  if (insertError){
+    toast("Upload saved with warning", insertError.message || "The file uploaded, but the database record failed.", "error");
+    return;
+  }
+  toast("Document uploaded", `${getOnboardingDocumentConfig(documentType).label} was uploaded.`);
+  await loadSubcontractorOnboarding();
+}
+
+async function openSubcontractorDocument(docId){
+  const id = String(docId || "").trim();
+  const allDocs = [...(state.onboarding.documents || []), ...(state.onboarding.adminDocuments || [])];
+  const doc = allDocs.find((item) => String(item?.id || "") === id);
+  if (!doc?.file_path || !state.client){
+    toast("Document unavailable", "The selected document could not be found.", "error");
+    return;
+  }
+  const { data, error } = await state.client.storage
+    .from(SUBCONTRACTOR_DOCUMENTS_BUCKET)
+    .createSignedUrl(doc.file_path, 60 * 5);
+  if (error || !data?.signedUrl){
+    toast("Document unavailable", error?.message || "Could not create a signed link.", "error");
+    return;
+  }
+  window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+}
+
+async function saveSubcontractorAgreement(){
+  if (!state.client || !state.user?.id) return;
+  const type = String(state.onboarding.activeAgreementType || "subcontractor_agreement");
+  const signerName = String($("onboardingSignerName")?.value || "").trim();
+  const acceptedTerms = Boolean($("onboardingSignatureConsent")?.checked);
+  const canvas = $("onboardingSignaturePad");
+  if (!signerName){
+    toast("Signer required", "Enter the signer name before saving.", "error");
+    return;
+  }
+  if (!acceptedTerms){
+    toast("Consent required", "Check the electronic signature consent box.", "error");
+    return;
+  }
+  if (!canvas || !state.onboarding.signatureDirty){
+    toast("Signature required", "Sign in the signature pad before saving.", "error");
+    return;
+  }
+  const signatureData = canvas.toDataURL("image/png");
+  const { error } = await state.client
+    .from("subcontractor_agreements")
+    .insert({
+      user_id: state.user.id,
+      agreement_type: type,
+      agreement_version: SUBCONTRACTOR_AGREEMENT_VERSION,
+      signer_name: signerName,
+      signature_data: signatureData,
+      accepted_terms: true,
+      user_agent: navigator.userAgent || null,
+    });
+  if (error){
+    toast("Signature save failed", error.message || "Could not save agreement.", "error");
+    return;
+  }
+  toast("Agreement saved", `${getAgreementConfig(type).label} signature saved.`);
+  clearOnboardingSignaturePad();
+  await loadSubcontractorOnboarding();
+}
+
+async function submitSubcontractorOnboarding(){
+  const saved = await saveSubcontractorDraft({ silent: true });
+  if (!saved) return;
+  const { data, error } = await state.client.rpc("fn_submit_subcontractor_onboarding");
+  if (error){
+    toast("Submit failed", error.message || "Could not submit onboarding.", "error");
+    return;
+  }
+  if (data && data.ok === false){
+    const missing = Array.isArray(data.missing) ? data.missing.join(", ") : "Required items";
+    toast("Packet incomplete", missing, "error");
+    await loadSubcontractorOnboarding();
+    return;
+  }
+  toast("Submitted", "Your onboarding packet is ready for admin review.");
+  await loadSubcontractorOnboarding();
+}
+
+async function refreshOnboardingStatus(){
+  await loadSubcontractorOnboarding();
+  if (isSubcontractorRole() && isOnboardingApproved()){
+    toast("Onboarding approved", "Normal SpecCom access is unlocked.");
+    window.location.hash = "#home";
+    window.location.reload();
+  }
+}
+
+function handleOnboardingAction(action, target){
+  if (!action) return;
+  if (action === "refresh") return void refreshOnboardingStatus();
+  if (action === "saveDraft") return void saveSubcontractorDraft();
+  if (action === "submit") return void submitSubcontractorOnboarding();
+  if (action === "clearSignature") return clearOnboardingSignaturePad();
+  if (action === "saveAgreement") return void saveSubcontractorAgreement();
+  if (action === "selectAgreement"){
+    state.onboarding.activeAgreementType = String(target?.dataset?.agreementType || "subcontractor_agreement");
+    clearOnboardingSignaturePad();
+    renderSubcontractorOnboarding();
+    return;
+  }
+  if (action === "chooseDocument"){
+    const input = $("subcontractorDocumentInput");
+    if (!input) return;
+    input.dataset.docType = normalizeDocumentType(target?.dataset?.docType || "other");
+    input.value = "";
+    input.click();
+    return;
+  }
+  if (action === "openDocument"){
+    void openSubcontractorDocument(target?.dataset?.docId);
+  }
+}
+
+function groupOnboardingRowsByUser(rows){
+  const map = new Map();
+  (rows || []).forEach((row) => {
+    const userId = String(row?.user_id || "");
+    if (!userId) return;
+    if (!map.has(userId)) map.set(userId, []);
+    map.get(userId).push(row);
+  });
+  return map;
+}
+
+async function loadAdminOnboarding(){
+  if (!state.client || !state.user?.id || !isOnboardingAdminRole()){
+    renderAdminOnboarding();
+    return;
+  }
+  state.onboarding.adminLoading = true;
+  renderAdminOnboarding();
+  try{
+    const [profilesResult, docsResult, agreementsResult] = await Promise.all([
+      state.client.from("subcontractor_profiles").select("*").order("submitted_at", { ascending: false, nullsFirst: false }),
+      state.client.from("subcontractor_documents").select("*").order("uploaded_at", { ascending: false }),
+      state.client.from("subcontractor_agreements").select("*").order("signed_at", { ascending: false }),
+    ]);
+    if (profilesResult.error) throw profilesResult.error;
+    if (docsResult.error) throw docsResult.error;
+    if (agreementsResult.error) throw agreementsResult.error;
+    state.onboarding.adminRows = profilesResult.data || [];
+    state.onboarding.adminDocuments = docsResult.data || [];
+    state.onboarding.adminAgreements = agreementsResult.data || [];
+  } catch (error){
+    toast("Onboarding review failed", error.message || String(error), "error");
+  } finally {
+    state.onboarding.adminLoading = false;
+    renderAdminOnboarding();
+  }
+}
+
+function renderAdminOnboarding(){
+  const wrap = $("adminOnboardingList");
+  if (!wrap) return;
+  if (!isOnboardingAdminRole()){
+    wrap.innerHTML = `<div class="card"><div class="muted small">Admin or office access required.</div></div>`;
+    return;
+  }
+  if (state.onboarding.adminLoading){
+    wrap.innerHTML = `<div class="card"><div class="muted small">Loading onboarding submissions...</div></div>`;
+    return;
+  }
+  const rows = state.onboarding.adminRows || [];
+  if (!rows.length){
+    wrap.innerHTML = `<div class="card"><div class="muted small">No subcontractor onboarding packets found.</div></div>`;
+    return;
+  }
+  const docsByUser = groupOnboardingRowsByUser(state.onboarding.adminDocuments || []);
+  const agreementsByUser = groupOnboardingRowsByUser(state.onboarding.adminAgreements || []);
+  wrap.innerHTML = rows.map((profile) => {
+    const docs = docsByUser.get(profile.user_id) || [];
+    const agreements = agreementsByUser.get(profile.user_id) || [];
+    const checklist = computeOnboardingChecklist(profile, docs, agreements);
+    const missing = checklist.filter((item) => !item.complete).map((item) => item.label);
+    const status = String(profile.onboarding_status || "draft").toLowerCase();
+    const submitted = profile.submitted_at ? new Date(profile.submitted_at).toLocaleString() : "Not submitted";
+    const docMap = getLatestRowsByType(docs, "document_type", "uploaded_at");
+    const renderAdminDoc = (config) => {
+      const doc = docMap.get(config.type);
+      const docStatus = doc ? String(doc.status || "uploaded").toLowerCase() : "missing";
+      return `
+        <div class="admin-onboarding-doc">
+          <div>
+            <strong>${escapeHtml(config.label)}</strong>
+            <div class="muted small">${doc ? escapeHtml(doc.file_name || "Uploaded file") : "Not uploaded"}</div>
+            ${doc?.rejection_reason ? `<div class="onboarding-error">${escapeHtml(doc.rejection_reason)}</div>` : ""}
+            ${doc?.expires_at ? `<div class="muted small">Expires ${escapeHtml(new Date(doc.expires_at).toLocaleDateString())}</div>` : ""}
+          </div>
+          <div class="admin-onboarding-doc-actions">
+            <span class="onboarding-badge ${onboardingStatusClass(docStatus)}">${escapeHtml(doc ? formatOnboardingStatus(docStatus) : "Missing")}</span>
+            ${doc ? `<button class="btn ghost small" type="button" data-onboarding-admin-action="openDoc" data-doc-id="${escapeHtml(doc.id)}">Open</button>` : ""}
+            ${doc ? `<button class="btn secondary small" type="button" data-onboarding-admin-action="acceptDoc" data-doc-id="${escapeHtml(doc.id)}">Accept</button>` : ""}
+            ${doc ? `<button class="btn danger small" type="button" data-onboarding-admin-action="rejectDoc" data-doc-id="${escapeHtml(doc.id)}">Reject</button>` : ""}
+            ${doc && config.type === "insurance_coi" ? `<input class="input compact" type="date" data-insurance-exp-doc="${escapeHtml(doc.id)}" value="${escapeHtml(doc.expires_at || "")}" /><button class="btn ghost small" type="button" data-onboarding-admin-action="saveExpiry" data-doc-id="${escapeHtml(doc.id)}">Save Exp.</button>` : ""}
+          </div>
+        </div>
+      `;
+    };
+    return `
+      <article class="admin-onboarding-card" data-admin-onboarding-user="${escapeHtml(profile.user_id)}">
+        <div class="admin-onboarding-head">
+          <div>
+            <h3>${escapeHtml(profile.full_name || "Unnamed subcontractor")}</h3>
+            <div class="muted small">${escapeHtml(profile.company_name || "No company")} · ${escapeHtml(profile.phone || "No phone")} · ${escapeHtml(profile.email || "No email")}</div>
+            <div class="muted small">Submitted: ${escapeHtml(submitted)}</div>
+          </div>
+          <span class="onboarding-badge ${onboardingStatusClass(status)}">${escapeHtml(formatOnboardingStatus(status))}</span>
+        </div>
+        ${missing.length ? `<div class="onboarding-error">Missing: ${escapeHtml(missing.join(", "))}</div>` : `<div class="onboarding-ok">All required items are present.</div>`}
+        <div class="admin-onboarding-docs">
+          ${SUBCONTRACTOR_REQUIRED_DOCUMENTS.map(renderAdminDoc).join("")}
+          ${SUBCONTRACTOR_OPTIONAL_DOCUMENTS.map(renderAdminDoc).join("")}
+        </div>
+        <label class="admin-onboarding-notes">Admin notes
+          <textarea class="input" rows="3" data-admin-onboarding-notes="${escapeHtml(profile.user_id)}">${escapeHtml(profile.admin_notes || "")}</textarea>
+        </label>
+        <div class="admin-onboarding-actions">
+          <button class="btn secondary" type="button" data-onboarding-admin-action="requestCorrection" data-user-id="${escapeHtml(profile.user_id)}">Request Correction</button>
+          <button class="btn danger" type="button" data-onboarding-admin-action="rejectPacket" data-user-id="${escapeHtml(profile.user_id)}">Reject</button>
+          <button class="btn" type="button" data-onboarding-admin-action="approvePacket" data-user-id="${escapeHtml(profile.user_id)}" ${missing.length ? "disabled" : ""}>Approve</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+async function reviewSubcontractorDocument(docId, status, { reason = null, expiresAt = null } = {}){
+  if (!state.client || !docId) return;
+  const { error } = await state.client.rpc("fn_review_subcontractor_document", {
+    p_document_id: docId,
+    p_status: status,
+    p_rejection_reason: reason,
+    p_expires_at: expiresAt || null,
+  });
+  if (error){
+    toast("Document review failed", error.message || "Could not review document.", "error");
+    return;
+  }
+  toast("Document updated", "Document review status saved.");
+  await loadAdminOnboarding();
+}
+
+async function setSubcontractorPacketStatus(userId, status){
+  if (!state.client || !userId) return;
+  const notes = String(document.querySelector(`[data-admin-onboarding-notes="${CSS.escape(userId)}"]`)?.value || "").trim();
+  if ((status === "missing_info" || status === "rejected") && !notes){
+    toast("Admin notes required", "Add notes so the subcontractor knows what to fix.", "error");
+    return;
+  }
+  const { error } = await state.client.rpc("fn_set_subcontractor_onboarding_status", {
+    p_user_id: userId,
+    p_status: status,
+    p_admin_notes: notes || null,
+  });
+  if (error){
+    toast("Status update failed", error.message || "Could not update onboarding status.", "error");
+    return;
+  }
+  toast("Onboarding updated", `Packet marked ${formatOnboardingStatus(status)}.`);
+  await loadAdminOnboarding();
+}
+
+function handleAdminOnboardingAction(action, target){
+  if (!action) return;
+  const docId = target?.dataset?.docId || "";
+  const userId = target?.dataset?.userId || "";
+  if (action === "refreshAdmin") return void loadAdminOnboarding();
+  if (action === "openDoc") return void openSubcontractorDocument(docId);
+  if (action === "acceptDoc") return void reviewSubcontractorDocument(docId, "accepted");
+  if (action === "rejectDoc"){
+    const reason = prompt("Reason for rejection?");
+    if (reason === null) return;
+    return void reviewSubcontractorDocument(docId, "rejected", { reason });
+  }
+  if (action === "saveExpiry"){
+    const input = document.querySelector(`[data-insurance-exp-doc="${CSS.escape(docId)}"]`);
+    const expiresAt = String(input?.value || "").trim() || null;
+    const doc = (state.onboarding.adminDocuments || []).find((item) => String(item.id) === String(docId));
+    return void reviewSubcontractorDocument(docId, String(doc?.status || "uploaded"), { expiresAt });
+  }
+  if (action === "approvePacket") return void setSubcontractorPacketStatus(userId, "approved");
+  if (action === "requestCorrection") return void setSubcontractorPacketStatus(userId, "missing_info");
+  if (action === "rejectPacket") return void setSubcontractorPacketStatus(userId, "rejected");
 }
 
 const DEMO_CINEMATIC_SESSION_KEY = "speccom_demo_cinematic_intro";
@@ -10695,10 +11494,16 @@ function initSplash() {
 
 function parseViewFromHash(hashValue = window.location.hash){
   const raw = String(hashValue || "").trim();
-  if (!raw || raw === "#") return null;
-  const normalized = raw.startsWith("#") ? raw.slice(1) : raw;
-  const routeToken = normalized.split(/[?&]/)[0].trim().toLowerCase();
+  const pathRoute = String(window.location.pathname || "").replace(/^\/+|\/+$/g, "").trim();
+  if ((!raw || raw === "#") && !pathRoute) return null;
+  const normalized = raw && raw !== "#" ? (raw.startsWith("#") ? raw.slice(1) : raw) : pathRoute;
+  const routeToken = normalized.split(/[?&]/)[0].replace(/^\/+|\/+$/g, "").trim().toLowerCase();
   if (!routeToken) return null;
+  if (routeToken === "onboarding" || routeToken === "viewonboarding") return "viewOnboarding";
+  if (routeToken === "admin/onboarding" || routeToken === "admin-onboarding"){
+    _activeAdminTab = "onboarding";
+    return "viewAdmin";
+  }
   if (routeToken === "map" || routeToken === "viewmap") return "viewMap";
   if (routeToken === "splicer") return "viewMap";
   if (routeToken === "redline") return "viewMap";
@@ -10718,6 +11523,8 @@ function syncHashForView(viewId){
   let nextHash = "";
   if (viewId === "viewMap"){
     nextHash = "#map";
+  } else if (viewId === "viewOnboarding"){
+    nextHash = "#onboarding";
   } else if (viewId === "viewDashboard"){
     nextHash = "#home";
   } else if (viewId === "viewTechnician"){
@@ -10732,7 +11539,7 @@ function syncHashForView(viewId){
   } else if (viewId === "viewSupervisor"){
     nextHash = "#supervisor";
   } else if (viewId === "viewAdmin"){
-    nextHash = "#admin";
+    nextHash = _activeAdminTab === "onboarding" ? "#admin/onboarding" : "#admin";
   } else {
     return;
   }
@@ -11074,6 +11881,7 @@ function clearInvoiceDeepLinkUrl(){
 
 function getDefaultView({ allowHash = false } = {}){
   if (CONTROL_CENTER_DEV_MODE) return "viewDashboard";
+  if (isSubcontractorOnboardingLocked()) return "viewOnboarding";
   if (getInvoiceIdFromUrl() && isViewAllowed("viewInvoices")) return "viewInvoices";
   if (allowHash){
     const hashView = parseViewFromHash();
@@ -11087,6 +11895,12 @@ function getDefaultView({ allowHash = false } = {}){
 function isViewAllowed(viewId){
   if (CONTROL_CENTER_DEV_MODE){
     return true;
+  }
+  if (isSubcontractorOnboardingLocked()){
+    return viewId === "viewOnboarding";
+  }
+  if (isFieldSubcontractorMode()){
+    return FIELD_SUBCONTRACTOR_ALLOWED_VIEWS.has(viewId);
   }
   if (isDemoShowcaseMode()){
     return true;
@@ -12067,6 +12881,7 @@ function updateKPI(){
 }
 
 function setRoleBasedVisibility(){
+  const fieldMode = isFieldSubcontractorMode();
   document.querySelectorAll(".nav-item").forEach((btn) => {
     const viewId = btn.dataset.view;
     btn.style.display = isViewAllowed(viewId) ? "" : "none";
@@ -12080,7 +12895,15 @@ function setRoleBasedVisibility(){
   document.querySelectorAll(".menu-link[data-view]").forEach((btn) => {
     const viewId = btn.dataset.view;
     if (!viewId) return;
-    btn.style.display = isViewAllowed(viewId) ? "" : "none";
+    const keepProjectShortcut = fieldMode && btn.dataset.projectsMenu === "true";
+    btn.style.display = (keepProjectShortcut || isViewAllowed(viewId)) ? "" : "none";
+  });
+  document.querySelectorAll('[data-ws-key="drop_crew"]').forEach((el) => {
+    if (fieldMode) el.style.display = "none";
+  });
+  ["nav-scanner-btn", "nav-workpkg-btn"].forEach((id) => {
+    const el = $(id);
+    if (el) el.style.display = fieldMode ? "none" : "";
   });
   syncDemoFeatureHubVisibility();
   renderDemoShowcaseHome();
@@ -17848,6 +18671,7 @@ function syncDemoLoginButton(){
 function setWhoami(){
   const authed = isDemo || Boolean(state.user);
   const shellVisible = authed || CONTROL_CENTER_DEV_MODE;
+  const onboardingLocked = isSubcontractorOnboardingLocked();
   const signInTopBtn = $("btnSignInTop");
   if (signInTopBtn) signInTopBtn.style.display = authed ? "none" : "";
   const signOutBtn = $("btnSignOut");
@@ -17858,14 +18682,14 @@ function setWhoami(){
   if (menuSignOutBtn) menuSignOutBtn.style.display = authed ? "" : "none";
   ["btnHome", "btnProjects", "btnMenu", "btnOpenProjects", "btnMapToggle"].forEach((id) => {
     const el = $(id);
-    if (el) el.style.display = shellVisible ? "" : "none";
+    if (el) el.style.display = shellVisible && !onboardingLocked ? "" : "none";
   });
   const timesheetBtn = $("btnTimesheet");
-  if (timesheetBtn) timesheetBtn.style.display = shellVisible && isViewAllowed("viewTechnician") ? "" : "none";
+  if (timesheetBtn) timesheetBtn.style.display = shellVisible && !onboardingLocked && isViewAllowed("viewTechnician") ? "" : "none";
   const messagesBtn = $("btnMessages");
-  if (messagesBtn) messagesBtn.style.display = shellVisible && state.messagesEnabled && state.features.messages ? "" : "none";
+  if (messagesBtn) messagesBtn.style.display = shellVisible && !onboardingLocked && state.messagesEnabled && state.features.messages ? "" : "none";
   const menuMessagesBtn = $("btnMenuMessages");
-  if (menuMessagesBtn) menuMessagesBtn.style.display = shellVisible && state.messagesEnabled && state.features.messages ? "" : "none";
+  if (menuMessagesBtn) menuMessagesBtn.style.display = shellVisible && !onboardingLocked && state.messagesEnabled && state.features.messages ? "" : "none";
   syncDemoLoginButton();
   syncDemoFeatureHubVisibility();
   renderDemoShowcaseHome();
@@ -20824,6 +21648,19 @@ async function loadProjects(){
     }
   }
 
+  if (isFieldSubcontractorMode()){
+    const { data: fieldProjects, error: fieldProjectsError } = await state.client
+      .from("projects")
+      .select(baseSelect)
+      .order("name");
+    if (!fieldProjectsError && Array.isArray(fieldProjects)){
+      const existing = new Set(projects.map(p => p.id));
+      fieldProjects.forEach((row) => {
+        if (row?.id && !existing.has(row.id)) projects.push(row);
+      });
+    }
+  }
+
   const uniqueProjects = [];
   const seen = new Set();
   (projects || []).forEach((row) => {
@@ -21171,7 +22008,7 @@ function renderAdminProfiles(){
     return;
   }
   const isRoot = SpecCom.helpers.isRoot();
-  const ALL_ROLES = ["SPLICER","TECHNICIAN","SUB","TDS","PRIME","ADMIN","OWNER"];
+  const ALL_ROLES = ["SPLICER","TECHNICIAN","SUB","SUBCONTRACTOR","TDS","PRIME","OFFICE","ADMIN","OWNER"];
   if (isRoot) ALL_ROLES.push("ROOT");
 
   // Build org name lookup from state.orgs
@@ -21234,7 +22071,7 @@ function renderAdminWorkspace(tab){
   const isRoot = SpecCom.helpers.isRoot();
 
   if (_activeAdminTab === "users"){
-    const ALL_ROLES_INVITE = ["SPLICER","TECHNICIAN","SUB","TDS","PRIME","ADMIN","OWNER"];
+    const ALL_ROLES_INVITE = ["SPLICER","TECHNICIAN","SUB","SUBCONTRACTOR","TDS","PRIME","OFFICE","ADMIN","OWNER"];
     if (isRoot) ALL_ROLES_INVITE.push("ROOT");
     body.innerHTML = `
       ${!canManageUsers ? `<div id="adminBuildGate" class="card"><div class="muted small">Admin access required to manage users.</div></div>` : ""}
@@ -21292,6 +22129,22 @@ function renderAdminWorkspace(tab){
       </div>
     `;
     renderAdminProjectsList();
+  } else if (_activeAdminTab === "onboarding"){
+    body.innerHTML = `
+      <div class="admin-onboarding-shell">
+        <div class="card">
+          <div class="row" style="justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+            <div>
+              <h3 style="margin:0;">Subcontractor Onboarding</h3>
+              <div class="muted small" style="margin-top:6px;">Review submitted packets, documents, corrections, and approval status.</div>
+            </div>
+            <button class="btn ghost small" type="button" data-onboarding-admin-action="refreshAdmin">Refresh</button>
+          </div>
+        </div>
+        <div id="adminOnboardingList" class="admin-onboarding-list"></div>
+      </div>
+    `;
+    loadAdminOnboarding();
   }
 }
 
@@ -31543,6 +32396,14 @@ async function postLoginBootstrap(client, user){
     console.log("[auth-redirect] early exit to restored route");
   }
   await loadProfile(client, state.user?.id);
+  if (isSubcontractorRole() && !isFieldSubcontractorMode()){
+    await loadSubcontractorOnboarding({ ensureProfile: true });
+    if (isSubcontractorOnboardingLocked()){
+      setActiveView("viewOnboarding");
+      setWhoami();
+      return;
+    }
+  }
   if (state.user){
     if (!pendingRedirect){
       console.info("[auth-redirect] fallback to home");
@@ -31624,7 +32485,7 @@ async function postLoginBootstrap(client, user){
     }
     if (!_postLoginBootstrapDone) {
       _postLoginBootstrapDone = true;
-      setActiveView(getDefaultView());
+      setActiveView(getDefaultView({ allowHash: true }));
       const _wsIntent = sessionStorage.getItem("sc_workspace_intent");
       if (_wsIntent) {
         sessionStorage.removeItem("sc_workspace_intent");
@@ -31802,6 +32663,24 @@ function wireUI(){
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.addEventListener("click", () => setActiveView(btn.dataset.view));
   });
+  const onboardingView = $("viewOnboarding");
+  if (onboardingView){
+    onboardingView.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-onboarding-action]");
+      if (!btn) return;
+      handleOnboardingAction(btn.dataset.onboardingAction, btn);
+    });
+  }
+  const onboardingDocInput = $("subcontractorDocumentInput");
+  if (onboardingDocInput){
+    onboardingDocInput.addEventListener("change", async () => {
+      const file = onboardingDocInput.files?.[0] || null;
+      const type = onboardingDocInput.dataset.docType || "other";
+      if (!file) return;
+      await uploadSubcontractorDocument(type, file);
+      onboardingDocInput.value = "";
+    });
+  }
   syncDispatchStatusFilter();
 
   const nodeCards = $("nodeCards");
@@ -31895,6 +32774,14 @@ function wireUI(){
       } else if (action === "adminDeleteUser"){
         deleteAdminProfile(id);
       }
+    });
+  }
+  const adminWorkspaceBody = $("adminWorkspaceBody");
+  if (adminWorkspaceBody){
+    adminWorkspaceBody.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-onboarding-admin-action]");
+      if (!btn) return;
+      handleAdminOnboardingAction(btn.dataset.onboardingAdminAction, btn);
     });
   }
 
@@ -32227,6 +33114,10 @@ function wireUI(){
       if (!btn || !mobileBottomNav.contains(btn)) return;
       const target = String(btn.dataset.mobileNav || "");
       if (target === "home"){
+        if (isFieldSubcontractorMode()){
+          openProjectsModal();
+          return;
+        }
         if (isViewAllowed("viewDashboard")) setActiveView("viewDashboard");
         return;
       }
@@ -32532,7 +33423,12 @@ function wireUI(){
 
   // Admin workspace tab buttons (static buttons in index.html)
   document.querySelectorAll("[data-admin-tab]").forEach((btn) => {
-    btn.addEventListener("click", () => renderAdminWorkspace(btn.dataset.adminTab));
+    btn.addEventListener("click", () => {
+      renderAdminWorkspace(btn.dataset.adminTab);
+      if ((document.querySelector(".view.active")?.id || "") === "viewAdmin"){
+        syncHashForView("viewAdmin");
+      }
+    });
   });
 
   const btnAdminCreate = $("btnAdminCreateUser");
@@ -32846,6 +33742,11 @@ function wireUI(){
   }
   document.querySelectorAll(".menu-link").forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (isFieldSubcontractorMode() && btn.dataset.projectsMenu === "true"){
+        closeMenuModal();
+        openProjectsModal();
+        return;
+      }
       const viewId = btn.dataset.view;
       if (!viewId) return;
       if (!isViewAllowed(viewId)) return;

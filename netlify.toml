@@ -18,6 +18,16 @@
   status = 200
   force = true
 
+[[redirects]]
+  from = "/onboarding"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/admin/onboarding"
+  to = "/index.html"
+  status = 200
+
 [[headers]]
   for = "/*"
   [headers.values]
