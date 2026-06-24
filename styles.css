@@ -6996,6 +6996,41 @@ body.map-mode #map-float-panel #btnImportLocations{
   color:rgba(223,236,250,0.88);
   font-size:11px;
 }
+#map-float-panel .btn,
+body.map-mode #map-float-panel .btn{
+  color:#eaf2ff;
+}
+#map-float-panel .btn.secondary,
+body.map-mode #map-float-panel .btn.secondary{
+  background:#f8fafc;
+  border-color:rgba(15,23,42,0.22);
+  color:#0f172a;
+}
+#map-float-panel .btn.ghost,
+body.map-mode #map-float-panel .btn.ghost{
+  background:rgba(4,10,16,0.44);
+  border-color:rgba(125,170,220,0.28);
+  color:#dbeafe;
+}
+#map-float-panel .btn:disabled,
+body.map-mode #map-float-panel .btn:disabled{
+  opacity:0.82;
+  color:#334155;
+  -webkit-text-fill-color:#334155;
+}
+#map-float-panel .btn.secondary:disabled,
+body.map-mode #map-float-panel .btn.secondary:disabled{
+  background:#f8fafc;
+  border-color:rgba(15,23,42,0.16);
+  color:#334155;
+  -webkit-text-fill-color:#334155;
+}
+#map-float-panel .btn.ghost:disabled,
+body.map-mode #map-float-panel .btn.ghost:disabled{
+  background:rgba(15,23,42,0.36);
+  color:#b9cce4;
+  -webkit-text-fill-color:#b9cce4;
+}
 #map-float-panel .sidebar-tabs,
 body.map-mode #map-float-panel .sidebar-tabs{
   display:flex;
@@ -7010,13 +7045,15 @@ body.map-mode #map-float-panel .sidebar-tabs .btn{
   padding:5px 10px;
   border-radius:8px;
   border-color:rgba(125,170,220,0.18);
-  color:rgba(190,215,245,0.72);
+  color:#dbeafe;
+  -webkit-text-fill-color:#dbeafe;
 }
 #map-float-panel .sidebar-tabs .btn.is-active,
 body.map-mode #map-float-panel .sidebar-tabs .btn.is-active{
   background:rgba(29,122,69,0.18);
   border-color:rgba(120,188,245,0.42);
   color:#f8fbff;
+  -webkit-text-fill-color:#f8fbff;
 }
 #map-float-panel .sidebar-body,
 body.map-mode #map-float-panel .sidebar-body{
@@ -7057,6 +7094,19 @@ body.map-mode #map-float-panel #kmzTreeSearch{
 #map-float-panel #btnKmzTreeSearch{
   min-height:40px;
   border-radius:10px;
+}
+#map-float-panel #btnKmzTreeSearch,
+#map-float-panel #btnMapUseMyLocation,
+#map-float-panel #btnMapShowCreateLocation,
+#map-float-panel #btnMapOpenNearbyLocation,
+#map-float-panel #btnMapAddToNearbyLocation,
+body.map-mode #map-float-panel #btnKmzTreeSearch,
+body.map-mode #map-float-panel #btnMapUseMyLocation,
+body.map-mode #map-float-panel #btnMapShowCreateLocation,
+body.map-mode #map-float-panel #btnMapOpenNearbyLocation,
+body.map-mode #map-float-panel #btnMapAddToNearbyLocation{
+  font-weight:900;
+  text-shadow:none;
 }
 #map-float-panel .kmz-tree,
 body.map-mode #map-float-panel .kmz-tree{
