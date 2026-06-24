@@ -8402,3 +8402,335 @@ body.field-subcontractor-mode .liveboard {
 .onboarding-sign-name .input {
   min-height: 44px;
 }
+
+/* App-wide form contrast safety net */
+:root {
+  --form-light-bg: #ffffff;
+  --form-light-text: #0f172a;
+  --form-light-placeholder: #64748b;
+  --form-light-disabled-bg: #f8fafc;
+  --form-light-disabled-text: #334155;
+  --form-light-border: #94a3b8;
+  --form-dark-bg: rgba(7, 18, 24, 0.84);
+  --form-dark-text: #f8fafc;
+  --form-dark-placeholder: #94a3b8;
+  --form-dark-disabled-bg: rgba(15, 23, 42, 0.72);
+  --form-dark-disabled-text: #cbd5e1;
+  --form-dark-border: rgba(148, 163, 184, 0.42);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+textarea,
+select,
+.input,
+.form-control {
+  color: var(--form-light-text) !important;
+  background-color: var(--form-light-bg) !important;
+  border-color: var(--form-light-border) !important;
+  caret-color: var(--form-light-text) !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+input::placeholder,
+textarea::placeholder,
+.input::placeholder,
+.form-control::placeholder {
+  color: var(--form-light-placeholder) !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: var(--form-light-placeholder) !important;
+}
+
+select,
+select option {
+  color: var(--form-light-text) !important;
+  background-color: var(--form-light-bg) !important;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):disabled,
+textarea:disabled,
+select:disabled,
+.input:disabled,
+.form-control:disabled,
+input[readonly],
+textarea[readonly],
+select[readonly],
+.input[readonly],
+.form-control[readonly] {
+  color: var(--form-light-disabled-text) !important;
+  background-color: var(--form-light-disabled-bg) !important;
+  border-color: #cbd5e1;
+  opacity: 1;
+  -webkit-text-fill-color: var(--form-light-disabled-text) !important;
+}
+
+input:-webkit-autofill,
+textarea:-webkit-autofill,
+select:-webkit-autofill,
+.input:-webkit-autofill,
+.form-control:-webkit-autofill {
+  -webkit-text-fill-color: var(--form-light-text) !important;
+  caret-color: var(--form-light-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--form-light-bg) inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+.btn,
+button.btn,
+.btn-primary,
+.btn-secondary {
+  -webkit-text-fill-color: currentColor;
+}
+
+.btn.secondary,
+.btn.btn-secondary,
+.btn-secondary {
+  color: #334155 !important;
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+.btn.ghost {
+  color: #334155 !important;
+}
+
+.btn:disabled,
+button:disabled,
+.btn.disabled,
+[aria-disabled="true"].btn {
+  opacity: 0.82;
+  cursor: not-allowed;
+  -webkit-text-fill-color: currentColor;
+}
+
+.btn.secondary:disabled,
+.btn.ghost:disabled,
+.btn.btn-secondary:disabled,
+.btn-secondary:disabled {
+  color: var(--form-light-disabled-text) !important;
+  background: var(--form-light-disabled-bg) !important;
+  border-color: #cbd5e1 !important;
+  opacity: 1;
+}
+
+.modal-card label,
+.card label,
+.field-stack label,
+.map-panel label,
+.map-field-create label,
+.map-details-drawer label {
+  color: var(--form-light-disabled-text);
+}
+
+:where(
+  .auth-card,
+  .sidebar,
+  .sidebar-card,
+  .gis-sidebar,
+  .map-panel,
+  .map-field-panel,
+  #map-float-panel,
+  #messagesModal,
+  .msg-modal-card,
+  #menuModal,
+  #techCloseoutModal,
+  .field-ops-studio,
+  .liveboard,
+  .message-popup,
+  .upload-center,
+  body.map-mode,
+  body.theme-light .card,
+  body.theme-light .modal-card
+) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select, .input, .form-control) {
+  color: var(--form-dark-text) !important;
+  background-color: var(--form-dark-bg) !important;
+  border-color: var(--form-dark-border) !important;
+  caret-color: var(--form-dark-text) !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+:where(.auth-card, .sidebar, .sidebar-card, .gis-sidebar, .map-panel, .map-field-panel, #map-float-panel, #messagesModal, .msg-modal-card, #menuModal, #techCloseoutModal, .field-ops-studio, .liveboard, .message-popup, .upload-center, body.map-mode, body.theme-light .card, body.theme-light .modal-card) input::placeholder,
+:where(.auth-card, .sidebar, .sidebar-card, .gis-sidebar, .map-panel, .map-field-panel, #map-float-panel, #messagesModal, .msg-modal-card, #menuModal, #techCloseoutModal, .field-ops-studio, .liveboard, .message-popup, .upload-center, body.map-mode, body.theme-light .card, body.theme-light .modal-card) textarea::placeholder,
+:where(.auth-card, .sidebar, .sidebar-card, .gis-sidebar, .map-panel, .map-field-panel, #map-float-panel, #messagesModal, .msg-modal-card, #menuModal, #techCloseoutModal, .field-ops-studio, .liveboard, .message-popup, .upload-center, body.map-mode, body.theme-light .card, body.theme-light .modal-card) .input::placeholder,
+:where(.auth-card, .sidebar, .sidebar-card, .gis-sidebar, .map-panel, .map-field-panel, #map-float-panel, #messagesModal, .msg-modal-card, #menuModal, #techCloseoutModal, .field-ops-studio, .liveboard, .message-popup, .upload-center, body.map-mode, body.theme-light .card, body.theme-light .modal-card) .form-control::placeholder {
+  color: var(--form-dark-placeholder) !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: var(--form-dark-placeholder) !important;
+}
+
+:where(
+  .auth-card,
+  .sidebar,
+  .sidebar-card,
+  .gis-sidebar,
+  .map-panel,
+  .map-field-panel,
+  #map-float-panel,
+  #messagesModal,
+  .msg-modal-card,
+  #menuModal,
+  #techCloseoutModal,
+  .field-ops-studio,
+  .liveboard,
+  .message-popup,
+  .upload-center,
+  body.map-mode,
+  body.theme-light .card,
+  body.theme-light .modal-card
+) :is(select, select option) {
+  color: var(--form-dark-text) !important;
+  background-color: #071218 !important;
+}
+
+:where(
+  .auth-card,
+  .sidebar,
+  .sidebar-card,
+  .gis-sidebar,
+  .map-panel,
+  .map-field-panel,
+  #map-float-panel,
+  #messagesModal,
+  .msg-modal-card,
+  #menuModal,
+  #techCloseoutModal,
+  .field-ops-studio,
+  .liveboard,
+  .message-popup,
+  .upload-center,
+  body.map-mode,
+  body.theme-light .card,
+  body.theme-light .modal-card
+) :is(input:disabled, textarea:disabled, select:disabled, .input:disabled, .form-control:disabled, input[readonly], textarea[readonly], select[readonly], .input[readonly], .form-control[readonly]) {
+  color: var(--form-dark-disabled-text) !important;
+  background-color: var(--form-dark-disabled-bg) !important;
+  border-color: rgba(148, 163, 184, 0.3);
+  opacity: 1;
+  -webkit-text-fill-color: var(--form-dark-disabled-text) !important;
+}
+
+:where(
+  .auth-card,
+  .sidebar,
+  .sidebar-card,
+  .gis-sidebar,
+  .map-panel,
+  .map-field-panel,
+  #map-float-panel,
+  #messagesModal,
+  .msg-modal-card,
+  #menuModal,
+  #techCloseoutModal,
+  .field-ops-studio,
+  .liveboard,
+  .message-popup,
+  .upload-center,
+  body.map-mode,
+  body.theme-light .card,
+  body.theme-light .modal-card
+) :is(input:-webkit-autofill, textarea:-webkit-autofill, select:-webkit-autofill, .input:-webkit-autofill, .form-control:-webkit-autofill) {
+  -webkit-text-fill-color: var(--form-dark-text) !important;
+  caret-color: var(--form-dark-text);
+  -webkit-box-shadow: 0 0 0 1000px #071218 inset;
+}
+
+:where(
+  .auth-card,
+  .sidebar,
+  .sidebar-card,
+  .gis-sidebar,
+  .map-panel,
+  .map-field-panel,
+  #map-float-panel,
+  #messagesModal,
+  .msg-modal-card,
+  #menuModal,
+  #techCloseoutModal,
+  .field-ops-studio,
+  .liveboard,
+  .message-popup,
+  .upload-center,
+  body.map-mode,
+  body.theme-light .card,
+  body.theme-light .modal-card
+) :is(label, .label, .field-stack label, .modal-card label, .card label) {
+  color: var(--form-dark-disabled-text) !important;
+}
+
+:where(
+  .auth-card,
+  .sidebar,
+  .sidebar-card,
+  .gis-sidebar,
+  .map-panel,
+  .map-field-panel,
+  #map-float-panel,
+  #messagesModal,
+  .msg-modal-card,
+  #menuModal,
+  #techCloseoutModal,
+  .field-ops-studio,
+  .liveboard,
+  .message-popup,
+  .upload-center,
+  body.map-mode,
+  body.theme-light .card,
+  body.theme-light .modal-card
+) :is(.btn.ghost) {
+  color: #e5eef7 !important;
+  border-color: rgba(148, 163, 184, 0.34) !important;
+}
+
+#map-float-panel :is(#mapFieldLocationName, #mapFieldLocationType, #mapFieldLocationNotes, #mapFieldBillingCodes),
+.map-field-panel :is(#mapFieldLocationName, #mapFieldLocationType, #mapFieldLocationNotes, #mapFieldBillingCodes) {
+  color: #f8fafc !important;
+  background: rgba(7, 18, 24, 0.88) !important;
+  border-color: rgba(148, 163, 184, 0.44) !important;
+  caret-color: #f8fafc;
+  -webkit-text-fill-color: currentColor;
+}
+
+#map-float-panel #mapFieldLocationName::placeholder,
+#map-float-panel #mapFieldLocationNotes::placeholder,
+#map-float-panel #mapFieldBillingCodes::placeholder,
+.map-field-panel #mapFieldLocationName::placeholder,
+.map-field-panel #mapFieldLocationNotes::placeholder,
+.map-field-panel #mapFieldBillingCodes::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1;
+  -webkit-text-fill-color: #94a3b8;
+}
+
+#messagesModal .msg-compose-input,
+#messageInput.msg-compose-input {
+  color: #f8fafc !important;
+  background: rgba(7, 18, 24, 0.88) !important;
+  caret-color: #f8fafc !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+#messagesModal .msg-compose-input::placeholder,
+#messageInput.msg-compose-input::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+}
+
+.onboarding-view :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select, .input),
+.admin-onboarding-shell :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select, .input) {
+  color: var(--form-light-text) !important;
+  background: var(--form-light-bg) !important;
+  border-color: #cbd5e1;
+  caret-color: var(--form-light-text);
+  -webkit-text-fill-color: currentColor;
+}
+
+.onboarding-view input::placeholder,
+.onboarding-view textarea::placeholder,
+.onboarding-view .input::placeholder,
+.admin-onboarding-shell input::placeholder,
+.admin-onboarding-shell textarea::placeholder,
+.admin-onboarding-shell .input::placeholder {
+  color: var(--form-light-placeholder) !important;
+  opacity: 1;
+  -webkit-text-fill-color: var(--form-light-placeholder) !important;
+}
