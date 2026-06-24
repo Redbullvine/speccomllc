@@ -21564,12 +21564,6 @@ async function deleteMessageById(messageId){
     return;
   }
   if (String(msg.channel || "BOARD").toUpperCase() === "BOARD" && canClearMainBoardMessages()){
-    const serverCleanup = await clearMainBoardViaServer([id]);
-    if (serverCleanup.attempted && !serverCleanup.error && serverCleanup.deleted > 0){
-      await loadMessages();
-      renderMessages();
-      return;
-    }
     const rpcRes = await state.client.rpc("fn_delete_message", { p_message_id: id });
     if (!rpcRes.error && Number(rpcRes.data || 0) > 0){
       await loadMessages();
@@ -21578,6 +21572,12 @@ async function deleteMessageById(messageId){
     }
     if (rpcRes.error && !isMissingRpcFunctionError(rpcRes.error, "fn_delete_message")){
       toast("Delete failed", rpcRes.error.message || "Could not delete message.", "error");
+      return;
+    }
+    const serverCleanup = await clearMainBoardViaServer([id]);
+    if (serverCleanup.attempted && !serverCleanup.error && serverCleanup.deleted > 0){
+      await loadMessages();
+      renderMessages();
       return;
     }
     const fallback = await deleteMessagesByIdsFallback([id], { boardOnly: true });
@@ -21717,6 +21717,20 @@ async function clearMainBoardMessages(){
       return msg?.id && Number.isFinite(stamp) && stamp <= Date.parse(snapshot);
     })
     .map((msg) => msg.id);
+  const clearRpcRes = await state.client.rpc("fn_clear_main_board_messages", {
+    p_org_id: SpecCom.helpers.isRoot() ? null : orgId,
+    p_before: snapshot,
+  });
+  if (!clearRpcRes.error){
+    toast("Main Board cleared", `Deleted ${Number(clearRpcRes.data || 0)} message${Number(clearRpcRes.data || 0) === 1 ? "" : "s"}. Direct messages were left alone.`);
+    await loadMessages();
+    renderMessages();
+    return;
+  }
+  if (!isMissingRpcFunctionError(clearRpcRes.error, "fn_clear_main_board_messages")){
+    toast("Clear failed", clearRpcRes.error.message || "Could not clear Main Board.", "error");
+    return;
+  }
   if (SpecCom.helpers.isRoot()){
     const serverCleanup = await clearMainBoardViaServer(visibleBoardIds);
     if (serverCleanup.attempted && !serverCleanup.error){
@@ -21725,20 +21739,10 @@ async function clearMainBoardMessages(){
       renderMessages();
       return;
     }
-    const rpcRes = await state.client.rpc("fn_clear_main_board_messages", {
-      p_org_id: null,
-      p_before: snapshot,
-    });
-    if (!rpcRes.error){
-      toast("Main Board cleared", `Deleted ${Number(rpcRes.data || 0)} message${Number(rpcRes.data || 0) === 1 ? "" : "s"}. Direct messages were left alone.`);
-      await loadMessages();
-      renderMessages();
-      return;
-    }
     const fallback = await deleteMessagesByIdsFallback(visibleBoardIds, { boardOnly: true });
     if (fallback.error || fallback.deleted < boardCount){
       const serverMessage = serverCleanup.error?.message ? ` Server cleanup: ${serverCleanup.error.message}` : "";
-      const rpcMessage = rpcRes.error?.message ? ` RPC: ${rpcRes.error.message}` : "";
+      const rpcMessage = clearRpcRes.error?.message ? ` RPC: ${clearRpcRes.error.message}` : "";
       toast("Clear failed", `${fallback.error?.message || "The visible Main Board messages were not deleted."}${serverMessage}${rpcMessage}`, "error");
       return;
     }
@@ -21754,24 +21758,12 @@ async function clearMainBoardMessages(){
     renderMessages();
     return;
   }
-  const { data, error } = await state.client.rpc("fn_clear_main_board_messages", {
-    p_org_id: orgId,
-    p_before: snapshot,
-  });
-  if (error && !isMissingRpcFunctionError(error, "fn_clear_main_board_messages")){
-    toast("Clear failed", error.message || "Could not clear Main Board.", "error");
+  const fallback = await deleteMessagesByIdsFallback(visibleBoardIds, { orgId, boardOnly: true });
+  if (fallback.error || fallback.deleted < boardCount){
+    toast("Clear failed", "Apply the latest Supabase migration for Main Board cleanup, then retry.", "error");
     return;
   }
-  if (error){
-    const fallback = await deleteMessagesByIdsFallback(visibleBoardIds, { orgId, boardOnly: true });
-    if (fallback.error || fallback.deleted < boardCount){
-      toast("Clear failed", "Apply the latest Supabase migration for Main Board cleanup, then retry.", "error");
-      return;
-    }
-    toast("Main Board cleared", `Deleted ${fallback.deleted} message${fallback.deleted === 1 ? "" : "s"}. Direct messages were left alone.`);
-  } else {
-    toast("Main Board cleared", `Deleted ${Number(data || 0)} message${Number(data || 0) === 1 ? "" : "s"}.`);
-  }
+  toast("Main Board cleared", `Deleted ${fallback.deleted} message${fallback.deleted === 1 ? "" : "s"}. Direct messages were left alone.`);
   await loadMessages();
   renderMessages();
 }
