@@ -21155,10 +21155,34 @@ async function loadMessageRecipients(){
     return `User ${String(row?.id || "").slice(0, 6)}`;
   };
 
-  let data = [];
-  let error = null;
+  const recipientsById = new Map();
+  const addRecipientRows = (rows = []) => {
+    (rows || []).forEach((row) => {
+      const id = String(row?.id || "").trim();
+      if (!id || id === state.user.id) return;
+      const label = formatRecipientLabel(row);
+      recipientsById.set(id, { id, name: label });
+      state.messageIdentityMap.set(id, label);
+    });
+  };
 
-  // Prefer current project members so the direct-message list stays clean and relevant.
+  let query = state.client
+    .from("profiles")
+    .select("id, display_name, org_id")
+    .neq("id", state.user.id)
+    .limit(1000);
+  if (!SpecCom.helpers.isRoot()){
+    query = query.eq("org_id", orgId);
+  }
+  const allProfilesRes = await query;
+  if (allProfilesRes.error){
+    toast("Messages load error", allProfilesRes.error.message);
+    renderMessageRecipients();
+    return;
+  }
+  addRecipientRows(allProfilesRes.data || []);
+
+  // Also pull active project members in case profile RLS exposes them through membership only.
   if (state.activeProject?.id){
     const { data: members, error: membersError } = await state.client
       .from("project_members")
@@ -21173,39 +21197,14 @@ async function loadMessageRecipients(){
           .select("id, display_name")
           .in("id", memberIds)
           .limit(500);
-        data = profilesRes.data || [];
-        error = profilesRes.error || null;
+        if (!profilesRes.error){
+          addRecipientRows(profilesRes.data || []);
+        }
       }
     }
   }
 
-  // Fallback for legacy projects: org-wide recipients.
-  if ((!data || !data.length) && !error){
-    let query = state.client
-      .from("profiles")
-      .select("id, display_name")
-      .neq("id", state.user.id)
-      .limit(500);
-    if (!SpecCom.helpers.isRoot()){
-      query = query.eq("org_id", orgId);
-    }
-    const fallbackRes = await query;
-    data = fallbackRes.data || [];
-    error = fallbackRes.error || null;
-  }
-
-  if (error){
-    toast("Messages load error", error.message);
-    renderMessageRecipients();
-    return;
-  }
-
-  const recipients = (data || []).map((row) => {
-    const label = formatRecipientLabel(row);
-    if (row.id) state.messageIdentityMap.set(row.id, label);
-    return { id: row.id, name: label };
-  }).filter((row) => row.id && row.id !== state.user.id);
-  state.messageRecipients = recipients.sort((a, b) => a.name.localeCompare(b.name));
+  state.messageRecipients = Array.from(recipientsById.values()).sort((a, b) => a.name.localeCompare(b.name));
   renderMessageRecipients();
 }
 
