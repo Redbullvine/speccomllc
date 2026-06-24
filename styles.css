@@ -7616,6 +7616,58 @@ body.map-mode #map-float-panel{
 
 /* ===== MAP-MODE body layout ===== */
 body.map-mode .liveboard { display: flex !important; }
+.liveboard,
+body.map-mode .liveboard,
+body.field-subcontractor-mode .liveboard {
+  display: none !important;
+}
+
+.field-message-button{
+  position: fixed;
+  right: 84px;
+  bottom: 22px;
+  z-index: 7100;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid rgba(200,169,110,.72);
+  border-radius: 8px;
+  background: rgba(4,12,7,.94);
+  color: rgba(238,248,240,.96);
+  font-weight: 900;
+  letter-spacing: .02em;
+  box-shadow: 0 14px 34px rgba(0,0,0,.32);
+  cursor: pointer;
+}
+.field-message-button:hover{
+  border-color:#c8a96e;
+  background:rgba(7,20,10,.98);
+}
+.field-message-badge{
+  position:absolute;
+  top:-7px;
+  right:-7px;
+  min-width:20px;
+  height:20px;
+  align-items:center;
+  justify-content:center;
+  border-radius:999px;
+  background:#dc2626;
+  color:#fff;
+  font-size:11px;
+  font-weight:900;
+  box-shadow:0 0 0 2px rgba(4,12,7,.96);
+}
+
+@media (max-width: 700px){
+  .field-message-button{
+    right: 12px;
+    bottom: 82px;
+  }
+  body.field-subcontractor-mode .message-popup{
+    right: 12px;
+    bottom: 136px;
+  }
+}
 /* Subcontractor onboarding */
 .onboarding-view {
   background:

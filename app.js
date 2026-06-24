@@ -12885,6 +12885,7 @@ function updateKPI(){
 
 function setRoleBasedVisibility(){
   const fieldMode = isFieldSubcontractorMode();
+  document.body.classList.toggle("field-subcontractor-mode", fieldMode);
   document.querySelectorAll(".nav-item").forEach((btn) => {
     const viewId = btn.dataset.view;
     btn.style.display = isViewAllowed(viewId) ? "" : "none";
@@ -18675,6 +18676,8 @@ function setWhoami(){
   const authed = isDemo || Boolean(state.user);
   const shellVisible = authed || CONTROL_CENTER_DEV_MODE;
   const onboardingLocked = isSubcontractorOnboardingLocked();
+  const fieldMode = isFieldSubcontractorMode();
+  document.body.classList.toggle("field-subcontractor-mode", fieldMode);
   const signInTopBtn = $("btnSignInTop");
   if (signInTopBtn) signInTopBtn.style.display = authed ? "none" : "";
   const signOutBtn = $("btnSignOut");
@@ -18693,6 +18696,10 @@ function setWhoami(){
   if (messagesBtn) messagesBtn.style.display = shellVisible && !onboardingLocked && state.messagesEnabled && state.features.messages ? "" : "none";
   const menuMessagesBtn = $("btnMenuMessages");
   if (menuMessagesBtn) menuMessagesBtn.style.display = shellVisible && !onboardingLocked && state.messagesEnabled && state.features.messages ? "" : "none";
+  const floatingMessagesBtn = $("fieldMessagesButton");
+  if (floatingMessagesBtn){
+    floatingMessagesBtn.style.display = shellVisible && !onboardingLocked && state.messagesEnabled && state.features.messages ? "" : "none";
+  }
   syncDemoLoginButton();
   syncDemoFeatureHubVisibility();
   renderDemoShowcaseHome();
@@ -21244,20 +21251,26 @@ function countUnreadMessages(){
 
 function updateMessagesBadge(){
   const badge = $("messagesBadge");
-  if (!badge) return;
+  const fieldBadge = $("fieldMessagesBadge");
   if (!state.messagesEnabled){
-    badge.textContent = "0";
-    badge.style.display = "none";
+    [badge, fieldBadge].forEach((el) => {
+      if (!el) return;
+      el.textContent = "0";
+      el.style.display = "none";
+    });
     return;
   }
   const count = countUnreadMessages();
-  if (count > 0){
-    badge.textContent = String(count);
-    badge.style.display = "inline-flex";
-  } else {
-    badge.textContent = "0";
-    badge.style.display = "none";
-  }
+  [badge, fieldBadge].forEach((el) => {
+    if (!el) return;
+    if (count > 0){
+      el.textContent = String(count);
+      el.style.display = "inline-flex";
+    } else {
+      el.textContent = "0";
+      el.style.display = "none";
+    }
+  });
 }
 
 function markMessagesRead(){
@@ -33698,6 +33711,10 @@ function wireUI(){
   const messagePopup = $("messagePopup");
   if (messagePopup){
     messagePopup.addEventListener("click", () => openMessagePopupThread());
+  }
+  const fieldMessagesButton = $("fieldMessagesButton");
+  if (fieldMessagesButton){
+    fieldMessagesButton.addEventListener("click", () => openMessagesModal());
   }
   const sendMessageBtn = $("btnSendMessage");
   if (sendMessageBtn){
