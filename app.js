@@ -5243,6 +5243,9 @@ function getActiveCompanyId(){
 }
 
 function isMissingRpcFunctionError(error, functionName){
+  if (Number(error?.status || 0) === 404) return true;
+  const code = String(error?.code || "").toLowerCase();
+  if (code === "pgrst202") return true;
   const message = String(error?.message || "").toLowerCase();
   const fnName = String(functionName || "").toLowerCase();
   if (!message) return false;
@@ -21560,6 +21563,16 @@ async function deleteMessageById(messageId){
     toast("Delete failed", "Client not ready.", "error");
     return;
   }
+  if (SpecCom.helpers.isRoot() || msg.sender_id === state.user?.id){
+    const fallback = await deleteMessagesByIdsFallback([id], { senderOnly: !SpecCom.helpers.isRoot() });
+    if (fallback.error){
+      toast("Delete failed", fallback.error.message || "Could not delete message.", "error");
+      return;
+    }
+    await loadMessages();
+    renderMessages();
+    return;
+  }
   const rpcRes = await state.client.rpc("fn_delete_message", { p_message_id: id });
   if (rpcRes.error && !isMissingRpcFunctionError(rpcRes.error, "fn_delete_message")){
     toast("Delete failed", rpcRes.error.message || "Could not delete message.", "error");
@@ -21581,6 +21594,26 @@ async function deleteMessageById(messageId){
   }
   await loadMessages();
   renderMessages();
+}
+
+async function deleteMessagesByIdsFallback(messageIds, { orgId = null, boardOnly = false, senderOnly = false } = {}){
+  const ids = Array.from(new Set((messageIds || []).map((id) => String(id || "").trim()).filter(Boolean)));
+  if (!ids.length) return { deleted: 0, error: null };
+  let deleted = 0;
+  for (let i = 0; i < ids.length; i += 50){
+    const chunk = ids.slice(i, i + 50);
+    let query = state.client
+      .from("messages")
+      .delete()
+      .in("id", chunk);
+    if (boardOnly) query = query.eq("channel", "BOARD");
+    if (orgId && !SpecCom.helpers.isRoot()) query = query.eq("org_id", orgId);
+    if (senderOnly) query = query.eq("sender_id", state.user?.id || "");
+    const { data, error } = await query.select("id");
+    if (error) return { deleted, error };
+    deleted += Array.isArray(data) ? data.length : 0;
+  }
+  return { deleted, error: null };
 }
 
 async function clearMainBoardMessages(){
@@ -21608,6 +21641,23 @@ async function clearMainBoardMessages(){
   }
   const orgId = getMessageOrgId();
   const snapshot = new Date().toISOString();
+  const visibleBoardIds = getMessagesForFilter("board")
+    .filter((msg) => {
+      const stamp = Date.parse(msg?.created_at || "");
+      return msg?.id && Number.isFinite(stamp) && stamp <= Date.parse(snapshot);
+    })
+    .map((msg) => msg.id);
+  if (SpecCom.helpers.isRoot()){
+    const fallback = await deleteMessagesByIdsFallback(visibleBoardIds, { boardOnly: true });
+    if (fallback.error){
+      toast("Clear failed", fallback.error.message || "Could not clear Main Board.", "error");
+      return;
+    }
+    toast("Main Board cleared", `Deleted ${fallback.deleted} message${fallback.deleted === 1 ? "" : "s"}. Direct messages were left alone.`);
+    await loadMessages();
+    renderMessages();
+    return;
+  }
   const { data, error } = await state.client.rpc("fn_clear_main_board_messages", {
     p_org_id: orgId,
     p_before: snapshot,
@@ -21617,20 +21667,12 @@ async function clearMainBoardMessages(){
     return;
   }
   if (error){
-    let query = state.client
-      .from("messages")
-      .delete({ count: "exact" })
-      .eq("channel", "BOARD")
-      .lte("created_at", snapshot);
-    if (!SpecCom.helpers.isRoot()){
-      query = query.eq("org_id", orgId);
-    }
-    const fallback = await query;
+    const fallback = await deleteMessagesByIdsFallback(visibleBoardIds, { orgId, boardOnly: true });
     if (fallback.error){
       toast("Clear failed", "Apply the latest Supabase migration for Main Board cleanup, then retry.", "error");
       return;
     }
-    toast("Main Board cleared", `Deleted ${fallback.count ?? boardCount} message${(fallback.count ?? boardCount) === 1 ? "" : "s"}.`);
+    toast("Main Board cleared", `Deleted ${fallback.deleted} message${fallback.deleted === 1 ? "" : "s"}. Direct messages were left alone.`);
   } else {
     toast("Main Board cleared", `Deleted ${Number(data || 0)} message${Number(data || 0) === 1 ? "" : "s"}.`);
   }
