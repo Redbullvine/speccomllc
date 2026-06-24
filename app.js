@@ -21563,6 +21563,23 @@ async function deleteMessageById(messageId){
     toast("Delete failed", "Client not ready.", "error");
     return;
   }
+  if (String(msg.channel || "BOARD").toUpperCase() === "BOARD" && canClearMainBoardMessages()){
+    const serverCleanup = await clearMainBoardViaServer([id]);
+    if (serverCleanup.attempted && !serverCleanup.error && serverCleanup.deleted > 0){
+      await loadMessages();
+      renderMessages();
+      return;
+    }
+    const fallback = await deleteMessagesByIdsFallback([id], { boardOnly: true });
+    if (fallback.error || fallback.deleted < 1){
+      const details = serverCleanup.error?.message ? ` Server cleanup: ${serverCleanup.error.message}` : "";
+      toast("Delete failed", `${fallback.error?.message || "The message was not deleted."}${details}`, "error");
+      return;
+    }
+    await loadMessages();
+    renderMessages();
+    return;
+  }
   if (SpecCom.helpers.isRoot() || msg.sender_id === state.user?.id){
     const fallback = await deleteMessagesByIdsFallback([id], { senderOnly: !SpecCom.helpers.isRoot() });
     if (fallback.error){
@@ -21616,6 +21633,46 @@ async function deleteMessagesByIdsFallback(messageIds, { orgId = null, boardOnly
   return { deleted, error: null };
 }
 
+async function getCurrentAccessToken(){
+  if (state.session?.access_token) return state.session.access_token;
+  if (!state.client?.auth?.getSession) return "";
+  try {
+    const { data } = await state.client.auth.getSession();
+    if (data?.session){
+      state.session = data.session;
+    }
+    return data?.session?.access_token || "";
+  } catch {
+    return "";
+  }
+}
+
+async function clearMainBoardViaServer(messageIds){
+  const ids = Array.from(new Set((messageIds || []).map((id) => String(id || "").trim()).filter(Boolean)));
+  if (!ids.length) return { attempted: false, deleted: 0, error: null };
+  const token = await getCurrentAccessToken();
+  if (!token) return { attempted: false, deleted: 0, error: new Error("Missing auth token") };
+  try {
+    const response = await fetch("/.netlify/functions/clear-main-board", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ ids }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok){
+      const err = new Error(payload?.error || `Cleanup failed (${response.status})`);
+      err.status = response.status;
+      return { attempted: true, deleted: 0, error: err };
+    }
+    return { attempted: true, deleted: Number(payload?.deleted || 0), error: null };
+  } catch (error) {
+    return { attempted: true, deleted: 0, error };
+  }
+}
+
 async function clearMainBoardMessages(){
   if (!canClearMainBoardMessages()){
     toast("Not allowed", "Only office/admin users can clear the Main Board.", "error");
@@ -21648,12 +21705,27 @@ async function clearMainBoardMessages(){
     })
     .map((msg) => msg.id);
   if (SpecCom.helpers.isRoot()){
+    const serverCleanup = await clearMainBoardViaServer(visibleBoardIds);
+    if (serverCleanup.attempted && !serverCleanup.error){
+      toast("Main Board cleared", `Deleted ${serverCleanup.deleted} message${serverCleanup.deleted === 1 ? "" : "s"}. Direct messages were left alone.`);
+      await loadMessages();
+      renderMessages();
+      return;
+    }
     const fallback = await deleteMessagesByIdsFallback(visibleBoardIds, { boardOnly: true });
-    if (fallback.error){
-      toast("Clear failed", fallback.error.message || "Could not clear Main Board.", "error");
+    if (fallback.error || fallback.deleted < boardCount){
+      const serverMessage = serverCleanup.error?.message ? ` Server cleanup: ${serverCleanup.error.message}` : "";
+      toast("Clear failed", `${fallback.error?.message || "The visible Main Board messages were not deleted."}${serverMessage}`, "error");
       return;
     }
     toast("Main Board cleared", `Deleted ${fallback.deleted} message${fallback.deleted === 1 ? "" : "s"}. Direct messages were left alone.`);
+    await loadMessages();
+    renderMessages();
+    return;
+  }
+  const serverCleanup = await clearMainBoardViaServer(visibleBoardIds);
+  if (serverCleanup.attempted && !serverCleanup.error){
+    toast("Main Board cleared", `Deleted ${serverCleanup.deleted} message${serverCleanup.deleted === 1 ? "" : "s"}. Direct messages were left alone.`);
     await loadMessages();
     renderMessages();
     return;
@@ -21668,7 +21740,7 @@ async function clearMainBoardMessages(){
   }
   if (error){
     const fallback = await deleteMessagesByIdsFallback(visibleBoardIds, { orgId, boardOnly: true });
-    if (fallback.error){
+    if (fallback.error || fallback.deleted < boardCount){
       toast("Clear failed", "Apply the latest Supabase migration for Main Board cleanup, then retry.", "error");
       return;
     }
