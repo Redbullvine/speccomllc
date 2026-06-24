@@ -8705,7 +8705,7 @@ button:disabled,
   color: #f8fafc !important;
   background: rgba(7, 18, 24, 0.88) !important;
   caret-color: #f8fafc !important;
-  -webkit-text-fill-color: currentColor !important;
+  -webkit-text-fill-color: #f8fafc !important;
 }
 
 #messagesModal .msg-compose-input::placeholder,
