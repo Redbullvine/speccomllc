@@ -21570,9 +21570,22 @@ async function deleteMessageById(messageId){
       renderMessages();
       return;
     }
+    const rpcRes = await state.client.rpc("fn_delete_message", { p_message_id: id });
+    if (!rpcRes.error && Number(rpcRes.data || 0) > 0){
+      await loadMessages();
+      renderMessages();
+      return;
+    }
+    if (rpcRes.error && !isMissingRpcFunctionError(rpcRes.error, "fn_delete_message")){
+      toast("Delete failed", rpcRes.error.message || "Could not delete message.", "error");
+      return;
+    }
     const fallback = await deleteMessagesByIdsFallback([id], { boardOnly: true });
     if (fallback.error || fallback.deleted < 1){
-      const details = serverCleanup.error?.message ? ` Server cleanup: ${serverCleanup.error.message}` : "";
+      const details = [
+        serverCleanup.error?.message ? `Server cleanup: ${serverCleanup.error.message}` : "",
+        rpcRes.error?.message ? `RPC: ${rpcRes.error.message}` : "",
+      ].filter(Boolean).join(" ");
       toast("Delete failed", `${fallback.error?.message || "The message was not deleted."}${details}`, "error");
       return;
     }
@@ -21712,10 +21725,21 @@ async function clearMainBoardMessages(){
       renderMessages();
       return;
     }
+    const rpcRes = await state.client.rpc("fn_clear_main_board_messages", {
+      p_org_id: null,
+      p_before: snapshot,
+    });
+    if (!rpcRes.error){
+      toast("Main Board cleared", `Deleted ${Number(rpcRes.data || 0)} message${Number(rpcRes.data || 0) === 1 ? "" : "s"}. Direct messages were left alone.`);
+      await loadMessages();
+      renderMessages();
+      return;
+    }
     const fallback = await deleteMessagesByIdsFallback(visibleBoardIds, { boardOnly: true });
     if (fallback.error || fallback.deleted < boardCount){
       const serverMessage = serverCleanup.error?.message ? ` Server cleanup: ${serverCleanup.error.message}` : "";
-      toast("Clear failed", `${fallback.error?.message || "The visible Main Board messages were not deleted."}${serverMessage}`, "error");
+      const rpcMessage = rpcRes.error?.message ? ` RPC: ${rpcRes.error.message}` : "";
+      toast("Clear failed", `${fallback.error?.message || "The visible Main Board messages were not deleted."}${serverMessage}${rpcMessage}`, "error");
       return;
     }
     toast("Main Board cleared", `Deleted ${fallback.deleted} message${fallback.deleted === 1 ? "" : "s"}. Direct messages were left alone.`);
