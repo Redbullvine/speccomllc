@@ -12114,6 +12114,7 @@ function clearAuthenticatedWorkspaceState(){
     state.client.removeChannel(state.realtime.usageChannel);
     state.realtime.usageChannel = null;
   }
+  unsubscribeMessageNotifications();
 }
 
 function applySignedOutUi(reason = "unknown"){
@@ -21511,6 +21512,9 @@ async function handleIncomingMessageNotification(msg){
   }
 }
 
+let messagePollingTimer = 0;
+const MESSAGE_POLL_INTERVAL_MS = 30_000;
+
 function subscribeMessageNotifications(){
   if (!state.client || messageNotificationChannel) return;
   messageNotificationChannel = state.client
@@ -21522,7 +21526,39 @@ function subscribeMessageNotifications(){
     }, (payload) => {
       void handleIncomingMessageNotification(payload.new);
     })
-    .subscribe();
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED") return;
+      startMessagePolling();
+    });
+  startMessagePolling();
+}
+
+function startMessagePolling(){
+  if (messagePollingTimer) return;
+  messagePollingTimer = window.setInterval(async () => {
+    if (!state.client || !state.user) return;
+    const prevIds = new Set((state.messages || []).map((m) => String(m.id)));
+    await loadMessages();
+    const newMsgs = (state.messages || []).filter((m) => !prevIds.has(String(m.id)));
+    for (const msg of newMsgs){
+      void handleIncomingMessageNotification(msg);
+    }
+  }, MESSAGE_POLL_INTERVAL_MS);
+}
+
+function stopMessagePolling(){
+  if (messagePollingTimer){
+    clearInterval(messagePollingTimer);
+    messagePollingTimer = 0;
+  }
+}
+
+function unsubscribeMessageNotifications(){
+  stopMessagePolling();
+  if (messageNotificationChannel && state.client){
+    state.client.removeChannel(messageNotificationChannel);
+  }
+  messageNotificationChannel = null;
 }
 
 async function loadMessages(){
