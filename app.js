@@ -1306,14 +1306,17 @@ const SUBCONTRACTOR_AGREEMENT_VERSION = "2026-06";
 const SUBCONTRACTOR_REQUIRED_DOCUMENTS = [
   { type: "w9", label: "W-9", detail: "Tax form upload. Do not enter SSN or TIN into SpecCom fields." },
   { type: "driver_license", label: "Driver License / ID", detail: "Government photo ID or driver license copy." },
-  { type: "insurance_coi", label: "Insurance COI", detail: "Certificate of Insurance naming Spec Com, LLC as additional insured." },
+  { type: "insurance_coi", label: "Insurance COI", detail: "Certificate of Insurance naming Spec Com, LLC as additional insured. Min: $2M GL · $1M auto · $1M employers' liability · $1M umbrella." },
+  { type: "workers_comp", label: "Workers' Comp or Exemption", detail: "Certificate of workers' compensation coverage, or state-issued sole-proprietor exemption letter." },
 ];
 const SUBCONTRACTOR_OPTIONAL_DOCUMENTS = [
   { type: "direct_deposit", label: "Direct Deposit", detail: "Optional payment setup document." },
-  { type: "other", label: "Other Packet File", detail: "I-9, bucket truck rental, workers comp exemption, or other admin-requested forms." },
+  { type: "other", label: "Other Packet File", detail: "Any other admin-requested forms." },
 ];
 const SUBCONTRACTOR_REQUIRED_AGREEMENTS = [
   { type: "subcontractor_agreement", label: "Subcontractor Agreement" },
+  { type: "bucket_truck_agreement", label: "Bucket Truck Agreement" },
+  { type: "rate_sheet_acknowledgment", label: "Rate Sheet" },
   { type: "safety_acknowledgment", label: "Safety / Work Rules" },
 ];
 const KMZ_SNAPSHOT_TABLE = "project_kmz_snapshots";
@@ -10389,7 +10392,7 @@ function isOnboardingApproved(){
 
 function normalizeDocumentType(type){
   const next = String(type || "").trim().toLowerCase();
-  return ["w9", "driver_license", "insurance_coi", "direct_deposit", "other"].includes(next) ? next : "other";
+  return ["w9", "driver_license", "insurance_coi", "workers_comp", "direct_deposit", "other"].includes(next) ? next : "other";
 }
 
 function getOnboardingDocumentConfig(type){
@@ -10445,8 +10448,11 @@ function computeOnboardingChecklist(profile = state.onboarding.profile, document
     { key: "w9", label: "W-9 uploaded", complete: isDocumentComplete("w9", documents) },
     { key: "driver_license", label: "Driver license / ID uploaded", complete: isDocumentComplete("driver_license", documents) },
     { key: "insurance_coi", label: "Insurance COI uploaded", complete: isDocumentComplete("insurance_coi", documents) },
+    { key: "workers_comp", label: "Workers' comp or exemption uploaded", complete: isDocumentComplete("workers_comp", documents) },
     { key: "subcontractor_agreement", label: "Subcontractor agreement signed", complete: isAgreementComplete("subcontractor_agreement", agreements) },
-    { key: "safety_acknowledgment", label: "Safety / work rules signed", complete: isAgreementComplete("safety_acknowledgment", agreements) },
+    { key: "bucket_truck_agreement", label: "Bucket truck agreement signed", complete: isAgreementComplete("bucket_truck_agreement", agreements) },
+    { key: "rate_sheet_acknowledgment", label: "Rate sheet acknowledged", complete: isAgreementComplete("rate_sheet_acknowledgment", agreements) },
+    { key: "safety_acknowledgment", label: "Safety / work rules acknowledged", complete: isAgreementComplete("safety_acknowledgment", agreements) },
   ];
 }
 
@@ -10524,6 +10530,53 @@ function renderOnboardingAgreementCopy(type){
   const target = $("onboardingAgreementContent");
   if (!target) return;
   const agreementType = String(type || state.onboarding.activeAgreementType || "subcontractor_agreement");
+  if (agreementType === "bucket_truck_agreement"){
+    target.innerHTML = `
+      <h3>Bucket Truck Rental Agreement</h3>
+      <p>Spec Com, LLC agrees to rent a bucket truck for use on the Ruidoso, NM project. By signing, I agree to the following terms:</p>
+      <p><strong>Option A — $800/week:</strong> Spec Com provides insurance. <strong>Option B — $500/week:</strong> I provide insurance and submit proof of coverage naming the truck as a covered vehicle.</p>
+      <ul>
+        <li>I will use the truck only for lawful, job-site purposes and return it in substantially the same condition.</li>
+        <li>I am responsible for ensuring all operators are qualified and comply with applicable safety rules.</li>
+        <li>I am responsible for any damage, loss, or unauthorized modifications during the rental period.</li>
+        <li>Payment is due weekly. Any changes to rate, insurance, or duration must be agreed to in writing.</li>
+      </ul>
+      <p class="muted small">Rental location: Ruidoso, New Mexico. Billing frequency: weekly. Rates do not include fuel, late fees, or delivery charges unless agreed to in writing.</p>
+    `;
+    return;
+  }
+  if (agreementType === "rate_sheet_acknowledgment"){
+    target.innerHTML = `
+      <h3>Subcontractor Rate Sheet</h3>
+      <p>I acknowledge that I have reviewed the Spec Com approved subcontractor rate sheet and accept the following pricing for work performed under this contract:</p>
+      <table class="onboarding-rate-table">
+        <thead><tr><th>Item</th><th>Rate</th></tr></thead>
+        <tbody>
+          <tr><td>HAFO (OFDC-A4)(1x2)</td><td>$92.70</td></tr>
+          <tr><td>HAFO (OFDC-B8G)</td><td>$92.00</td></tr>
+          <tr><td>HAFO (OFDC-B8G)(1x2)</td><td>$92.00</td></tr>
+          <tr><td>HAFO (PCOT) LO</td><td>$33.00</td></tr>
+          <tr><td>HO-1 (&lt;48) [CUSTOM]</td><td>$22.00</td></tr>
+          <tr><td>HxFO (1X2) PCOT (60/40) MO</td><td>$31.50</td></tr>
+          <tr><td>HxFO (1X2) PCOT (70/30) MO</td><td>$31.50</td></tr>
+          <tr><td>HxFO (1X2) PCOT (80/20) MO</td><td>$31.50</td></tr>
+          <tr><td>HxFO (1X2) PCOT (85/15) MO</td><td>$31.50</td></tr>
+          <tr><td>HxFO (1X2) PCOT (90/10) MO</td><td>$31.50</td></tr>
+          <tr><td>HxFO (1X4) PCOT (70/30) MO</td><td>$31.50</td></tr>
+          <tr><td>HxFO (1X4) PCOT (80/20) MO</td><td>$31.50</td></tr>
+          <tr><td>HxFO (1X4) PCOT (85/15) MO</td><td>$31.50</td></tr>
+          <tr><td>HxFO (1X4) PCOT (90/10) MO</td><td>$31.50</td></tr>
+          <tr><td>Splitter (1x8)</td><td>$9.90</td></tr>
+          <tr><td>Splitter (1x4)</td><td>$9.90</td></tr>
+          <tr><td>PE1-2G</td><td>$0.00</td></tr>
+          <tr><td>PF3-3</td><td>$0.00</td></tr>
+          <tr><td>PM2A</td><td>$0.00</td></tr>
+        </tbody>
+      </table>
+      <p class="muted small">Rates are effective as of June 2026 and subject to written amendment only.</p>
+    `;
+    return;
+  }
   if (agreementType === "safety_acknowledgment"){
     target.innerHTML = `
       <h3>Safety and Work Rules Acknowledgment</h3>
@@ -10539,7 +10592,7 @@ function renderOnboardingAgreementCopy(type){
     <p>I understand that I am performing work as an independent subcontractor and not as an employee of Spec Com, LLC.</p>
     <p>I am responsible for work authorization, business licensing, insurance, qualified labor, safe work practices, tools, equipment, taxes, and compliance with applicable project requirements.</p>
     <p>I agree to follow safety rules, protect confidential project and customer information, and complete work according to approved written scopes, work orders, and instructions.</p>
-    <p>Payment terms are per approved work order or written agreement. This onboarding flow does not include rate sheets or K&S pricing.</p>
+    <p>Payment terms are per approved work order or written agreement. Review the full agreement PDF provided by Spec Com before signing.</p>
   `;
 }
 
