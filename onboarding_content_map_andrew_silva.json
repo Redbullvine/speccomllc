@@ -1,0 +1,259 @@
+{
+  "_meta": {
+    "purpose": "Onboarding content map for BAINTU to wire into the app. Do not modify without coordinating with Danny.",
+    "generated": "2026-06-23",
+    "blocked_areas": ["messaging", "profile nav", "navigation"]
+  },
+  "target": {
+    "uid": "ce9c87b7-4232-48ce-9687-cc15c18dd9e5",
+    "name": "Andrew Silva",
+    "email": "fusionprostx@gmail.com",
+    "role": "SUBCONTRACTOR",
+    "contractor_type": "1099_subcontractor"
+  },
+  "source_documents": {
+    "subcontractor_agreement": "Spec_Com_Subcontractor_Agreement.pdf",
+    "bucket_truck_agreement": "Hire Pack_Bucket_Rental.pdf",
+    "rate_sheet": "Hire Pack_Rates.pdf"
+  },
+  "hard_rules": [
+    "Andrew is a 1099 subcontractor — no I-9, no employee eligibility, no citizenship or immigration fields.",
+    "Do not ask Andrew to type SSN or TIN into any app field. W-9 is an upload only, stored private.",
+    "W-9 document must never be rendered back to the subcontractor or any non-admin user in the UI."
+  ],
+  "checklist": [
+    {
+      "step": 1,
+      "id": "profile_address",
+      "title": "Profile & Address",
+      "helper_text": "Enter your legal name, phone number, mailing address, and contact information.",
+      "required": true,
+      "behavior": "form",
+      "db_table": "subcontractor_profiles",
+      "fields": [
+        "full_name",
+        "company_name",
+        "phone",
+        "email",
+        "address_line1",
+        "address_line2",
+        "city",
+        "state",
+        "zip"
+      ],
+      "document_type": null,
+      "agreement_type": null,
+      "admin_review_labels": {
+        "incomplete": "Not started",
+        "complete": "Complete"
+      }
+    },
+    {
+      "step": 2,
+      "id": "emergency_contact",
+      "title": "Emergency Contact",
+      "helper_text": "Provide the name and phone number of someone we can contact in an emergency.",
+      "required": true,
+      "behavior": "form",
+      "db_table": "subcontractor_profiles",
+      "fields": [
+        "emergency_contact_name",
+        "emergency_contact_phone"
+      ],
+      "document_type": null,
+      "agreement_type": null,
+      "admin_review_labels": {
+        "incomplete": "Not entered",
+        "complete": "Complete"
+      }
+    },
+    {
+      "step": 3,
+      "id": "w9_upload",
+      "title": "IRS W-9",
+      "helper_text": "Upload your completed IRS W-9 form. This is required for 1099 tax reporting. Upload only — do not type your SSN or TIN into any app field.",
+      "required": true,
+      "behavior": "upload",
+      "db_table": "subcontractor_documents",
+      "document_type": "w9",
+      "agreement_type": null,
+      "storage_bucket": "subcontractor-documents",
+      "storage_path_prefix": "{user_id}/w9/",
+      "private": true,
+      "accepts": ["application/pdf", "image/jpeg", "image/png", "image/webp"],
+      "admin_review_labels": {
+        "uploaded": "Pending review",
+        "accepted": "Accepted",
+        "rejected": "Rejected — reupload required"
+      }
+    },
+    {
+      "step": 4,
+      "id": "driver_license",
+      "title": "Driver License / Government ID",
+      "helper_text": "Upload a clear photo or scan of your valid driver license or government-issued photo ID.",
+      "required": true,
+      "behavior": "upload",
+      "db_table": "subcontractor_documents",
+      "document_type": "driver_license",
+      "agreement_type": null,
+      "storage_bucket": "subcontractor-documents",
+      "storage_path_prefix": "{user_id}/driver_license/",
+      "private": true,
+      "accepts": ["application/pdf", "image/jpeg", "image/png", "image/webp"],
+      "admin_review_labels": {
+        "uploaded": "Pending review",
+        "accepted": "Accepted",
+        "rejected": "Rejected — reupload required"
+      }
+    },
+    {
+      "step": 5,
+      "id": "insurance_coi",
+      "title": "Certificate of Insurance (COI)",
+      "helper_text": "Upload your current certificate of insurance. Spec Com, LLC must be listed as additional insured. Required minimums: $2M commercial general liability · $1M auto liability · $1M employers' liability · $1M umbrella.",
+      "required": true,
+      "behavior": "upload",
+      "db_table": "subcontractor_documents",
+      "document_type": "insurance_coi",
+      "agreement_type": null,
+      "storage_bucket": "subcontractor-documents",
+      "storage_path_prefix": "{user_id}/insurance_coi/",
+      "private": true,
+      "accepts": ["application/pdf", "image/jpeg", "image/png", "image/webp"],
+      "admin_review_labels": {
+        "uploaded": "Pending review",
+        "accepted": "Accepted",
+        "rejected": "Rejected — reupload required"
+      }
+    },
+    {
+      "step": 6,
+      "id": "workers_comp",
+      "title": "Workers' Comp Certificate or Exemption",
+      "helper_text": "Upload your workers' compensation certificate of coverage, or a state-issued sole-proprietor exemption letter if one applies to you. Contact Spec Com if you are unsure.",
+      "required": false,
+      "required_note": "Required unless a valid state exemption applies. Admin will review and confirm.",
+      "behavior": "upload",
+      "db_table": "subcontractor_documents",
+      "document_type": "workers_comp",
+      "agreement_type": null,
+      "storage_bucket": "subcontractor-documents",
+      "storage_path_prefix": "{user_id}/workers_comp/",
+      "private": true,
+      "accepts": ["application/pdf", "image/jpeg", "image/png", "image/webp"],
+      "admin_review_labels": {
+        "not_uploaded": "Not submitted",
+        "uploaded": "Pending review",
+        "accepted": "Accepted",
+        "rejected": "Rejected — reupload required"
+      }
+    },
+    {
+      "step": 7,
+      "id": "subcontractor_agreement",
+      "title": "Spec Com Subcontractor Agreement",
+      "helper_text": "Read the full Spec Com, LLC Subcontractor Agreement for telecommunications and fiber construction services. This is a binding legal contract. You may consult an attorney before signing.",
+      "required": true,
+      "behavior": "sign",
+      "db_table": "subcontractor_agreements",
+      "document_type": null,
+      "agreement_type": "subcontractor_agreement",
+      "agreement_version": "2026-06",
+      "source_doc": "Spec_Com_Subcontractor_Agreement.pdf",
+      "display_full_text": true,
+      "collect": ["signer_name", "signature_data", "ip_address", "user_agent"],
+      "accepted_terms_required": true,
+      "admin_review_labels": {
+        "not_signed": "Not signed",
+        "signed": "Signed — on file"
+      }
+    },
+    {
+      "step": 8,
+      "id": "bucket_truck_agreement",
+      "title": "Bucket Truck Rental Agreement",
+      "helper_text": "Review and sign the Spec Com bucket truck rental agreement for the Ruidoso, NM project. Choose Option A ($800/week — Spec Com provides insurance) or Option B ($500/week — you provide insurance with proof of COI).",
+      "required": true,
+      "behavior": "sign",
+      "db_table": "subcontractor_agreements",
+      "document_type": null,
+      "agreement_type": "bucket_truck_agreement",
+      "agreement_version": "2026-06",
+      "source_doc": "Hire Pack_Bucket_Rental.pdf",
+      "display_full_text": true,
+      "collect": ["signer_name", "signature_data", "ip_address", "user_agent"],
+      "accepted_terms_required": true,
+      "ui_note": "Show insurance option selector (Option A / Option B) before signature. Store selected option in signature_data or as a metadata field if the schema is extended.",
+      "admin_review_labels": {
+        "not_signed": "Not signed",
+        "signed": "Signed — on file"
+      }
+    },
+    {
+      "step": 9,
+      "id": "rate_sheet",
+      "title": "Subcontractor Rate Sheet",
+      "helper_text": "Review your approved Spec Com subcontractor pricing. Tap Acknowledge to confirm you have read and accept these rates.",
+      "required": true,
+      "behavior": "acknowledge",
+      "db_table": "subcontractor_agreements",
+      "document_type": null,
+      "agreement_type": "rate_sheet_acknowledgment",
+      "agreement_version": "2026-06",
+      "source_doc": "Hire Pack_Rates.pdf",
+      "display_full_text": true,
+      "collect": ["signer_name", "signature_data", "ip_address", "user_agent"],
+      "accepted_terms_required": true,
+      "admin_review_labels": {
+        "not_acknowledged": "Not acknowledged",
+        "acknowledged": "Acknowledged"
+      }
+    },
+    {
+      "step": 10,
+      "id": "safety_work_rules",
+      "title": "Safety & Work Rules",
+      "helper_text": "Read and acknowledge Spec Com's safety requirements, drug and alcohol policy, and workplace rules. These apply on all project sites and must be followed at all times.",
+      "required": true,
+      "behavior": "acknowledge",
+      "db_table": "subcontractor_agreements",
+      "document_type": null,
+      "agreement_type": "safety_acknowledgment",
+      "agreement_version": "2026-06",
+      "source_doc": null,
+      "display_full_text": true,
+      "collect": ["signer_name", "signature_data", "ip_address", "user_agent"],
+      "accepted_terms_required": true,
+      "admin_review_labels": {
+        "not_acknowledged": "Not acknowledged",
+        "acknowledged": "Acknowledged"
+      }
+    },
+    {
+      "step": 11,
+      "id": "submit",
+      "title": "Submit for Review",
+      "helper_text": "All steps are complete. Tap Submit to send your onboarding package to the Spec Com team. You'll be notified once your documents are reviewed and approved.",
+      "required": true,
+      "behavior": "submit",
+      "rpc": "fn_submit_subcontractor_onboarding",
+      "document_type": null,
+      "agreement_type": null,
+      "gate": "all required steps must pass fn_subcontractor_onboarding_missing()",
+      "admin_review_labels": {
+        "draft": "Not yet submitted",
+        "submitted": "Under review",
+        "missing_info": "Action required — check admin notes",
+        "approved": "Approved",
+        "rejected": "Rejected — see admin notes"
+      }
+    }
+  ],
+  "schema_delta": {
+    "new_document_types": ["workers_comp"],
+    "new_agreement_types": ["bucket_truck_agreement", "rate_sheet_acknowledgment"],
+    "migration_file": "20260623000002_onboarding_extend_andrew_silva.sql",
+    "note": "Apply migration before BAINTU wires in steps 6, 8, and 9. Steps 1–5, 7, 10, 11 work against the existing schema already deployed in 20260623000001."
+  }
+}
