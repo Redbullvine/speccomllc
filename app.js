@@ -10650,6 +10650,7 @@ function bindOnboardingSignaturePad(){
     if (!drawing) return;
     event.preventDefault();
     const point = getPoint(event);
+    ctx.setLineDash([]);
     ctx.lineWidth = 3.5;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
