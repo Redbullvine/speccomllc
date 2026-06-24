@@ -19509,6 +19509,10 @@ function openMessagesModal(){
     if (!state.messagesEnabled) return;
     await loadMessageRecipients();
     applyMessagesUiLabels();
+    if (hasUnreadDirectMessage()){
+      state.messageFilter = "direct";
+    }
+    setMessagesFilter(state.messageFilter);
     syncMessageComposerMode();
     renderMessages();
     markMessagesRead();
@@ -21240,9 +21244,10 @@ function getMessageOrgId(){
 }
 
 function countUnreadMessages(){
-  const lastRead = getLastMessageReadAt(state.messageFilter);
   return (state.messages || []).filter((msg) => {
     if (msg.sender_id === state.user?.id) return false;
+    const filter = getMessageFilterForRow(msg);
+    const lastRead = getLastMessageReadAt(filter);
     const stamp = Date.parse(msg.created_at || "");
     return Number.isFinite(stamp) && stamp > lastRead;
   }).length;
@@ -21273,7 +21278,7 @@ function updateMessagesBadge(){
 }
 
 function markMessagesRead(){
-  const latest = state.messages?.[0]?.created_at;
+  const latest = getMessagesForFilter(state.messageFilter)?.[0]?.created_at;
   if (!latest) return;
   setLastMessageReadAt(state.messageFilter, latest);
   updateMessagesBadge();
@@ -21281,6 +21286,25 @@ function markMessagesRead(){
 
 function getMessageFilterForRow(msg){
   return String(msg?.channel || "BOARD").toUpperCase() === "DM" ? "direct" : "board";
+}
+
+function getMessagesForFilter(filter = state.messageFilter){
+  const selected = filter === "direct" ? "direct" : "board";
+  return (state.messages || []).filter((msg) => {
+    const channel = String(msg?.channel || "BOARD").toUpperCase();
+    if (selected === "board") return channel === "BOARD";
+    return channel === "DM"
+      && (msg.sender_id === state.user?.id || msg.recipient_id === state.user?.id);
+  });
+}
+
+function hasUnreadDirectMessage(){
+  const lastRead = getLastMessageReadAt("direct");
+  return getMessagesForFilter("direct").some((msg) => {
+    if (msg.sender_id === state.user?.id) return false;
+    const stamp = Date.parse(msg.created_at || "");
+    return Number.isFinite(stamp) && stamp > lastRead;
+  });
 }
 
 function isIncomingMessageForCurrentUser(msg){
@@ -21344,18 +21368,18 @@ function openMessagePopupThread(){
 async function handleIncomingMessageNotification(msg){
   if (!isIncomingMessageForCurrentUser(msg)) return;
   const filter = getMessageFilterForRow(msg);
-  const matchesCurrentFilter = filter === state.messageFilter;
-  if (matchesCurrentFilter){
-    const exists = (state.messages || []).some((row) => String(row?.id || "") === String(msg.id || ""));
-    if (!exists){
-      state.messages = [msg, ...(state.messages || [])].slice(0, 200);
-    }
-    updateMessagesBadge();
+  const exists = (state.messages || []).some((row) => String(row?.id || "") === String(msg.id || ""));
+  if (!exists){
+    state.messages = [msg, ...(state.messages || [])]
+      .sort((a, b) => Date.parse(b?.created_at || "") - Date.parse(a?.created_at || ""))
+      .slice(0, 200);
   }
+  updateMessagesBadge();
   showMessagePopup(msg);
   const modal = $("messagesModal");
   if (modal && modal.style.display !== "none"){
     await loadMessages();
+    if (filter === "direct") setMessagesFilter("direct");
   }
 }
 
@@ -21380,9 +21404,9 @@ async function loadMessages(){
     const list = state.demo.messages || [];
     state.messages = list.filter((msg) => {
       const channel = msg.channel || (msg.recipient_id ? "DM" : "BOARD");
-      if (state.messageFilter === "board") return channel === "BOARD";
+      if (channel === "BOARD") return true;
       return channel === "DM" && (msg.sender_id === state.user?.id || msg.recipient_id === state.user?.id);
-    });
+    }).sort((a, b) => Date.parse(b?.created_at || "") - Date.parse(a?.created_at || ""));
     updateMessagesBadge();
     return;
   }
@@ -21397,24 +21421,25 @@ async function loadMessages(){
     updateMessagesBadge();
     return;
   }
-  let query = state.client
+  let boardQuery = state.client
     .from("messages")
     .select("id, org_id, channel, sender_id, recipient_id, body, created_at")
+    .eq("channel", "BOARD")
     .order("created_at", { ascending: false })
-    .limit(200);
-  if (state.messageFilter === "board"){
-    if (!SpecCom.helpers.isRoot()){
-      query = query.eq("org_id", orgId);
-    }
-    query = query.eq("channel", "BOARD");
-  } else {
-    if (!SpecCom.helpers.isRoot()){
-      query = query.eq("org_id", orgId);
-    }
-    query = query.eq("channel", "DM");
-    query = query.or(`sender_id.eq.${state.user.id},recipient_id.eq.${state.user.id}`);
+    .limit(100);
+  let directQuery = state.client
+    .from("messages")
+    .select("id, org_id, channel, sender_id, recipient_id, body, created_at")
+    .eq("channel", "DM")
+    .or(`sender_id.eq.${state.user.id},recipient_id.eq.${state.user.id}`)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (!SpecCom.helpers.isRoot()){
+    boardQuery = boardQuery.eq("org_id", orgId);
+    directQuery = directQuery.eq("org_id", orgId);
   }
-  const { data, error } = await query;
+  const [boardRes, directRes] = await Promise.all([boardQuery, directQuery]);
+  const error = boardRes.error || directRes.error;
   if (error){
     if (isMissingTable(error)){
       state.features.messages = false;
@@ -21424,7 +21449,9 @@ async function loadMessages(){
     toast("Messages load error", error.message);
     return;
   }
-  state.messages = data || [];
+  state.messages = [...(boardRes.data || []), ...(directRes.data || [])]
+    .sort((a, b) => Date.parse(b?.created_at || "") - Date.parse(a?.created_at || ""))
+    .slice(0, 200);
   updateMessagesBadge();
   const modal = $("messagesModal");
   if (modal && modal.style.display !== "none"){
@@ -21540,10 +21567,7 @@ function renderMessages(){
   if (scope){
     scope.textContent = state.messageFilter === "board" ? t("messagesScopeProject") : t("messagesFilterDirect");
   }
-  const filtered = (state.messages || []).filter((msg) => {
-    if (state.messageFilter === "board") return msg.channel === "BOARD";
-    return msg.channel === "DM";
-  });
+  const filtered = getMessagesForFilter(state.messageFilter);
   if (!filtered.length){
     list.innerHTML = "";
     if (empty) empty.style.display = "";
