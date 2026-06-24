@@ -4,7 +4,7 @@
  * Does NOT use Background Sync API - manual sync handled by app
  */
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const CACHE_NAME = `speccom-${CACHE_VERSION}`;
 
 // Assets that are critical for offline operation
@@ -12,7 +12,7 @@ const CRITICAL_ASSETS = [
   "/",
   "/index.html",
   "/app.js",
-  "/styles.css",
+  "/styles.css?v=20260624-onboarding-contrast",
   "/supabaseClient.js",
   "/services/offlinePhotoQueue.js",
   "/env.generated.js",
