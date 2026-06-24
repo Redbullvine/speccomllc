@@ -2986,6 +2986,27 @@ body.map-create-open .map-floating-places{
   color: var(--muted);
   background: rgba(5,14,7,.45);
 }
+#messagesModal .input,
+#messagesModal select,
+#messagesModal textarea{
+  background:#f8fafc;
+  border-color:rgba(15,23,42,.28);
+  color:#0f172a;
+  caret-color:#0f172a;
+}
+#messagesModal .input::placeholder,
+#messagesModal textarea::placeholder{
+  color:#64748b;
+  opacity:1;
+}
+#messagesModal select option{
+  background:#ffffff;
+  color:#0f172a;
+}
+#messagesModal select option:checked{
+  background:#dbeafe;
+  color:#0f172a;
+}
 .message-popup{
   position: fixed;
   right: 18px;
