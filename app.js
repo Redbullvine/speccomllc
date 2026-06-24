@@ -255,6 +255,7 @@ const state = {
   messageFilter: "board",
   messageMode: "board",
   messageDmRecipient: null,
+  messageAvatarMap: new Map(),
   messagePopup: null,
   messagePopupTimer: 0,
   dpr: {
@@ -21171,6 +21172,17 @@ function syncMessageComposerMode(){
   updateMessageAdminControls();
 }
 
+function msgAvatarHtml(userId, size = "sidebar"){
+  const url = state.messageAvatarMap?.get(userId);
+  const name = state.messageIdentityMap?.get(userId) || "";
+  const initials = escapeHtml(String(name || "?").split(/\s+/).map((w) => w[0] || "").slice(0, 2).join("").toUpperCase());
+  const cls = size === "thread" ? "msg-avatar" : "msg-sidebar-avatar";
+  if (url){
+    return `<span class="${cls}"><img src="${escapeHtml(url)}" alt="${initials}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" /></span>`;
+  }
+  return `<span class="${cls}">${initials}</span>`;
+}
+
 function renderMessageSidebar(){
   const list = $("msgSidebarList");
   if (!list) return;
@@ -21188,11 +21200,10 @@ function renderMessageSidebar(){
     items.push(`<div class="msg-sidebar-divider"></div><div class="msg-sidebar-section">TEAM</div>`);
     recipients.forEach((row) => {
       const isActive = state.messageFilter === "direct" && state.messageDmRecipient === row.id;
-      const initials = String(row.name || "?").split(/\s+/).map((w) => w[0] || "").slice(0, 2).join("").toUpperCase();
       const unread = unreadDirect[row.id] || 0;
       items.push(`
         <div class="msg-sidebar-item${isActive ? " is-active" : ""}" data-sidebar-filter="direct" data-sidebar-recipient="${escapeHtml(String(row.id))}">
-          <span class="msg-sidebar-avatar">${escapeHtml(initials)}</span>
+          ${msgAvatarHtml(row.id, "sidebar")}
           <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(row.name)}</span>
           ${unread > 0 ? `<span class="msg-sidebar-badge">${unread}</span>` : ""}
         </div>
@@ -21248,11 +21259,14 @@ function applyMessagesUiLabels(){
 async function loadMessageRecipients(){
   state.messageRecipients = [];
   state.messageIdentityMap = new Map();
+  state.messageAvatarMap = new Map();
   if (!state.client || !state.user){
     renderMessageRecipients();
     return;
   }
   state.messageIdentityMap.set(state.user.id, t("messageSenderYou"));
+  const myAvatar = String(state.profile?.avatar_url || "").trim();
+  if (myAvatar) state.messageAvatarMap.set(state.user.id, myAvatar);
   const orgId = getMessageOrgId();
   if (!SpecCom.helpers.isRoot() && !orgId){
     renderMessageRecipients();
@@ -21271,14 +21285,16 @@ async function loadMessageRecipients(){
       const id = String(row?.id || "").trim();
       if (!id || id === state.user.id) return;
       const label = formatRecipientLabel(row);
-      recipientsById.set(id, { id, name: label });
+      const avatarUrl = String(row?.avatar_url || "").trim();
+      recipientsById.set(id, { id, name: label, avatarUrl });
       state.messageIdentityMap.set(id, label);
+      if (avatarUrl) state.messageAvatarMap.set(id, avatarUrl);
     });
   };
 
   let query = state.client
     .from("profiles")
-    .select("id, display_name, org_id")
+    .select("id, display_name, org_id, avatar_url")
     .neq("id", state.user.id)
     .limit(1000);
   if (!SpecCom.helpers.isRoot()){
@@ -21304,7 +21320,7 @@ async function loadMessageRecipients(){
       if (memberIds.length){
         const profilesRes = await state.client
           .from("profiles")
-          .select("id, display_name")
+          .select("id, display_name, avatar_url")
           .in("id", memberIds)
           .limit(500);
         if (!profilesRes.error){
@@ -21900,12 +21916,11 @@ function renderMessages(){
     const time = msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
     const dateStr = msg.created_at ? new Date(msg.created_at).toLocaleDateString() : "";
     const body = escapeHtml(msg.body || "").replace(/\n/g, "<br>");
-    const initials = String(senderName || "?").split(/\s+/).map((w) => w[0] || "").slice(0, 2).join("").toUpperCase();
     const canEdit = canEditMessage(msg);
     const canDelete = canManageMessage(msg);
     return `
       <div class="message-card ${outgoing ? "outgoing" : "incoming"}">
-        <span class="msg-avatar">${escapeHtml(initials)}</span>
+        ${msgAvatarHtml(msg.sender_id, "thread")}
         <div class="message-meta">
           <span class="message-sender">${escapeHtml(senderName)}</span>
           <span class="message-time" title="${escapeHtml(dateStr)}">${escapeHtml(time)}</span>
