@@ -2986,6 +2986,17 @@ body.map-create-open .map-floating-places{
   color: var(--muted);
   background: rgba(5,14,7,.45);
 }
+.messages-toolbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:10px;
+}
+.messages-toolbar .segmented{
+  margin-top:0;
+}
 #messagesModal .input,
 #messagesModal select,
 #messagesModal textarea{

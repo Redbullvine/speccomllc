@@ -3013,9 +3013,12 @@
           <button id="btnMessagesClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
         </div>
         <div id="messagesScope" class="muted small" style="margin-top:4px;"></div>
-        <div class="segmented" style="margin-top:10px;">
-          <button id="btnMessagesFilterBoard" class="segmented-btn active" type="button" data-filter="board">Main Board</button>
-          <button id="btnMessagesFilterDirect" class="segmented-btn" type="button" data-filter="direct">Direct Messages</button>
+        <div class="messages-toolbar">
+          <div class="segmented">
+            <button id="btnMessagesFilterBoard" class="segmented-btn active" type="button" data-filter="board">Main Board</button>
+            <button id="btnMessagesFilterDirect" class="segmented-btn" type="button" data-filter="direct">Direct Messages</button>
+          </div>
+          <button id="btnClearMainBoardMessages" class="btn danger small" type="button" style="display:none;">Clear Main Board</button>
         </div>
         <div id="messagesList" class="messages-list" style="margin-top:10px;"></div>
         <div id="messagesEmpty" class="muted small" style="margin-top:10px; display:none;" data-i18n="messagesEmpty">No messages yet.</div>

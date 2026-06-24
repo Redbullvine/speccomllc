@@ -21106,6 +21106,7 @@ function syncMessageComposerMode(){
   state.messageMode = modeSelect.value || "board";
   const showRecipient = state.messageMode === "direct";
   recipientSelect.style.display = showRecipient ? "" : "none";
+  updateMessageAdminControls();
 }
 
 function renderMessageRecipients(){
@@ -21462,7 +21463,28 @@ async function loadMessages(){
 function canManageMessage(msg){
   if (!msg) return false;
   if (msg.sender_id === state.user?.id) return true;
+  return String(msg.channel || "BOARD").toUpperCase() === "BOARD" && canClearMainBoardMessages();
+}
+
+function canEditMessage(msg){
+  if (!msg) return false;
+  return msg.sender_id === state.user?.id;
+}
+
+function canClearMainBoardMessages(){
   return SpecCom.helpers.isRoot() || isOwnerOrAdmin();
+}
+
+function updateMessageAdminControls(){
+  const clearBtn = $("btnClearMainBoardMessages");
+  if (!clearBtn) return;
+  const boardCount = getMessagesForFilter("board").length;
+  const show = state.messagesEnabled
+    && state.messageFilter === "board"
+    && canClearMainBoardMessages()
+    && boardCount > 0;
+  clearBtn.style.display = show ? "" : "none";
+  clearBtn.textContent = boardCount > 0 ? `Clear Main Board (${boardCount})` : "Clear Main Board";
 }
 
 async function editMessageById(messageId){
@@ -21473,7 +21495,7 @@ async function editMessageById(messageId){
     toast("Message missing", "Message not found.", "error");
     return;
   }
-  if (!canManageMessage(msg)){
+  if (!canEditMessage(msg)){
     toast("Not allowed", "You can only edit your own messages.", "error");
     return;
   }
@@ -21538,17 +21560,79 @@ async function deleteMessageById(messageId){
     toast("Delete failed", "Client not ready.", "error");
     return;
   }
-  let query = state.client
-    .from("messages")
-    .delete()
-    .eq("id", id);
-  if (!SpecCom.helpers.isRoot() && !isOwnerOrAdmin()){
-    query = query.eq("sender_id", state.user?.id || "");
-  }
-  const { error } = await query;
-  if (error){
-    toast("Delete failed", error.message || "Could not delete message.", "error");
+  const rpcRes = await state.client.rpc("fn_delete_message", { p_message_id: id });
+  if (rpcRes.error && !isMissingRpcFunctionError(rpcRes.error, "fn_delete_message")){
+    toast("Delete failed", rpcRes.error.message || "Could not delete message.", "error");
     return;
+  }
+  if (rpcRes.error){
+    let query = state.client
+      .from("messages")
+      .delete()
+      .eq("id", id);
+    if (!SpecCom.helpers.isRoot()){
+      query = query.eq("sender_id", state.user?.id || "");
+    }
+    const { error } = await query;
+    if (error){
+      toast("Delete failed", "Apply the latest Supabase migration for admin message cleanup, then retry.", "error");
+      return;
+    }
+  }
+  await loadMessages();
+  renderMessages();
+}
+
+async function clearMainBoardMessages(){
+  if (!canClearMainBoardMessages()){
+    toast("Not allowed", "Only office/admin users can clear the Main Board.", "error");
+    return;
+  }
+  const boardCount = getMessagesForFilter("board").length;
+  if (!boardCount){
+    toast("Main Board", "No Main Board messages to clear.");
+    return;
+  }
+  const ok = confirm(`Delete ${boardCount} Main Board message${boardCount === 1 ? "" : "s"}? Direct messages will not be deleted.`);
+  if (!ok) return;
+  if (isDemo){
+    state.demo.messages = (state.demo.messages || []).filter((msg) => String(msg.channel || (msg.recipient_id ? "DM" : "BOARD")).toUpperCase() !== "BOARD");
+    await loadMessages();
+    renderMessages();
+    toast("Main Board cleared", "Direct messages were left alone.");
+    return;
+  }
+  if (!state.client || !state.user){
+    toast("Clear failed", "Client not ready.", "error");
+    return;
+  }
+  const orgId = getMessageOrgId();
+  const snapshot = new Date().toISOString();
+  const { data, error } = await state.client.rpc("fn_clear_main_board_messages", {
+    p_org_id: orgId,
+    p_before: snapshot,
+  });
+  if (error && !isMissingRpcFunctionError(error, "fn_clear_main_board_messages")){
+    toast("Clear failed", error.message || "Could not clear Main Board.", "error");
+    return;
+  }
+  if (error){
+    let query = state.client
+      .from("messages")
+      .delete({ count: "exact" })
+      .eq("channel", "BOARD")
+      .lte("created_at", snapshot);
+    if (!SpecCom.helpers.isRoot()){
+      query = query.eq("org_id", orgId);
+    }
+    const fallback = await query;
+    if (fallback.error){
+      toast("Clear failed", "Apply the latest Supabase migration for Main Board cleanup, then retry.", "error");
+      return;
+    }
+    toast("Main Board cleared", `Deleted ${fallback.count ?? boardCount} message${(fallback.count ?? boardCount) === 1 ? "" : "s"}.`);
+  } else {
+    toast("Main Board cleared", `Deleted ${Number(data || 0)} message${Number(data || 0) === 1 ? "" : "s"}.`);
   }
   await loadMessages();
   renderMessages();
@@ -21562,12 +21646,14 @@ function renderMessages(){
   if (!state.messagesEnabled){
     list.innerHTML = "";
     if (empty) empty.style.display = "";
+    updateMessageAdminControls();
     return;
   }
   if (scope){
     scope.textContent = state.messageFilter === "board" ? t("messagesScopeProject") : t("messagesFilterDirect");
   }
   const filtered = getMessagesForFilter(state.messageFilter);
+  updateMessageAdminControls();
   if (!filtered.length){
     list.innerHTML = "";
     if (empty) empty.style.display = "";
@@ -21584,7 +21670,8 @@ function renderMessages(){
       : "";
     const body = escapeHtml(msg.body || "").replace(/\n/g, "<br>");
     const metaParts = [sender, recipientLabel, time].filter(Boolean);
-    const canManage = canManageMessage(msg);
+    const canEdit = canEditMessage(msg);
+    const canDelete = canManageMessage(msg);
     return `
       <div class="message-card ${outgoing ? "outgoing" : "incoming"}">
         <div class="message-meta">
@@ -21592,10 +21679,10 @@ function renderMessages(){
           <span>${escapeHtml(metaParts.join(" | "))}</span>
         </div>
         <div>${body}</div>
-        ${canManage ? `
+        ${(canEdit || canDelete) ? `
           <div class="message-actions">
-            <button type="button" class="btn ghost small" data-action="editMessage" data-message-id="${escapeHtml(String(msg.id || ""))}">Edit</button>
-            <button type="button" class="btn ghost small" data-action="deleteMessage" data-message-id="${escapeHtml(String(msg.id || ""))}">Delete</button>
+            ${canEdit ? `<button type="button" class="btn ghost small" data-action="editMessage" data-message-id="${escapeHtml(String(msg.id || ""))}">Edit</button>` : ""}
+            ${canDelete ? `<button type="button" class="btn ghost small" data-action="deleteMessage" data-message-id="${escapeHtml(String(msg.id || ""))}">Delete</button>` : ""}
           </div>
         ` : ""}
       </div>
@@ -33775,6 +33862,12 @@ function wireUI(){
   messageFilters.forEach((btn) => {
     btn.addEventListener("click", () => setMessagesFilter(btn.dataset.filter || "board"));
   });
+  const clearMainBoardBtn = $("btnClearMainBoardMessages");
+  if (clearMainBoardBtn){
+    clearMainBoardBtn.addEventListener("click", () => {
+      void clearMainBoardMessages();
+    });
+  }
   setMessagesFilter(state.messageFilter);
   const menuBtn = $("btnMenu");
   const togglePlacesDrawer = () => {
