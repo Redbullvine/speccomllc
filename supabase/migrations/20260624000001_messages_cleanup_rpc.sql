@@ -18,7 +18,7 @@ begin
     raise exception 'Not authenticated' using errcode = '28000';
   end if;
 
-  select public.effective_role_code(p.role_code, p.role), p.org_id
+  select upper(coalesce(nullif(p.role::text, ''), '')), p.org_id
     into v_role, v_org_id
   from public.profiles p
   where p.id = v_uid;
@@ -78,7 +78,7 @@ begin
     raise exception 'Not authenticated' using errcode = '28000';
   end if;
 
-  select public.effective_role_code(p.role_code, p.role), p.org_id
+  select upper(coalesce(nullif(p.role::text, ''), '')), p.org_id
     into v_role, v_profile_org_id
   from public.profiles p
   where p.id = v_uid;

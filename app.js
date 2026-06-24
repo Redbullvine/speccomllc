@@ -21771,7 +21771,7 @@ async function clearMainBoardMessages(){
     })
     .map((msg) => msg.id);
   const clearRpcRes = await state.client.rpc("fn_clear_main_board_messages", {
-    p_org_id: SpecCom.helpers.isRoot() ? null : orgId,
+    p_org_id: orgId || null,
     p_before: snapshot,
   });
   if (!clearRpcRes.error){
