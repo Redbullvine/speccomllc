@@ -254,6 +254,7 @@ const state = {
   messageIdentityMap: new Map(),
   messageFilter: "board",
   messageMode: "board",
+  messageDmRecipient: null,
   messagePopup: null,
   messagePopupTimer: 0,
   dpr: {
@@ -21141,28 +21142,84 @@ function getMessageIdentityLabel(userId){
   return state.messageIdentityMap.get(userId) || `User ${String(userId).slice(0, 6)}`;
 }
 
-function setMessagesFilter(filter = "board"){
+function setMessagesFilter(filter = "board", recipientId = null){
   state.messageFilter = ["board", "direct"].includes(filter) ? filter : "board";
-  document.querySelectorAll("#messagesModal [data-filter]").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.filter === state.messageFilter);
-  });
+  if (state.messageFilter === "direct" && recipientId){
+    state.messageDmRecipient = recipientId;
+  } else if (state.messageFilter === "board"){
+    state.messageDmRecipient = null;
+  }
   const modeSelect = $("messageMode");
   if (modeSelect) modeSelect.value = state.messageFilter;
+  renderMessageSidebar();
   syncMessageComposerMode();
   renderMessages();
 }
 
 function syncMessageComposerMode(){
+  state.messageMode = state.messageFilter === "direct" ? "direct" : "board";
   const modeSelect = $("messageMode");
-  const recipientSelect = $("messageRecipient");
-  if (!modeSelect || !recipientSelect) return;
-  if (!["board", "direct"].includes(modeSelect.value)){
-    modeSelect.value = state.messageFilter === "direct" ? "direct" : "board";
+  if (modeSelect) modeSelect.value = state.messageMode;
+  const paneTitle = $("msgPaneTitle");
+  if (paneTitle){
+    if (state.messageFilter === "direct" && state.messageDmRecipient){
+      paneTitle.textContent = getMessageIdentityLabel(state.messageDmRecipient);
+    } else {
+      paneTitle.textContent = "# board";
+    }
   }
-  state.messageMode = modeSelect.value || "board";
-  const showRecipient = state.messageMode === "direct";
-  recipientSelect.style.display = showRecipient ? "" : "none";
   updateMessageAdminControls();
+}
+
+function renderMessageSidebar(){
+  const list = $("msgSidebarList");
+  if (!list) return;
+  const recipients = state.messageRecipients || [];
+  const boardActive = state.messageFilter === "board";
+  const unreadDirect = getUnreadCountByRecipient();
+  const items = [];
+  items.push(`
+    <div class="msg-sidebar-item${boardActive ? " is-active" : ""}" data-sidebar-filter="board">
+      <span style="font-size:15px;line-height:1;">#</span>
+      <span>board</span>
+    </div>
+  `);
+  if (recipients.length){
+    items.push(`<div class="msg-sidebar-divider"></div><div class="msg-sidebar-section">TEAM</div>`);
+    recipients.forEach((row) => {
+      const isActive = state.messageFilter === "direct" && state.messageDmRecipient === row.id;
+      const initials = String(row.name || "?").split(/\s+/).map((w) => w[0] || "").slice(0, 2).join("").toUpperCase();
+      const unread = unreadDirect[row.id] || 0;
+      items.push(`
+        <div class="msg-sidebar-item${isActive ? " is-active" : ""}" data-sidebar-filter="direct" data-sidebar-recipient="${escapeHtml(String(row.id))}">
+          <span class="msg-sidebar-avatar">${escapeHtml(initials)}</span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(row.name)}</span>
+          ${unread > 0 ? `<span class="msg-sidebar-badge">${unread}</span>` : ""}
+        </div>
+      `);
+    });
+  }
+  list.innerHTML = items.join("");
+  list.querySelectorAll(".msg-sidebar-item[data-sidebar-filter]").forEach((el) => {
+    el.addEventListener("click", () => {
+      setMessagesFilter(el.dataset.sidebarFilter || "board", el.dataset.sidebarRecipient || null);
+    });
+  });
+}
+
+function getUnreadCountByRecipient(){
+  const counts = {};
+  const myId = state.user?.id;
+  if (!myId) return counts;
+  const lastRead = getLastMessageReadAt("direct");
+  (state.messages || []).forEach((msg) => {
+    if (String(msg.channel || "").toUpperCase() !== "DM") return;
+    if (msg.recipient_id !== myId) return;
+    const stamp = Date.parse(msg.created_at || "");
+    if (!Number.isFinite(stamp) || stamp <= lastRead) return;
+    counts[msg.sender_id] = (counts[msg.sender_id] || 0) + 1;
+  });
+  return counts;
 }
 
 function renderMessageRecipients(){
@@ -21180,19 +21237,11 @@ function renderMessageRecipients(){
   if (current && (state.messageRecipients || []).some((row) => row.id === current)){
     recipientSelect.value = current;
   }
+  renderMessageSidebar();
 }
 
 function applyMessagesUiLabels(){
-  const boardBtn = $("btnMessagesFilterBoard");
-  const directBtn = $("btnMessagesFilterDirect");
-  if (boardBtn) boardBtn.textContent = t("messagesFilterProject");
-  if (directBtn) directBtn.textContent = t("messagesFilterDirect");
-  const modeSelect = $("messageMode");
-  if (modeSelect){
-    const opts = Array.from(modeSelect.options || []);
-    if (opts[0]) opts[0].text = t("messageModeProject");
-    if (opts[1]) opts[1].text = t("messageModeDirect");
-  }
+  renderMessageSidebar();
   renderMessageRecipients();
 }
 
@@ -21347,11 +21396,17 @@ function getMessageFilterForRow(msg){
 
 function getMessagesForFilter(filter = state.messageFilter){
   const selected = filter === "direct" ? "direct" : "board";
+  const myId = state.user?.id;
   return (state.messages || []).filter((msg) => {
     const channel = String(msg?.channel || "BOARD").toUpperCase();
     if (selected === "board") return channel === "BOARD";
-    return channel === "DM"
-      && (msg.sender_id === state.user?.id || msg.recipient_id === state.user?.id);
+    if (channel !== "DM") return false;
+    if (msg.sender_id !== myId && msg.recipient_id !== myId) return false;
+    if (state.messageDmRecipient){
+      const otherId = msg.sender_id === myId ? msg.recipient_id : msg.sender_id;
+      return otherId === state.messageDmRecipient;
+    }
+    return true;
   });
 }
 
@@ -21540,7 +21595,7 @@ function updateMessageAdminControls(){
     && canClearMainBoardMessages()
     && boardCount > 0;
   clearBtn.style.display = show ? "" : "none";
-  clearBtn.textContent = boardCount > 0 ? `Clear Main Board (${boardCount})` : "Clear Main Board";
+  clearBtn.textContent = boardCount > 0 ? `Clear (${boardCount})` : "Clear";
 }
 
 async function editMessageById(messageId){
@@ -21824,16 +21879,12 @@ async function clearMainBoardMessages(){
 function renderMessages(){
   const list = $("messagesList");
   const empty = $("messagesEmpty");
-  const scope = $("messagesScope");
   if (!list) return;
   if (!state.messagesEnabled){
     list.innerHTML = "";
     if (empty) empty.style.display = "";
     updateMessageAdminControls();
     return;
-  }
-  if (scope){
-    scope.textContent = state.messageFilter === "board" ? t("messagesScopeProject") : t("messagesFilterDirect");
   }
   const filtered = getMessagesForFilter(state.messageFilter);
   updateMessageAdminControls();
@@ -21844,24 +21895,22 @@ function renderMessages(){
   }
   if (empty) empty.style.display = "none";
   list.innerHTML = filtered.map((msg) => {
-    const sender = getMessageIdentityLabel(msg.sender_id);
+    const senderName = getMessageIdentityLabel(msg.sender_id);
     const outgoing = msg.sender_id === state.user?.id;
-    const time = msg.created_at ? new Date(msg.created_at).toLocaleString() : "";
-    const scopeLabel = msg.channel === "BOARD" ? t("messageProjectTag") : t("messageDirectTag");
-    const recipientLabel = msg.recipient_id
-      ? t("messageDirectTo", { name: getMessageIdentityLabel(msg.recipient_id) })
-      : "";
+    const time = msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+    const dateStr = msg.created_at ? new Date(msg.created_at).toLocaleDateString() : "";
     const body = escapeHtml(msg.body || "").replace(/\n/g, "<br>");
-    const metaParts = [sender, recipientLabel, time].filter(Boolean);
+    const initials = String(senderName || "?").split(/\s+/).map((w) => w[0] || "").slice(0, 2).join("").toUpperCase();
     const canEdit = canEditMessage(msg);
     const canDelete = canManageMessage(msg);
     return `
       <div class="message-card ${outgoing ? "outgoing" : "incoming"}">
+        <span class="msg-avatar">${escapeHtml(initials)}</span>
         <div class="message-meta">
-          ${scopeLabel ? `<span class="message-chip">${escapeHtml(scopeLabel)}</span>` : ""}
-          <span>${escapeHtml(metaParts.join(" | "))}</span>
+          <span class="message-sender">${escapeHtml(senderName)}</span>
+          <span class="message-time" title="${escapeHtml(dateStr)}">${escapeHtml(time)}</span>
         </div>
-        <div>${body}</div>
+        <div class="message-body">${body}</div>
         ${(canEdit || canDelete) ? `
           <div class="message-actions">
             ${canEdit ? `<button type="button" class="btn ghost small" data-action="editMessage" data-message-id="${escapeHtml(String(msg.id || ""))}">Edit</button>` : ""}
@@ -21871,6 +21920,7 @@ function renderMessages(){
       </div>
     `;
   }).join("");
+  list.scrollTop = list.scrollHeight;
 }
 
 async function sendMessage(){
@@ -21879,17 +21929,15 @@ async function sendMessage(){
     return;
   }
   const input = $("messageInput");
-  const modeSelect = $("messageMode");
-  const recipientSelect = $("messageRecipient");
   const text = input?.value.trim();
   if (!text){
     toast("Message required", "Write a message.");
     return;
   }
-  const mode = modeSelect?.value || "board";
-  const recipientId = recipientSelect?.value || null;
+  const mode = state.messageFilter === "direct" ? "direct" : "board";
+  const recipientId = state.messageDmRecipient || null;
   if (mode === "direct" && !recipientId){
-    toast("Recipient required", "Select a recipient for direct message.");
+    toast("Recipient required", "Select a team member from the sidebar first.");
     return;
   }
   if (isDemo){

@@ -3007,36 +3007,34 @@
     </div>
 
     <div id="messagesModal" class="modal" style="display:none;">
-      <div class="card modal-card">
-        <div class="modal-header">
-          <h2 data-i18n="messagesNav">Messages</h2>
-          <button id="btnMessagesClose" class="btn ghost small" type="button" data-i18n="closeLabel">Close</button>
-        </div>
-        <div id="messagesScope" class="muted small" style="margin-top:4px;"></div>
-        <div class="messages-toolbar">
-          <div class="segmented">
-            <button id="btnMessagesFilterBoard" class="segmented-btn active" type="button" data-filter="board">Main Board</button>
-            <button id="btnMessagesFilterDirect" class="segmented-btn" type="button" data-filter="direct">Direct Messages</button>
+      <div class="card modal-card msg-modal-card">
+        <div class="msg-layout">
+          <div class="msg-sidebar">
+            <div class="msg-sidebar-section">CHANNELS</div>
+            <div id="msgSidebarList"></div>
           </div>
-          <button id="btnClearMainBoardMessages" class="btn danger small" type="button" style="display:none;">Clear Main Board</button>
-        </div>
-        <div id="messagesList" class="messages-list" style="margin-top:10px;"></div>
-        <div id="messagesEmpty" class="muted small" style="margin-top:10px; display:none;" data-i18n="messagesEmpty">No messages yet.</div>
-        <div class="field-stack" style="margin-top:12px;">
-          <div class="row" style="gap:8px; flex-wrap:wrap;">
-            <select id="messageMode" class="input" style="min-width:190px; flex:1 1 220px;">
-              <option value="board">Main Board</option>
-              <option value="direct">Direct Messages</option>
-            </select>
-            <select id="messageRecipient" class="input" style="min-width:220px; flex:1 1 220px; display:none;">
-              <option value="">Select recipient</option>
-            </select>
-          </div>
-          <textarea id="messageInput" class="input" rows="3" data-i18n-placeholder="messagePlaceholder" placeholder="Write a message..."></textarea>
-          <div class="row" style="justify-content:flex-end;">
-            <button id="btnSendMessage" class="btn" type="button" data-i18n="sendMessage">Send</button>
+          <div class="msg-main">
+            <div class="msg-pane-header">
+              <span id="msgPaneTitle" class="msg-pane-title"></span>
+              <div class="msg-pane-actions">
+                <button id="btnClearMainBoardMessages" class="btn danger small" type="button" style="display:none;"></button>
+                <button id="btnMessagesClose" class="btn ghost small" type="button">Close</button>
+              </div>
+            </div>
+            <div id="messagesList" class="msg-thread"></div>
+            <div id="messagesEmpty" class="muted small msg-empty" style="display:none;">No messages yet.</div>
+            <div class="msg-compose">
+              <textarea id="messageInput" class="input msg-compose-input" rows="2" placeholder="Write a message..."></textarea>
+              <button id="btnSendMessage" class="btn msg-compose-send" type="button">Send</button>
+            </div>
           </div>
         </div>
+        <!-- Hidden: keeps JS selectors that reference these IDs working without changes -->
+        <div id="messagesScope" style="display:none;"></div>
+        <select id="messageMode" style="display:none;"><option value="board">board</option><option value="direct">direct</option></select>
+        <select id="messageRecipient" style="display:none;"><option value="">Select recipient</option></select>
+        <button id="btnMessagesFilterBoard" style="display:none;" data-filter="board"></button>
+        <button id="btnMessagesFilterDirect" style="display:none;" data-filter="direct"></button>
       </div>
     </div>
 
