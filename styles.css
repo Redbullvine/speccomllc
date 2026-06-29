@@ -1060,6 +1060,14 @@ img.item-photo{width:100%; max-width: 420px; border-radius: 14px; border:1px sol
 
 
 /* Telecom theme overrides */
+:root{
+  --text: #0f172a;
+  --muted: #64748b;
+  --text-muted: #64748b;
+  --border: rgba(203,213,225,0.9);
+  --line: rgba(203,213,225,0.9);
+  --surface: #ffffff;
+}
 body{
   margin:0;
   background: #f5f7fb;
