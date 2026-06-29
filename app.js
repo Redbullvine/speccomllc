@@ -22039,6 +22039,30 @@ async function sendMessage(){
   markMessagesRead();
 }
 
+async function loadProjectsViaServer(){
+  const token = await getCurrentAccessToken();
+  if (!token) return { data: null, error: new Error("Missing auth token") };
+  try {
+    const response = await fetch("/.netlify/functions/list-projects", {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok){
+      const err = new Error(payload?.error || `Projects service failed (${response.status})`);
+      err.status = response.status;
+      return { data: null, error: err };
+    }
+    return { data: Array.isArray(payload?.data) ? payload.data : [], error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+}
+
 async function loadProjects(){
   if (isDemo){
     state.projects = state.demo.project ? [state.demo.project] : [];
@@ -22057,37 +22081,56 @@ async function loadProjects(){
   if (!orgId){
     console.warn("[projects] org undefined; loading all visible projects", { user_id: userId, org_id: null });
   }
-  const baseSelect = "id, org_id, name, description, created_at, location, job_number, is_demo, created_by";
+  const baseSelect = "id, org_id, name, description, created_at, location, job_number, is_demo, created_by, active";
   let projects = [];
+  const serverProjects = await loadProjectsViaServer();
 
-  let projectsQuery = state.client
-    .from("projects")
-    .select(baseSelect)
-    .order("name");
-  let projectsResp = await projectsQuery;
-  if (projectsResp.error){
-    const message = String(projectsResp.error.message || "").toLowerCase();
-    if (message.includes("created_by") && message.includes("does not exist")){
-      projectsQuery = state.client
-        .from("projects")
-        .select(baseSelect.replace(", created_by", ""))
-        .order("name");
-      projectsResp = await projectsQuery;
+  if (!serverProjects.error){
+    projects = serverProjects.data || [];
+  } else {
+    console.warn("[projects] server list unavailable; falling back to client query", serverProjects.error);
+
+    let projectsQuery = state.client
+      .from("projects")
+      .select(baseSelect)
+      .eq("active", true)
+      .order("name");
+    let projectsResp = await projectsQuery;
+    if (projectsResp.error){
+      const message = String(projectsResp.error.message || "").toLowerCase();
+      if (message.includes("active") && message.includes("does not exist")){
+        projectsQuery = state.client
+          .from("projects")
+          .select(baseSelect.replace(", active", ""))
+          .order("name");
+        projectsResp = await projectsQuery;
+      }
     }
+    if (projectsResp.error){
+      const message = String(projectsResp.error.message || "").toLowerCase();
+      if (message.includes("created_by") && message.includes("does not exist")){
+        projectsQuery = state.client
+          .from("projects")
+          .select(baseSelect.replace(", created_by", "").replace(", active", ""))
+          .order("name");
+        projectsResp = await projectsQuery;
+      }
+    }
+    if (projectsResp.error){
+      toast("Projects load error", projectsResp.error.message);
+      return;
+    }
+    projects = projectsResp.data || [];
   }
-  if (projectsResp.error){
-    toast("Projects load error", projectsResp.error.message);
-    return;
-  }
-  projects = projectsResp.data || [];
 
   if (!projects.length){
+    const membershipSelect = baseSelect.replace(", active", "");
     const { data: memberRows, error: memberError } = await state.client
       .from("project_members")
       .select(`
         project_id,
         projects (
-          ${baseSelect}
+          ${membershipSelect}
         )
       `)
       .eq("user_id", state.user.id);
@@ -22100,6 +22143,20 @@ async function loadProjects(){
           };
         })
         .filter(Boolean);
+    } else if (!serverProjects.error) {
+      console.warn("[projects] membership fallback failed", memberError);
+    } else {
+      let legacyQuery = state.client
+        .from("projects")
+        .select(membershipSelect)
+        .order("name");
+      if (orgId){
+        legacyQuery = legacyQuery.eq("org_id", orgId);
+      }
+      const legacyResp = await legacyQuery;
+      if (!legacyResp.error){
+        projects = legacyResp.data || projects;
+      }
     }
   }
 
