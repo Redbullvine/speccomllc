@@ -2645,8 +2645,7 @@ function normalizePopupPhotos(items){
         readonly: Boolean(item?.readonly),
       };
     })
-    .filter(Boolean)
-    .slice(0, 6);
+    .filter(Boolean);
 }
 
 function getCachedSitePhotos(siteId){
@@ -2678,7 +2677,6 @@ async function fetchSitePhotosForMapPopup(siteId){
   if (isDemo){
     const rows = (state.demo.siteMedia || [])
       .filter((row) => toSiteIdKey(row?.site_id) === key)
-      .slice(0, 6)
       .map((row) => ({
         id: row?.id || "",
         createdBy: row?.created_by || "",
@@ -2712,15 +2710,13 @@ async function fetchSitePhotosForMapPopup(siteId){
     .from("site_media")
     .select("id, media_path, created_by, created_at, gps_lat, gps_lng, gps_accuracy_m")
     .eq("site_id", siteId)
-    .order("created_at", { ascending: false })
-    .limit(6);
+    .order("created_at", { ascending: false });
   if (error && isMissingColumnError(error, "created_by")){
     ({ data, error } = await state.client
       .from("site_media")
       .select("id, media_path, created_at, gps_lat, gps_lng, gps_accuracy_m")
       .eq("site_id", siteId)
-      .order("created_at", { ascending: false })
-      .limit(6));
+      .order("created_at", { ascending: false }));
   }
   if (error){
     debugLog("[map] popup photo fetch failed", error);
@@ -22093,7 +22089,6 @@ async function loadProjects(){
     let projectsQuery = state.client
       .from("projects")
       .select(baseSelect)
-      .eq("active", true)
       .order("name");
     let projectsResp = await projectsQuery;
     if (projectsResp.error){
@@ -24557,6 +24552,19 @@ async function loadSiteMedia(siteId){
   }
   if (error){
     logPhotoFlowError("site media load failed", error, { siteId });
+    const archivePhotos = await getRuidosoArchivePhotosForSite(archiveSite);
+    if (archivePhotos.length){
+      state.siteMedia = archivePhotos;
+      setCachedSitePhotos(siteId, archivePhotos.map((row) => ({
+        id: row?.id || "",
+        createdBy: row?.created_by || "",
+        url: String(row?.previewUrl || row?.media_path || "").trim(),
+        createdAt: row?.created_at || "",
+        source: row?.source || "",
+        readonly: Boolean(row?.readonly),
+      })).filter((row) => row.url));
+      return;
+    }
     toast("Media load error", error.message);
     state.siteMedia = [];
     setCachedSitePhotos(siteId, []);

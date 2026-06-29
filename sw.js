@@ -4,7 +4,7 @@
  * Does NOT use Background Sync API - manual sync handled by app
  */
 
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const CACHE_NAME = `speccom-${CACHE_VERSION}`;
 
 // Assets that are critical for offline operation
@@ -12,7 +12,7 @@ const CRITICAL_ASSETS = [
   "/",
   "/index.html",
   "/app.js",
-  "/styles.css?v=20260624-form-contrast",
+  "/styles.css?v=20260625-auth-contrast",
   "/supabaseClient.js",
   "/services/offlinePhotoQueue.js",
   "/env.generated.js",
@@ -41,7 +41,7 @@ function shouldCache(url) {
       return false;
     }
     // Don't cache API calls or dynamic content
-    if (urlObj.pathname.includes("/rest/") || urlObj.pathname.includes("/api/")) {
+    if (urlObj.pathname.includes("/rest/") || urlObj.pathname.includes("/api/") || urlObj.pathname.includes("/.netlify/functions/")) {
       return false;
     }
     // Check patterns
@@ -114,7 +114,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Skip API/REST calls - let them fail in offline
-  if (url.includes("/rest/") || url.includes("/api/")) {
+  if (url.includes("/rest/") || url.includes("/api/") || url.includes("/.netlify/functions/")) {
     return;
   }
 

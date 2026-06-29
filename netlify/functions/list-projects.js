@@ -11,18 +11,14 @@ function json(statusCode, payload) {
 }
 
 async function fetchProjects(adminClient) {
-  let query = adminClient
+  const result = await adminClient
     .from("projects")
     .select(PROJECT_COLUMNS)
     .order("name", { ascending: true });
+  if (!result.error) return result;
 
-  const activeResult = await query.eq("active", true);
-  if (!activeResult.error) return activeResult;
-
-  const message = String(activeResult.error.message || "").toLowerCase();
-  if (!message.includes("active") || !message.includes("does not exist")) {
-    return activeResult;
-  }
+  const message = String(result.error.message || "").toLowerCase();
+  if (!message.includes("active") || !message.includes("does not exist")) return result;
 
   return adminClient
     .from("projects")
