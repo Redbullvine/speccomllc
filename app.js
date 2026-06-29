@@ -45,6 +45,7 @@ const FIELD_SUBCONTRACTOR_ALLOWED_VIEWS = new Set([
   "viewMap",
   "viewNodes",
   "viewPhotos",
+  "viewDailyReport",
 ]);
 
 const SHOWCASE_GROUPS = [
@@ -263,6 +264,7 @@ const state = {
     projectId: null,
     reportDate: null,
     metrics: null,
+    summary: "",
   },
   adminProfiles: [],
   materialAdminRows: [],
@@ -18303,6 +18305,11 @@ async function endTechnicianTimesheet(){
   state.technician.timesheet = data || state.technician.timesheet;
   await loadTechnicianEvents();
   renderTechnicianDashboard();
+  await autoSaveDailyProgressReport({
+    projectId: state.technician.timesheet?.project_id || data?.project_id || state.activeProject?.id || null,
+    reportDate: state.technician.timesheet?.work_date || data?.work_date || getLocalDateISO(),
+    silent: false,
+  });
 }
 
 async function loadLaborRows(){
@@ -20924,7 +20931,102 @@ function getDprDefaultMetrics(){
     splice_locations_created_today: 0,
     work_orders_completed_today: 0,
     blocked_items_today: 0,
+    photos_uploaded_today: 0,
+    site_photos_uploaded_today: 0,
+    splice_photos_uploaded_today: 0,
+    material_items_used_today: 0,
+    material_units_used_today: 0,
+    site_entry_lines_today: 0,
+    code_count_today: 0,
+    labor_minutes_today: 0,
+    labor_hours_today: 0,
+    crew_count_today: 0,
+    locations_worked: [],
+    splice_locations_worked: [],
+    material_usage: [],
+    crew: [],
+    work_orders: [],
+    summary: "",
   };
+}
+
+function getDprArray(metrics, key){
+  const value = metrics?.[key];
+  return Array.isArray(value) ? value : [];
+}
+
+function getDprNumber(metrics, key){
+  const value = Number(metrics?.[key] ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function formatDprDateTime(value){
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatDprGps(lat, lng){
+  const latNum = Number(lat);
+  const lngNum = Number(lng);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return "";
+  return `${latNum.toFixed(5)}, ${lngNum.toFixed(5)}`;
+}
+
+function getPublicStorageUrl(bucket, path){
+  const cleanPath = String(path || "").trim();
+  if (!cleanPath) return "";
+  if (/^https?:\/\//i.test(cleanPath)) return cleanPath;
+  const env = getRuntimeEnv();
+  const base = String(env?.SUPABASE_URL || window.SUPABASE_URL || "").replace(/\/+$/, "");
+  if (!base) return cleanPath;
+  const encodedPath = cleanPath.split("/").map((part) => encodeURIComponent(part)).join("/");
+  return `${base}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodedPath}`;
+}
+
+function renderDprCodeChips(codes){
+  const list = Array.from(new Set((Array.isArray(codes) ? codes : [])
+    .map((code) => String(code || "").trim())
+    .filter(Boolean)));
+  if (!list.length) return `<span class="muted tiny">No codes recorded</span>`;
+  return list.slice(0, 18).map((code) => `<span class="dpr-code-chip">${escapeHtml(code)}</span>`).join("")
+    + (list.length > 18 ? `<span class="muted tiny">+${list.length - 18} more</span>` : "");
+}
+
+function renderDprPhotos(photos, bucket = "proof-photos"){
+  const list = Array.isArray(photos) ? photos : [];
+  if (!list.length) return `<span class="muted tiny">No photos captured on this report date</span>`;
+  return list.slice(0, 8).map((photo, index) => {
+    const path = String(photo?.path || photo?.photo_path || photo?.media_path || "").trim();
+    const url = getPublicStorageUrl(bucket, path);
+    const time = formatDprDateTime(photo?.created_at || photo?.taken_at);
+    const label = `Photo ${index + 1}${time ? ` - ${time}` : ""}`;
+    if (!url) return `<span class="dpr-photo-link">${escapeHtml(label)}</span>`;
+    return `<a class="dpr-photo-link" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(label)}</a>`;
+  }).join("")
+    + (list.length > 8 ? `<span class="muted tiny">+${list.length - 8} more photos</span>` : "");
+}
+
+function renderDprEntries(entries){
+  const list = Array.isArray(entries) ? entries : [];
+  if (!list.length) return "";
+  return `
+    <div class="dpr-entry-list">
+      ${list.slice(0, 10).map((entry) => `
+        <div class="dpr-entry-row">
+          <span>${escapeHtml(entry?.description || "Item")}</span>
+          <strong>${escapeHtml(String(entry?.quantity ?? "-"))}</strong>
+        </div>
+      `).join("")}
+      ${list.length > 10 ? `<div class="muted tiny">+${list.length - 10} more items</div>` : ""}
+    </div>
+  `;
 }
 
 function syncDprProjectSelection(){
@@ -20960,16 +21062,109 @@ function renderDprMetrics(){
     return;
   }
   const metrics = { ...getDprDefaultMetrics(), ...state.dpr.metrics };
+  const locations = getDprArray(metrics, "locations_worked");
+  const spliceLocations = getDprArray(metrics, "splice_locations_worked");
+  const materials = getDprArray(metrics, "material_usage");
+  const crew = getDprArray(metrics, "crew");
+  const workOrders = getDprArray(metrics, "work_orders");
+  const summary = String(state.dpr.summary || metrics.summary || "").trim();
   wrap.innerHTML = `
-    <div class="dpr-metric-row"><span>${t("dprMetricSites")}</span><span>${metrics.sites_created_today}</span></div>
-    <div class="dpr-metric-row"><span>${t("dprMetricSplice")}</span><span>${metrics.splice_locations_created_today}</span></div>
-    <div class="dpr-metric-row"><span>${t("dprMetricWorkOrders")}</span><span>${metrics.work_orders_completed_today}</span></div>
-    <div class="dpr-metric-row"><span>${t("dprMetricBlocked")}</span><span>${metrics.blocked_items_today}</span></div>
+    ${summary ? `<div class="dpr-summary-text">${escapeHtml(summary)}</div>` : ""}
+    <div class="dpr-metric-grid">
+      <div class="dpr-metric-tile"><span>Locations worked</span><strong>${locations.length + spliceLocations.length}</strong></div>
+      <div class="dpr-metric-tile"><span>Photos</span><strong>${getDprNumber(metrics, "photos_uploaded_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>Material units</span><strong>${getDprNumber(metrics, "material_units_used_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>Codes</span><strong>${getDprNumber(metrics, "code_count_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>Crew</span><strong>${getDprNumber(metrics, "crew_count_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>Labor hours</span><strong>${getDprNumber(metrics, "labor_hours_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>${t("dprMetricWorkOrders")}</span><strong>${getDprNumber(metrics, "work_orders_completed_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>${t("dprMetricBlocked")}</span><strong>${getDprNumber(metrics, "blocked_items_today")}</strong></div>
+    </div>
+    <div class="dpr-section">
+      <h3>Locations and photos</h3>
+      ${locations.length ? locations.map((loc) => {
+        const gps = formatDprGps(loc?.gps_lat, loc?.gps_lng);
+        return `
+          <article class="dpr-report-item">
+            <div class="dpr-report-item-head">
+              <div>
+                <strong>${escapeHtml(loc?.name || "Location")}</strong>
+                <div class="muted tiny">${escapeHtml([loc?.work_type || "", gps ? `GPS ${gps}` : ""].filter(Boolean).join(" | "))}</div>
+              </div>
+              <span class="muted tiny">${escapeHtml(formatDprDateTime(loc?.created_at))}</span>
+            </div>
+            ${loc?.notes ? `<div class="dpr-report-notes">${escapeHtml(loc.notes)}</div>` : ""}
+            <div class="dpr-code-wrap">${renderDprCodeChips(loc?.codes || [])}</div>
+            ${renderDprEntries(loc?.entries || [])}
+            <div class="dpr-photo-wrap">${renderDprPhotos(loc?.photos || [], "proof-photos")}</div>
+          </article>
+        `;
+      }).join("") : `<div class="muted small">No site/location activity captured for this date.</div>`}
+    </div>
+    <div class="dpr-section">
+      <h3>Splicing locations</h3>
+      ${spliceLocations.length ? spliceLocations.map((loc) => {
+        const gps = formatDprGps(loc?.gps_lat, loc?.gps_lng);
+        return `
+          <article class="dpr-report-item">
+            <div class="dpr-report-item-head">
+              <div>
+                <strong>${escapeHtml(loc?.label || "Splice location")}</strong>
+                <div class="muted tiny">${escapeHtml([loc?.node_number ? `Node ${loc.node_number}` : "", gps ? `GPS ${gps}` : "", loc?.completed ? "Completed" : ""].filter(Boolean).join(" | "))}</div>
+              </div>
+              <span class="muted tiny">${escapeHtml(formatDprDateTime(loc?.created_at))}</span>
+            </div>
+            ${loc?.work_description ? `<div class="dpr-report-notes">${escapeHtml(loc.work_description)}</div>` : ""}
+            <div class="dpr-code-wrap">${renderDprCodeChips(loc?.work_codes || [])}</div>
+            <div class="dpr-photo-wrap">${renderDprPhotos(loc?.photos || [], "proof-photos")}</div>
+          </article>
+        `;
+      }).join("") : `<div class="muted small">No splice-location activity captured for this date.</div>`}
+    </div>
+    <div class="dpr-section">
+      <h3>Materials used</h3>
+      ${materials.length ? `
+        <div class="dpr-entry-list">
+          ${materials.map((row) => `
+            <div class="dpr-entry-row">
+              <span>${escapeHtml(row?.item_key || "Material")} <span class="muted tiny">${escapeHtml(row?.feature_id || "")}</span></span>
+              <strong>${escapeHtml(String(row?.qty_used ?? 0))}</strong>
+            </div>
+          `).join("")}
+        </div>
+      ` : `<div class="muted small">No material usage logged for this date.</div>`}
+    </div>
+    <div class="dpr-section">
+      <h3>Crew time</h3>
+      ${crew.length ? `
+        <div class="dpr-entry-list">
+          ${crew.map((row) => `
+            <div class="dpr-entry-row">
+              <span>${escapeHtml(row?.name || "Crew member")} <span class="muted tiny">${escapeHtml([formatDprDateTime(row?.clock_in_at), row?.clock_out_at ? formatDprDateTime(row.clock_out_at) : "open"].filter(Boolean).join(" - "))}</span></span>
+              <strong>${escapeHtml(formatDurationMinutes(Number(row?.total_minutes_worked || 0)))}</strong>
+            </div>
+          `).join("")}
+        </div>
+      ` : `<div class="muted small">No crew time captured for this date.</div>`}
+    </div>
+    ${workOrders.length ? `
+      <div class="dpr-section">
+        <h3>Work orders touched</h3>
+        <div class="dpr-entry-list">
+          ${workOrders.slice(0, 10).map((row) => `
+            <div class="dpr-entry-row">
+              <span>${escapeHtml(row?.customer_label || row?.address || row?.type || "Work order")}</span>
+              <strong>${escapeHtml(row?.status || "")}</strong>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    ` : ""}
   `;
 }
 
 function setDprEditState(){
-  const canEdit = isPrivilegedRole();
+  const canEdit = hasAuthenticatedSession();
   const refreshBtn = $("btnDprRefresh");
   const saveBtn = $("btnDprSave");
   const comments = $("dprComments");
@@ -20996,6 +21191,7 @@ async function loadDailyProgressReport(){
   if (!projectId){
     state.dpr.reportId = null;
     state.dpr.metrics = null;
+    state.dpr.summary = "";
     if ($("dprComments")) $("dprComments").value = "";
     renderDprMetrics();
     setDprEditState();
@@ -21006,6 +21202,7 @@ async function loadDailyProgressReport(){
     const row = list.find((r) => r.project_id === projectId && r.report_date === state.dpr.reportDate) || null;
     state.dpr.reportId = row?.id || null;
     state.dpr.metrics = row?.metrics || null;
+    state.dpr.summary = row?.summary || row?.metrics?.summary || "";
     if ($("dprComments")) $("dprComments").value = row?.comments || "";
     renderDprMetrics();
     setDprEditState();
@@ -21018,7 +21215,7 @@ async function loadDailyProgressReport(){
   }
   const { data, error } = await state.client
     .from("daily_progress_reports")
-    .select("id, project_id, report_date, metrics, comments")
+    .select("id, project_id, report_date, metrics, summary, comments, submitted_at, submitted_by")
     .eq("project_id", projectId)
     .eq("report_date", state.dpr.reportDate)
     .maybeSingle();
@@ -21028,13 +21225,14 @@ async function loadDailyProgressReport(){
   }
   state.dpr.reportId = data?.id || null;
   state.dpr.metrics = data?.metrics || null;
+  state.dpr.summary = data?.summary || data?.metrics?.summary || "";
   if ($("dprComments")) $("dprComments").value = data?.comments || "";
   renderDprMetrics();
   setDprEditState();
 }
 
 async function generateDailyProgressReport(){
-  if (!isPrivilegedRole()){
+  if (!hasAuthenticatedSession()){
     toast("Not allowed", "Authorized access required.");
     return;
   }
@@ -21047,12 +21245,18 @@ async function generateDailyProgressReport(){
   if (dateInput) state.dpr.reportDate = dateInput.value || getTodayDate();
   const comments = $("dprComments")?.value || null;
   if (isDemo){
-    const metrics = getDprDefaultMetrics();
+    const metrics = {
+      ...getDprDefaultMetrics(),
+      summary: "Demo report saved for today.",
+      locations_worked: [],
+      crew_count_today: 1,
+    };
     const row = {
       id: `demo-dpr-${Date.now()}`,
       project_id: projectId,
       report_date: state.dpr.reportDate,
       metrics,
+      summary: metrics.summary,
       comments,
     };
     state.demo.dprReports = state.demo.dprReports || [];
@@ -21065,6 +21269,7 @@ async function generateDailyProgressReport(){
       state.dpr.reportId = row.id;
     }
     state.dpr.metrics = metrics;
+    state.dpr.summary = metrics.summary;
     renderDprMetrics();
     setDprEditState();
     toast("Daily report", "Report saved.");
@@ -21092,13 +21297,14 @@ async function generateDailyProgressReport(){
     return;
   }
   state.dpr.metrics = metricsData || getDprDefaultMetrics();
+  state.dpr.summary = state.dpr.metrics?.summary || "";
   renderDprMetrics();
   setDprEditState();
   toast("Daily report", "Report saved.");
 }
 
 async function saveDailyProgressComments(){
-  if (!isPrivilegedRole()){
+  if (!hasAuthenticatedSession()){
     toast("Not allowed", "Authorized access required.");
     return;
   }
@@ -21127,6 +21333,30 @@ async function saveDailyProgressComments(){
     return;
   }
   toast("Daily report", "Comments saved.");
+}
+
+async function autoSaveDailyProgressReport({
+  projectId = state.technician.timesheet?.project_id || state.activeProject?.id || null,
+  reportDate = getLocalDateISO(),
+  comments = null,
+  silent = false,
+} = {}){
+  if (isDemo || isDemoUser() || !state.client || !state.user || !projectId) return null;
+  const { data, error } = await state.client.rpc("fn_upsert_daily_progress_report", {
+    p_project_id: projectId,
+    p_date: reportDate,
+    p_comments: comments,
+  });
+  if (error){
+    console.warn("[daily report] auto-save failed", error);
+    if (!silent) toast("Daily report error", error.message || "Could not save the daily report.");
+    return null;
+  }
+  if (state.dpr.projectId === projectId && state.dpr.reportDate === reportDate){
+    await loadDailyProgressReport();
+  }
+  if (!silent) toast("Daily report", "End-of-day report saved for review.");
+  return data || null;
 }
 
 const MESSAGE_READ_KEY = "messages_last_read_";
@@ -34321,6 +34551,20 @@ function wireUI(){
   const dprSaveBtn = $("btnDprSave");
   if (dprSaveBtn){
     dprSaveBtn.addEventListener("click", () => saveDailyProgressComments());
+  }
+  const techOpenDailyReportBtn = $("btnTechOpenDailyReport");
+  if (techOpenDailyReportBtn){
+    techOpenDailyReportBtn.addEventListener("click", () => {
+      if (state.activeProject?.id){
+        state.dpr.projectId = state.activeProject.id;
+      } else if (state.technician.timesheet?.project_id){
+        state.dpr.projectId = state.technician.timesheet.project_id;
+      }
+      state.dpr.reportDate = getLocalDateISO();
+      const dateInput = $("dprDate");
+      if (dateInput) dateInput.value = state.dpr.reportDate;
+      setActiveView("viewDailyReport");
+    });
   }
   const languageSelect = $("languageSelect");
   if (languageSelect){
