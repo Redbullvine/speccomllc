@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Exo+2:wght@200;300;400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" />
-  <link rel="stylesheet" href="./styles.css?v=20260624-form-contrast" />
+  <link rel="stylesheet" href="./styles.css?v=20260625-auth-contrast" />
   <link rel="stylesheet" href="./styles/background.css" />
   <style>
     /* ===== SPLASH SCREEN ===== */
@@ -1208,45 +1208,66 @@
     .auth-card h1 {
       font-family: 'Rajdhani', sans-serif;
       font-size: 22px;
-      font-weight: 700;
+      font-weight: 800;
       letter-spacing: 1px;
-      color: rgba(230,242,255,0.95);
+      color: rgba(230,242,255,1);
       text-align: center;
       margin: 0 0 6px;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.36);
     }
     .auth-sub {
       font-family: 'Exo 2', sans-serif;
       font-size: 11px;
       letter-spacing: 1.5px;
       text-transform: uppercase;
-      color: rgba(140,180,150,0.45);
+      color: rgba(140,180,150,0.9);
       text-align: center;
       margin-bottom: 24px;
+      font-weight: 700;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
     }
-    .auth-card .hr { border-color: rgba(29,122,69,0.1); margin: 0 0 22px; }
+    .auth-card .hr { border-color: rgba(29,122,69,0.28); margin: 0 0 22px; }
     .auth-card .input {
       background: rgba(5,11,24,0.9) !important;
-      border: 1px solid rgba(148,163,184,0.35) !important;
+      border: 1px solid rgba(148,163,184,0.68) !important;
       border-radius: 8px !important;
-      color: rgba(200,220,245,0.9) !important;
+      color: rgba(230,242,255,1) !important;
+      caret-color: #ffffff !important;
+      -webkit-text-fill-color: rgba(230,242,255,1) !important;
+      color-scheme: dark;
       font-family: 'Exo 2', sans-serif !important;
       font-size: 13px !important;
+      font-weight: 700 !important;
       padding: 11px 14px !important;
       outline: none !important;
+      opacity: 1 !important;
+      text-shadow: 0 0 0 rgba(230,242,255,1) !important;
       transition: border-color 0.18s !important;
     }
     .auth-card .input:focus {
-      border-color: rgba(29,122,69,0.65) !important;
+      border-color: rgba(29,122,69,0.95) !important;
+      box-shadow: 0 0 0 3px rgba(29,122,69,0.22) !important;
     }
-    .auth-card .input::placeholder { color: rgba(148,163,184,0.65) !important; }
+    .auth-card .input::placeholder {
+      color: rgba(148,163,184,0.95) !important;
+      -webkit-text-fill-color: rgba(148,163,184,0.95) !important;
+      font-weight: 700 !important;
+    }
+    .auth-card .input:-webkit-autofill {
+      -webkit-text-fill-color: rgba(230,242,255,1) !important;
+      caret-color: #ffffff !important;
+      -webkit-box-shadow: 0 0 0 1000px #050b18 inset !important;
+      transition: background-color 9999s ease-in-out 0s !important;
+    }
     .auth-card .field-stack { gap: 10px; }
     .auth-card .btn {
       min-height: 46px !important;
       border-radius: 8px !important;
       font-family: 'Rajdhani', sans-serif !important;
       font-size: 13px !important;
-      font-weight: 700 !important;
+      font-weight: 900 !important;
       letter-spacing: 2px !important;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.32) !important;
       transition: all 0.18s !important;
     }
     .auth-card .btn:not(.secondary):not(.ghost) {
@@ -1259,14 +1280,14 @@
       box-shadow: 0 0 22px rgba(29,122,69,0.3) !important;
     }
     .auth-card .btn.secondary {
-      background: rgba(255,255,255,0.05) !important;
-      border: 1px solid rgba(29,122,69,0.22) !important;
-      color: rgba(180,215,250,0.85) !important;
+      background: rgba(255,255,255,0.1) !important;
+      border: 1px solid rgba(29,122,69,0.5) !important;
+      color: rgba(180,215,250,1) !important;
     }
     .auth-card .btn.ghost {
       background: transparent !important;
-      border: 1px solid rgba(255,255,255,0.1) !important;
-      color: rgba(140,180,150,0.65) !important;
+      border: 1px solid rgba(255,255,255,0.28) !important;
+      color: rgba(140,180,150,0.98) !important;
     }
     .auth-workspace-context {
       display: none;
@@ -1463,9 +1484,18 @@
       background: #f7f9fd !important;
       border-color: rgba(29,122,69,0.18) !important;
       color: #0f1f38 !important;
+      caret-color: #0f1f38 !important;
+      -webkit-text-fill-color: #0f1f38 !important;
+      color-scheme: light;
     }
     body.theme-light .auth-card .input::placeholder {
       color: rgba(70,100,145,0.55) !important;
+      -webkit-text-fill-color: rgba(70,100,145,0.55) !important;
+    }
+    body.theme-light .auth-card .input:-webkit-autofill {
+      -webkit-text-fill-color: #0f1f38 !important;
+      caret-color: #0f1f38 !important;
+      -webkit-box-shadow: 0 0 0 1000px #f7f9fd inset !important;
     }
     body.theme-light .auth-card .btn.secondary {
       background: #ffffff !important;
