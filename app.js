@@ -22055,116 +22055,51 @@ async function loadProjects(){
   const orgId = await initializeOrgContext({ attemptRepair: true });
   const userId = state.user?.id || null;
   if (!orgId){
-    console.warn("[projects] org undefined; attempting membership/creator fallback", { user_id: userId, org_id: null });
+    console.warn("[projects] org undefined; loading all visible projects", { user_id: userId, org_id: null });
   }
   const baseSelect = "id, org_id, name, description, created_at, location, job_number, is_demo, created_by";
   let projects = [];
 
-  // ROOT sees all projects across all orgs
-  if (SpecCom.helpers.isRoot()){
-    const { data: allProjects, error: rootErr } = await state.client
-      .from("projects")
-      .select(baseSelect)
-      .order("name");
-    if (!rootErr){
-      projects = allProjects || [];
-    }
-    // Skip membership/creator queries — fall through to dedup + render
-    const uniqueProjectsRoot = [];
-    const seenRoot = new Set();
-    (projects || []).forEach((row) => {
-      const id = String(row?.id || "").trim();
-      if (!id || seenRoot.has(id)) return;
-      seenRoot.add(id);
-      uniqueProjectsRoot.push(row);
-    });
-    uniqueProjectsRoot.sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
-    state.projects = uniqueProjectsRoot;
-    const savedId = String(state.activeProject?.id || state.profile?.current_project_id || "").trim();
-    state.activeProject = uniqueProjectsRoot.find(p => p.id === savedId) || uniqueProjectsRoot[0] || null;
-    renderProjects();
-    loadMessages();
-    return;
-  }
-
-  const { data: memberRows, error: memberError } = await state.client
-    .from("project_members")
-    .select(`
-      project_id,
-      projects (
-        ${baseSelect}
-      )
-    `)
-    .eq("user_id", state.user.id);
-  if (memberError){
-    toast("Projects load error", memberError.message);
-    return;
-  }
-  projects = (memberRows || [])
-    .map((row) => {
-      if (!row?.projects) return null;
-      return {
-        ...row.projects,
-      };
-    })
-    .filter(Boolean);
-
-  // Fallback 2: include all projects in the user's org (catches projects where
-  // membership rows are missing but the user belongs to the org)
-  if (orgId){
-    const { data: orgProjects, error: orgErr } = await state.client
-      .from("projects")
-      .select(baseSelect)
-      .eq("org_id", orgId)
-      .order("name");
-    if (!orgErr && orgProjects){
-      const existing = new Set(projects.map(p => p.id));
-      orgProjects.forEach((row) => {
-        if (!existing.has(row.id)) projects.push(row);
-      });
-    }
-  }
-
-  // Fallback 3: include projects created by the user (legacy rows missing membership)
-  let createdQuery = state.client
+  let projectsQuery = state.client
     .from("projects")
     .select(baseSelect)
-    .eq("created_by", state.user.id)
     .order("name");
-  if (orgId){
-    createdQuery = createdQuery.eq("org_id", orgId);
-  }
-  const createdResp = await createdQuery;
-  if (!createdResp.error){
-    const existing = new Set(projects.map(p => p.id));
-    (createdResp.data || []).forEach((row) => {
-      if (!existing.has(row.id)) projects.push(row);
-    });
-  } else {
-    const message = String(createdResp.error.message || "").toLowerCase();
+  let projectsResp = await projectsQuery;
+  if (projectsResp.error){
+    const message = String(projectsResp.error.message || "").toLowerCase();
     if (message.includes("created_by") && message.includes("does not exist")){
-      let fallbackQuery = state.client
+      projectsQuery = state.client
         .from("projects")
         .select(baseSelect.replace(", created_by", ""))
         .order("name");
-      if (orgId){
-        fallbackQuery = fallbackQuery.eq("org_id", orgId);
-      }
-      const { data } = await fallbackQuery;
-      projects = data || projects;
+      projectsResp = await projectsQuery;
     }
   }
+  if (projectsResp.error){
+    toast("Projects load error", projectsResp.error.message);
+    return;
+  }
+  projects = projectsResp.data || [];
 
-  if (isFieldSubcontractorMode()){
-    const { data: fieldProjects, error: fieldProjectsError } = await state.client
-      .from("projects")
-      .select(baseSelect)
-      .order("name");
-    if (!fieldProjectsError && Array.isArray(fieldProjects)){
-      const existing = new Set(projects.map(p => p.id));
-      fieldProjects.forEach((row) => {
-        if (row?.id && !existing.has(row.id)) projects.push(row);
-      });
+  if (!projects.length){
+    const { data: memberRows, error: memberError } = await state.client
+      .from("project_members")
+      .select(`
+        project_id,
+        projects (
+          ${baseSelect}
+        )
+      `)
+      .eq("user_id", state.user.id);
+    if (!memberError){
+      projects = (memberRows || [])
+        .map((row) => {
+          if (!row?.projects) return null;
+          return {
+            ...row.projects,
+          };
+        })
+        .filter(Boolean);
     }
   }
 
@@ -22205,6 +22140,9 @@ async function loadProjects(){
     count: state.projects.length,
   });
   renderProjects();
+  if (SpecCom.helpers.isRoot()){
+    loadMessages();
+  }
 }
 
 function setAdminInventoryStatus(message = "", { isError = false } = {}){
