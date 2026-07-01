@@ -8650,7 +8650,7 @@ button:disabled,
   background-color: var(--form-dark-bg) !important;
   border-color: var(--form-dark-border) !important;
   caret-color: var(--form-dark-text) !important;
-  -webkit-text-fill-color: currentColor !important;
+  -webkit-text-fill-color: var(--form-dark-text) !important;
 }
 
 :where(.auth-card, .sidebar, .sidebar-card, .gis-sidebar, .map-panel, .map-field-panel, #map-float-panel, #messagesModal, .msg-modal-card, #menuModal, #techCloseoutModal, .field-ops-studio, .liveboard, .message-popup, .upload-center, body.map-mode, body.theme-light .card, body.theme-light .modal-card) input::placeholder,
@@ -8791,7 +8791,23 @@ button:disabled,
   background: rgba(7, 18, 24, 0.88) !important;
   border-color: rgba(148, 163, 184, 0.44) !important;
   caret-color: #f8fafc;
-  -webkit-text-fill-color: currentColor;
+  -webkit-text-fill-color: #f8fafc !important;
+}
+
+#map-float-panel #kmzTreeSearch,
+body.map-mode #map-float-panel #kmzTreeSearch,
+#map-float-panel .map-search-row .input,
+body.map-mode #map-float-panel .map-search-row .input {
+  color: #f8fbff !important;
+  caret-color: #f8fbff !important;
+  -webkit-text-fill-color: #f8fbff !important;
+}
+
+#map-float-panel #kmzTreeSearch:-webkit-autofill,
+body.map-mode #map-float-panel #kmzTreeSearch:-webkit-autofill {
+  -webkit-text-fill-color: #f8fbff !important;
+  caret-color: #f8fbff !important;
+  -webkit-box-shadow: 0 0 0 1000px rgba(7, 18, 24, 0.88) inset !important;
 }
 
 #map-float-panel #mapFieldLocationName::placeholder,
