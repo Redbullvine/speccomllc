@@ -2849,15 +2849,15 @@ body.map-create-open .map-floating-places{
 }
 .project-row.active{
   border-color: rgba(200,169,110,.9);
-  background: rgba(200,169,110,.12);
-  color:#1f2937;
+  background: rgba(22,101,52,.36);
+  color:#f8fafc;
 }
 .project-row.active .project-row-select,
 .project-row.active .project-row-title{
-  color:#1f2937;
+  color:#f8fafc;
 }
 .project-row.active .project-row-meta{
-  color:#475569;
+  color:#cbd5e1;
 }
 .project-row-title{
   font-weight:800;
@@ -2886,16 +2886,16 @@ body.map-create-open .map-floating-places{
   color: #f1f5f9;
 }
 #projectsModal .project-row.active{
-  background: rgba(212, 175, 55, 0.18);
+  background: rgba(22, 101, 52, 0.36);
   border-color: rgba(212, 175, 55, 0.85);
-  color: #1f2937;
+  color: #f8fafc;
 }
 #projectsModal .project-row.active .project-row-title,
 #projectsModal .project-row.active .project-row-select{
-  color: #1f2937;
+  color: #f8fafc;
 }
 #projectsModal .project-row.active .project-row-meta{
-  color: #475569;
+  color: #cbd5e1;
 }
 #projectsModal .modal-header h2{
   color: #0f1f3d;
@@ -8854,4 +8854,94 @@ body.map-mode #map-float-panel #kmzTreeSearch:-webkit-autofill {
   color: var(--form-light-placeholder) !important;
   opacity: 1;
   -webkit-text-fill-color: var(--form-light-placeholder) !important;
+}
+
+/* Admin and project dark-panel readability */
+#viewAdmin .card,
+#viewAdmin #adminWorkspaceBody,
+#viewAdmin #adminWorkspaceBody .card {
+  color: #f8fafc !important;
+}
+
+#viewAdmin .card :is(h1, h2, h3, h4, p, td, th, .project-row-title, .project-row-select),
+#viewAdmin #adminWorkspaceBody :is(h1, h2, h3, h4, p, td, th, .project-row-title, .project-row-select),
+#viewAdmin :is(#adminProjectsList, #adminCompaniesList) span {
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+}
+
+#viewAdmin .card :is(.muted, .small, .project-row-meta, label),
+#viewAdmin #adminWorkspaceBody :is(.muted, .small, .project-row-meta, label) {
+  color: #cbd5e1 !important;
+  -webkit-text-fill-color: #cbd5e1 !important;
+}
+
+#viewAdmin .card .project-row,
+#projectsModal .project-row {
+  background: rgba(7, 18, 24, 0.88) !important;
+  border-color: rgba(148, 163, 184, 0.38) !important;
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+}
+
+#viewAdmin .card .project-row.active,
+#projectsModal .project-row.active {
+  background: rgba(22, 101, 52, 0.36) !important;
+  border-color: rgba(212, 175, 55, 0.85) !important;
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+}
+
+#viewAdmin .card .project-row :is(.project-row-title, .project-row-select),
+#projectsModal .project-row :is(.project-row-title, .project-row-select) {
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+}
+
+#viewAdmin .card .project-row .project-row-meta,
+#projectsModal .project-row .project-row-meta {
+  color: #cbd5e1 !important;
+  -webkit-text-fill-color: #cbd5e1 !important;
+}
+
+#viewAdmin .table tbody tr,
+#viewAdmin .table tbody tr:nth-child(even),
+#viewAdmin .table tbody tr:hover {
+  background: rgba(7, 18, 24, 0.78) !important;
+}
+
+#viewAdmin .table :is(th, td) {
+  border-color: rgba(148, 163, 184, 0.28) !important;
+}
+
+#viewAdmin .card :is(.btn.secondary, .btn.ghost, .btn.btn-secondary, .btn-secondary, button.btn.secondary, button.btn.ghost):not(.danger),
+#projectsModal :is(.btn.secondary, .btn.ghost, .btn.btn-secondary, .btn-secondary, button.btn.secondary, button.btn.ghost):not(.danger),
+#map-float-panel :is(.btn.secondary, .btn.ghost, .btn.btn-secondary, .btn-secondary, button.btn.secondary, button.btn.ghost):not(.danger),
+.map-field-panel :is(.btn.secondary, .btn.ghost, .btn.btn-secondary, .btn-secondary, button.btn.secondary, button.btn.ghost):not(.danger) {
+  background: rgba(7, 18, 24, 0.9) !important;
+  border-color: rgba(148, 163, 184, 0.42) !important;
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+}
+
+#viewAdmin .card :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select, .input, .form-control),
+#projectsModal :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select, .input, .form-control) {
+  background: rgba(7, 18, 24, 0.9) !important;
+  border-color: rgba(148, 163, 184, 0.42) !important;
+  color: #f8fafc !important;
+  caret-color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+}
+
+#viewAdmin .card input::placeholder,
+#viewAdmin .card textarea::placeholder,
+#viewAdmin .card .input::placeholder,
+#viewAdmin .card .form-control::placeholder,
+#projectsModal input::placeholder,
+#projectsModal textarea::placeholder,
+#projectsModal .input::placeholder,
+#projectsModal .form-control::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
 }
