@@ -250,6 +250,7 @@ const state = {
     captureTarget: "",
   },
   projects: [],
+  projectMembershipIds: new Set(),
   messages: [],
   messageRecipients: [],
   messageIdentityMap: new Map(),
@@ -265,6 +266,12 @@ const state = {
     reportDate: null,
     metrics: null,
     summary: "",
+  },
+  fieldDay: {
+    session: null,
+    events: [],
+    activeEvent: null,
+    loading: false,
   },
   adminProfiles: [],
   materialAdminRows: [],
@@ -347,6 +354,8 @@ const state = {
     userNames: new Map(),
     siteCodesBySiteId: new Map(),
     sitePhotosBySiteId: new Map(),
+    fieldWorkLogsBySiteId: new Map(),
+    fieldLastPingByKey: new Map(),
     popupSiteKeys: [],
     popupSiteIndex: 0,
     popupMarker: null,
@@ -3186,6 +3195,12 @@ async function upsertUserLocation(pos){
   if (!shouldSendLocation(nextPoint)) return;
   state.lastLocationSent = nextPoint;
   state.lastLocationSentAt = Date.now();
+  void recordFieldLocationPingFromGps({
+    lat: payload.lat,
+    lng: payload.lng,
+    accuracy_m: payload.accuracy,
+    captured_at: payload.updated_at,
+  });
   await state.client.from("user_locations").upsert(payload, { onConflict: "user_id" });
 }
 
@@ -5186,6 +5201,18 @@ const MAP_FIELD_STATUS_COLORS = {
   [MAP_FIELD_STATUS.NOT_STARTED]: "#ef4444",
   [MAP_FIELD_STATUS.IN_PROGRESS]: "#f59e0b",
   [MAP_FIELD_STATUS.COMPLETE]: "#16a34a",
+};
+const FIELD_DAY_EVENT_TYPES = {
+  VEHICLE_INSPECTION: "VEHICLE_INSPECTION",
+  LOCATION_WORK: "LOCATION_WORK",
+  BREAK_15: "BREAK_15",
+  LUNCH: "LUNCH",
+};
+const FIELD_DAY_EVENT_LABELS = {
+  [FIELD_DAY_EVENT_TYPES.VEHICLE_INSPECTION]: "Vehicle Inspection",
+  [FIELD_DAY_EVENT_TYPES.LOCATION_WORK]: "Location",
+  [FIELD_DAY_EVENT_TYPES.BREAK_15]: "Break",
+  [FIELD_DAY_EVENT_TYPES.LUNCH]: "Lunch",
 };
 const MAP_MY_LOCATION_COLOR = "#3b82f6";
 const MAP_PANES = {
@@ -10099,7 +10126,7 @@ async function refreshLocations(){
   const searchResult = getSiteSearchResultSet();
   const rows = searchResult.rows;
   if (state.map.myLocation){
-    const nearest = findNearestVisibleSite(state.map.myLocation);
+    const nearest = findNearestVisibleSite(state.map.myLocation, getFieldGpsAssociationRadius(state.map.myLocation));
     state.map.nearestSiteId = nearest?.site?.id ? toSiteIdKey(nearest.site.id) : "";
     state.map.nearestSiteDistanceM = nearest?.distanceM ?? null;
   } else {
@@ -10315,6 +10342,92 @@ function isFieldRole(roleCode = getRoleCode()){
   return ["TDS", "SUB", "SUBCONTRACTOR", "SPLICER", "TECHNICIAN"].includes(String(roleCode || "").toUpperCase());
 }
 
+function canManageProjectControls(){
+  return isOwnerOrAdmin();
+}
+
+function shouldUseFieldProjectBucket(){
+  if (isPrivilegedRole()) return false;
+  if (isFieldRole() || isFieldSubcontractorMode()) return true;
+  return Boolean((state.projectMembershipIds?.size || 0) || getProfileCurrentProjectId());
+}
+
+function isProjectMarkedInactive(project){
+  const value = project?.active;
+  if (value === false) return true;
+  if (String(value || "").trim().toLowerCase() === "false") return true;
+  return false;
+}
+
+function isLikelyTestProject(project){
+  if (project?.is_demo) return true;
+  const blob = [
+    project?.name,
+    project?.description,
+    project?.job_number,
+    project?.location,
+  ].map((value) => String(value || "").toLowerCase()).join(" ");
+  return /\b(test|testing|demo|dev|sample|sandbox|training)\b/.test(blob);
+}
+
+function isProjectActiveForField(project){
+  if (!project) return false;
+  if (isProjectMarkedInactive(project)) return false;
+  if (isLikelyTestProject(project)) return false;
+  return true;
+}
+
+function getProfileCurrentProjectId(){
+  return String(state.profile?.current_project_id || "").trim();
+}
+
+function filterProjectsForFieldBucket(projects, membershipIds = state.projectMembershipIds){
+  const list = Array.isArray(projects) ? projects : [];
+  if (!shouldUseFieldProjectBucket()) return list;
+  const profileProjectId = getProfileCurrentProjectId();
+  const assignedIds = profileProjectId
+    ? new Set([profileProjectId])
+    : new Set(
+      Array.from(membershipIds || [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)
+    );
+
+  const assignedProjects = assignedIds.size
+    ? list.filter((project) => assignedIds.has(String(project?.id || "")))
+    : [];
+  const source = assignedProjects.length ? assignedProjects : list;
+  const activeSource = source.filter(isProjectActiveForField);
+  if (activeSource.length) return activeSource;
+  return assignedProjects.length ? assignedProjects : list.filter(isProjectActiveForField);
+}
+
+async function loadProjectMembershipIdsForCurrentUser(){
+  const ids = new Set();
+  if (!state.client || !state.user?.id){
+    state.projectMembershipIds = ids;
+    return ids;
+  }
+  try {
+    const { data, error } = await state.client
+      .from("project_members")
+      .select("project_id")
+      .eq("user_id", state.user.id);
+    if (error){
+      console.warn("[projects] membership ids unavailable", error);
+    } else {
+      (data || []).forEach((row) => {
+        const id = String(row?.project_id || "").trim();
+        if (id) ids.add(id);
+      });
+    }
+  } catch (error) {
+    console.warn("[projects] membership ids failed", error);
+  }
+  state.projectMembershipIds = ids;
+  return ids;
+}
+
 function getShowcaseAccountEmails(){
   const env = getRuntimeEnv();
   const raw = String(env?.LIVE_SHOWCASE_EMAILS || env?.DEMO_SHOWCASE_EMAILS || "").trim();
@@ -10373,7 +10486,7 @@ function canViewInvoiceVault(){
 
 function canCreateProjects(){
   if (CONTROL_CENTER_DEV_MODE) return true;
-  return hasAuthenticatedSession();
+  return hasAuthenticatedSession() && canManageProjectControls();
 }
 
 function getOnboardingStatus(){
@@ -13038,8 +13151,8 @@ function setRoleUI(){
   renderInvoiceFilesPanel();
 }
 
-function getLocalDateISO(){
-  const now = new Date();
+function getLocalDateISO(value = new Date()){
+  const now = value instanceof Date ? value : new Date(value || Date.now());
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
@@ -19538,8 +19651,9 @@ function updateProjectScopedControls(){
 
   const createBtn = $("btnProjectsCreate");
   const emptyCreateBtn = $("btnProjectsEmptyCreate");
-  if (createBtn) createBtn.style.display = "";
-  if (emptyCreateBtn) emptyCreateBtn.style.display = "";
+  const showCreate = canCreateProjects() || isDemo;
+  if (createBtn) createBtn.style.display = showCreate ? "" : "none";
+  if (emptyCreateBtn) emptyCreateBtn.style.display = showCreate ? "" : "none";
 }
 
 function openProjectsModal(){
@@ -20589,7 +20703,7 @@ async function confirmImportPriceSheet(){
 }
 
 function openGrantAccessModal(){
-  if (!SpecCom.helpers.isPlatformAdmin()){
+  if (!canManageProjectControls()){
     toast("Not allowed", "Only authorized accounts can grant project access.");
     return;
   }
@@ -20612,7 +20726,7 @@ function closeGrantAccessModal(){
 }
 
 async function confirmGrantAccess(){
-  if (!SpecCom.helpers.isPlatformAdmin()){
+  if (!canManageProjectControls()){
     toast("Not allowed", "Only authorized accounts can grant project access.");
     return;
   }
@@ -20630,14 +20744,27 @@ async function confirmGrantAccess(){
     toast("Access failed", "Supabase client unavailable.");
     return;
   }
-  toast("Access granted", "Access requests are in auth-only mode during access reset.");
+  const { data, error } = await client.rpc("fn_grant_project_access", {
+    p_project_id: state.activeProject.id,
+    p_user_identifier: userInput,
+    p_role_code: "SPLICER",
+  });
+  if (error){
+    toast("Access failed", error.message || "Unable to grant project access.");
+    return;
+  }
+  toast("Access granted", `${data?.email || userInput} can open ${state.activeProject.name || "this project"}.`);
   closeGrantAccessModal();
-  return { ok: true, user: userInput };
+  return data || { ok: true, user: userInput };
 }
 
 function openCreateProjectModal(){
   if (!hasAuthenticatedSession()){
     applySignedOutUi("open-create-project-modal-blocked");
+    return;
+  }
+  if (!canCreateProjects() && !isDemo){
+    toast("Not allowed", "Only admin and office users can create projects.");
     return;
   }
   const modal = $("createProjectModal");
@@ -20941,11 +21068,21 @@ function getDprDefaultMetrics(){
     labor_minutes_today: 0,
     labor_hours_today: 0,
     crew_count_today: 0,
+    field_work_logs_today: 0,
+    gps_points_today: 0,
+    field_day_events_today: 0,
+    project_day_minutes_today: 0,
+    vehicle_inspection_minutes_today: 0,
+    break_minutes_today: 0,
+    lunch_minutes_today: 0,
+    location_work_minutes_today: 0,
     locations_worked: [],
     splice_locations_worked: [],
     material_usage: [],
     crew: [],
     work_orders: [],
+    field_day_sessions: [],
+    field_day_events: [],
     summary: "",
   };
 }
@@ -21029,6 +21166,354 @@ function renderDprEntries(entries){
   `;
 }
 
+function renderDprFieldLogs(logs){
+  const list = Array.isArray(logs) ? logs : [];
+  if (!list.length) return "";
+  return `
+    <div class="dpr-entry-list">
+      ${list.slice(0, 8).map((log) => {
+        const time = formatDprDateTime(log?.completed_at || log?.arrived_at);
+        const codes = Array.isArray(log?.work_codes) && log.work_codes.length
+          ? ` Codes: ${log.work_codes.join(", ")}`
+          : "";
+        return `
+          <div class="dpr-entry-row">
+            <span>${escapeHtml([time, log?.work_completed || "Field work logged"].filter(Boolean).join(" - "))}${escapeHtml(codes)}</span>
+            <strong>${escapeHtml(log?.status_after || "")}</strong>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderDprVisitSummary(visits){
+  const list = Array.isArray(visits) ? visits : [];
+  if (!list.length) return "";
+  return `
+    <div class="muted tiny">
+      GPS seen ${list.reduce((sum, visit) => sum + Number(visit?.ping_count || 0), 0)} time${list.length === 1 ? "" : "s"}
+      ${list[0]?.first_seen_at ? `from ${escapeHtml(formatDprDateTime(list[0].first_seen_at))}` : ""}
+      ${list[0]?.last_seen_at ? ` to ${escapeHtml(formatDprDateTime(list[0].last_seen_at))}` : ""}
+    </div>
+  `;
+}
+
+function renderDprFieldDayTimeline(sessions, events){
+  const sessionList = Array.isArray(sessions) ? sessions : [];
+  const eventList = Array.isArray(events) ? events : [];
+  if (!sessionList.length && !eventList.length) return "";
+  const sessionSummary = sessionList.map((session) => {
+    const start = formatDprDateTime(session?.started_at);
+    const end = session?.ended_at ? formatDprDateTime(session.ended_at) : "open";
+    const minutes = Number(session?.total_minutes || getDurationMinutesBetween(session?.started_at, session?.ended_at || nowISO()));
+    return `<div class="muted tiny">Project day: ${escapeHtml(start)} to ${escapeHtml(end)} (${escapeHtml(formatDurationMinutes(minutes))})</div>`;
+  }).join("");
+  return `
+    <div class="dpr-section">
+      <h3>Project day timeline</h3>
+      ${sessionSummary}
+      ${eventList.length ? `
+        <div class="dpr-entry-list">
+          ${eventList.map((event) => {
+            const start = formatDprDateTime(event?.started_at);
+            const end = event?.ended_at ? formatDprDateTime(event.ended_at) : "open";
+            const minutes = Number(event?.duration_minutes || getDurationMinutesBetween(event?.started_at, event?.ended_at || nowISO()));
+            const codes = Array.isArray(event?.work_codes) && event.work_codes.length ? ` Codes: ${event.work_codes.join(", ")}` : "";
+            return `
+              <div class="dpr-entry-row">
+                <span>${escapeHtml(getFieldDayEventLabel(event))} <span class="muted tiny">${escapeHtml(start)} to ${escapeHtml(end)}${event?.notes ? ` - ${escapeHtml(event.notes)}` : ""}${escapeHtml(codes)}</span></span>
+                <strong>${escapeHtml(formatDurationMinutes(minutes))}</strong>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      ` : `<div class="muted small">No field-day events captured for this date.</div>`}
+    </div>
+  `;
+}
+
+function normalizeDprMaterialRows(rows){
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => ({
+      item_key: String(row?.item_key || row?.material || row?.description || "").trim(),
+      qty_used: Number(row?.qty_used ?? row?.quantity ?? 1),
+      feature_id: row?.feature_id || row?.site_name || "",
+      used_at: row?.used_at || row?.completed_at || row?.created_at || "",
+    }))
+    .filter((row) => row.item_key)
+    .map((row) => ({
+      ...row,
+      qty_used: Number.isFinite(row.qty_used) && row.qty_used > 0 ? row.qty_used : 1,
+    }));
+}
+
+async function loadFieldWorkReportRows(projectId, reportDate){
+  if (isDemo || !state.client || !projectId || !reportDate){
+    return { logs: [], pings: [], sessions: [], events: [] };
+  }
+  const [logsRes, pingsRes] = await Promise.all([
+    state.client
+      .from("field_work_logs")
+      .select("id, user_id, project_id, site_id, work_date, arrived_at, completed_at, gps_lat, gps_lng, gps_accuracy_m, nearest_distance_m, status_before, status_after, work_completed, work_codes, materials_used, created_at")
+      .eq("project_id", projectId)
+      .eq("work_date", reportDate)
+      .order("completed_at", { ascending: true }),
+    state.client
+      .from("field_location_pings")
+      .select("id, user_id, project_id, site_id, work_date, captured_at, gps_lat, gps_lng, gps_accuracy_m, nearest_distance_m, source")
+      .eq("project_id", projectId)
+      .eq("work_date", reportDate)
+      .order("captured_at", { ascending: true }),
+  ]);
+  const sessionsRes = await state.client
+    .from("field_day_sessions")
+    .select("id, user_id, project_id, work_date, started_at, ended_at, total_minutes, start_gps_lat, start_gps_lng, start_gps_accuracy_m, end_gps_lat, end_gps_lng, end_gps_accuracy_m, notes, created_at")
+    .eq("project_id", projectId)
+    .eq("work_date", reportDate)
+    .order("started_at", { ascending: true });
+  const sessionIds = sessionsRes.error ? [] : (sessionsRes.data || []).map((row) => row.id).filter(Boolean);
+  let eventsRes = { data: [], error: null };
+  if (sessionIds.length){
+    eventsRes = await state.client
+      .from("field_day_events")
+      .select("id, session_id, user_id, project_id, site_id, event_type, label, started_at, ended_at, duration_minutes, gps_lat, gps_lng, gps_accuracy_m, site_lat, site_lng, notes, work_codes, materials_used, created_at")
+      .in("session_id", sessionIds)
+      .order("started_at", { ascending: true });
+  }
+  if (logsRes.error && !isMissingTable(logsRes.error)){
+    console.warn("[daily report] field work logs load failed", logsRes.error);
+  }
+  if (pingsRes.error && !isMissingTable(pingsRes.error)){
+    console.warn("[daily report] field GPS pings load failed", pingsRes.error);
+  }
+  if (sessionsRes.error && !isMissingTable(sessionsRes.error)){
+    console.warn("[daily report] field day sessions load failed", sessionsRes.error);
+  }
+  if (eventsRes.error && !isMissingTable(eventsRes.error)){
+    console.warn("[daily report] field day events load failed", eventsRes.error);
+  }
+  return {
+    logs: logsRes.error ? [] : (logsRes.data || []),
+    pings: pingsRes.error ? [] : (pingsRes.data || []),
+    sessions: sessionsRes.error ? [] : (sessionsRes.data || []),
+    events: eventsRes.error ? [] : (eventsRes.data || []),
+  };
+}
+
+async function ensureDprSiteMap(projectId, siteIds = []){
+  const map = new Map();
+  (state.projectSites || []).forEach((site) => {
+    if (!site?.id) return;
+    if (projectId && site.project_id && site.project_id !== projectId) return;
+    map.set(toSiteIdKey(site.id), site);
+  });
+  const missingIds = Array.from(new Set(siteIds.map(toSiteIdKey).filter(Boolean))).filter((id) => !map.has(id));
+  if (missingIds.length && state.client){
+    const { data, error } = await state.client
+      .from("sites")
+      .select(SITE_SELECT_COLUMNS)
+      .in("id", missingIds);
+    if (!error){
+      (data || []).forEach((site) => map.set(toSiteIdKey(site.id), site));
+    }
+  }
+  return map;
+}
+
+function buildDprSummary(metrics){
+  const projectName = String(metrics?.project_name || state.activeProject?.name || "Project").trim() || "Project";
+  const locations = getDprArray(metrics, "locations_worked");
+  const spliceLocations = getDprArray(metrics, "splice_locations_worked");
+  const locationNames = locations
+    .map((loc) => loc?.name || "")
+    .filter(Boolean)
+    .slice(0, 5)
+    .join(", ");
+  const dayMinutes = getDprNumber(metrics, "project_day_minutes_today");
+  const projectTime = dayMinutes ? `${formatDurationMinutes(dayMinutes)} project time, ` : "";
+  const summary = `${projectName}: ${locations.length + spliceLocations.length} locations worked, ${projectTime}${getDprNumber(metrics, "photos_uploaded_today")} photos uploaded, ${getDprNumber(metrics, "material_units_used_today")} material units logged, ${getDprNumber(metrics, "code_count_today")} codes recorded, ${getDprNumber(metrics, "crew_count_today")} crew member(s), ${getDprNumber(metrics, "labor_hours_today")} labor hours.`;
+  return locationNames ? `${summary} Locations: ${locationNames}.` : summary;
+}
+
+async function enhanceDprMetricsWithFieldWork(baseMetrics, projectId, reportDate, { persist = false, reportId = null } = {}){
+  const metrics = { ...getDprDefaultMetrics(), ...(baseMetrics || {}) };
+  const { logs, pings, sessions, events } = await loadFieldWorkReportRows(projectId, reportDate);
+  if (!logs.length && !pings.length && !sessions.length && !events.length) return metrics;
+  const siteIds = Array.from(new Set([
+    ...logs.map((row) => row.site_id),
+    ...pings.map((row) => row.site_id),
+    ...events.map((row) => row.site_id),
+  ].filter(Boolean)));
+  const siteMap = await ensureDprSiteMap(projectId, siteIds);
+  const locations = getDprArray(metrics, "locations_worked").map((loc) => ({ ...loc }));
+  const bySite = new Map();
+  locations.forEach((loc) => {
+    const key = toSiteIdKey(loc?.site_id || loc?.location_id);
+    if (key) bySite.set(key, loc);
+  });
+  const ensureLocation = (siteId, fallback = {}) => {
+    const key = toSiteIdKey(siteId);
+    let loc = key ? bySite.get(key) : null;
+    if (loc) return loc;
+    const site = key ? siteMap.get(key) : null;
+    loc = {
+      site_id: key || fallback.id || "",
+      name: site ? getSiteDisplayName(site) : (fallback.name || "Field location"),
+      notes: site?.notes || "",
+      work_type: "Field work",
+      gps_lat: site?.gps_lat ?? fallback.gps_lat ?? null,
+      gps_lng: site?.gps_lng ?? fallback.gps_lng ?? null,
+      created_at: fallback.created_at || fallback.completed_at || fallback.captured_at || "",
+      codes: [],
+      entries: [],
+      photos: [],
+      field_logs: [],
+      visits: [],
+    };
+    locations.push(loc);
+    if (key) bySite.set(key, loc);
+    return loc;
+  };
+
+  const pingGroups = new Map();
+  pings.forEach((ping) => {
+    const key = toSiteIdKey(ping.site_id);
+    if (!key) return;
+    if (!pingGroups.has(key)){
+      pingGroups.set(key, {
+        first_seen_at: ping.captured_at,
+        last_seen_at: ping.captured_at,
+        ping_count: 0,
+        gps_lat: ping.gps_lat,
+        gps_lng: ping.gps_lng,
+        gps_accuracy_m: ping.gps_accuracy_m,
+        nearest_distance_m: ping.nearest_distance_m,
+      });
+    }
+    const group = pingGroups.get(key);
+    group.ping_count += 1;
+    group.last_seen_at = ping.captured_at || group.last_seen_at;
+    if (ping.gps_lat != null && ping.gps_lng != null){
+      group.gps_lat = ping.gps_lat;
+      group.gps_lng = ping.gps_lng;
+      group.gps_accuracy_m = ping.gps_accuracy_m;
+    }
+  });
+
+  logs.forEach((rawLog) => {
+    const log = normalizeFieldWorkLogRow(rawLog);
+    if (!log) return;
+    const loc = ensureLocation(log.site_id, {
+      id: log.id,
+      name: "Field work",
+      gps_lat: log.gps_lat,
+      gps_lng: log.gps_lng,
+      completed_at: log.completed_at,
+    });
+    loc.field_logs = Array.isArray(loc.field_logs) ? loc.field_logs : [];
+    loc.field_logs.push(log);
+    const codeSet = new Set([...(Array.isArray(loc.codes) ? loc.codes : []), ...log.work_codes]);
+    loc.codes = Array.from(codeSet).filter(Boolean);
+    if (log.work_completed){
+      loc.notes = [loc.notes, log.work_completed].filter(Boolean).join("\n");
+    }
+    if (log.gps_lat != null && log.gps_lng != null){
+      loc.gps_lat = loc.gps_lat ?? log.gps_lat;
+      loc.gps_lng = loc.gps_lng ?? log.gps_lng;
+    }
+    if (!loc.created_at) loc.created_at = log.completed_at || log.arrived_at || "";
+  });
+
+  pingGroups.forEach((visit, siteId) => {
+    const loc = ensureLocation(siteId, {
+      gps_lat: visit.gps_lat,
+      gps_lng: visit.gps_lng,
+      captured_at: visit.first_seen_at,
+    });
+    loc.visits = [visit];
+    if (!loc.created_at) loc.created_at = visit.first_seen_at;
+    if (loc.gps_lat == null && visit.gps_lat != null) loc.gps_lat = visit.gps_lat;
+    if (loc.gps_lng == null && visit.gps_lng != null) loc.gps_lng = visit.gps_lng;
+  });
+
+  const fieldMaterials = logs.flatMap((log) => (
+    normalizeDprMaterialRows(log.materials_used).map((row) => ({
+      ...row,
+      feature_id: row.feature_id || (siteMap.get(toSiteIdKey(log.site_id)) ? getSiteDisplayName(siteMap.get(toSiteIdKey(log.site_id))) : ""),
+      used_at: log.completed_at || log.created_at || "",
+    }))
+  ));
+  const eventMaterials = events.flatMap((event) => (
+    normalizeDprMaterialRows(event.materials_used).map((row) => ({
+      ...row,
+      feature_id: row.feature_id || (siteMap.get(toSiteIdKey(event.site_id)) ? getSiteDisplayName(siteMap.get(toSiteIdKey(event.site_id))) : event.label || ""),
+      used_at: event.ended_at || event.started_at || "",
+    }))
+  ));
+  const materialUsage = getDprArray(metrics, "material_usage").concat(fieldMaterials, eventMaterials);
+  const materialUnits = materialUsage.reduce((sum, row) => sum + (Number(row?.qty_used ?? 0) || 0), 0);
+  const codeSet = new Set();
+  locations.forEach((loc) => (Array.isArray(loc.codes) ? loc.codes : []).forEach((code) => codeSet.add(String(code).trim().toLowerCase())));
+  getDprArray(metrics, "splice_locations_worked").forEach((loc) => (Array.isArray(loc.work_codes) ? loc.work_codes : []).forEach((code) => codeSet.add(String(code).trim().toLowerCase())));
+  events.forEach((event) => (Array.isArray(event.work_codes) ? event.work_codes : []).forEach((code) => codeSet.add(String(code).trim().toLowerCase())));
+  const normalizedSessions = sessions.map(normalizeFieldDaySessionRow).filter(Boolean);
+  const normalizedEvents = events.map(normalizeFieldDayEventRow).filter(Boolean);
+  const projectDayMinutes = normalizedSessions.reduce((sum, session) => (
+    sum + (Number(session.total_minutes) || getDurationMinutesBetween(session.started_at, session.ended_at || nowISO()))
+  ), 0);
+  const minutesByType = normalizedEvents.reduce((map, event) => {
+    const minutes = Number(event.duration_minutes) || getDurationMinutesBetween(event.started_at, event.ended_at || nowISO());
+    map[event.event_type] = (map[event.event_type] || 0) + minutes;
+    return map;
+  }, {});
+  if (projectDayMinutes > getDprNumber(metrics, "labor_minutes_today")){
+    metrics.labor_minutes_today = projectDayMinutes;
+    metrics.labor_hours_today = Math.round((projectDayMinutes / 60) * 100) / 100;
+  }
+  if (normalizedSessions.length){
+    const crewIds = new Set(getDprArray(metrics, "crew").map((row) => String(row?.user_id || "").trim()).filter(Boolean));
+    const crew = getDprArray(metrics, "crew").slice();
+    normalizedSessions.forEach((session) => {
+      const userId = String(session.user_id || "").trim();
+      if (!userId || crewIds.has(userId)) return;
+      crewIds.add(userId);
+      crew.push({
+        user_id: userId,
+        name: userId === state.user?.id ? (state.profile?.display_name || state.user?.email || "Field crew") : `Crew ${userId.slice(0, 8)}`,
+        clock_in_at: session.started_at,
+        clock_out_at: session.ended_at,
+        total_minutes_worked: Number(session.total_minutes) || getDurationMinutesBetween(session.started_at, session.ended_at || nowISO()),
+      });
+    });
+    metrics.crew = crew;
+    metrics.crew_count_today = Math.max(getDprNumber(metrics, "crew_count_today"), crewIds.size);
+  }
+  metrics.locations_worked = locations;
+  metrics.material_usage = materialUsage;
+  metrics.material_items_used_today = materialUsage.length;
+  metrics.material_units_used_today = materialUnits;
+  metrics.code_count_today = Array.from(codeSet).filter(Boolean).length;
+  metrics.field_work_logs_today = logs.length;
+  metrics.gps_points_today = pings.length;
+  metrics.field_day_sessions = normalizedSessions;
+  metrics.field_day_events = normalizedEvents;
+  metrics.field_day_events_today = normalizedEvents.length;
+  metrics.project_day_minutes_today = projectDayMinutes;
+  metrics.vehicle_inspection_minutes_today = minutesByType[FIELD_DAY_EVENT_TYPES.VEHICLE_INSPECTION] || 0;
+  metrics.break_minutes_today = minutesByType[FIELD_DAY_EVENT_TYPES.BREAK_15] || 0;
+  metrics.lunch_minutes_today = minutesByType[FIELD_DAY_EVENT_TYPES.LUNCH] || 0;
+  metrics.location_work_minutes_today = minutesByType[FIELD_DAY_EVENT_TYPES.LOCATION_WORK] || 0;
+  metrics.summary = buildDprSummary(metrics);
+  if (persist && reportId && state.client){
+    await state.client
+      .from("daily_progress_reports")
+      .update({ metrics, summary: metrics.summary })
+      .eq("id", reportId);
+  }
+  return metrics;
+}
+
 function syncDprProjectSelection(){
   if (!state.dpr.projectId && state.activeProject?.id){
     state.dpr.projectId = state.activeProject.id;
@@ -21077,9 +21562,14 @@ function renderDprMetrics(){
       <div class="dpr-metric-tile"><span>Codes</span><strong>${getDprNumber(metrics, "code_count_today")}</strong></div>
       <div class="dpr-metric-tile"><span>Crew</span><strong>${getDprNumber(metrics, "crew_count_today")}</strong></div>
       <div class="dpr-metric-tile"><span>Labor hours</span><strong>${getDprNumber(metrics, "labor_hours_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>Work logs</span><strong>${getDprNumber(metrics, "field_work_logs_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>GPS pings</span><strong>${getDprNumber(metrics, "gps_points_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>Project time</span><strong>${escapeHtml(formatDurationMinutes(getDprNumber(metrics, "project_day_minutes_today")))}</strong></div>
+      <div class="dpr-metric-tile"><span>Day events</span><strong>${getDprNumber(metrics, "field_day_events_today")}</strong></div>
       <div class="dpr-metric-tile"><span>${t("dprMetricWorkOrders")}</span><strong>${getDprNumber(metrics, "work_orders_completed_today")}</strong></div>
       <div class="dpr-metric-tile"><span>${t("dprMetricBlocked")}</span><strong>${getDprNumber(metrics, "blocked_items_today")}</strong></div>
     </div>
+    ${renderDprFieldDayTimeline(metrics.field_day_sessions || [], metrics.field_day_events || [])}
     <div class="dpr-section">
       <h3>Locations and photos</h3>
       ${locations.length ? locations.map((loc) => {
@@ -21096,6 +21586,8 @@ function renderDprMetrics(){
             ${loc?.notes ? `<div class="dpr-report-notes">${escapeHtml(loc.notes)}</div>` : ""}
             <div class="dpr-code-wrap">${renderDprCodeChips(loc?.codes || [])}</div>
             ${renderDprEntries(loc?.entries || [])}
+            ${renderDprFieldLogs(loc?.field_logs || [])}
+            ${renderDprVisitSummary(loc?.visits || [])}
             <div class="dpr-photo-wrap">${renderDprPhotos(loc?.photos || [], "proof-photos")}</div>
           </article>
         `;
@@ -21224,8 +21716,14 @@ async function loadDailyProgressReport(){
     return;
   }
   state.dpr.reportId = data?.id || null;
-  state.dpr.metrics = data?.metrics || null;
+  state.dpr.metrics = data?.metrics
+    ? await enhanceDprMetricsWithFieldWork(data.metrics, projectId, state.dpr.reportDate, {
+      persist: Boolean(data?.id),
+      reportId: data?.id || null,
+    })
+    : null;
   state.dpr.summary = data?.summary || data?.metrics?.summary || "";
+  if (state.dpr.metrics?.summary) state.dpr.summary = state.dpr.metrics.summary;
   if ($("dprComments")) $("dprComments").value = data?.comments || "";
   renderDprMetrics();
   setDprEditState();
@@ -21296,7 +21794,10 @@ async function generateDailyProgressReport(){
     toast("Metrics error", metricsError.message);
     return;
   }
-  state.dpr.metrics = metricsData || getDprDefaultMetrics();
+  state.dpr.metrics = await enhanceDprMetricsWithFieldWork(metricsData || getDprDefaultMetrics(), projectId, state.dpr.reportDate, {
+    persist: Boolean(state.dpr.reportId),
+    reportId: state.dpr.reportId,
+  });
   state.dpr.summary = state.dpr.metrics?.summary || "";
   renderDprMetrics();
   setDprEditState();
@@ -21351,6 +21852,18 @@ async function autoSaveDailyProgressReport({
     console.warn("[daily report] auto-save failed", error);
     if (!silent) toast("Daily report error", error.message || "Could not save the daily report.");
     return null;
+  }
+  try{
+    const { data: baseMetrics, error: metricsError } = await state.client
+      .rpc("fn_build_dpr_metrics", { p_project_id: projectId, p_date: reportDate });
+    if (!metricsError){
+      await enhanceDprMetricsWithFieldWork(baseMetrics || getDprDefaultMetrics(), projectId, reportDate, {
+        persist: Boolean(data),
+        reportId: data || null,
+      });
+    }
+  } catch (enhanceError){
+    console.warn("[daily report] field-work enhancement failed", enhanceError);
   }
   if (state.dpr.projectId === projectId && state.dpr.reportDate === reportDate){
     await loadDailyProgressReport();
@@ -22385,6 +22898,7 @@ async function loadProjects(){
     }
   }
 
+  const memberProjectIds = await loadProjectMembershipIdsForCurrentUser();
   const uniqueProjects = [];
   const seen = new Set();
   (projects || []).forEach((row) => {
@@ -22394,7 +22908,7 @@ async function loadProjects(){
     uniqueProjects.push(row);
   });
 
-  const resolvedProjects = uniqueProjects;
+  const resolvedProjects = filterProjectsForFieldBucket(uniqueProjects, memberProjectIds);
 
   resolvedProjects.sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
   state.projects = resolvedProjects;
@@ -22420,8 +22934,11 @@ async function loadProjects(){
     org_id: resolvedOrgId || null,
     requested_org_id: orgId || null,
     count: state.projects.length,
+    field_bucket: shouldUseFieldProjectBucket(),
+    memberships: state.projectMembershipIds?.size || 0,
   });
   renderProjects();
+  void loadFieldDaySession({ silent: true });
   if (SpecCom.helpers.isRoot()){
     loadMessages();
   }
@@ -22846,11 +23363,15 @@ function renderAdminWorkspace(tab){
     `;
     renderAdminCompaniesList();
   } else if (_activeAdminTab === "projects"){
+    const canManageProjects = canManageProjectControls();
     body.innerHTML = `
       <div class="card">
         <h3 style="margin:0 0 12px;">Projects</h3>
+        <div class="muted small" style="margin-bottom:12px;">
+          Field users only see assigned live projects. Admins can open or delete old test projects here.
+        </div>
         <div id="adminProjectsList" class="field-stack"></div>
-        <div class="row" style="margin-top:12px;">
+        <div class="row" style="margin-top:12px; ${canManageProjects ? "" : "display:none;"}">
           <button class="btn secondary small" data-action="openCreateProject" type="button">+ New Project</button>
         </div>
       </div>
@@ -22899,10 +23420,22 @@ function renderAdminProjectsList(){
     wrap.innerHTML = `<div class="muted small">No projects found.</div>`;
     return;
   }
+  const canManageProjects = canManageProjectControls();
   wrap.innerHTML = projects.map((p) => `
-    <div class="row" style="justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border,#e5e7eb);">
-      <span>${escapeHtml(p.name || p.id)}</span>
-      <span class="muted small">${escapeHtml(p.job_number || "")}</span>
+    <div class="admin-project-row">
+      <div class="admin-project-main">
+        <div class="admin-project-name">${escapeHtml(p.name || p.id)}</div>
+        <div class="admin-project-meta">
+          ${p.job_number ? `<span>Job ${escapeHtml(p.job_number)}</span>` : ""}
+          ${p.location ? `<span>${escapeHtml(p.location)}</span>` : ""}
+          ${isProjectMarkedInactive(p) ? `<span class="admin-project-badge warn">Inactive</span>` : `<span class="admin-project-badge ok">Active</span>`}
+          ${isLikelyTestProject(p) ? `<span class="admin-project-badge test">Test/demo</span>` : ""}
+        </div>
+      </div>
+      <div class="admin-project-actions">
+        <button class="btn ghost small" type="button" data-action="adminOpenProject" data-project-id="${escapeHtml(String(p.id || ""))}">Open</button>
+        ${canManageProjects ? `<button class="btn danger small" type="button" data-action="adminDeleteProject" data-project-id="${escapeHtml(String(p.id || ""))}">Delete</button>` : ""}
+      </div>
     </div>
   `).join("");
 }
@@ -23260,6 +23793,421 @@ function getMapFieldSelectedSite(){
   return getVisibleSites().find((site) => toSiteIdKey(site?.id) === key) || null;
 }
 
+function getDurationMinutesBetween(startedAt, endedAt = nowISO()){
+  const startMs = Date.parse(startedAt || "");
+  const endMs = Date.parse(endedAt || "");
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return 0;
+  return Math.max(0, Math.round((endMs - startMs) / 60000));
+}
+
+function formatFieldDayTime(value){
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function getFieldDayEventLabel(eventOrType){
+  const type = typeof eventOrType === "string" ? eventOrType : eventOrType?.event_type;
+  const label = typeof eventOrType === "string" ? "" : eventOrType?.label;
+  if (label) return label;
+  return FIELD_DAY_EVENT_LABELS[type] || "Field activity";
+}
+
+function normalizeFieldDaySessionRow(row){
+  if (!row || typeof row !== "object") return null;
+  return {
+    id: row.id || "",
+    user_id: row.user_id || "",
+    project_id: row.project_id || "",
+    work_date: row.work_date || "",
+    started_at: row.started_at || "",
+    ended_at: row.ended_at || "",
+    total_minutes: Number(row.total_minutes || 0),
+    start_gps_lat: row.start_gps_lat ?? null,
+    start_gps_lng: row.start_gps_lng ?? null,
+    start_gps_accuracy_m: row.start_gps_accuracy_m ?? null,
+    end_gps_lat: row.end_gps_lat ?? null,
+    end_gps_lng: row.end_gps_lng ?? null,
+    end_gps_accuracy_m: row.end_gps_accuracy_m ?? null,
+    notes: row.notes || "",
+    created_at: row.created_at || "",
+  };
+}
+
+function normalizeFieldDayEventRow(row){
+  if (!row || typeof row !== "object") return null;
+  return {
+    id: row.id || "",
+    session_id: row.session_id || "",
+    user_id: row.user_id || "",
+    project_id: row.project_id || "",
+    site_id: row.site_id || "",
+    event_type: row.event_type || "",
+    label: row.label || "",
+    started_at: row.started_at || "",
+    ended_at: row.ended_at || "",
+    duration_minutes: Number(row.duration_minutes || 0),
+    gps_lat: row.gps_lat ?? null,
+    gps_lng: row.gps_lng ?? null,
+    gps_accuracy_m: row.gps_accuracy_m ?? null,
+    site_lat: row.site_lat ?? null,
+    site_lng: row.site_lng ?? null,
+    notes: row.notes || "",
+    work_codes: Array.isArray(row.work_codes) ? row.work_codes : [],
+    materials_used: Array.isArray(row.materials_used) ? row.materials_used : [],
+    created_at: row.created_at || "",
+  };
+}
+
+function setFieldDayState(session, events = []){
+  state.fieldDay.session = normalizeFieldDaySessionRow(session);
+  state.fieldDay.events = (Array.isArray(events) ? events : [])
+    .map(normalizeFieldDayEventRow)
+    .filter(Boolean);
+  state.fieldDay.activeEvent = state.fieldDay.events.find((event) => event.started_at && !event.ended_at) || null;
+}
+
+async function loadFieldDaySession({ silent = true } = {}){
+  if (isDemo || isDemoUser() || !state.client || !state.user || !state.activeProject?.id){
+    setFieldDayState(null, []);
+    renderMapFieldPanel();
+    return null;
+  }
+  if (state.fieldDay.loading) return state.fieldDay.session;
+  state.fieldDay.loading = true;
+  try {
+    const workDate = getLocalDateISO();
+    const { data, error } = await state.client
+      .from("field_day_sessions")
+      .select("id, user_id, project_id, work_date, started_at, ended_at, total_minutes, start_gps_lat, start_gps_lng, start_gps_accuracy_m, end_gps_lat, end_gps_lng, end_gps_accuracy_m, notes, created_at")
+      .eq("user_id", state.user.id)
+      .eq("project_id", state.activeProject.id)
+      .eq("work_date", workDate)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (error){
+      if (!isMissingTable(error) && !silent) toast("Project day error", error.message);
+      setFieldDayState(null, []);
+      return null;
+    }
+    const session = data?.[0] || null;
+    if (!session){
+      setFieldDayState(null, []);
+      return null;
+    }
+    const eventsRes = await state.client
+      .from("field_day_events")
+      .select("id, session_id, user_id, project_id, site_id, event_type, label, started_at, ended_at, duration_minutes, gps_lat, gps_lng, gps_accuracy_m, site_lat, site_lng, notes, work_codes, materials_used, created_at")
+      .eq("session_id", session.id)
+      .order("started_at", { ascending: true });
+    if (eventsRes.error){
+      if (!isMissingTable(eventsRes.error) && !silent) toast("Project day error", eventsRes.error.message);
+      setFieldDayState(session, []);
+      return session;
+    }
+    setFieldDayState(session, eventsRes.data || []);
+    return state.fieldDay.session;
+  } finally {
+    state.fieldDay.loading = false;
+    renderMapFieldPanel();
+  }
+}
+
+async function getFieldDayGpsSnapshot({ center = false, silent = true } = {}){
+  const gps = state.map.myLocation || await requestMapCurrentLocation({ center, silent });
+  if (!gps) return {};
+  return {
+    gps_lat: gps.lat,
+    gps_lng: gps.lng,
+    gps_accuracy_m: gps.accuracy_m ?? gps.accuracy ?? null,
+    captured_at: gps.captured_at || nowISO(),
+  };
+}
+
+function getOpenFieldDaySession(){
+  const session = state.fieldDay.session || null;
+  if (!session || session.ended_at) return null;
+  return session;
+}
+
+async function startFieldDay(){
+  if (!state.activeProject?.id){
+    toast("Project required", "Select RUIDOSO_1635CA before starting the day.");
+    return;
+  }
+  const existing = getOpenFieldDaySession();
+  if (existing){
+    toast("Project day active", "This project day is already started.");
+    return;
+  }
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
+  if (!state.client || !state.user){
+    toast("Sign in required", "Sign in before starting the project day.");
+    return;
+  }
+  const now = nowISO();
+  const gps = await getFieldDayGpsSnapshot({ center: false, silent: true });
+  const row = {
+    user_id: state.user.id,
+    project_id: state.activeProject.id,
+    work_date: getLocalDateISO(now),
+    started_at: now,
+    start_gps_lat: gps.gps_lat ?? null,
+    start_gps_lng: gps.gps_lng ?? null,
+    start_gps_accuracy_m: gps.gps_accuracy_m ?? null,
+  };
+  const { data, error } = await state.client
+    .from("field_day_sessions")
+    .insert(row)
+    .select("id, user_id, project_id, work_date, started_at, ended_at, total_minutes, start_gps_lat, start_gps_lng, start_gps_accuracy_m, end_gps_lat, end_gps_lng, end_gps_accuracy_m, notes, created_at")
+    .maybeSingle();
+  if (error){
+    toast("Project day failed", isMissingTable(error) ? "Database migration for project-day tracking has not been applied yet." : error.message, "error");
+    return;
+  }
+  setFieldDayState(data, []);
+  await autoSaveDailyProgressReport({ projectId: row.project_id, reportDate: row.work_date, silent: true });
+  renderMapFieldPanel();
+  toast("Project day started", "Start the vehicle inspection next.");
+}
+
+async function startFieldDayEvent(eventType, { siteId = null } = {}){
+  const session = getOpenFieldDaySession();
+  if (!session){
+    toast("Start project day", "Tap Start Project Day before logging activities.");
+    return;
+  }
+  if (state.fieldDay.activeEvent){
+    toast("Finish active item", `End ${getFieldDayEventLabel(state.fieldDay.activeEvent)} before starting another item.`);
+    return;
+  }
+  if (!state.client || !state.user) return;
+  const site = siteId ? getVisibleSiteByIdKey(siteId) : null;
+  const siteCoords = site ? getSiteCoords(site) : null;
+  const gps = await getFieldDayGpsSnapshot({ center: false, silent: true });
+  const now = nowISO();
+  const label = eventType === FIELD_DAY_EVENT_TYPES.LOCATION_WORK && site
+    ? getSiteDisplayName(site)
+    : getFieldDayEventLabel(eventType);
+  const row = {
+    session_id: session.id,
+    user_id: state.user.id,
+    project_id: session.project_id,
+    site_id: site?.id || null,
+    event_type: eventType,
+    label,
+    started_at: now,
+    gps_lat: gps.gps_lat ?? null,
+    gps_lng: gps.gps_lng ?? null,
+    gps_accuracy_m: gps.gps_accuracy_m ?? null,
+    site_lat: siteCoords?.lat ?? null,
+    site_lng: siteCoords?.lng ?? null,
+  };
+  const { data, error } = await state.client
+    .from("field_day_events")
+    .insert(row)
+    .select("id, session_id, user_id, project_id, site_id, event_type, label, started_at, ended_at, duration_minutes, gps_lat, gps_lng, gps_accuracy_m, site_lat, site_lng, notes, work_codes, materials_used, created_at")
+    .maybeSingle();
+  if (error){
+    toast("Start failed", isMissingTable(error) ? "Database migration for project-day tracking has not been applied yet." : error.message, "error");
+    return;
+  }
+  state.fieldDay.events = [...(state.fieldDay.events || []), normalizeFieldDayEventRow(data)].filter(Boolean);
+  state.fieldDay.activeEvent = normalizeFieldDayEventRow(data);
+  if (eventType === FIELD_DAY_EVENT_TYPES.LOCATION_WORK && site?.id){
+    setSiteWorkflowStatus(site.id, MAP_FIELD_STATUS.IN_PROGRESS);
+  }
+  renderMapFieldPanel();
+  toast(`${getFieldDayEventLabel(row)} started`, eventType === FIELD_DAY_EVENT_TYPES.LOCATION_WORK ? "Work from the saved location card, then End Location." : "Timer started.");
+}
+
+async function endFieldDayEvent({ eventId = state.fieldDay.activeEvent?.id, notes = null, workCodes = null, materialsUsed = null, endedAt = nowISO(), toastLabel = "" } = {}){
+  const event = (state.fieldDay.events || []).find((row) => row.id === eventId) || state.fieldDay.activeEvent || null;
+  if (!event || event.ended_at){
+    toast("No active item", "There is no active project-day item to end.");
+    return null;
+  }
+  if (!state.client || !state.user) return null;
+  const duration = getDurationMinutesBetween(event.started_at, endedAt);
+  const payload = {
+    ended_at: endedAt,
+    duration_minutes: duration,
+  };
+  if (notes !== null) payload.notes = notes || null;
+  if (workCodes !== null) payload.work_codes = Array.isArray(workCodes) ? workCodes : [];
+  if (materialsUsed !== null) payload.materials_used = Array.isArray(materialsUsed) ? materialsUsed : [];
+  const { data, error } = await state.client
+    .from("field_day_events")
+    .update(payload)
+    .eq("id", event.id)
+    .select("id, session_id, user_id, project_id, site_id, event_type, label, started_at, ended_at, duration_minutes, gps_lat, gps_lng, gps_accuracy_m, site_lat, site_lng, notes, work_codes, materials_used, created_at")
+    .maybeSingle();
+  if (error){
+    toast("End failed", error.message || "Unable to end activity.", "error");
+    return null;
+  }
+  state.fieldDay.events = (state.fieldDay.events || []).map((row) => row.id === event.id ? normalizeFieldDayEventRow(data) : row);
+  state.fieldDay.activeEvent = null;
+  await autoSaveDailyProgressReport({
+    projectId: event.project_id || state.activeProject?.id || null,
+    reportDate: getLocalDateISO(endedAt),
+    silent: true,
+  });
+  renderMapFieldPanel();
+  if (toastLabel) toast(toastLabel, `${getFieldDayEventLabel(data)} ended. ${formatDurationMinutes(duration)} recorded.`);
+  return normalizeFieldDayEventRow(data);
+}
+
+async function endFieldDayLocation(siteId){
+  const active = state.fieldDay.activeEvent || null;
+  if (!active || active.event_type !== FIELD_DAY_EVENT_TYPES.LOCATION_WORK || toSiteIdKey(active.site_id) !== toSiteIdKey(siteId)){
+    toast("Location not active", "Start this location before ending it.");
+    return;
+  }
+  const notes = String($("mapFieldWorkCompleted")?.value || "").trim();
+  const workCodes = parseMapFieldWorkCodes($("mapFieldWorkCodes")?.value || "");
+  const materialsUsed = parseMapFieldMaterialLines($("mapFieldMaterialsUsed")?.value || "");
+  const completedAt = nowISO();
+  const saved = await saveMapFieldWorkLog(siteId, {
+    allowEmpty: true,
+    startedAt: active.started_at,
+    completedAt,
+    silent: true,
+  });
+  if (!saved) return;
+  await endFieldDayEvent({
+    eventId: active.id,
+    notes,
+    workCodes,
+    materialsUsed,
+    endedAt: completedAt,
+    toastLabel: "Location ended",
+  });
+}
+
+async function endFieldDay(){
+  const session = getOpenFieldDaySession();
+  if (!session){
+    toast("Project day", "No active project day to end.");
+    return;
+  }
+  if (state.fieldDay.activeEvent){
+    toast("Finish active item", `End ${getFieldDayEventLabel(state.fieldDay.activeEvent)} before ending the project day.`);
+    return;
+  }
+  if (!state.client || !state.user) return;
+  const endedAt = nowISO();
+  const gps = await getFieldDayGpsSnapshot({ center: false, silent: true });
+  const duration = getDurationMinutesBetween(session.started_at, endedAt);
+  const { data, error } = await state.client
+    .from("field_day_sessions")
+    .update({
+      ended_at: endedAt,
+      total_minutes: duration,
+      end_gps_lat: gps.gps_lat ?? null,
+      end_gps_lng: gps.gps_lng ?? null,
+      end_gps_accuracy_m: gps.gps_accuracy_m ?? null,
+    })
+    .eq("id", session.id)
+    .select("id, user_id, project_id, work_date, started_at, ended_at, total_minutes, start_gps_lat, start_gps_lng, start_gps_accuracy_m, end_gps_lat, end_gps_lng, end_gps_accuracy_m, notes, created_at")
+    .maybeSingle();
+  if (error){
+    toast("End day failed", error.message || "Unable to end project day.", "error");
+    return;
+  }
+  state.fieldDay.session = normalizeFieldDaySessionRow(data);
+  state.fieldDay.activeEvent = null;
+  await autoSaveDailyProgressReport({
+    projectId: session.project_id,
+    reportDate: session.work_date || getLocalDateISO(endedAt),
+    silent: false,
+  });
+  renderMapFieldPanel();
+  toast("Project day ended", `${formatDurationMinutes(duration)} recorded for review.`);
+}
+
+function renderFieldDayControls(){
+  if (!state.activeProject?.id) return "";
+  const session = state.fieldDay.session || null;
+  const active = state.fieldDay.activeEvent || null;
+  if (!session || session.ended_at){
+    return `
+      <div class="map-field-day-card">
+        <div class="map-field-day-title">Project Day</div>
+        <div class="muted tiny">Start the day before VI, locations, break, lunch, and close-out.</div>
+        <button class="btn secondary small" type="button" data-map-field-action="startFieldDay">Start Project Day</button>
+      </div>
+    `;
+  }
+  const started = formatFieldDayTime(session.started_at);
+  const activeLabel = active ? getFieldDayEventLabel(active) : "";
+  const activeStarted = active ? formatFieldDayTime(active.started_at) : "";
+  const activeIsLocation = active?.event_type === FIELD_DAY_EVENT_TYPES.LOCATION_WORK;
+  return `
+    <div class="map-field-day-card">
+      <div class="row" style="justify-content:space-between; gap:8px; align-items:center;">
+        <div>
+          <div class="map-field-day-title">Project Day Active</div>
+          <div class="muted tiny">Started ${escapeHtml(started || "today")}${active ? ` | Active: ${escapeHtml(activeLabel)} ${escapeHtml(activeStarted)}` : ""}</div>
+        </div>
+      </div>
+      <div class="map-field-day-actions">
+        ${active ? (
+          activeIsLocation
+            ? `<button class="btn ghost small" type="button" disabled>End this location from its card</button>`
+            : `<button class="btn secondary small" type="button" data-map-field-action="endFieldDayEvent">${escapeHtml(`End ${activeLabel}`)}</button>`
+        ) : `
+          <button class="btn ghost small" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.VEHICLE_INSPECTION}">Start VI</button>
+          <button class="btn ghost small" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.BREAK_15}">Start Break</button>
+          <button class="btn ghost small" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.LUNCH}">Start Lunch</button>
+          <button class="btn danger small" type="button" data-map-field-action="endFieldDay">End Project Day</button>
+        `}
+      </div>
+    </div>
+  `;
+}
+
+function renderFieldDayLocationControls(site){
+  if (!site?.id) return "";
+  const session = state.fieldDay.session || null;
+  const active = state.fieldDay.activeEvent || null;
+  if (!session || session.ended_at){
+    return `
+      <div class="map-field-day-location">
+        <div class="muted tiny">Start Project Day before timing work at this saved location.</div>
+      </div>
+    `;
+  }
+  const sameSiteActive = active
+    && active.event_type === FIELD_DAY_EVENT_TYPES.LOCATION_WORK
+    && toSiteIdKey(active.site_id) === toSiteIdKey(site.id);
+  if (sameSiteActive){
+    return `
+      <div class="map-field-day-location active">
+        <div class="muted tiny">Location timer started ${escapeHtml(formatFieldDayTime(active.started_at))}. Add notes/material/photos below, then end the location.</div>
+        <button class="btn secondary small" type="button" data-map-field-action="endFieldLocation" data-site-id="${escapeHtml(site.id)}">End Location + Save</button>
+      </div>
+    `;
+  }
+  if (active){
+    return `
+      <div class="map-field-day-location">
+        <div class="muted tiny">Finish ${escapeHtml(getFieldDayEventLabel(active))} before starting this location.</div>
+      </div>
+    `;
+  }
+  return `
+    <div class="map-field-day-location">
+      <button class="btn secondary small" type="button" data-map-field-action="startFieldLocation" data-site-id="${escapeHtml(site.id)}">Start Location</button>
+      <div class="muted tiny">Uses this saved location as the anchor; GPS is saved as supporting proof.</div>
+    </div>
+  `;
+}
+
 function renderMapFieldPanel(){
   const panel = $("mapFieldPanel");
   const showBtn = $("btnMapFieldShow");
@@ -23357,6 +24305,7 @@ function renderMapFieldPanel(){
       `;
     }
   }
+  actionsWrap.insertAdjacentHTML("beforeend", renderFieldDayControls());
 
   const selected = createOpen ? null : (getMapFieldSelectedSite() || nearest || null);
   if (!selected){
@@ -23376,6 +24325,7 @@ function renderMapFieldPanel(){
       <span class="map-field-status-chip ${statusClass}">${escapeHtml(statusLabel)}</span>
     </div>
     <div class="map-field-location-meta">${escapeHtml(coordText)}</div>
+    ${renderFieldDayLocationControls(selected)}
     <div class="row" style="gap:8px; flex-wrap:wrap;">
       <button class="btn secondary small" type="button" data-map-field-action="photo" data-site-id="${selected.id}">Upload Reference Media</button>
       <button class="btn ghost small" type="button" data-map-field-action="note" data-site-id="${selected.id}">Add Note</button>
@@ -23390,7 +24340,9 @@ function renderMapFieldPanel(){
         <option value="${MAP_FIELD_STATUS.COMPLETE}" ${status === MAP_FIELD_STATUS.COMPLETE ? "selected" : ""}>Complete</option>
       </select>
     </div>
+    ${renderMapFieldWorkLogForm(selected, status)}
   `;
+  void hydrateMapFieldSiteActivity(selected.id);
 }
 
 function setMapFieldPanelVisible(visible){
@@ -23501,9 +24453,10 @@ async function requestMapCurrentLocation({ center = false, silent = false } = {}
   state.map.myLocation = enriched;
   state.map.lastFieldGpsCheckAt = Date.now();
   ensureMyLocationMarker(enriched);
-  const nearest = findNearestVisibleSite(enriched);
+  const nearest = findNearestVisibleSite(enriched, getFieldGpsAssociationRadius(enriched));
   state.map.nearestSiteId = nearest?.site?.id ? toSiteIdKey(nearest.site.id) : "";
   state.map.nearestSiteDistanceM = nearest?.distanceM ?? null;
+  void recordFieldLocationPingFromGps(enriched, { nearest, source: "field_location_button" });
   if (center && state.map.instance){
     state.map.instance.setView([enriched.lat, enriched.lng], Math.max(state.map.instance.getZoom() || 0, 18));
   }
@@ -23514,7 +24467,7 @@ async function requestMapCurrentLocation({ center = false, silent = false } = {}
 async function openOrCreateSpliceAtCurrentLocation({ center = true, hidePanel = true } = {}){
   const gps = await requestMapCurrentLocation({ center, silent: false });
   if (!gps) return null;
-  const nearest = findNearestVisibleSite(gps, state.map.nearbyRadiusM || 30);
+  const nearest = findNearestVisibleSite(gps, getFieldGpsAssociationRadius(gps));
   let siteId = nearest?.site?.id || null;
   if (!siteId){
     siteId = await createSiteFromMapClick(
@@ -23689,6 +24642,286 @@ async function appendMapFieldBillingCodesToSiteNotes(site, billingRows){
   site.notes = nextNotes;
   applyMapFieldSiteNotes(site.id, nextNotes);
   return true;
+}
+
+function parseMapFieldWorkCodes(raw){
+  return Array.from(new Set(String(raw || "")
+    .split(/[\n,]+/)
+    .map((code) => code.trim())
+    .filter(Boolean)));
+}
+
+function parseMapFieldMaterialLines(raw){
+  return String(raw || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(/^(.*\S)\s+(-?\d+(?:\.\d+)?)$/);
+      const item = match ? match[1].trim() : line;
+      const qty = match ? Number(match[2]) : 1;
+      return {
+        item_key: item,
+        qty_used: Number.isFinite(qty) && qty > 0 ? qty : 1,
+      };
+    })
+    .filter((row) => row.item_key);
+}
+
+function normalizeFieldWorkLogRow(row){
+  if (!row || typeof row !== "object") return null;
+  return {
+    id: row.id || "",
+    user_id: row.user_id || row.userId || "",
+    project_id: row.project_id || row.projectId || "",
+    site_id: row.site_id || row.siteId || "",
+    work_date: row.work_date || row.workDate || "",
+    arrived_at: row.arrived_at || row.arrivedAt || "",
+    completed_at: row.completed_at || row.completedAt || row.created_at || "",
+    gps_lat: row.gps_lat ?? row.gpsLat ?? null,
+    gps_lng: row.gps_lng ?? row.gpsLng ?? null,
+    gps_accuracy_m: row.gps_accuracy_m ?? row.gpsAccuracyM ?? null,
+    nearest_distance_m: row.nearest_distance_m ?? row.nearestDistanceM ?? null,
+    status_before: row.status_before || "",
+    status_after: row.status_after || "",
+    work_completed: row.work_completed || row.workCompleted || "",
+    work_codes: Array.isArray(row.work_codes) ? row.work_codes : [],
+    materials_used: Array.isArray(row.materials_used) ? row.materials_used : [],
+  };
+}
+
+function getCachedFieldWorkLogs(siteId){
+  const key = toSiteIdKey(siteId);
+  if (!key) return [];
+  const cached = state.map.fieldWorkLogsBySiteId.get(key);
+  return Array.isArray(cached) ? cached : [];
+}
+
+function hasCachedFieldWorkLogs(siteId){
+  const key = toSiteIdKey(siteId);
+  return Boolean(key) && state.map.fieldWorkLogsBySiteId.has(key);
+}
+
+function setCachedFieldWorkLogs(siteId, logs){
+  const key = toSiteIdKey(siteId);
+  if (!key) return [];
+  const normalized = (Array.isArray(logs) ? logs : [])
+    .map(normalizeFieldWorkLogRow)
+    .filter(Boolean);
+  state.map.fieldWorkLogsBySiteId.set(key, normalized);
+  return normalized;
+}
+
+async function fetchFieldWorkLogsForSite(siteId){
+  const key = toSiteIdKey(siteId);
+  if (!key) return [];
+  if (hasCachedFieldWorkLogs(key)) return getCachedFieldWorkLogs(key);
+  if (isDemo || !state.client){
+    return setCachedFieldWorkLogs(key, []);
+  }
+  const { data, error } = await state.client
+    .from("field_work_logs")
+    .select("id, user_id, project_id, site_id, work_date, arrived_at, completed_at, gps_lat, gps_lng, gps_accuracy_m, nearest_distance_m, status_before, status_after, work_completed, work_codes, materials_used, created_at")
+    .eq("site_id", siteId)
+    .order("completed_at", { ascending: false })
+    .limit(8);
+  if (error){
+    if (!isMissingTable(error)){
+      console.warn("[field work] log fetch failed", error);
+    }
+    return setCachedFieldWorkLogs(key, []);
+  }
+  return setCachedFieldWorkLogs(key, data || []);
+}
+
+async function hydrateMapFieldSiteActivity(siteId){
+  const key = toSiteIdKey(siteId);
+  if (!key) return;
+  const needsCodes = !hasCachedSiteCodes(key);
+  const needsPhotos = !hasCachedSitePhotos(key);
+  const needsLogs = !hasCachedFieldWorkLogs(key);
+  if (!needsCodes && !needsPhotos && !needsLogs) return;
+  await Promise.all([
+    needsCodes ? fetchSiteCodesForMapPopup(key) : Promise.resolve(getCachedSiteCodes(key)),
+    needsPhotos ? fetchSitePhotosForMapPopup(key) : Promise.resolve(getCachedSitePhotos(key)),
+    needsLogs ? fetchFieldWorkLogsForSite(key) : Promise.resolve(getCachedFieldWorkLogs(key)),
+  ]);
+  if (toSiteIdKey(getMapFieldSelectedSite()?.id || state.map.nearestSiteId) === key){
+    renderMapFieldPanel();
+  }
+}
+
+function renderMapFieldExistingWorkNotice(site, status){
+  const codes = getCachedSiteCodes(site?.id);
+  const photos = getCachedSitePhotos(site?.id);
+  const logs = getCachedFieldWorkLogs(site?.id);
+  const parts = [];
+  if (status === MAP_FIELD_STATUS.COMPLETE) parts.push("marked complete");
+  if (photos.length) parts.push(`${photos.length} photo${photos.length === 1 ? "" : "s"}`);
+  if (codes.length) parts.push(`codes: ${codes.slice(0, 5).join(", ")}${codes.length > 5 ? "..." : ""}`);
+  if (logs.length) parts.push(`${logs.length} work log${logs.length === 1 ? "" : "s"}`);
+  if (!parts.length) return "";
+  return `
+    <div class="map-field-existing-work">
+      Existing work found here: ${escapeHtml(parts.join(" | "))}. Use the log below for repair/correction work.
+    </div>
+  `;
+}
+
+function renderMapFieldWorkLogForm(site, status){
+  if (!site?.id) return "";
+  const existingNotice = renderMapFieldExistingWorkNotice(site, status);
+  const lastLog = getCachedFieldWorkLogs(site.id)[0] || null;
+  const lastLogText = lastLog
+    ? `<div class="muted tiny">Last log: ${escapeHtml(formatDprDateTime(lastLog.completed_at))}${lastLog.work_completed ? ` - ${escapeHtml(lastLog.work_completed).slice(0, 120)}` : ""}</div>`
+    : "";
+  return `
+    <div class="map-field-work-log">
+      <div class="map-field-work-title">What work was completed at this location?</div>
+      ${existingNotice}
+      ${lastLogText}
+      <textarea id="mapFieldWorkCompleted" class="input compact" rows="3" data-site-id="${escapeHtml(site.id)}" placeholder="Repair/correction notes, what was fixed, what still needs attention"></textarea>
+      <textarea id="mapFieldWorkCodes" class="input compact" rows="2" data-site-id="${escapeHtml(site.id)}" placeholder="Splicing or billing codes used, comma or one per line"></textarea>
+      <textarea id="mapFieldMaterialsUsed" class="input compact" rows="2" data-site-id="${escapeHtml(site.id)}" placeholder="Material used, one per line: item qty"></textarea>
+      <button class="btn secondary small" type="button" data-map-field-action="saveWorkLog" data-site-id="${escapeHtml(site.id)}">Save Work Log</button>
+    </div>
+  `;
+}
+
+function getFieldGpsAssociationRadius(gps){
+  const baseRadius = Math.max(Number(state.map.nearbyRadiusM || 30), 45);
+  const accuracy = Number(gps?.accuracy_m ?? gps?.accuracy ?? 0);
+  return Math.max(baseRadius, Number.isFinite(accuracy) && accuracy > 0 ? accuracy + 20 : baseRadius);
+}
+
+async function recordFieldLocationPingFromGps(gps, { nearest = null, source = "truck_gps" } = {}){
+  if (isDemo || isDemoUser() || !state.client || !state.user || !gps) return null;
+  const projectId = state.activeProject?.id || state.technician.timesheet?.project_id || null;
+  if (!projectId) return null;
+  const lat = Number(gps.lat);
+  const lng = Number(gps.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const resolvedNearest = nearest || findNearestVisibleSite({ lat, lng }, getFieldGpsAssociationRadius(gps));
+  const siteId = resolvedNearest?.site?.id || null;
+  const pingKey = `${projectId}|${siteId || "no-site"}`;
+  const nowMs = Date.now();
+  const lastMs = Number(state.map.fieldLastPingByKey.get(pingKey) || 0);
+  if (nowMs - lastMs < 60000) return null;
+  state.map.fieldLastPingByKey.set(pingKey, nowMs);
+  const capturedAt = gps.captured_at || gps.updated_at || nowISO();
+  const payload = {
+    user_id: state.user.id,
+    project_id: projectId,
+    site_id: siteId,
+    work_date: getLocalDateISO(capturedAt),
+    captured_at: capturedAt,
+    gps_lat: lat,
+    gps_lng: lng,
+    gps_accuracy_m: gps.accuracy_m ?? gps.accuracy ?? null,
+    nearest_distance_m: resolvedNearest?.distanceM ?? null,
+    source,
+  };
+  const { data, error } = await state.client
+    .from("field_location_pings")
+    .insert(payload)
+    .select("id")
+    .maybeSingle();
+  if (error){
+    if (!isMissingTable(error)){
+      console.warn("[field work] GPS ping save failed", error);
+    }
+    state.map.fieldLastPingByKey.delete(pingKey);
+    return null;
+  }
+  return data?.id || null;
+}
+
+async function saveMapFieldWorkLog(siteId, { allowEmpty = false, startedAt = null, completedAt = null, silent = false } = {}){
+  const site = getVisibleSiteByIdKey(siteId);
+  if (!site){
+    toast("Location missing", "This location is not available.", "error");
+    return null;
+  }
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return null;
+  }
+  const projectId = site.project_id || state.activeProject?.id || null;
+  if (!projectId){
+    toast("Project required", "Select a project before saving field work.");
+    return null;
+  }
+  const notes = String($("mapFieldWorkCompleted")?.value || "").trim();
+  const codes = parseMapFieldWorkCodes($("mapFieldWorkCodes")?.value || "");
+  const materials = parseMapFieldMaterialLines($("mapFieldMaterialsUsed")?.value || "");
+  if (!allowEmpty && !notes && !codes.length && !materials.length){
+    toast("Work log needed", "Add notes, codes, or material before saving.");
+    return null;
+  }
+  const gps = state.map.myLocation || await requestMapCurrentLocation({ center: false, silent: Boolean(silent) });
+  const nearest = gps ? findNearestVisibleSite(gps, getFieldGpsAssociationRadius(gps)) : null;
+  const statusBefore = getSiteWorkflowStatus(site);
+  const statusAfter = normalizeMapFieldStatus($("mapFieldStatusSelect")?.value || statusBefore);
+  const completed = completedAt || nowISO();
+  const row = {
+    user_id: state.user?.id || null,
+    project_id: projectId,
+    site_id: site.id,
+    work_date: getLocalDateISO(completed),
+    arrived_at: startedAt || gps?.captured_at || completed,
+    completed_at: completed,
+    gps_lat: gps?.lat ?? null,
+    gps_lng: gps?.lng ?? null,
+    gps_accuracy_m: gps?.accuracy_m ?? gps?.accuracy ?? null,
+    nearest_distance_m: nearest?.distanceM ?? state.map.nearestSiteDistanceM ?? null,
+    status_before: statusBefore,
+    status_after: statusAfter,
+    work_completed: notes || null,
+    work_codes: codes,
+    materials_used: materials,
+  };
+  let savedRow = null;
+  if (isDemo){
+    const saved = { id: `demo-field-work-${Date.now()}`, ...row };
+    setCachedFieldWorkLogs(site.id, [saved, ...getCachedFieldWorkLogs(site.id)]);
+    savedRow = saved;
+  } else {
+    if (!state.client || !state.user){
+      toast("Sign in required", "Sign in before saving field work.");
+      return null;
+    }
+    const { data, error } = await state.client
+      .from("field_work_logs")
+      .insert(row)
+      .select("id, user_id, project_id, site_id, work_date, arrived_at, completed_at, gps_lat, gps_lng, gps_accuracy_m, nearest_distance_m, status_before, status_after, work_completed, work_codes, materials_used, created_at")
+      .maybeSingle();
+    if (error){
+      toast("Work log save failed", isMissingTable(error) ? "Database migration for field work logs has not been applied yet." : error.message, "error");
+      return null;
+    }
+    setCachedFieldWorkLogs(site.id, [data, ...getCachedFieldWorkLogs(site.id)]);
+    savedRow = data;
+  }
+  setSiteWorkflowStatus(site.id, statusAfter);
+  $("mapFieldWorkCompleted") && ($("mapFieldWorkCompleted").value = "");
+  $("mapFieldWorkCodes") && ($("mapFieldWorkCodes").value = "");
+  $("mapFieldMaterialsUsed") && ($("mapFieldMaterialsUsed").value = "");
+  await recordFieldLocationPingFromGps(gps || {
+    lat: row.gps_lat,
+    lng: row.gps_lng,
+    accuracy_m: row.gps_accuracy_m,
+    captured_at: completed,
+  }, { nearest, source: "work_log" });
+  await autoSaveDailyProgressReport({
+    projectId,
+    reportDate: row.work_date,
+    silent: true,
+  });
+  renderMapFieldPanel();
+  if (!silent){
+    toast("Work log saved", "Location, time, GPS, notes, codes, and material were saved.");
+  }
+  return savedRow || row;
 }
 
 function renderMapFieldPendingProofs(){
@@ -24002,6 +25235,7 @@ async function loadProjectSites(projectId){
     state.map.siteSearchIndex.clear();
     state.map.siteCodesBySiteId.clear();
     state.map.sitePhotosBySiteId.clear();
+    state.map.fieldWorkLogsBySiteId.clear();
     state.map.fieldPhotos = [];
     renderSiteList();
     return;
@@ -24012,6 +25246,7 @@ async function loadProjectSites(projectId){
     state.map.siteSearchIndex.clear();
     state.map.siteCodesBySiteId.clear();
     state.map.sitePhotosBySiteId.clear();
+    state.map.fieldWorkLogsBySiteId.clear();
     state.map.fieldPhotos = [];
     renderSiteList();
     return;
@@ -24026,6 +25261,7 @@ async function loadProjectSites(projectId){
   state.map.siteSearchIndex.clear();
   state.map.siteCodesBySiteId.clear();
   state.map.sitePhotosBySiteId.clear();
+  state.map.fieldWorkLogsBySiteId.clear();
   await loadProjectFieldPhotos(projectId);
   dlog("[data] loadProjectSites complete", {
     projectId,
@@ -25962,6 +27198,7 @@ function setActiveProjectById(id){
   renderProjects();
   loadProjectNodes(state.activeProject?.id || null);
   loadProjectSites(state.activeProject?.id || null);
+  void loadFieldDaySession({ silent: true });
   state.activeSite = null;
   renderSitePanel();
   loadRateCards(state.activeProject?.id || null);
@@ -33520,9 +34757,26 @@ function wireUI(){
   const adminWorkspaceBody = $("adminWorkspaceBody");
   if (adminWorkspaceBody){
     adminWorkspaceBody.addEventListener("click", (e) => {
-      const btn = e.target.closest("button[data-onboarding-admin-action]");
-      if (!btn) return;
-      handleAdminOnboardingAction(btn.dataset.onboardingAdminAction, btn);
+      const onboardingBtn = e.target.closest("button[data-onboarding-admin-action]");
+      if (onboardingBtn){
+        handleAdminOnboardingAction(onboardingBtn.dataset.onboardingAdminAction, onboardingBtn);
+        return;
+      }
+      const actionBtn = e.target.closest("button[data-action]");
+      if (!actionBtn) return;
+      const action = actionBtn.dataset.action || "";
+      const projectId = actionBtn.dataset.projectId || "";
+      if (action === "openCreateProject"){
+        openCreateProjectModal();
+      } else if (action === "adminOpenProject" && projectId){
+        setActiveProjectById(projectId);
+        toast("Project opened", state.activeProject?.name || "Project opened.");
+      } else if (action === "adminDeleteProject" && projectId){
+        setActiveProjectById(projectId);
+        openDeleteProjectModal();
+      } else if (action === "adminOpenCreateCompany"){
+        toast("Companies", "Company creation is not wired yet.");
+      }
     });
   }
 
@@ -34448,9 +35702,9 @@ function wireUI(){
       if (!isMapViewActive()){
         setActiveView("viewMap");
       }
-      const siteId = await openOrCreateSpliceAtCurrentLocation({ center: true, hidePanel: true });
+      const siteId = await openOrCreateSpliceAtCurrentLocation({ center: true, hidePanel: false });
       if (siteId){
-        toast("Splice ready", "Location pin opened. Add photos, codes, material, and notes.");
+        toast("Location ready", "GPS saved. Log the repair details on the field card.");
       }
     });
   }
@@ -34643,9 +35897,9 @@ function wireUI(){
   const useMyLocationBtn = $("btnMapUseMyLocation");
   if (useMyLocationBtn){
     useMyLocationBtn.addEventListener("click", async () => {
-      const siteId = await openOrCreateSpliceAtCurrentLocation({ center: true, hidePanel: true });
+      const siteId = await openOrCreateSpliceAtCurrentLocation({ center: true, hidePanel: false });
       if (siteId){
-        toast("Splice ready", "Location pin opened. Add photos, codes, material, and notes.");
+        toast("Location ready", "GPS saved. Log the repair details on the field card.");
       }
     });
   }
@@ -34682,7 +35936,32 @@ function wireUI(){
       if (actionBtn){
         const action = String(actionBtn.dataset.mapFieldAction || "");
         const siteId = actionBtn.dataset.siteId;
+        if (action === "startFieldDay"){
+          await startFieldDay();
+          return;
+        }
+        if (action === "startFieldDayEvent"){
+          const eventType = actionBtn.dataset.fieldDayEvent || "";
+          if (eventType) await startFieldDayEvent(eventType);
+          return;
+        }
+        if (action === "endFieldDayEvent"){
+          await endFieldDayEvent({ toastLabel: "Activity ended" });
+          return;
+        }
+        if (action === "endFieldDay"){
+          await endFieldDay();
+          return;
+        }
         if (!siteId) return;
+        if (action === "startFieldLocation"){
+          await startFieldDayEvent(FIELD_DAY_EVENT_TYPES.LOCATION_WORK, { siteId });
+          return;
+        }
+        if (action === "endFieldLocation"){
+          await endFieldDayLocation(siteId);
+          return;
+        }
         if (action === "open"){
           await openLocationForField(siteId, { center: true, forAdd: false });
           return;
@@ -34705,6 +35984,10 @@ function wireUI(){
           } else {
             toast("Location opened", "Upload reference media in location details.");
           }
+          return;
+        }
+        if (action === "saveWorkLog"){
+          await saveMapFieldWorkLog(siteId);
           return;
         }
         if (action === "complete"){

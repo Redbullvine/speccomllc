@@ -1605,6 +1605,61 @@ a{color:inherit; text-decoration:none;}
   background:rgba(22,163,74,.22);
   color:#bbf7d0;
 }
+.map-field-work-log{
+  display:grid;
+  gap:8px;
+  margin-top:2px;
+  padding-top:10px;
+  border-top:1px solid rgba(148,163,184,.24);
+}
+.map-field-work-title{
+  color:#f8fafc;
+  font-weight:900;
+  line-height:1.2;
+}
+.map-field-existing-work{
+  border:1px solid rgba(245,158,11,.42);
+  border-radius:8px;
+  padding:7px 8px;
+  background:rgba(120,70,12,.28);
+  color:#fde68a;
+  font-size:12px;
+  line-height:1.35;
+  font-weight:800;
+}
+.map-field-work-log textarea.input{
+  min-height:58px;
+  resize:vertical;
+}
+.map-field-day-card,
+.map-field-day-location{
+  display:grid;
+  gap:8px;
+  width:100%;
+  padding:10px;
+  border:1px solid rgba(148,163,184,.28);
+  border-radius:8px;
+  background:rgba(7,18,24,.86);
+}
+.map-field-day-card{
+  margin-top:8px;
+}
+.map-field-day-location{
+  margin:8px 0;
+}
+.map-field-day-location.active{
+  border-color:rgba(34,197,94,.46);
+  background:rgba(20,83,45,.38);
+}
+.map-field-day-title{
+  color:#f8fafc;
+  font-weight:900;
+}
+.map-field-day-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
 body.map-create-open #mapFieldPanel.is-create-open > :not(#mapFieldCreateWrap){
   display:none !important;
 }
@@ -8785,8 +8840,8 @@ button:disabled,
   border-color: rgba(148, 163, 184, 0.34) !important;
 }
 
-#map-float-panel :is(#mapFieldLocationName, #mapFieldLocationType, #mapFieldLocationNotes, #mapFieldBillingCodes),
-.map-field-panel :is(#mapFieldLocationName, #mapFieldLocationType, #mapFieldLocationNotes, #mapFieldBillingCodes) {
+#map-float-panel :is(#mapFieldLocationName, #mapFieldLocationType, #mapFieldLocationNotes, #mapFieldBillingCodes, #mapFieldWorkCompleted, #mapFieldWorkCodes, #mapFieldMaterialsUsed),
+.map-field-panel :is(#mapFieldLocationName, #mapFieldLocationType, #mapFieldLocationNotes, #mapFieldBillingCodes, #mapFieldWorkCompleted, #mapFieldWorkCodes, #mapFieldMaterialsUsed) {
   color: #f8fafc !important;
   background: rgba(7, 18, 24, 0.88) !important;
   border-color: rgba(148, 163, 184, 0.44) !important;
@@ -8813,9 +8868,15 @@ body.map-mode #map-float-panel #kmzTreeSearch:-webkit-autofill {
 #map-float-panel #mapFieldLocationName::placeholder,
 #map-float-panel #mapFieldLocationNotes::placeholder,
 #map-float-panel #mapFieldBillingCodes::placeholder,
+#map-float-panel #mapFieldWorkCompleted::placeholder,
+#map-float-panel #mapFieldWorkCodes::placeholder,
+#map-float-panel #mapFieldMaterialsUsed::placeholder,
 .map-field-panel #mapFieldLocationName::placeholder,
 .map-field-panel #mapFieldLocationNotes::placeholder,
-.map-field-panel #mapFieldBillingCodes::placeholder {
+.map-field-panel #mapFieldBillingCodes::placeholder,
+.map-field-panel #mapFieldWorkCompleted::placeholder,
+.map-field-panel #mapFieldWorkCodes::placeholder,
+.map-field-panel #mapFieldMaterialsUsed::placeholder {
   color: #94a3b8 !important;
   opacity: 1;
   -webkit-text-fill-color: #94a3b8;
@@ -8902,6 +8963,58 @@ body.map-mode #map-float-panel #kmzTreeSearch:-webkit-autofill {
 #projectsModal .project-row .project-row-meta {
   color: #cbd5e1 !important;
   -webkit-text-fill-color: #cbd5e1 !important;
+}
+
+.admin-project-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.32);
+}
+
+.admin-project-main {
+  min-width: 0;
+}
+
+.admin-project-name {
+  color: #f8fafc !important;
+  font-weight: 800;
+  -webkit-text-fill-color: #f8fafc !important;
+}
+
+.admin-project-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+  color: #cbd5e1 !important;
+  font-size: 0.82rem;
+  -webkit-text-fill-color: #cbd5e1 !important;
+}
+
+.admin-project-badge {
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 999px;
+  padding: 1px 7px;
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+}
+
+.admin-project-badge.ok {
+  background: rgba(22, 101, 52, 0.38);
+}
+
+.admin-project-badge.warn,
+.admin-project-badge.test {
+  background: rgba(120, 53, 15, 0.42);
+}
+
+.admin-project-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
 }
 
 #viewAdmin .table tbody tr,

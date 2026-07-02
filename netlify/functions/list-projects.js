@@ -26,6 +26,106 @@ async function fetchProjects(adminClient) {
     .order("name", { ascending: true });
 }
 
+function normalizeRole(role) {
+  return String(role || "").trim().toUpperCase();
+}
+
+function isPrivilegedRole(role) {
+  return ["ROOT", "OWNER", "ADMIN", "OFFICE", "SUPPORT", "PRIME"].includes(normalizeRole(role));
+}
+
+function isFieldRole(role) {
+  return ["TDS", "SUB", "SUBCONTRACTOR", "SPLICER", "TECHNICIAN"].includes(normalizeRole(role));
+}
+
+function isProjectMarkedInactive(project) {
+  if (project?.active === false) return true;
+  return String(project?.active || "").trim().toLowerCase() === "false";
+}
+
+function isLikelyTestProject(project) {
+  if (project?.is_demo) return true;
+  const blob = [
+    project?.name,
+    project?.description,
+    project?.job_number,
+    project?.location,
+  ].map((value) => String(value || "").toLowerCase()).join(" ");
+  return /\b(test|testing|demo|dev|sample|sandbox|training)\b/.test(blob);
+}
+
+function isProjectActiveForField(project) {
+  return Boolean(project && !isProjectMarkedInactive(project) && !isLikelyTestProject(project));
+}
+
+async function fetchUserProfile(client, userId) {
+  if (!userId) return null;
+  const attempts = [
+    "role, current_project_id, org_id",
+    "current_project_id, org_id",
+    "role, org_id",
+    "org_id",
+  ];
+  for (const select of attempts) {
+    const { data, error } = await client
+      .from("profiles")
+      .select(select)
+      .eq("id", userId)
+      .maybeSingle();
+    if (!error) return data || {};
+    const message = String(error.message || "").toLowerCase();
+    if (!message.includes("does not exist")) {
+      return null;
+    }
+  }
+  return null;
+}
+
+async function fetchProjectMembershipIds(client, userId) {
+  const ids = new Set();
+  if (!userId) return ids;
+  try {
+    const { data, error } = await client
+      .from("project_members")
+      .select("project_id")
+      .eq("user_id", userId);
+    if (error) return ids;
+    (data || []).forEach((row) => {
+      const id = String(row?.project_id || "").trim();
+      if (id) ids.add(id);
+    });
+  } catch (_) {
+    return ids;
+  }
+  return ids;
+}
+
+function filterProjectsForUser(projects, profile, membershipIds) {
+  const list = Array.isArray(projects) ? projects : [];
+  const role = normalizeRole(profile?.role);
+  if (isPrivilegedRole(role)) return list;
+
+  const currentProjectId = String(profile?.current_project_id || "").trim();
+  const assignedIds = currentProjectId
+    ? new Set([currentProjectId])
+    : new Set(
+      Array.from(membershipIds || [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)
+    );
+
+  const shouldScope = isFieldRole(role) || assignedIds.size > 0;
+  if (!shouldScope) return list;
+
+  const assignedProjects = assignedIds.size
+    ? list.filter((project) => assignedIds.has(String(project?.id || "")))
+    : [];
+  const source = assignedProjects.length ? assignedProjects : list;
+  const activeSource = source.filter(isProjectActiveForField);
+  if (activeSource.length) return activeSource;
+  return assignedProjects.length ? assignedProjects : list.filter(isProjectActiveForField);
+}
+
 exports.handler = async function handler(event) {
   if (event.httpMethod === "OPTIONS") return json(204, {});
   if (event.httpMethod !== "GET") return json(405, { error: "Method not allowed" });
@@ -58,10 +158,15 @@ exports.handler = async function handler(event) {
 
   const { data, error } = await fetchProjects(projectClient);
   if (error) return json(500, { error: error.message || "Failed to load projects" });
+  const profile = userId ? await fetchUserProfile(projectClient, userId) : null;
+  const membershipIds = userId ? await fetchProjectMembershipIds(projectClient, userId) : new Set();
+  const projects = filterProjectsForUser(data, profile, membershipIds);
 
   return json(200, {
     ok: true,
     user_id: userId,
-    data: Array.isArray(data) ? data : [],
+    project_scope: profile ? "profile" : "public",
+    memberships: membershipIds.size,
+    data: projects,
   });
 };
