@@ -376,6 +376,9 @@ const state = {
     nearestSiteDistanceM: null,
     fieldPanelVisible: true,
     fieldSelectedSiteId: "",
+    fieldVisitDraft: null,
+    fieldCloseoutOpen: false,
+    fieldCloseoutDraft: null,
     fieldCreateOpen: false,
     fieldCreateRecentlyClosedUntil: 0,
     siteWorkflowById: new Map(),
@@ -2653,6 +2656,7 @@ function normalizePopupPhotos(items){
         gpsLng: Number.isFinite(Number(item?.gpsLng)) ? Number(item.gpsLng) : null,
         gpsAccuracyM: Number.isFinite(Number(item?.gpsAccuracyM)) ? Number(item.gpsAccuracyM) : null,
         source: item?.source || "",
+        proofType: item?.proofType || item?.proof_type || "",
         readonly: Boolean(item?.readonly),
       };
     })
@@ -2693,6 +2697,8 @@ async function fetchSitePhotosForMapPopup(siteId){
         createdBy: row?.created_by || "",
         url: String(row?.previewUrl || row?.media_path || "").trim(),
         createdAt: row?.created_at || "",
+        source: row?.source || "",
+        proofType: row?.proof_type || "",
       }))
       .filter((row) => row.url);
     if (rows.length) return setCachedSitePhotos(key, rows);
@@ -2703,6 +2709,7 @@ async function fetchSitePhotosForMapPopup(siteId){
       url: String(row?.previewUrl || row?.media_path || "").trim(),
       createdAt: row?.created_at || "",
       source: row?.source || "",
+      proofType: row?.proof_type || "",
       readonly: Boolean(row?.readonly),
     })).filter((row) => row.url));
   }
@@ -2714,18 +2721,26 @@ async function fetchSitePhotosForMapPopup(siteId){
       url: String(row?.previewUrl || row?.media_path || "").trim(),
       createdAt: row?.created_at || "",
       source: row?.source || "",
+      proofType: row?.proof_type || "",
       readonly: Boolean(row?.readonly),
     })).filter((row) => row.url));
   }
   let { data, error } = await state.client
     .from("site_media")
-    .select("id, media_path, created_by, created_at, gps_lat, gps_lng, gps_accuracy_m")
+    .select("id, media_path, created_by, created_at, gps_lat, gps_lng, gps_accuracy_m, source, proof_type")
     .eq("site_id", siteId)
     .order("created_at", { ascending: false });
   if (error && isMissingColumnError(error, "created_by")){
     ({ data, error } = await state.client
       .from("site_media")
-      .select("id, media_path, created_at, gps_lat, gps_lng, gps_accuracy_m")
+      .select("id, media_path, created_at, gps_lat, gps_lng, gps_accuracy_m, source, proof_type")
+      .eq("site_id", siteId)
+      .order("created_at", { ascending: false }));
+  }
+  if (error && ["source", "proof_type"].some((col) => isMissingColumnError(error, col))){
+    ({ data, error } = await state.client
+      .from("site_media")
+      .select("id, media_path, created_by, created_at, gps_lat, gps_lng, gps_accuracy_m")
       .eq("site_id", siteId)
       .order("created_at", { ascending: false }));
   }
@@ -2738,6 +2753,7 @@ async function fetchSitePhotosForMapPopup(siteId){
       url: String(row?.previewUrl || row?.media_path || "").trim(),
       createdAt: row?.created_at || "",
       source: row?.source || "",
+      proofType: row?.proof_type || "",
       readonly: Boolean(row?.readonly),
     })).filter((row) => row.url));
   }
@@ -2766,6 +2782,8 @@ async function fetchSitePhotosForMapPopup(siteId){
       gpsLat: row?.gps_lat ?? null,
       gpsLng: row?.gps_lng ?? null,
       gpsAccuracyM: row?.gps_accuracy_m ?? null,
+      source: row?.source || "",
+      proofType: row?.proof_type || "",
     });
   }
   if (!rows.length){
@@ -5214,6 +5232,97 @@ const FIELD_DAY_EVENT_LABELS = {
   [FIELD_DAY_EVENT_TYPES.BREAK_15]: "Break",
   [FIELD_DAY_EVENT_TYPES.LUNCH]: "Lunch",
 };
+const FIELD_VISIT_TYPES = [
+  "First visit",
+  "Revisit",
+  "QC/Audit",
+  "Repair/Fix",
+  "Escalation check",
+];
+const FIELD_VISIT_FINAL_STATUSES = [
+  "Fixed",
+  "Audit Complete",
+  "Needs Return",
+  "Escalate",
+];
+const FIELD_VISIT_SOURCE_PREFIX = "field_visit:";
+const FIELD_CLOSEOUT_ANSWER_VALUES = ["yes", "no", "na"];
+const FIELD_CLOSEOUT_SECTIONS = [
+  {
+    key: "test",
+    title: "A. Test Results",
+    items: [
+      ["before_reading_entered", "Before reading entered"],
+      ["after_reading_entered", "After reading entered"],
+      ["test_result_improved", "Test result improved"],
+      ["test_result_acceptable", "Test result acceptable/pass"],
+      ["test_result_still_bad", "Test result still bad"],
+      ["needs_patrick_review", "Needs Patrick review"],
+      ["customer_transfer_blocker_remains", "Customer transfer blocker remains"],
+    ],
+  },
+  {
+    key: "physical",
+    title: "B. Physical Inspection",
+    items: [
+      ["ports_cleaned", "Ports cleaned"],
+      ["ports_inspected", "Ports inspected"],
+      ["fiber_splice_points_inspected", "Fiber/splice points inspected"],
+      ["splice_tray_inspected", "Splice tray inspected"],
+      ["connections_reseated_checked", "Connections reseated/checked"],
+      ["damaged_hardware_found", "Damaged hardware found"],
+      ["weather_water_dirt_issue_found", "Weather/water/dirt issue found"],
+    ],
+  },
+  {
+    key: "work",
+    title: "C. Work Completed",
+    items: [
+      ["previous_work_audited", "Previous work audited"],
+      ["issue_found", "Issue found"],
+      ["issue_repaired", "Issue repaired"],
+      ["material_used_recorded", "Material used recorded"],
+      ["splicing_code_recorded", "Splicing code recorded"],
+      ["site_left_clean", "Site left clean"],
+      ["location_safe_secured", "Location safe/secured"],
+    ],
+  },
+  {
+    key: "documentation",
+    title: "D. Documentation",
+    items: [
+      ["before_photo_uploaded", "Before photo uploaded"],
+      ["issue_photo_uploaded", "Issue photo uploaded"],
+      ["after_photo_uploaded", "After photo uploaded"],
+      ["description_notes_completed", "Description notes completed"],
+      ["gps_time_captured", "GPS/time captured"],
+      ["status_selected", "Status selected"],
+    ],
+  },
+];
+const FIELD_CLOSEOUT_ITEM_LABELS = new Map(
+  FIELD_CLOSEOUT_SECTIONS.flatMap((section) => section.items)
+);
+const FIELD_CLOSEOUT_EVIDENCE_ANSWER_KEYS = [
+  "before_reading_entered",
+  "after_reading_entered",
+  "test_result_improved",
+  "test_result_acceptable",
+  "test_result_still_bad",
+  "needs_patrick_review",
+  "customer_transfer_blocker_remains",
+  "previous_work_audited",
+  "issue_found",
+  "material_used_recorded",
+  "splicing_code_recorded",
+  "before_photo_uploaded",
+  "issue_photo_uploaded",
+  "after_photo_uploaded",
+  "description_notes_completed",
+  "gps_time_captured",
+  "status_selected",
+  "any_photo_uploaded",
+];
 const MAP_MY_LOCATION_COLOR = "#3b82f6";
 const MAP_PANES = {
   boundary: "speccom-boundary-pane",
@@ -21071,11 +21180,19 @@ function getDprDefaultMetrics(){
     field_work_logs_today: 0,
     gps_points_today: 0,
     field_day_events_today: 0,
+    field_closeouts_today: 0,
     project_day_minutes_today: 0,
     vehicle_inspection_minutes_today: 0,
     break_minutes_today: 0,
     lunch_minutes_today: 0,
     location_work_minutes_today: 0,
+    locations_fixed_today: 0,
+    locations_audit_complete_today: 0,
+    locations_needing_return_today: 0,
+    locations_escalated_today: 0,
+    locations_bad_reading_remaining_today: 0,
+    locations_needing_patrick_review_today: 0,
+    locations_missing_photos_with_reason_today: 0,
     locations_worked: [],
     splice_locations_worked: [],
     material_usage: [],
@@ -21083,6 +21200,7 @@ function getDprDefaultMetrics(){
     work_orders: [],
     field_day_sessions: [],
     field_day_events: [],
+    field_location_closeouts: [],
     summary: "",
   };
 }
@@ -21166,6 +21284,131 @@ function renderDprEntries(entries){
   `;
 }
 
+function normalizeDprCloseoutPayload(row){
+  if (!row || typeof row !== "object") return null;
+  const checklist = row.checklist && typeof row.checklist === "object" ? row.checklist : row;
+  return {
+    ...checklist,
+    checklist_id: row.id || checklist.checklist_id || "",
+    project_day_id: row.project_day_id || checklist.project_day_id || "",
+    location_visit_id: row.location_visit_id || checklist.location_visit_id || "",
+    project_id: row.project_id || checklist.project_id || "",
+    user_id: row.user_id || checklist.user_id || "",
+    base_location_id: row.base_location_id || checklist.base_location_id || "",
+    base_location_label: checklist.base_location_label || row.base_location_label || "",
+    visit_label: row.visit_label || checklist.visit_label || "",
+    submitted_at: row.submitted_at || checklist.timestamp || checklist.submitted_at || "",
+    timestamp: checklist.timestamp || row.submitted_at || checklist.submitted_at || "",
+    gps_lat: row.gps_lat ?? checklist.gps_lat ?? null,
+    gps_lng: row.gps_lng ?? checklist.gps_lng ?? null,
+    gps_accuracy_m: row.gps_accuracy_m ?? checklist.gps_accuracy_m ?? null,
+    answers: checklist.answers && typeof checklist.answers === "object" ? checklist.answers : {},
+    notes: checklist.notes && typeof checklist.notes === "object" ? checklist.notes : {},
+    no_photo_possible: Boolean(checklist.no_photo_possible),
+    no_photo_reason: checklist.no_photo_reason || "",
+    still_bad_note: checklist.still_bad_note || "",
+    blocker_note: checklist.blocker_note || "",
+    next_step_notes: checklist.next_step_notes || "",
+    photo_count: Number(checklist.photo_count || 0),
+    work_codes: Array.isArray(checklist.work_codes) ? checklist.work_codes : [],
+    materials_used: Array.isArray(checklist.materials_used) ? checklist.materials_used : [],
+  };
+}
+
+function formatDprCloseoutAnswer(value){
+  const answer = normalizeCloseoutAnswer(value);
+  if (answer === "na") return "N/A";
+  return answer ? answer.toUpperCase() : "Unanswered";
+}
+
+function getDprCloseoutAnswerCounts(closeout){
+  const answers = closeout?.answers || {};
+  const counts = { yes: 0, no: 0, na: 0, unanswered: 0 };
+  FIELD_CLOSEOUT_SECTIONS.forEach((section) => {
+    section.items.forEach(([key]) => {
+      const answer = normalizeCloseoutAnswer(answers[key]);
+      if (answer) counts[answer] += 1;
+      else counts.unanswered += 1;
+    });
+  });
+  return counts;
+}
+
+function formatDprMaterialSummary(materials){
+  const rows = normalizeDprMaterialRows(materials);
+  if (!rows.length) return "No materials recorded";
+  return rows.map((row) => `${row.item_key} x${row.qty_used}${row.unit ? ` ${row.unit}` : ""}`).join(", ");
+}
+
+function getDprCloseoutFlags(closeout, visit = {}){
+  const answers = closeout?.answers || {};
+  const status = visit.status || closeout?.final_status || "";
+  return [
+    answers.test_result_still_bad === "yes" ? "Still bad reading" : "",
+    answers.customer_transfer_blocker_remains === "yes" ? "Customer transfer blocker" : "",
+    answers.needs_patrick_review === "yes" ? "Needs Patrick review" : "",
+    status === "Needs Return" || visit.needs_return === "yes" ? "Needs Return" : "",
+    status === "Escalate" || visit.escalate === "yes" ? "Escalate" : "",
+    closeout?.no_photo_reason ? `No photo reason: ${closeout.no_photo_reason}` : "",
+  ].filter(Boolean);
+}
+
+function renderDprCloseoutSummary(closeoutRow, context = {}){
+  const closeout = normalizeDprCloseoutPayload(closeoutRow);
+  if (!closeout) return "";
+  const event = context.event || {};
+  const visit = {
+    ...(context.visit || {}),
+    before_reading: context.visit?.before_reading || closeout.before_reading || "",
+    after_reading: context.visit?.after_reading || closeout.after_reading || "",
+    status: context.visit?.status || closeout.final_status || "",
+    final_notes: context.visit?.final_notes || closeout.description_notes || "",
+  };
+  const counts = getDprCloseoutAnswerCounts(closeout);
+  const codes = Array.isArray(context.codes) && context.codes.length ? context.codes : closeout.work_codes || [];
+  const materials = Array.isArray(context.materials) && context.materials.length ? context.materials : closeout.materials_used || [];
+  const start = event.started_at || context.started_at || "";
+  const end = event.ended_at || context.ended_at || closeout.timestamp || closeout.submitted_at || "";
+  const minutes = Number(event.duration_minutes || context.duration_minutes || 0)
+    || (start && end ? getDurationMinutesBetween(start, end) : 0);
+  const baseLocation = closeout.base_location_label || context.baseLabel || closeout.base_location_id || event.site_id || "-";
+  const visitLabel = closeout.visit_label || visit.visit_label || event.label || "-";
+  const flags = getDprCloseoutFlags(closeout, visit);
+  const gridRows = [
+    ["Base location", baseLocation],
+    ["Visit label", visitLabel],
+    ["Start / end", [formatDprDateTime(start), formatDprDateTime(end)].filter(Boolean).join(" to ") || "-"],
+    ["Time on location", minutes ? formatDurationMinutes(minutes) : "-"],
+    ["Before reading", visit.before_reading || "-"],
+    ["After reading", visit.after_reading || "-"],
+    ["Final status", visit.status || "-"],
+    ["Photos uploaded", String(closeout.photo_count || 0)],
+    ["Materials used", formatDprMaterialSummary(materials)],
+    ["Splicing codes", codes.length ? codes.join(", ") : "No codes recorded"],
+  ];
+  const summary = `Checklist: Yes ${counts.yes} | No ${counts.no} | N/A ${counts.na}${counts.unanswered ? ` | Unanswered ${counts.unanswered}` : ""}`;
+  return `
+    <div class="dpr-closeout-summary">
+      <strong>Closeout checklist</strong>
+      <div class="muted tiny">${escapeHtml(summary)}</div>
+      <div class="dpr-closeout-grid">
+        ${gridRows.map(([label, value]) => `
+          <div>
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(value)}</strong>
+          </div>
+        `).join("")}
+      </div>
+      ${visit.final_notes ? `<div class="dpr-report-notes">${escapeHtml(visit.final_notes)}</div>` : ""}
+      ${closeout.still_bad_note ? `<div class="muted tiny">Still bad: ${escapeHtml(closeout.still_bad_note)}</div>` : ""}
+      ${closeout.blocker_note ? `<div class="muted tiny">Transfer blocker: ${escapeHtml(closeout.blocker_note)}</div>` : ""}
+      ${closeout.next_step_notes ? `<div class="muted tiny">Next steps: ${escapeHtml(closeout.next_step_notes)}</div>` : ""}
+      <div class="muted tiny">Before photo: ${escapeHtml(formatDprCloseoutAnswer(closeout.answers.before_photo_uploaded))} | Issue photo: ${escapeHtml(formatDprCloseoutAnswer(closeout.answers.issue_photo_uploaded))} | After photo: ${escapeHtml(formatDprCloseoutAnswer(closeout.answers.after_photo_uploaded))}</div>
+      ${flags.length ? `<div class="dpr-red-flags">${flags.map((flag) => `<span>${escapeHtml(flag)}</span>`).join("")}</div>` : ""}
+    </div>
+  `;
+}
+
 function renderDprFieldLogs(logs){
   const list = Array.isArray(logs) ? logs : [];
   if (!list.length) return "";
@@ -21173,13 +21416,24 @@ function renderDprFieldLogs(logs){
     <div class="dpr-entry-list">
       ${list.slice(0, 8).map((log) => {
         const time = formatDprDateTime(log?.completed_at || log?.arrived_at);
+        const visit = parseFieldVisitWorkNotes(log?.work_completed || "");
+        const closeout = parseFieldCloseoutFromNotes(log?.work_completed || "");
         const codes = Array.isArray(log?.work_codes) && log.work_codes.length
           ? ` Codes: ${log.work_codes.join(", ")}`
           : "";
+        const title = [
+          time,
+          visit.visit_label ? `Visit ${visit.visit_label}` : "Field work logged",
+          visit.before_reading ? `Before ${visit.before_reading}` : "",
+          visit.after_reading ? `After ${visit.after_reading}` : "",
+          visit.status ? `Status ${visit.status}` : "",
+        ].filter(Boolean).join(" - ");
         return `
-          <div class="dpr-entry-row">
-            <span>${escapeHtml([time, log?.work_completed || "Field work logged"].filter(Boolean).join(" - "))}${escapeHtml(codes)}</span>
+          <div class="dpr-entry-row dpr-entry-row-stack">
+            <span>${escapeHtml(title)}${escapeHtml(codes)}</span>
             <strong>${escapeHtml(log?.status_after || "")}</strong>
+            ${visit.final_notes ? `<div class="muted tiny">${escapeHtml(visit.final_notes)}</div>` : ""}
+            ${renderDprCloseoutSummary(closeout)}
           </div>
         `;
       }).join("")}
@@ -21199,10 +21453,17 @@ function renderDprVisitSummary(visits){
   `;
 }
 
-function renderDprFieldDayTimeline(sessions, events){
+function renderDprFieldDayTimeline(sessions, events, closeouts = []){
   const sessionList = Array.isArray(sessions) ? sessions : [];
   const eventList = Array.isArray(events) ? events : [];
   if (!sessionList.length && !eventList.length) return "";
+  const closeoutList = (Array.isArray(closeouts) ? closeouts : [])
+    .map(normalizeDprCloseoutPayload)
+    .filter(Boolean);
+  const closeoutByVisitId = new Map();
+  closeoutList.forEach((closeout) => {
+    if (closeout.location_visit_id) closeoutByVisitId.set(closeout.location_visit_id, closeout);
+  });
   const sessionSummary = sessionList.map((session) => {
     const start = formatDprDateTime(session?.started_at);
     const end = session?.ended_at ? formatDprDateTime(session.ended_at) : "open";
@@ -21220,10 +21481,25 @@ function renderDprFieldDayTimeline(sessions, events){
             const end = event?.ended_at ? formatDprDateTime(event.ended_at) : "open";
             const minutes = Number(event?.duration_minutes || getDurationMinutesBetween(event?.started_at, event?.ended_at || nowISO()));
             const codes = Array.isArray(event?.work_codes) && event.work_codes.length ? ` Codes: ${event.work_codes.join(", ")}` : "";
+            const visit = parseFieldVisitWorkNotes(event?.notes || "");
+            const closeout = closeoutByVisitId.get(event?.id) || parseFieldCloseoutFromNotes(event?.notes || "");
+            const visitBits = [
+              visit.visit_label ? `Visit ${visit.visit_label}` : "",
+              visit.before_reading ? `Before ${visit.before_reading}` : "",
+              visit.after_reading ? `After ${visit.after_reading}` : "",
+              visit.status ? `Status ${visit.status}` : "",
+            ].filter(Boolean).join(" | ");
             return `
-              <div class="dpr-entry-row">
-                <span>${escapeHtml(getFieldDayEventLabel(event))} <span class="muted tiny">${escapeHtml(start)} to ${escapeHtml(end)}${event?.notes ? ` - ${escapeHtml(event.notes)}` : ""}${escapeHtml(codes)}</span></span>
+              <div class="dpr-entry-row dpr-entry-row-stack">
+                <span>${escapeHtml(getFieldDayEventLabel(event))} <span class="muted tiny">${escapeHtml(start)} to ${escapeHtml(end)}${visitBits ? ` - ${escapeHtml(visitBits)}` : ""}${escapeHtml(codes)}</span></span>
                 <strong>${escapeHtml(formatDurationMinutes(minutes))}</strong>
+                ${visit.final_notes ? `<div class="muted tiny">${escapeHtml(visit.final_notes)}</div>` : ""}
+                ${renderDprCloseoutSummary(closeout, {
+                  event,
+                  visit,
+                  codes: event?.work_codes || [],
+                  materials: event?.materials_used || [],
+                })}
               </div>
             `;
           }).join("")}
@@ -21250,8 +21526,11 @@ function normalizeDprMaterialRows(rows){
 
 async function loadFieldWorkReportRows(projectId, reportDate){
   if (isDemo || !state.client || !projectId || !reportDate){
-    return { logs: [], pings: [], sessions: [], events: [] };
+    return { logs: [], pings: [], sessions: [], events: [], closeouts: [] };
   }
+  const reportDay = new Date(`${reportDate}T00:00:00`);
+  const reportStart = startOfDay(reportDay).toISOString();
+  const reportEnd = endOfDay(reportDay).toISOString();
   const [logsRes, pingsRes] = await Promise.all([
     state.client
       .from("field_work_logs")
@@ -21281,6 +21560,13 @@ async function loadFieldWorkReportRows(projectId, reportDate){
       .in("session_id", sessionIds)
       .order("started_at", { ascending: true });
   }
+  const closeoutsRes = await state.client
+    .from("splicer_location_closeout_checklists")
+    .select("id, project_day_id, location_visit_id, project_id, user_id, base_location_id, visit_label, submitted_at, gps_lat, gps_lng, gps_accuracy_m, checklist, created_at")
+    .eq("project_id", projectId)
+    .gte("submitted_at", reportStart)
+    .lte("submitted_at", reportEnd)
+    .order("submitted_at", { ascending: true });
   if (logsRes.error && !isMissingTable(logsRes.error)){
     console.warn("[daily report] field work logs load failed", logsRes.error);
   }
@@ -21293,11 +21579,15 @@ async function loadFieldWorkReportRows(projectId, reportDate){
   if (eventsRes.error && !isMissingTable(eventsRes.error)){
     console.warn("[daily report] field day events load failed", eventsRes.error);
   }
+  if (closeoutsRes.error && !isMissingTable(closeoutsRes.error)){
+    console.warn("[daily report] field closeouts load failed", closeoutsRes.error);
+  }
   return {
     logs: logsRes.error ? [] : (logsRes.data || []),
     pings: pingsRes.error ? [] : (pingsRes.data || []),
     sessions: sessionsRes.error ? [] : (sessionsRes.data || []),
     events: eventsRes.error ? [] : (eventsRes.data || []),
+    closeouts: closeoutsRes.error ? [] : (closeoutsRes.data || []),
   };
 }
 
@@ -21338,12 +21628,14 @@ function buildDprSummary(metrics){
 
 async function enhanceDprMetricsWithFieldWork(baseMetrics, projectId, reportDate, { persist = false, reportId = null } = {}){
   const metrics = { ...getDprDefaultMetrics(), ...(baseMetrics || {}) };
-  const { logs, pings, sessions, events } = await loadFieldWorkReportRows(projectId, reportDate);
-  if (!logs.length && !pings.length && !sessions.length && !events.length) return metrics;
+  const { logs, pings, sessions, events, closeouts } = await loadFieldWorkReportRows(projectId, reportDate);
+  if (!logs.length && !pings.length && !sessions.length && !events.length && !closeouts.length) return metrics;
+  const normalizedCloseouts = closeouts.map(normalizeDprCloseoutPayload).filter(Boolean);
   const siteIds = Array.from(new Set([
     ...logs.map((row) => row.site_id),
     ...pings.map((row) => row.site_id),
     ...events.map((row) => row.site_id),
+    ...normalizedCloseouts.map((row) => row.base_location_id),
   ].filter(Boolean)));
   const siteMap = await ensureDprSiteMap(projectId, siteIds);
   const locations = getDprArray(metrics, "locations_worked").map((loc) => ({ ...loc }));
@@ -21425,6 +21717,24 @@ async function enhanceDprMetricsWithFieldWork(baseMetrics, projectId, reportDate
     if (!loc.created_at) loc.created_at = log.completed_at || log.arrived_at || "";
   });
 
+  normalizedCloseouts.forEach((closeout) => {
+    const loc = ensureLocation(closeout.base_location_id, {
+      id: closeout.checklist_id || closeout.location_visit_id,
+      name: closeout.base_location_label || closeout.visit_label || "Field location",
+      gps_lat: closeout.gps_lat,
+      gps_lng: closeout.gps_lng,
+      completed_at: closeout.timestamp || closeout.submitted_at,
+    });
+    loc.closeouts = Array.isArray(loc.closeouts) ? loc.closeouts : [];
+    loc.closeouts.push(closeout);
+    const codeSet = new Set([...(Array.isArray(loc.codes) ? loc.codes : []), ...(closeout.work_codes || [])]);
+    loc.codes = Array.from(codeSet).filter(Boolean);
+    if (closeout.description_notes){
+      loc.notes = [loc.notes, closeout.description_notes].filter(Boolean).join("\n");
+    }
+    if (!loc.created_at) loc.created_at = closeout.timestamp || closeout.submitted_at || "";
+  });
+
   pingGroups.forEach((visit, siteId) => {
     const loc = ensureLocation(siteId, {
       gps_lat: visit.gps_lat,
@@ -21459,6 +21769,19 @@ async function enhanceDprMetricsWithFieldWork(baseMetrics, projectId, reportDate
   events.forEach((event) => (Array.isArray(event.work_codes) ? event.work_codes : []).forEach((code) => codeSet.add(String(code).trim().toLowerCase())));
   const normalizedSessions = sessions.map(normalizeFieldDaySessionRow).filter(Boolean);
   const normalizedEvents = events.map(normalizeFieldDayEventRow).filter(Boolean);
+  const visitNotesForCounts = normalizedEvents.length
+    ? normalizedEvents.map((event) => event.notes || "")
+    : logs.map((log) => log.work_completed || "");
+  const parsedVisitsForCounts = visitNotesForCounts.map(parseFieldVisitWorkNotes);
+  const parsedCloseoutsForCounts = visitNotesForCounts.map(parseFieldCloseoutFromNotes).filter(Boolean);
+  const closeoutsForCounts = normalizedCloseouts.length ? normalizedCloseouts : parsedCloseoutsForCounts;
+  const visitStatusRows = parsedVisitsForCounts.length
+    ? parsedVisitsForCounts
+    : closeoutsForCounts.map((closeout) => ({
+      status: closeout.final_status || "",
+      needs_return: closeout.final_status === "Needs Return" ? "yes" : "",
+      escalate: closeout.final_status === "Escalate" ? "yes" : "",
+    }));
   const projectDayMinutes = normalizedSessions.reduce((sum, session) => (
     sum + (Number(session.total_minutes) || getDurationMinutesBetween(session.started_at, session.ended_at || nowISO()))
   ), 0);
@@ -21499,11 +21822,20 @@ async function enhanceDprMetricsWithFieldWork(baseMetrics, projectId, reportDate
   metrics.field_day_sessions = normalizedSessions;
   metrics.field_day_events = normalizedEvents;
   metrics.field_day_events_today = normalizedEvents.length;
+  metrics.field_location_closeouts = normalizedCloseouts;
+  metrics.field_closeouts_today = normalizedCloseouts.length || parsedCloseoutsForCounts.length;
   metrics.project_day_minutes_today = projectDayMinutes;
   metrics.vehicle_inspection_minutes_today = minutesByType[FIELD_DAY_EVENT_TYPES.VEHICLE_INSPECTION] || 0;
   metrics.break_minutes_today = minutesByType[FIELD_DAY_EVENT_TYPES.BREAK_15] || 0;
   metrics.lunch_minutes_today = minutesByType[FIELD_DAY_EVENT_TYPES.LUNCH] || 0;
   metrics.location_work_minutes_today = minutesByType[FIELD_DAY_EVENT_TYPES.LOCATION_WORK] || 0;
+  metrics.locations_fixed_today = visitStatusRows.filter((visit) => visit.status === "Fixed").length;
+  metrics.locations_audit_complete_today = visitStatusRows.filter((visit) => visit.status === "Audit Complete").length;
+  metrics.locations_needing_return_today = visitStatusRows.filter((visit) => visit.status === "Needs Return" || visit.needs_return === "yes").length;
+  metrics.locations_escalated_today = visitStatusRows.filter((visit) => visit.status === "Escalate" || visit.escalate === "yes").length;
+  metrics.locations_bad_reading_remaining_today = closeoutsForCounts.filter((closeout) => closeout?.answers?.test_result_still_bad === "yes").length;
+  metrics.locations_needing_patrick_review_today = closeoutsForCounts.filter((closeout) => closeout?.answers?.needs_patrick_review === "yes").length;
+  metrics.locations_missing_photos_with_reason_today = closeoutsForCounts.filter((closeout) => closeout?.no_photo_reason).length;
   metrics.summary = buildDprSummary(metrics);
   if (persist && reportId && state.client){
     await state.client
@@ -21566,10 +21898,18 @@ function renderDprMetrics(){
       <div class="dpr-metric-tile"><span>GPS pings</span><strong>${getDprNumber(metrics, "gps_points_today")}</strong></div>
       <div class="dpr-metric-tile"><span>Project time</span><strong>${escapeHtml(formatDurationMinutes(getDprNumber(metrics, "project_day_minutes_today")))}</strong></div>
       <div class="dpr-metric-tile"><span>Day events</span><strong>${getDprNumber(metrics, "field_day_events_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>Closeouts</span><strong>${getDprNumber(metrics, "field_closeouts_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>Fixed</span><strong>${getDprNumber(metrics, "locations_fixed_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>Audit complete</span><strong>${getDprNumber(metrics, "locations_audit_complete_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>Needs return</span><strong>${getDprNumber(metrics, "locations_needing_return_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>Escalated</span><strong>${getDprNumber(metrics, "locations_escalated_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>Bad readings</span><strong>${getDprNumber(metrics, "locations_bad_reading_remaining_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>Patrick review</span><strong>${getDprNumber(metrics, "locations_needing_patrick_review_today")}</strong></div>
+      <div class="dpr-metric-tile"><span>No photo reason</span><strong>${getDprNumber(metrics, "locations_missing_photos_with_reason_today")}</strong></div>
       <div class="dpr-metric-tile"><span>${t("dprMetricWorkOrders")}</span><strong>${getDprNumber(metrics, "work_orders_completed_today")}</strong></div>
       <div class="dpr-metric-tile"><span>${t("dprMetricBlocked")}</span><strong>${getDprNumber(metrics, "blocked_items_today")}</strong></div>
     </div>
-    ${renderDprFieldDayTimeline(metrics.field_day_sessions || [], metrics.field_day_events || [])}
+    ${renderDprFieldDayTimeline(metrics.field_day_sessions || [], metrics.field_day_events || [], metrics.field_location_closeouts || [])}
     <div class="dpr-section">
       <h3>Locations and photos</h3>
       ${locations.length ? locations.map((loc) => {
@@ -21588,6 +21928,11 @@ function renderDprMetrics(){
             ${renderDprEntries(loc?.entries || [])}
             ${renderDprFieldLogs(loc?.field_logs || [])}
             ${renderDprVisitSummary(loc?.visits || [])}
+            ${(loc?.closeouts || []).map((closeout) => renderDprCloseoutSummary(closeout, {
+              baseLabel: loc?.name || "",
+              codes: loc?.codes || [],
+              materials: closeout?.materials_used || [],
+            })).join("")}
             <div class="dpr-photo-wrap">${renderDprPhotos(loc?.photos || [], "proof-photos")}</div>
           </article>
         `;
@@ -23793,6 +24138,29 @@ function getMapFieldSelectedSite(){
   return getVisibleSites().find((site) => toSiteIdKey(site?.id) === key) || null;
 }
 
+async function searchMapFieldVisitLocation(query){
+  const needle = String(query || "").trim().toLowerCase();
+  if (!needle){
+    toast("Search needed", "Enter a saved location ID like 1704.");
+    return null;
+  }
+  const sites = getVisibleSites();
+  const match = sites.find((site) => getSiteDisplayName(site).toLowerCase() === needle)
+    || sites.find((site) => getSiteDisplayName(site).toLowerCase().includes(needle))
+    || sites.find((site) => String(site?.notes || "").toLowerCase().includes(needle));
+  if (!match){
+    toast("Location not found", `No saved location matched ${query}.`);
+    return null;
+  }
+  setMapFieldSelectedSite(match.id);
+  await setActiveSite(match.id, { openOverview: false });
+  focusSiteOnMap(match.id);
+  await hydrateMapFieldSiteActivity(match.id);
+  renderMapFieldPanel();
+  toast("Location selected", `${getSiteDisplayName(match)} is ready for a visit.`);
+  return match;
+}
+
 function getDurationMinutesBetween(startedAt, endedAt = nowISO()){
   const startMs = Date.parse(startedAt || "");
   const endMs = Date.parse(endedAt || "");
@@ -23931,6 +24299,34 @@ function getOpenFieldDaySession(){
   return session;
 }
 
+function getRecordedProjectDayNotice(){
+  return "This starts your recorded project day for hourly work. SpecCom will record project time, vehicle inspection, location visits, GPS pings, photos, notes, materials, splice codes, breaks, lunch, and end time.";
+}
+
+async function saveFieldDayAcceptance(sessionId, acceptedAt){
+  if (!state.client || !state.user || !state.activeProject?.id) return;
+  const payload = {
+    user_id: state.user.id,
+    project_id: state.activeProject.id,
+    session_id: sessionId || null,
+    accepted_at: acceptedAt,
+    work_date: getLocalDateISO(acceptedAt),
+    device_user_agent: navigator.userAgent || "",
+    notice_version: "recorded_project_day_v1",
+    notice_text: getRecordedProjectDayNotice(),
+  };
+  try {
+    const { error } = await state.client
+      .from("field_day_acceptances")
+      .insert(payload);
+    if (error && !isMissingTable(error) && !isMissingColumnError(error, "session_id")){
+      console.warn("[field day] acceptance save failed", error);
+    }
+  } catch (error) {
+    console.warn("[field day] acceptance save failed", error);
+  }
+}
+
 async function startFieldDay(){
   if (!state.activeProject?.id){
     toast("Project required", "Select RUIDOSO_1635CA before starting the day.");
@@ -23949,8 +24345,18 @@ async function startFieldDay(){
     toast("Sign in required", "Sign in before starting the project day.");
     return;
   }
+  const accepted = window.confirm(`${getRecordedProjectDayNotice()}\n\nStart Recorded Project Day?`);
+  if (!accepted) return;
   const now = nowISO();
   const gps = await getFieldDayGpsSnapshot({ center: false, silent: true });
+  const acceptance = {
+    accepted_at: now,
+    user_id: state.user.id,
+    project_id: state.activeProject.id,
+    work_date: getLocalDateISO(now),
+    device_user_agent: navigator.userAgent || "",
+    notice_version: "recorded_project_day_v1",
+  };
   const row = {
     user_id: state.user.id,
     project_id: state.activeProject.id,
@@ -23959,6 +24365,7 @@ async function startFieldDay(){
     start_gps_lat: gps.gps_lat ?? null,
     start_gps_lng: gps.gps_lng ?? null,
     start_gps_accuracy_m: gps.gps_accuracy_m ?? null,
+    notes: `Recording acceptance: ${JSON.stringify(acceptance)}`,
   };
   const { data, error } = await state.client
     .from("field_day_sessions")
@@ -23969,13 +24376,14 @@ async function startFieldDay(){
     toast("Project day failed", isMissingTable(error) ? "Database migration for project-day tracking has not been applied yet." : error.message, "error");
     return;
   }
+  await saveFieldDayAcceptance(data?.id || null, now);
   setFieldDayState(data, []);
   await autoSaveDailyProgressReport({ projectId: row.project_id, reportDate: row.work_date, silent: true });
   renderMapFieldPanel();
   toast("Project day started", "Start the vehicle inspection next.");
 }
 
-async function startFieldDayEvent(eventType, { siteId = null } = {}){
+async function startFieldDayEvent(eventType, { siteId = null, label: requestedLabel = "" } = {}){
   const session = getOpenFieldDaySession();
   if (!session){
     toast("Start project day", "Tap Start Project Day before logging activities.");
@@ -23991,7 +24399,7 @@ async function startFieldDayEvent(eventType, { siteId = null } = {}){
   const gps = await getFieldDayGpsSnapshot({ center: false, silent: true });
   const now = nowISO();
   const label = eventType === FIELD_DAY_EVENT_TYPES.LOCATION_WORK && site
-    ? getSiteDisplayName(site)
+    ? (String(requestedLabel || "").trim() || getSiteDisplayName(site))
     : getFieldDayEventLabel(eventType);
   const row = {
     session_id: session.id,
@@ -24019,6 +24427,8 @@ async function startFieldDayEvent(eventType, { siteId = null } = {}){
   state.fieldDay.events = [...(state.fieldDay.events || []), normalizeFieldDayEventRow(data)].filter(Boolean);
   state.fieldDay.activeEvent = normalizeFieldDayEventRow(data);
   if (eventType === FIELD_DAY_EVENT_TYPES.LOCATION_WORK && site?.id){
+    state.map.fieldCloseoutOpen = false;
+    state.map.fieldCloseoutDraft = null;
     setSiteWorkflowStatus(site.id, MAP_FIELD_STATUS.IN_PROGRESS);
   }
   renderMapFieldPanel();
@@ -24062,23 +24472,60 @@ async function endFieldDayEvent({ eventId = state.fieldDay.activeEvent?.id, note
   return normalizeFieldDayEventRow(data);
 }
 
-async function endFieldDayLocation(siteId){
+async function finalizeFieldDayLocation(siteId){
+  const active = state.fieldDay.activeEvent || null;
+  const site = getVisibleSiteByIdKey(siteId);
+  if (!site || !active || active.event_type !== FIELD_DAY_EVENT_TYPES.LOCATION_WORK || toSiteIdKey(active.site_id) !== toSiteIdKey(siteId)){
+    toast("Location not active", "Start this location before finalizing it.");
+    return;
+  }
+  const draft = updateMapFieldVisitDraftFromInputs(siteId) || state.map.fieldVisitDraft || {};
+  const closeout = updateMapFieldCloseoutDraftFromInputs(siteId) || getMapFieldCloseoutDraft(site);
+  const missing = getCloseoutMissingRequirements(site, draft, closeout);
+  if (missing.length){
+    toast("Closeout incomplete", missing[0]);
+    state.map.fieldCloseoutOpen = true;
+    renderMapFieldPanel();
+    return;
+  }
+  const payload = buildFieldCloseoutPayload(site, draft, active);
+  await endFieldDayLocation(siteId, { closeout: payload });
+}
+
+async function endFieldDayLocation(siteId, { closeout = null } = {}){
   const active = state.fieldDay.activeEvent || null;
   if (!active || active.event_type !== FIELD_DAY_EVENT_TYPES.LOCATION_WORK || toSiteIdKey(active.site_id) !== toSiteIdKey(siteId)){
     toast("Location not active", "Start this location before ending it.");
     return;
   }
-  const notes = String($("mapFieldWorkCompleted")?.value || "").trim();
-  const workCodes = parseMapFieldWorkCodes($("mapFieldWorkCodes")?.value || "");
-  const materialsUsed = parseMapFieldMaterialLines($("mapFieldMaterialsUsed")?.value || "");
+  if (!closeout){
+    state.map.fieldCloseoutOpen = true;
+    renderMapFieldPanel();
+    toast("Closeout required", "Complete the Location Closeout Checklist before ending this visit.");
+    return;
+  }
+  const draft = updateMapFieldVisitDraftFromInputs(siteId) || state.map.fieldVisitDraft || {};
+  if (isFieldVisitStillBad(draft) && !draft.auditNotes && !draft.finalNotes && !closeout?.still_bad_note && !closeout?.blocker_note && !closeout?.next_step_notes){
+    toast("Note required", "If the reading is still bad, needs return, or is escalated, add a note before saving.");
+    return;
+  }
+  const notes = [composeFieldVisitWorkNotes(siteId), closeout ? renderFieldCloseoutText(closeout) : ""].filter(Boolean).join("\n");
+  const workCodes = getMapFieldVisitCodes(siteId);
+  const materialsUsed = getMapFieldVisitMaterials(siteId);
   const completedAt = nowISO();
   const saved = await saveMapFieldWorkLog(siteId, {
     allowEmpty: true,
     startedAt: active.started_at,
     completedAt,
     silent: true,
+    notesOverride: notes,
+    codesOverride: workCodes,
+    materialsOverride: materialsUsed,
   });
   if (!saved) return;
+  if (closeout){
+    await saveFieldCloseoutChecklistRecord(closeout);
+  }
   await endFieldDayEvent({
     eventId: active.id,
     notes,
@@ -24087,6 +24534,8 @@ async function endFieldDayLocation(siteId){
     endedAt: completedAt,
     toastLabel: "Location ended",
   });
+  state.map.fieldCloseoutOpen = false;
+  state.map.fieldCloseoutDraft = null;
 }
 
 async function endFieldDay(){
@@ -24130,44 +24579,197 @@ async function endFieldDay(){
   toast("Project day ended", `${formatDurationMinutes(duration)} recorded for review.`);
 }
 
-function renderFieldDayControls(){
-  if (!state.activeProject?.id) return "";
+function hasCompletedFieldDayEvent(eventType){
+  return (state.fieldDay.events || []).some((event) => (
+    event.event_type === eventType && event.started_at && event.ended_at
+  ));
+}
+
+function getActiveFieldDayEventType(){
+  return state.fieldDay.activeEvent?.event_type || "";
+}
+
+function getFieldDayGuidance(selectedSite){
   const session = state.fieldDay.session || null;
   const active = state.fieldDay.activeEvent || null;
   if (!session || session.ended_at){
-    return `
-      <div class="map-field-day-card">
-        <div class="map-field-day-title">Project Day</div>
-        <div class="muted tiny">Start the day before VI, locations, break, lunch, and close-out.</div>
-        <button class="btn secondary small" type="button" data-map-field-action="startFieldDay">Start Project Day</button>
-      </div>
-    `;
+    return {
+      step: "Start project day",
+      action: "Start Recorded Project Day",
+      detail: "Begin the work day before VI, visits, breaks, lunch, and close-out.",
+      actionHtml: `<button class="btn primary wide" type="button" data-map-field-action="startFieldDay">Start Recorded Project Day</button>`,
+    };
   }
-  const started = formatFieldDayTime(session.started_at);
-  const activeLabel = active ? getFieldDayEventLabel(active) : "";
-  const activeStarted = active ? formatFieldDayTime(active.started_at) : "";
-  const activeIsLocation = active?.event_type === FIELD_DAY_EVENT_TYPES.LOCATION_WORK;
+  if (active?.event_type === FIELD_DAY_EVENT_TYPES.VEHICLE_INSPECTION){
+    return {
+      step: "Vehicle inspection running",
+      action: "End Vehicle Inspection",
+      detail: "Finish the basic vehicle inspection before starting location work.",
+      actionHtml: `<button class="btn secondary wide" type="button" data-map-field-action="endFieldDayEvent">End Vehicle Inspection</button>`,
+    };
+  }
+  if (!hasCompletedFieldDayEvent(FIELD_DAY_EVENT_TYPES.VEHICLE_INSPECTION)){
+    return {
+      step: "Vehicle inspection required",
+      action: "Start Vehicle Inspection",
+      detail: "Do the quick VI before the first location visit.",
+      actionHtml: `<button class="btn primary wide" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.VEHICLE_INSPECTION}">Start Vehicle Inspection</button>`,
+    };
+  }
+  if (active?.event_type === FIELD_DAY_EVENT_TYPES.BREAK_15){
+    return {
+      step: "Break running",
+      action: "End Break",
+      detail: "Close the break timer before starting another activity.",
+      actionHtml: `<button class="btn secondary wide" type="button" data-map-field-action="endFieldDayEvent">End Break</button>`,
+    };
+  }
+  if (active?.event_type === FIELD_DAY_EVENT_TYPES.LUNCH){
+    return {
+      step: "Lunch running",
+      action: "End Lunch",
+      detail: "Close lunch before starting another activity.",
+      actionHtml: `<button class="btn secondary wide" type="button" data-map-field-action="endFieldDayEvent">End Lunch</button>`,
+    };
+  }
+  if (active?.event_type === FIELD_DAY_EVENT_TYPES.LOCATION_WORK){
+    return {
+      step: "Location visit active",
+      action: "Complete visit steps",
+      detail: "Finish audit, photos, material, codes, and notes below, then End Location + Save.",
+      actionHtml: `<button class="btn secondary wide" type="button" disabled>Finish Active Visit Below</button>`,
+    };
+  }
+  if (selectedSite?.id){
+    return {
+      step: "Drive to / verify next location",
+      action: "Start Location Visit",
+      detail: "Confirm the saved location ID, name this visit, then start the timer.",
+      actionHtml: `<button class="btn primary wide" type="button" data-map-field-action="startFieldLocation" data-site-id="${escapeHtml(selectedSite.id)}">Start Location Visit</button>`,
+    };
+  }
+  return {
+    step: "Select saved location",
+    action: "Search/select location",
+    detail: "Search the saved location ID before starting a visit.",
+    actionHtml: `<button class="btn secondary wide" type="button" disabled>Select a Saved Location</button>`,
+  };
+}
+
+function renderFieldDayControls(gps, nearest, selectedSite){
+  if (!state.activeProject?.id) return "";
+  const session = state.fieldDay.session || null;
+  const active = state.fieldDay.activeEvent || null;
+  const guidance = getFieldDayGuidance(selectedSite);
+  const started = session?.started_at ? formatFieldDayTime(session.started_at) : "";
+  const elapsed = session?.started_at ? formatDurationMinutes(getDurationMinutesBetween(session.started_at, session.ended_at || nowISO())) : "0 min";
+  const activeLabel = active ? getFieldDayEventLabel(active) : "None";
+  const activeElapsed = active?.started_at ? formatDurationMinutes(getDurationMinutesBetween(active.started_at, active.ended_at || nowISO())) : "";
   return `
-    <div class="map-field-day-card">
-      <div class="row" style="justify-content:space-between; gap:8px; align-items:center;">
-        <div>
-          <div class="map-field-day-title">Project Day Active</div>
-          <div class="muted tiny">Started ${escapeHtml(started || "today")}${active ? ` | Active: ${escapeHtml(activeLabel)} ${escapeHtml(activeStarted)}` : ""}</div>
+    <section class="map-field-guide-card map-field-status-card">
+      <div class="map-field-card-kicker">Project Day Status</div>
+      <div class="map-field-status-title">${escapeHtml(state.activeProject?.name || "Project")}</div>
+      <div class="map-field-status-grid">
+        <div><span>Day</span><strong>${session && !session.ended_at ? "Active" : "Not started"}</strong></div>
+        <div><span>Started</span><strong>${escapeHtml(started || "-")}</strong></div>
+        <div><span>Elapsed</span><strong>${escapeHtml(elapsed)}</strong></div>
+        <div><span>Active timer</span><strong>${escapeHtml(activeElapsed ? `${activeLabel} ${activeElapsed}` : activeLabel)}</strong></div>
+      </div>
+      <div class="map-field-next-card">
+        <span>Current Step</span>
+        <strong>${escapeHtml(guidance.step)}</strong>
+        <p>${escapeHtml(guidance.detail)}</p>
+        ${guidance.actionHtml}
+      </div>
+      ${session && !session.ended_at ? `<div class="map-field-recording-notice">Project Day Active - time, GPS pings, photos, notes, and work activity are being recorded for this project.</div>` : ""}
+      ${session && !session.ended_at ? `
+        <div class="map-field-end-day-row">
+          <button class="btn danger wide" type="button" data-map-field-action="endFieldDay">End Project Day</button>
         </div>
+      ` : ""}
+    </section>
+    ${renderMapFieldGpsAwareness(gps, nearest)}
+  `;
+}
+
+function renderMapFieldGpsAwareness(gps, nearest){
+  const hasGps = Boolean(gps && Number.isFinite(Number(gps.lat)) && Number.isFinite(Number(gps.lng)));
+  const lat = hasGps ? Number(gps.lat).toFixed(6) : "";
+  const lng = hasGps ? Number(gps.lng).toFixed(6) : "";
+  const accuracy = hasGps && Number.isFinite(Number(gps.accuracy_m ?? gps.accuracy))
+    ? Math.round(Number(gps.accuracy_m ?? gps.accuracy))
+    : null;
+  const poorAccuracy = accuracy != null && accuracy > 60;
+  const nearestLabel = nearest ? getSiteDisplayName(nearest) : "";
+  return `
+    <section class="map-field-guide-card map-field-gps-card">
+      <div class="map-field-card-kicker">GPS / Location Awareness</div>
+      <div class="map-field-gps-near">${nearest ? `You are near: ${escapeHtml(nearestLabel)}` : "No saved location matched yet"}</div>
+      <div class="map-field-gps-details">
+        ${hasGps ? `${escapeHtml(lat)}, ${escapeHtml(lng)}${accuracy != null ? ` (+/-${accuracy}m)` : ""}` : "GPS not captured yet."}
       </div>
+      ${poorAccuracy ? `<div class="map-field-warning">GPS accuracy is poor. Use the location ID below as the official work location.</div>` : ""}
+      <div class="map-field-reference-note">GPS is only a reference. The saved location ID is the official work location.</div>
       <div class="map-field-day-actions">
-        ${active ? (
-          activeIsLocation
-            ? `<button class="btn ghost small" type="button" disabled>End this location from its card</button>`
-            : `<button class="btn secondary small" type="button" data-map-field-action="endFieldDayEvent">${escapeHtml(`End ${activeLabel}`)}</button>`
-        ) : `
-          <button class="btn ghost small" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.VEHICLE_INSPECTION}">Start VI</button>
-          <button class="btn ghost small" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.BREAK_15}">Start Break</button>
-          <button class="btn ghost small" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.LUNCH}">Start Lunch</button>
-          <button class="btn danger small" type="button" data-map-field-action="endFieldDay">End Project Day</button>
-        `}
+        <button id="btnMapCaptureLocation" class="btn secondary small" type="button">${hasGps ? "Refresh GPS" : "Capture Location"}</button>
+        ${nearest ? `<button id="btnMapOpenNearbyLocation" class="btn ghost small" type="button">Use Nearby Location</button>` : ""}
       </div>
-    </div>
+    </section>
+  `;
+}
+
+function getMapFieldWorklistStatus(site){
+  const status = getSiteWorkflowStatus(site);
+  const latestLog = getCachedFieldWorkLogs(site?.id)[0] || null;
+  const parsed = parseFieldVisitWorkNotes(latestLog?.work_completed || "");
+  if (parsed.escalate === "yes" || parsed.customer_transfer_blocker === "yes") return "Escalate";
+  if (parsed.needs_return === "yes" || parsed.fixed_enough_for_turn_up === "no") return "Needs Return";
+  if (parsed.status === "Fixed") return "Fixed";
+  if (parsed.status === "Audit Complete") return "Complete";
+  if (status === MAP_FIELD_STATUS.IN_PROGRESS) return "In Progress";
+  if (status === MAP_FIELD_STATUS.COMPLETE) return "Complete";
+  return "Not Started";
+}
+
+function getMapFieldWorklistStatusClass(status){
+  return String(status || "Not Started").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}
+
+function renderTodayWorklistCard(selectedSite){
+  const sites = getVisibleSites();
+  if (!sites.length) return "";
+  const selectedKey = toSiteIdKey(selectedSite?.id);
+  const ordered = sites.slice()
+    .sort((a, b) => {
+      if (toSiteIdKey(a?.id) === selectedKey) return -1;
+      if (toSiteIdKey(b?.id) === selectedKey) return 1;
+      const aStatus = getMapFieldWorklistStatus(a);
+      const bStatus = getMapFieldWorklistStatus(b);
+      return aStatus.localeCompare(bStatus) || getSiteDisplayName(a).localeCompare(getSiteDisplayName(b));
+    })
+    .slice(0, 8);
+  return `
+    <section class="map-field-guide-card map-field-worklist-card">
+      <div class="map-field-card-kicker">Today's Worklist</div>
+      ${ordered.map((site) => {
+        const status = getMapFieldWorklistStatus(site);
+        const latestLog = getCachedFieldWorkLogs(site.id)[0] || null;
+        const parsed = parseFieldVisitWorkNotes(latestLog?.work_completed || "");
+        const photoCount = getCachedSitePhotos(site.id).length;
+        const notesCount = getCachedFieldWorkLogs(site.id).filter((log) => log.work_completed).length + (site.notes ? 1 : 0);
+        return `
+          <button class="map-field-worklist-item ${toSiteIdKey(site.id) === selectedKey ? "is-selected" : ""}" type="button" data-map-field-action="selectWorklistSite" data-site-id="${escapeHtml(site.id)}">
+            <span class="map-field-worklist-pin ${getMapFieldWorklistStatusClass(status)}"></span>
+            <span>
+              <strong>${escapeHtml(getSiteDisplayName(site))}</strong>
+              <small>${escapeHtml(parsed.visit_label ? `Visit ${parsed.visit_label}` : "Base location")}${parsed.before_reading ? ` | Before ${escapeHtml(parsed.before_reading)}` : ""}${parsed.after_reading ? ` | After ${escapeHtml(parsed.after_reading)}` : ""}</small>
+            </span>
+            <em>${escapeHtml(status)} | ${photoCount} photos | ${notesCount} notes</em>
+          </button>
+        `;
+      }).join("")}
+      ${sites.length > ordered.length ? `<div class="muted tiny">Showing ${ordered.length} of ${sites.length} saved project locations.</div>` : ""}
+    </section>
   `;
 }
 
@@ -24175,36 +24777,253 @@ function renderFieldDayLocationControls(site){
   if (!site?.id) return "";
   const session = state.fieldDay.session || null;
   const active = state.fieldDay.activeEvent || null;
-  if (!session || session.ended_at){
-    return `
-      <div class="map-field-day-location">
-        <div class="muted tiny">Start Project Day before timing work at this saved location.</div>
-      </div>
-    `;
-  }
+  const draft = getMapFieldVisitDraft(site);
+  const baseLabel = getSiteDisplayName(site);
   const sameSiteActive = active
     && active.event_type === FIELD_DAY_EVENT_TYPES.LOCATION_WORK
     && toSiteIdKey(active.site_id) === toSiteIdKey(site.id);
-  if (sameSiteActive){
+  if (!session || session.ended_at){
     return `
-      <div class="map-field-day-location active">
-        <div class="muted tiny">Location timer started ${escapeHtml(formatFieldDayTime(active.started_at))}. Add notes/material/photos below, then end the location.</div>
-        <button class="btn secondary small" type="button" data-map-field-action="endFieldLocation" data-site-id="${escapeHtml(site.id)}">End Location + Save</button>
-      </div>
+      <section class="map-field-guide-card">
+        <div class="map-field-card-kicker">Start Location Visit</div>
+        <div class="map-field-warning">Start Project Day before timing work at ${escapeHtml(baseLabel)}.</div>
+      </section>
     `;
+  }
+  if (sameSiteActive){
+    return renderActiveFieldVisitCard(site, draft, active);
   }
   if (active){
     return `
-      <div class="map-field-day-location">
-        <div class="muted tiny">Finish ${escapeHtml(getFieldDayEventLabel(active))} before starting this location.</div>
-      </div>
+      <section class="map-field-guide-card">
+        <div class="map-field-card-kicker">Start Location Visit</div>
+        <div class="map-field-warning">Finish ${escapeHtml(getFieldDayEventLabel(active))} before starting ${escapeHtml(baseLabel)}.</div>
+      </section>
     `;
   }
   return `
-    <div class="map-field-day-location">
-      <button class="btn secondary small" type="button" data-map-field-action="startFieldLocation" data-site-id="${escapeHtml(site.id)}">Start Location</button>
-      <div class="muted tiny">Uses this saved location as the anchor; GPS is saved as supporting proof.</div>
+    <section class="map-field-guide-card map-field-start-visit-card">
+      <div class="map-field-card-kicker">Start Location Visit</div>
+      <div class="map-field-base-location">Base saved location: <strong>${escapeHtml(baseLabel)}</strong></div>
+      <label for="mapFieldVisitSearch">Search saved location</label>
+      <div class="map-field-search-row">
+        <input id="mapFieldVisitSearch" class="input compact" type="search" placeholder="1704, 1748, 2123" value="${escapeHtml(baseLabel)}" />
+        <button class="btn secondary small" type="button" data-map-field-action="searchVisitLocation">Search</button>
+      </div>
+      <label for="mapFieldVisitLabel">Visit name / field label</label>
+      <input id="mapFieldVisitLabel" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}" value="${escapeHtml(draft.visitLabel)}" placeholder="1704A or 1704-revisit" />
+      <label for="mapFieldVisitType">Visit type</label>
+      <select id="mapFieldVisitType" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}">
+        ${renderFieldVisitOptions(FIELD_VISIT_TYPES, draft.visitType)}
+      </select>
+      <button class="btn primary wide" type="button" data-map-field-action="startFieldLocation" data-site-id="${escapeHtml(site.id)}">Start Location Visit</button>
+    </section>
+  `;
+}
+
+function renderFieldDraftListItems(rows, listName, siteId){
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return `<div class="muted tiny">Nothing added yet.</div>`;
+  return `
+    <div class="map-field-draft-list">
+      ${list.map((row, index) => {
+        const label = listName === "materials"
+          ? `${row.item_key || "Material"} x${row.qty_used || 1}${row.unit ? ` ${row.unit}` : ""}${row.notes ? ` - ${row.notes}` : ""}`
+          : `${row.code || "Code"}${row.ref ? ` - ${row.ref}` : ""}${row.notes ? ` - ${row.notes}` : ""}`;
+        return `
+          <div class="map-field-draft-item">
+            <span>${escapeHtml(label)}</span>
+            <button class="btn ghost tiny" type="button" data-map-field-action="removeDraftItem" data-site-id="${escapeHtml(siteId)}" data-list-name="${escapeHtml(listName)}" data-list-index="${index}">Remove</button>
+          </div>
+        `;
+      }).join("")}
     </div>
+  `;
+}
+
+function renderCloseoutAnswerButtons(siteId, key, value){
+  const normalizedValue = normalizeCloseoutAnswer(value);
+  return `
+    <div class="map-field-closeout-pills" role="group" aria-label="${escapeHtml(key)}">
+      ${FIELD_CLOSEOUT_ANSWER_VALUES.map((option) => `
+        <button class="map-field-closeout-pill ${normalizedValue === option ? "is-active" : ""}" type="button" data-map-field-action="setCloseoutAnswer" data-site-id="${escapeHtml(siteId)}" data-closeout-key="${escapeHtml(key)}" data-closeout-value="${option}">
+          ${option.toUpperCase()}
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderLocationCloseoutChecklist(site, draft, active){
+  if (!state.map.fieldCloseoutOpen) return "";
+  const closeout = getMapFieldCloseoutDraft(site);
+  const missing = getCloseoutMissingRequirements(site, draft, closeout);
+  const timeOnLocation = active?.started_at ? formatDurationMinutes(getDurationMinutesBetween(active.started_at, nowISO())) : "0 min";
+  return `
+    <section class="map-field-closeout-card">
+      <div class="map-field-card-kicker">Location Closeout Checklist</div>
+      <div class="map-field-active-title">Location Closeout - ${escapeHtml(draft.visitLabel)}</div>
+      <div class="map-field-base-location">Base location: <strong>${escapeHtml(getSiteDisplayName(site))}</strong> <span>Time on location: ${escapeHtml(timeOnLocation)}</span></div>
+      ${FIELD_CLOSEOUT_SECTIONS.map((section) => `
+        <div class="map-field-closeout-section">
+          <div class="map-field-step-title">${escapeHtml(section.title)}</div>
+          ${section.items.map(([key, label]) => `
+            <div class="map-field-closeout-row ${normalizeCloseoutAnswer(closeout.answers?.[key]) ? "" : "is-unanswered"}" data-closeout-row-key="${escapeHtml(key)}">
+              <div>
+                <strong>${escapeHtml(label)}</strong>
+                <input id="mapFieldCloseoutNote_${escapeHtml(key)}" class="input compact" data-field-closeout-input data-site-id="${escapeHtml(site.id)}" value="${escapeHtml(closeout.notes?.[key] || "")}" placeholder="Optional note" />
+              </div>
+              ${renderCloseoutAnswerButtons(site.id, key, closeout.answers?.[key] || "")}
+            </div>
+          `).join("")}
+        </div>
+      `).join("")}
+      <div class="map-field-closeout-section">
+        <div class="map-field-step-title">E. Final Notes / Status</div>
+        <label class="map-field-checkbox-label">
+          <input id="mapFieldNoPhotoPossible" type="checkbox" data-field-closeout-input data-site-id="${escapeHtml(site.id)}" ${closeout.noPhotoPossible ? "checked" : ""} />
+          No photo possible
+        </label>
+        <textarea id="mapFieldNoPhotoReason" class="input compact" rows="2" data-field-closeout-input data-site-id="${escapeHtml(site.id)}" placeholder="Required if no photo possible">${escapeHtml(closeout.noPhotoReason || "")}</textarea>
+        <textarea id="mapFieldStillBadNote" class="input compact" rows="2" data-field-closeout-input data-site-id="${escapeHtml(site.id)}" placeholder="Required if test result is still bad">${escapeHtml(closeout.stillBadNote || "")}</textarea>
+        <textarea id="mapFieldBlockerNote" class="input compact" rows="2" data-field-closeout-input data-site-id="${escapeHtml(site.id)}" placeholder="Required if customer transfer blocker remains">${escapeHtml(closeout.blockerNote || "")}</textarea>
+        <textarea id="mapFieldNextStepNotes" class="input compact" rows="2" data-field-closeout-input data-site-id="${escapeHtml(site.id)}" placeholder="Required for Needs Return or Escalate">${escapeHtml(closeout.nextStepNotes || "")}</textarea>
+      </div>
+      ${missing.length ? `
+        <div id="mapFieldCloseoutValidation" class="map-field-missing-list">
+          ${missing.map((item) => `<div>${escapeHtml(item)}</div>`).join("")}
+        </div>
+      ` : `<div id="mapFieldCloseoutValidation" class="map-field-ready-list">Closeout requirements complete.</div>`}
+      <div class="map-field-closeout-actions">
+        <button class="btn ghost wide" type="button" data-map-field-action="cancelCloseout" data-site-id="${escapeHtml(site.id)}">Cancel / Continue Working</button>
+        <button id="btnMapFieldFinalizeCloseout" class="btn primary wide" type="button" data-map-field-action="finalizeFieldLocation" data-site-id="${escapeHtml(site.id)}" ${missing.length ? "disabled" : ""}>Finalize Location Visit</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderActiveFieldVisitCard(site, draft, active){
+  const baseLabel = getSiteDisplayName(site);
+  const elapsed = active?.started_at ? formatDurationMinutes(getDurationMinutesBetween(active.started_at, nowISO())) : "0 min";
+  const beforeCount = getFieldVisitPhotoCount(site.id, draft.visitLabel, "visit_before");
+  const issueCount = getFieldVisitPhotoCount(site.id, draft.visitLabel, "visit_issue");
+  const afterCount = getFieldVisitPhotoCount(site.id, draft.visitLabel, "visit_after");
+  return `
+    <section class="map-field-guide-card map-field-active-visit-card">
+      <div class="map-field-card-kicker">Active Location Visit</div>
+      <div class="map-field-active-title">Active Visit: ${escapeHtml(draft.visitLabel || getFieldDayEventLabel(active))}</div>
+      <div class="map-field-base-location">Base Location: <strong>${escapeHtml(baseLabel)}</strong> <span>Elapsed: ${escapeHtml(elapsed)}</span></div>
+
+      <div class="map-field-step-card">
+        <div class="map-field-step-title">Step 1 - Audit</div>
+        <label>Previous work complete?</label>
+        <select id="mapFieldPreviousComplete" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}">
+          ${renderFieldVisitOptions(["unknown", "yes", "no"], draft.previousComplete)}
+        </select>
+        <label>Work wrong?</label>
+        <select id="mapFieldWorkWrong" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}">
+          ${renderFieldVisitOptions(["no", "yes", "unknown"], draft.workWrong)}
+        </select>
+        <label>Bad reading?</label>
+        <select id="mapFieldBadReading" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}">
+          ${renderFieldVisitOptions(["no", "yes", "unknown"], draft.badReading)}
+        </select>
+        <div class="map-field-two-col">
+          <label>Before reading<input id="mapFieldBeforeReading" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}" value="${escapeHtml(draft.beforeReading)}" placeholder="-42" /></label>
+          <label>After reading<input id="mapFieldAfterReading" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}" value="${escapeHtml(draft.afterReading)}" placeholder="-18" /></label>
+        </div>
+        <label>Reading improved?</label>
+        <select id="mapFieldReadingImproved" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}">
+          ${renderFieldVisitOptions(["unknown", "yes", "no"], draft.readingImproved)}
+        </select>
+        <label>Pass/fail</label>
+        <select id="mapFieldPassFail" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}">
+          ${renderFieldVisitOptions(["unknown", "yes", "no"], draft.passFail)}
+        </select>
+        <label>Customer transfer blocker?</label>
+        <select id="mapFieldCustomerTransferBlocker" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}">
+          ${renderFieldVisitOptions(["unknown", "yes", "no"], draft.customerTransferBlocker)}
+        </select>
+        <label>Fixed enough for turn-up?</label>
+        <select id="mapFieldFixedEnoughForTurnup" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}">
+          ${renderFieldVisitOptions(["unknown", "yes", "no"], draft.fixedEnoughForTurnup)}
+        </select>
+        <label>Needs Patrick review?</label>
+        <select id="mapFieldNeedsPatrickReview" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}">
+          ${renderFieldVisitOptions(["no", "yes", "unknown"], draft.needsPatrickReview)}
+        </select>
+        <div class="map-field-check-row">
+          <label><input id="mapFieldNeedsReturn" type="checkbox" data-field-visit-input data-site-id="${escapeHtml(site.id)}" ${draft.needsReturn ? "checked" : ""} /> Needs Return</label>
+          <label><input id="mapFieldEscalate" type="checkbox" data-field-visit-input data-site-id="${escapeHtml(site.id)}" ${draft.escalate ? "checked" : ""} /> Escalate</label>
+        </div>
+        <textarea id="mapFieldAuditNotes" class="input compact" rows="3" data-field-visit-input data-site-id="${escapeHtml(site.id)}" placeholder="Audit notes">${escapeHtml(draft.auditNotes)}</textarea>
+      </div>
+
+      <div class="map-field-step-card">
+        <div class="map-field-step-title">Step 2 - Photos</div>
+        <div class="map-field-photo-actions">
+          <button class="btn secondary small" type="button" data-map-field-action="uploadVisitPhoto" data-photo-type="visit_before" data-site-id="${escapeHtml(site.id)}">Upload Before Photos</button>
+          <button class="btn secondary small" type="button" data-map-field-action="uploadVisitPhoto" data-photo-type="visit_issue" data-site-id="${escapeHtml(site.id)}">Upload Issue Photos</button>
+          <button class="btn secondary small" type="button" data-map-field-action="uploadVisitPhoto" data-photo-type="visit_after" data-site-id="${escapeHtml(site.id)}">Upload After Photos</button>
+        </div>
+        <div class="map-field-photo-counts">Before ${beforeCount} | Issue ${issueCount} | After ${afterCount}</div>
+      </div>
+
+      <div class="map-field-step-card">
+        <div class="map-field-step-title">Step 3 - Materials Used</div>
+        <input id="mapFieldMaterialItem" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}" value="${escapeHtml(draft.materialItem)}" placeholder="Material" />
+        <div class="map-field-two-col">
+          <input id="mapFieldMaterialQty" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}" value="${escapeHtml(draft.materialQty)}" placeholder="Qty" />
+          <input id="mapFieldMaterialUnit" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}" value="${escapeHtml(draft.materialUnit)}" placeholder="Unit" />
+        </div>
+        <input id="mapFieldMaterialNotes" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}" value="${escapeHtml(draft.materialNotes)}" placeholder="Material notes" />
+        <button class="btn secondary small" type="button" data-map-field-action="addDraftMaterial" data-site-id="${escapeHtml(site.id)}">Add Material</button>
+        ${renderFieldDraftListItems(draft.materials, "materials", site.id)}
+      </div>
+
+      <div class="map-field-step-card">
+        <div class="map-field-step-title">Step 4 - Splicing Codes</div>
+        <input id="mapFieldSpliceCode" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}" value="${escapeHtml(draft.codeValue)}" placeholder="Code" />
+        <input id="mapFieldSpliceCodeRef" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}" value="${escapeHtml(draft.codeRef)}" placeholder="Count / reference" />
+        <input id="mapFieldSpliceCodeNotes" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}" value="${escapeHtml(draft.codeNotes)}" placeholder="Code notes" />
+        <button class="btn secondary small" type="button" data-map-field-action="addDraftCode" data-site-id="${escapeHtml(site.id)}">Add Code</button>
+        ${renderFieldDraftListItems(draft.codes, "codes", site.id)}
+      </div>
+
+      <div class="map-field-step-card">
+        <div class="map-field-step-title">Step 5 - Description / Final Notes</div>
+        <textarea id="mapFieldWorkCompleted" class="input compact" rows="4" data-field-visit-input data-site-id="${escapeHtml(site.id)}" placeholder="Describe what you found, what you fixed, and what still needs done.">${escapeHtml(draft.finalNotes)}</textarea>
+        <label>Status</label>
+        <select id="mapFieldFinalStatus" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}">
+          <option value="" ${draft.finalStatus ? "" : "selected"}>Select final status</option>
+          ${renderFieldVisitOptions(FIELD_VISIT_FINAL_STATUSES, draft.finalStatus)}
+        </select>
+        <button class="btn primary wide" type="button" data-map-field-action="openCloseout" data-site-id="${escapeHtml(site.id)}">End Location</button>
+      </div>
+      ${renderLocationCloseoutChecklist(site, draft, active)}
+    </section>
+  `;
+}
+
+function renderFieldBreakLunchCard(){
+  const session = state.fieldDay.session || null;
+  if (!session || session.ended_at) return "";
+  const activeType = getActiveFieldDayEventType();
+  return `
+    <section class="map-field-guide-card map-field-time-card">
+      <div class="map-field-card-kicker">Break / Lunch</div>
+      <div class="map-field-day-actions">
+        ${activeType === FIELD_DAY_EVENT_TYPES.BREAK_15
+          ? `<button class="btn secondary small" type="button" data-map-field-action="endFieldDayEvent">End Break</button>`
+          : `<button class="btn ghost small" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.BREAK_15}" ${activeType ? "disabled" : ""}>Start Break</button>`}
+        ${activeType === FIELD_DAY_EVENT_TYPES.LUNCH
+          ? `<button class="btn secondary small" type="button" data-map-field-action="endFieldDayEvent">End Lunch</button>`
+          : `<button class="btn ghost small" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.LUNCH}" ${activeType ? "disabled" : ""}>Start Lunch</button>`}
+      </div>
+      ${activeType && ![FIELD_DAY_EVENT_TYPES.BREAK_15, FIELD_DAY_EVENT_TYPES.LUNCH].includes(activeType)
+        ? `<div class="map-field-warning">Finish the active item before starting break or lunch.</div>`
+        : `<div class="muted tiny">Break is expected around 15 minutes. Lunch is expected around 30 to 60 minutes.</div>`}
+    </section>
   `;
 }
 
@@ -24241,6 +25060,7 @@ function renderMapFieldPanel(){
   const nearest = nearestId
     ? getVisibleSites().find((site) => toSiteIdKey(site?.id) === nearestId) || null
     : null;
+  const selected = createOpen ? null : (getMapFieldSelectedSite() || nearest || null);
 
   if (!gps){
     gpsState.textContent = "GPS not captured yet.";
@@ -24251,63 +25071,24 @@ function renderMapFieldPanel(){
     gpsState.textContent = `${lat}, ${lng}${accuracyText}`;
   }
 
-  if (!gps){
-    actionsWrap.innerHTML = `<button id="btnMapCaptureLocation" class="btn secondary small" type="button">Capture Location</button>`;
-  } else if (nearest){
-    const distance = formatDistanceFeetMeters(state.map.nearestSiteDistanceM);
-    const nearestLabel = getSiteDisplayName(nearest);
-    actionsWrap.innerHTML = `
-      <div class="muted small" style="width:100%;">Nearby saved location: ${escapeHtml(nearestLabel)}${distance ? ` (${escapeHtml(distance)})` : ""}</div>
-      <button id="btnMapOpenNearbyLocation" class="btn secondary small" type="button">Open Location</button>
-      <button id="btnMapAddToNearbyLocation" class="btn ghost small" type="button">Add to This Location</button>
-    `;
-  } else {
-    if (!state.activeProject) {
-      const projectOptions = (state.projects || []).map(p =>
-        `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`
-      ).join("");
-      actionsWrap.innerHTML = `
-        <div class="muted small" style="width:100%;">No saved location within ${Math.round(state.map.nearbyRadiusM || 30)}m.</div>
-        <div style="width:100%;background:rgba(55,138,221,0.08);border:1px solid rgba(55,138,221,0.2);border-radius:8px;padding:10px;margin-top:4px;">
-          <div class="muted small" style="margin-bottom:6px;color:rgba(55,138,221,0.9);">No project selected. You can still create a trouble-ticket location here, or assign one to a project first.</div>
-          ${projectOptions.length
-            ? `<select id="mapInlineProjectSelect" class="input compact" style="margin-bottom:8px;">
-                <option value="">Create without a project</option>
-                ${projectOptions}
-               </select>`
-            : `<div class="muted small" style="margin-bottom:8px;color:rgba(255,180,60,0.8);">No projects found. This location will be created without a project.</div>`
-          }
-          <button id="btnMapShowCreateLocation" class="btn secondary small" type="button" style="width:100%;">Create New Location Here</button>
+  actionsWrap.innerHTML = `
+    ${renderFieldDayControls(gps, nearest, selected)}
+    ${renderTodayWorklistCard(selected)}
+    ${!selected ? `
+      <section class="map-field-guide-card">
+        <div class="map-field-card-kicker">Select Saved Location</div>
+        <label for="mapFieldVisitSearch">Search saved location</label>
+        <div class="map-field-search-row">
+          <input id="mapFieldVisitSearch" class="input compact" type="search" placeholder="1704, 1748, 2123" />
+          <button class="btn secondary small" type="button" data-map-field-action="searchVisitLocation">Search</button>
         </div>
-      `;
-      const sel = actionsWrap.querySelector("#mapInlineProjectSelect");
-      if (sel) {
-        sel.value = state.activeProject?.id || "";
-        sel.addEventListener("change", () => {
-          const id = sel.value;
-          if (id) {
-            setActiveProjectById(id);
-          } else {
-            state.activeProject = null;
-            state.projectNodes = [];
-            state.projectSites = [];
-            state.activeNode = null;
-            state.activeSite = null;
-            renderMapMarkers();
-          }
-          renderMapFieldPanel();
-        });
-      }
-    } else {
-      actionsWrap.innerHTML = `
-        <div class="muted small" style="width:100%;">No saved location within ${Math.round(state.map.nearbyRadiusM || 30)}m.</div>
-        <button id="btnMapShowCreateLocation" class="btn secondary small" type="button">Create New Location Here</button>
-      `;
-    }
-  }
-  actionsWrap.insertAdjacentHTML("beforeend", renderFieldDayControls());
+        <div class="muted tiny">No saved location is selected yet.</div>
+        ${state.activeProject ? `<button id="btnMapShowCreateLocation" class="btn ghost small" type="button">Create New Location Here</button>` : ""}
+      </section>
+    ` : ""}
+    ${renderFieldBreakLunchCard()}
+  `;
 
-  const selected = createOpen ? null : (getMapFieldSelectedSite() || nearest || null);
   if (!selected){
     card.hidden = true;
     card.innerHTML = "";
@@ -24326,14 +25107,12 @@ function renderMapFieldPanel(){
     </div>
     <div class="map-field-location-meta">${escapeHtml(coordText)}</div>
     ${renderFieldDayLocationControls(selected)}
-    <div class="row" style="gap:8px; flex-wrap:wrap;">
-      <button class="btn secondary small" type="button" data-map-field-action="photo" data-site-id="${selected.id}">Upload Reference Media</button>
-      <button class="btn ghost small" type="button" data-map-field-action="note" data-site-id="${selected.id}">Add Note</button>
-      <button class="btn ghost small" type="button" data-map-field-action="open" data-site-id="${selected.id}">Open Location</button>
-      <button class="btn ghost small" type="button" data-map-field-action="complete" data-site-id="${selected.id}">Mark Complete</button>
+    <div class="map-field-utility-row">
+      <button class="btn ghost small" type="button" data-map-field-action="open" data-site-id="${selected.id}">Open Full Location Details</button>
+      <button class="btn ghost small" type="button" data-map-field-action="complete" data-site-id="${selected.id}">Mark Base Complete</button>
     </div>
-    <div class="row" style="gap:8px; align-items:center;">
-      <label class="small" for="mapFieldStatusSelect" style="min-width:66px;">Status</label>
+    <div class="map-field-status-control">
+      <label class="small" for="mapFieldStatusSelect">Base location status</label>
       <select id="mapFieldStatusSelect" class="input compact" data-site-id="${selected.id}">
         <option value="${MAP_FIELD_STATUS.NOT_STARTED}" ${status === MAP_FIELD_STATUS.NOT_STARTED ? "selected" : ""}>Not Started</option>
         <option value="${MAP_FIELD_STATUS.IN_PROGRESS}" ${status === MAP_FIELD_STATUS.IN_PROGRESS ? "selected" : ""}>In Progress</option>
@@ -24668,6 +25447,520 @@ function parseMapFieldMaterialLines(raw){
     .filter((row) => row.item_key);
 }
 
+function normalizeMapFieldYesNo(value, fallback = ""){
+  const text = String(value || "").trim().toLowerCase();
+  if (["yes", "no", "unknown"].includes(text)) return text;
+  return fallback;
+}
+
+function normalizeFieldVisitType(value){
+  const text = String(value || "").trim();
+  return FIELD_VISIT_TYPES.includes(text) ? text : "QC/Audit";
+}
+
+function normalizeFieldVisitFinalStatus(value, fallback = ""){
+  const text = String(value || "").trim();
+  return FIELD_VISIT_FINAL_STATUSES.includes(text) ? text : fallback;
+}
+
+function getDefaultVisitLabel(site){
+  return String(getSiteDisplayName(site) || "field-visit").trim();
+}
+
+function getFieldVisitSource(label){
+  const clean = String(label || "").trim();
+  return clean ? `${FIELD_VISIT_SOURCE_PREFIX}${clean}` : "";
+}
+
+function isFieldVisitPhotoForLabel(photo, label){
+  const source = String(photo?.source || "").trim();
+  return Boolean(label) && source === getFieldVisitSource(label);
+}
+
+function getFieldVisitPhotoCount(siteId, label, proofType = ""){
+  const photos = getCachedSitePhotos(siteId);
+  const normalizedProof = String(proofType || "").trim();
+  return photos.filter((photo) => (
+    isFieldVisitPhotoForLabel(photo, label)
+    && (!normalizedProof || String(photo?.proofType || "").trim() === normalizedProof)
+  )).length;
+}
+
+function createFieldVisitDraft(site, existing = {}){
+  const baseLabel = getDefaultVisitLabel(site);
+  return {
+    siteId: toSiteIdKey(site?.id),
+    visitLabel: String(existing.visitLabel || existing.visit_label || baseLabel).trim() || baseLabel,
+    visitType: normalizeFieldVisitType(existing.visitType || existing.visit_type),
+    previousComplete: normalizeMapFieldYesNo(existing.previousComplete || existing.previous_complete, "unknown"),
+    workWrong: normalizeMapFieldYesNo(existing.workWrong || existing.work_wrong, "no"),
+    badReading: normalizeMapFieldYesNo(existing.badReading || existing.bad_reading, "no"),
+    beforeReading: String(existing.beforeReading || existing.before_reading || "").trim(),
+    afterReading: String(existing.afterReading || existing.after_reading || "").trim(),
+    readingImproved: normalizeMapFieldYesNo(existing.readingImproved || existing.reading_improved, "unknown"),
+    passFail: normalizeMapFieldYesNo(existing.passFail || existing.pass_fail, "unknown"),
+    customerTransferBlocker: normalizeMapFieldYesNo(existing.customerTransferBlocker || existing.customer_transfer_blocker, "unknown"),
+    fixedEnoughForTurnup: normalizeMapFieldYesNo(existing.fixedEnoughForTurnup || existing.fixed_enough_for_turnup, "unknown"),
+    needsPatrickReview: normalizeMapFieldYesNo(existing.needsPatrickReview || existing.needs_patrick_review, "no"),
+    needsReturn: Boolean(existing.needsReturn || existing.needs_return),
+    escalate: Boolean(existing.escalate),
+    auditNotes: String(existing.auditNotes || existing.audit_notes || "").trim(),
+    finalNotes: String(existing.finalNotes || existing.final_notes || existing.work_completed || "").trim(),
+    finalStatus: normalizeFieldVisitFinalStatus(existing.finalStatus || existing.final_status),
+    materialItem: "",
+    materialQty: "",
+    materialUnit: "each",
+    materialNotes: "",
+    materials: Array.isArray(existing.materials) ? existing.materials : [],
+    codeValue: "",
+    codeRef: "",
+    codeNotes: "",
+    codes: Array.isArray(existing.codes) ? existing.codes : [],
+  };
+}
+
+function getMapFieldVisitDraft(site){
+  const siteId = toSiteIdKey(site?.id);
+  const active = state.fieldDay.activeEvent || null;
+  const activeLabel = active?.event_type === FIELD_DAY_EVENT_TYPES.LOCATION_WORK && toSiteIdKey(active.site_id) === siteId
+    ? String(active.label || "").trim()
+    : "";
+  const current = state.map.fieldVisitDraft;
+  if (!current || current.siteId !== siteId){
+    state.map.fieldVisitDraft = createFieldVisitDraft(site, activeLabel ? { visitLabel: activeLabel } : {});
+  } else if (activeLabel && current.visitLabel !== activeLabel){
+    state.map.fieldVisitDraft.visitLabel = activeLabel;
+  }
+  return state.map.fieldVisitDraft;
+}
+
+function updateMapFieldVisitDraftFromInputs(siteId){
+  const siteKey = toSiteIdKey(siteId);
+  const site = getVisibleSiteByIdKey(siteKey) || getMapFieldSelectedSite();
+  if (!site) return null;
+  const draft = getMapFieldVisitDraft(site);
+  if (!draft || draft.siteId !== siteKey) return draft;
+  const value = (id) => String($(id)?.value || "").trim();
+  const checked = (id) => Boolean($(id)?.checked);
+  draft.visitLabel = value("mapFieldVisitLabel") || getDefaultVisitLabel(site);
+  draft.visitType = normalizeFieldVisitType(value("mapFieldVisitType"));
+  draft.previousComplete = normalizeMapFieldYesNo(value("mapFieldPreviousComplete"), draft.previousComplete || "unknown");
+  draft.workWrong = normalizeMapFieldYesNo(value("mapFieldWorkWrong"), draft.workWrong || "no");
+  draft.badReading = normalizeMapFieldYesNo(value("mapFieldBadReading"), draft.badReading || "no");
+  draft.beforeReading = value("mapFieldBeforeReading");
+  draft.afterReading = value("mapFieldAfterReading");
+  draft.readingImproved = normalizeMapFieldYesNo(value("mapFieldReadingImproved"), draft.readingImproved || "unknown");
+  draft.passFail = normalizeMapFieldYesNo(value("mapFieldPassFail"), draft.passFail || "unknown");
+  draft.customerTransferBlocker = normalizeMapFieldYesNo(value("mapFieldCustomerTransferBlocker"), draft.customerTransferBlocker || "unknown");
+  draft.fixedEnoughForTurnup = normalizeMapFieldYesNo(value("mapFieldFixedEnoughForTurnup"), draft.fixedEnoughForTurnup || "unknown");
+  draft.needsPatrickReview = normalizeMapFieldYesNo(value("mapFieldNeedsPatrickReview"), draft.needsPatrickReview || "no");
+  draft.needsReturn = checked("mapFieldNeedsReturn");
+  draft.escalate = checked("mapFieldEscalate");
+  draft.auditNotes = value("mapFieldAuditNotes");
+  draft.finalNotes = value("mapFieldWorkCompleted");
+  draft.finalStatus = normalizeFieldVisitFinalStatus(value("mapFieldFinalStatus"));
+  draft.materialItem = value("mapFieldMaterialItem");
+  draft.materialQty = value("mapFieldMaterialQty");
+  draft.materialUnit = value("mapFieldMaterialUnit") || "each";
+  draft.materialNotes = value("mapFieldMaterialNotes");
+  draft.codeValue = value("mapFieldSpliceCode");
+  draft.codeRef = value("mapFieldSpliceCodeRef");
+  draft.codeNotes = value("mapFieldSpliceCodeNotes");
+  return draft;
+}
+
+function renderFieldVisitOptions(options, selected){
+  return options.map((option) => (
+    `<option value="${escapeHtml(option)}" ${option === selected ? "selected" : ""}>${escapeHtml(option)}</option>`
+  )).join("");
+}
+
+function addMapFieldDraftMaterial(siteId){
+  const draft = updateMapFieldVisitDraftFromInputs(siteId);
+  if (!draft) return false;
+  const item = String(draft.materialItem || "").trim();
+  if (!item){
+    toast("Material needed", "Enter the material used before adding it.");
+    return false;
+  }
+  const qty = Number(draft.materialQty || 1);
+  draft.materials.push({
+    item_key: item,
+    qty_used: Number.isFinite(qty) && qty > 0 ? qty : 1,
+    unit: draft.materialUnit || "each",
+    notes: draft.materialNotes || "",
+  });
+  draft.materialItem = "";
+  draft.materialQty = "";
+  draft.materialUnit = "each";
+  draft.materialNotes = "";
+  renderMapFieldPanel();
+  return true;
+}
+
+function addMapFieldDraftCode(siteId){
+  const draft = updateMapFieldVisitDraftFromInputs(siteId);
+  if (!draft) return false;
+  const code = String(draft.codeValue || "").trim();
+  if (!code){
+    toast("Code needed", "Enter a splicing code before adding it.");
+    return false;
+  }
+  draft.codes.push({
+    code,
+    ref: draft.codeRef || "",
+    notes: draft.codeNotes || "",
+  });
+  draft.codeValue = "";
+  draft.codeRef = "";
+  draft.codeNotes = "";
+  renderMapFieldPanel();
+  return true;
+}
+
+function removeMapFieldDraftListItem(siteId, listName, index){
+  const draft = updateMapFieldVisitDraftFromInputs(siteId) || state.map.fieldVisitDraft;
+  const list = draft?.[listName];
+  const idx = Number(index);
+  if (!Array.isArray(list) || !Number.isInteger(idx) || idx < 0 || idx >= list.length) return;
+  list.splice(idx, 1);
+  renderMapFieldPanel();
+}
+
+function getMapFieldVisitCodes(siteId){
+  const draft = updateMapFieldVisitDraftFromInputs(siteId) || state.map.fieldVisitDraft;
+  if (Array.isArray(draft?.codes) && draft.codes.length){
+    return draft.codes
+      .map((row) => [row.code, row.ref ? `ref ${row.ref}` : "", row.notes].filter(Boolean).join(" - "))
+      .filter(Boolean);
+  }
+  return parseMapFieldWorkCodes($("mapFieldWorkCodes")?.value || "");
+}
+
+function getMapFieldVisitMaterials(siteId){
+  const draft = updateMapFieldVisitDraftFromInputs(siteId) || state.map.fieldVisitDraft;
+  if (Array.isArray(draft?.materials) && draft.materials.length){
+    return draft.materials
+      .map((row) => ({
+        item_key: String(row?.item_key || "").trim(),
+        qty_used: Number(row?.qty_used ?? 1) || 1,
+        unit: String(row?.unit || "each").trim(),
+        notes: String(row?.notes || "").trim(),
+      }))
+      .filter((row) => row.item_key);
+  }
+  return parseMapFieldMaterialLines($("mapFieldMaterialsUsed")?.value || "");
+}
+
+function composeFieldVisitWorkNotes(siteId){
+  const draft = updateMapFieldVisitDraftFromInputs(siteId) || state.map.fieldVisitDraft || {};
+  const lines = [
+    `Visit label: ${draft.visitLabel || ""}`,
+    `Visit type: ${draft.visitType || ""}`,
+    `Previous work complete: ${draft.previousComplete || "unknown"}`,
+    `Work wrong: ${draft.workWrong || "no"}`,
+    `Bad reading: ${draft.badReading || "no"}`,
+    `Before reading: ${draft.beforeReading || ""}`,
+    `After reading: ${draft.afterReading || ""}`,
+    `Reading improved: ${draft.readingImproved || "unknown"}`,
+    `Pass/fail: ${draft.passFail || "unknown"}`,
+    `Customer transfer blocker: ${draft.customerTransferBlocker || "unknown"}`,
+    `Fixed enough for turn-up: ${draft.fixedEnoughForTurnup || "unknown"}`,
+    `Needs Patrick review: ${draft.needsPatrickReview || "no"}`,
+    `Needs return: ${draft.needsReturn ? "yes" : "no"}`,
+    `Escalate: ${draft.escalate ? "yes" : "no"}`,
+    `Status: ${draft.finalStatus || ""}`,
+  ];
+  if (draft.auditNotes) lines.push(`Audit notes: ${draft.auditNotes}`);
+  if (draft.finalNotes) lines.push(`Final notes: ${draft.finalNotes}`);
+  return lines.filter((line) => !line.endsWith(": ")).join("\n");
+}
+
+function parseFieldVisitWorkNotes(notes){
+  const text = String(notes || "");
+  const out = {};
+  text.split(/\r?\n/).forEach((line) => {
+    const match = line.match(/^([^:]+):\s*(.*)$/);
+    if (!match) return;
+    const key = match[1].trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    out[key] = match[2].trim();
+  });
+  return out;
+}
+
+function isFieldVisitStillBad(draft){
+  if (!draft) return false;
+  return draft.passFail === "no"
+    || draft.fixedEnoughForTurnup === "no"
+    || draft.customerTransferBlocker === "yes"
+    || draft.needsReturn
+    || draft.escalate;
+}
+
+function isFieldVisitTestResultStillBad(draft){
+  if (!draft) return false;
+  return draft.badReading === "yes"
+    || draft.passFail === "no"
+    || draft.fixedEnoughForTurnup === "no";
+}
+
+function normalizeCloseoutAnswer(value){
+  const text = String(value || "").trim().toLowerCase();
+  return FIELD_CLOSEOUT_ANSWER_VALUES.includes(text) ? text : "";
+}
+
+function createDefaultCloseoutAnswers(visitDraft, site){
+  const photoCount = getFieldVisitPhotoCount(site?.id, visitDraft?.visitLabel || "");
+  return {
+    before_reading_entered: visitDraft?.beforeReading ? "yes" : "no",
+    after_reading_entered: visitDraft?.afterReading ? "yes" : "no",
+    test_result_improved: visitDraft?.readingImproved === "yes" ? "yes" : (visitDraft?.readingImproved === "no" ? "no" : "na"),
+    test_result_acceptable: visitDraft?.passFail === "yes" ? "yes" : (visitDraft?.passFail === "no" ? "no" : "na"),
+    test_result_still_bad: isFieldVisitTestResultStillBad(visitDraft) ? "yes" : "no",
+    needs_patrick_review: visitDraft?.needsPatrickReview === "yes" ? "yes" : "no",
+    customer_transfer_blocker_remains: visitDraft?.customerTransferBlocker === "yes" ? "yes" : "no",
+    ports_cleaned: "",
+    ports_inspected: "",
+    fiber_splice_points_inspected: "",
+    splice_tray_inspected: "",
+    connections_reseated_checked: "",
+    damaged_hardware_found: "",
+    weather_water_dirt_issue_found: "",
+    previous_work_audited: visitDraft?.previousComplete === "yes" ? "yes" : (visitDraft?.previousComplete === "no" ? "no" : ""),
+    issue_found: visitDraft?.workWrong === "yes" || visitDraft?.badReading === "yes" ? "yes" : "na",
+    issue_repaired: visitDraft?.finalStatus === "Fixed" ? "yes" : "",
+    material_used_recorded: Array.isArray(visitDraft?.materials) && visitDraft.materials.length ? "yes" : "na",
+    splicing_code_recorded: Array.isArray(visitDraft?.codes) && visitDraft.codes.length ? "yes" : "na",
+    site_left_clean: "",
+    location_safe_secured: "",
+    before_photo_uploaded: getFieldVisitPhotoCount(site?.id, visitDraft?.visitLabel || "", "visit_before") ? "yes" : "no",
+    issue_photo_uploaded: getFieldVisitPhotoCount(site?.id, visitDraft?.visitLabel || "", "visit_issue") ? "yes" : "no",
+    after_photo_uploaded: getFieldVisitPhotoCount(site?.id, visitDraft?.visitLabel || "", "visit_after") ? "yes" : "no",
+    description_notes_completed: visitDraft?.finalNotes ? "yes" : "no",
+    gps_time_captured: state.map.myLocation ? "yes" : "",
+    status_selected: visitDraft?.finalStatus ? "yes" : "no",
+    any_photo_uploaded: photoCount ? "yes" : "no",
+  };
+}
+
+function syncCloseoutEvidenceAnswers(closeoutDraft, visitDraft, site){
+  if (!closeoutDraft) return closeoutDraft;
+  const latest = createDefaultCloseoutAnswers(visitDraft, site);
+  closeoutDraft.answers = closeoutDraft.answers || {};
+  FIELD_CLOSEOUT_EVIDENCE_ANSWER_KEYS.forEach((key) => {
+    const answer = normalizeCloseoutAnswer(latest[key]);
+    if (answer) closeoutDraft.answers[key] = answer;
+  });
+  return closeoutDraft;
+}
+
+function getMapFieldCloseoutDraft(site){
+  const siteId = toSiteIdKey(site?.id);
+  const visitDraft = getMapFieldVisitDraft(site);
+  if (!state.map.fieldCloseoutDraft || state.map.fieldCloseoutDraft.siteId !== siteId){
+    state.map.fieldCloseoutDraft = {
+      siteId,
+      answers: createDefaultCloseoutAnswers(visitDraft, site),
+      notes: {},
+      noPhotoPossible: false,
+      noPhotoReason: "",
+      stillBadNote: "",
+      blockerNote: "",
+      nextStepNotes: "",
+    };
+  }
+  syncCloseoutEvidenceAnswers(state.map.fieldCloseoutDraft, visitDraft, site);
+  return state.map.fieldCloseoutDraft;
+}
+
+function updateMapFieldCloseoutDraftFromInputs(siteId){
+  const site = getVisibleSiteByIdKey(siteId) || getMapFieldSelectedSite();
+  if (!site) return null;
+  const draft = getMapFieldCloseoutDraft(site);
+  draft.noPhotoPossible = Boolean($("mapFieldNoPhotoPossible")?.checked);
+  draft.noPhotoReason = String($("mapFieldNoPhotoReason")?.value || "").trim();
+  draft.stillBadNote = String($("mapFieldStillBadNote")?.value || "").trim();
+  draft.blockerNote = String($("mapFieldBlockerNote")?.value || "").trim();
+  draft.nextStepNotes = String($("mapFieldNextStepNotes")?.value || "").trim();
+  FIELD_CLOSEOUT_SECTIONS.forEach((section) => {
+    section.items.forEach(([key]) => {
+      const noteEl = $(`mapFieldCloseoutNote_${key}`);
+      if (noteEl) draft.notes[key] = String(noteEl.value || "").trim();
+    });
+  });
+  return draft;
+}
+
+function setMapFieldCloseoutAnswer(siteId, key, value){
+  const site = getVisibleSiteByIdKey(siteId) || getMapFieldSelectedSite();
+  if (!site) return;
+  const draft = getMapFieldCloseoutDraft(site);
+  draft.answers[key] = normalizeCloseoutAnswer(value);
+  renderMapFieldPanel();
+}
+
+function getCloseoutUnansweredItems(closeoutDraft){
+  const answers = closeoutDraft?.answers || {};
+  return FIELD_CLOSEOUT_SECTIONS.flatMap((section) => (
+    section.items
+      .filter(([key]) => !normalizeCloseoutAnswer(answers[key]))
+      .map(([key, label]) => label || FIELD_CLOSEOUT_ITEM_LABELS.get(key) || key)
+  ));
+}
+
+function getCloseoutMissingRequirements(site, visitDraft, closeoutDraft){
+  const missing = [];
+  const photoCount = getFieldVisitPhotoCount(site?.id, visitDraft?.visitLabel || "");
+  const finalStatus = normalizeFieldVisitFinalStatus(visitDraft?.finalStatus);
+  const unanswered = getCloseoutUnansweredItems(closeoutDraft);
+  if (unanswered.length){
+    const visible = unanswered.slice(0, 4).join(", ");
+    missing.push(`Answer all closeout checklist items Yes, No, or N/A before finalizing: ${visible}${unanswered.length > 4 ? `, +${unanswered.length - 4} more` : ""}.`);
+  }
+  if (!FIELD_VISIT_FINAL_STATUSES.includes(finalStatus)) missing.push("Select final status.");
+  if (!visitDraft?.finalNotes) missing.push("Add description notes before finalizing.");
+  if (!photoCount && !(closeoutDraft?.noPhotoPossible && closeoutDraft?.noPhotoReason)){
+    missing.push("Upload photo or enter no-photo reason.");
+  }
+  if (closeoutDraft?.answers?.test_result_still_bad === "yes" && !closeoutDraft.stillBadNote){
+    missing.push("Still bad reading requires explanation.");
+  }
+  if (closeoutDraft?.answers?.customer_transfer_blocker_remains === "yes" && !closeoutDraft.blockerNote){
+    missing.push("Customer transfer blocker requires explanation.");
+  }
+  if (["Needs Return", "Escalate"].includes(finalStatus) && !closeoutDraft?.nextStepNotes){
+    missing.push("Needs Return or Escalate requires next-step notes.");
+  }
+  return missing;
+}
+
+function refreshMapFieldCloseoutAnswerUi(closeoutDraft){
+  if (!closeoutDraft) return;
+  const answers = closeoutDraft.answers || {};
+  document.querySelectorAll("[data-closeout-key]").forEach((btn) => {
+    const key = btn.dataset.closeoutKey || "";
+    const value = btn.dataset.closeoutValue || "";
+    btn.classList.toggle("is-active", normalizeCloseoutAnswer(answers[key]) === value);
+  });
+  document.querySelectorAll("[data-closeout-row-key]").forEach((row) => {
+    const key = row.dataset.closeoutRowKey || "";
+    row.classList.toggle("is-unanswered", !normalizeCloseoutAnswer(answers[key]));
+  });
+}
+
+function refreshMapFieldCloseoutValidationState(siteId){
+  if (!state.map.fieldCloseoutOpen) return;
+  const site = getVisibleSiteByIdKey(siteId) || getMapFieldSelectedSite();
+  if (!site) return;
+  const visitDraft = updateMapFieldVisitDraftFromInputs(site.id) || state.map.fieldVisitDraft || {};
+  const closeoutDraft = updateMapFieldCloseoutDraftFromInputs(site.id) || getMapFieldCloseoutDraft(site);
+  syncCloseoutEvidenceAnswers(closeoutDraft, visitDraft, site);
+  refreshMapFieldCloseoutAnswerUi(closeoutDraft);
+  const missing = getCloseoutMissingRequirements(site, visitDraft, closeoutDraft);
+  const validation = $("mapFieldCloseoutValidation");
+  if (validation){
+    validation.className = missing.length ? "map-field-missing-list" : "map-field-ready-list";
+    validation.innerHTML = missing.length
+      ? missing.map((item) => `<div>${escapeHtml(item)}</div>`).join("")
+      : "Closeout requirements complete.";
+  }
+  const finalizeBtn = $("btnMapFieldFinalizeCloseout");
+  if (finalizeBtn) finalizeBtn.disabled = Boolean(missing.length);
+}
+
+function buildFieldCloseoutPayload(site, visitDraft, activeEvent){
+  const closeout = updateMapFieldCloseoutDraftFromInputs(site?.id) || getMapFieldCloseoutDraft(site);
+  syncCloseoutEvidenceAnswers(closeout, visitDraft, site);
+  const gps = state.map.myLocation || {};
+  const photoCount = getFieldVisitPhotoCount(site?.id, visitDraft?.visitLabel || "");
+  return {
+    project_day_id: state.fieldDay.session?.id || "",
+    location_visit_id: activeEvent?.id || "",
+    project_id: state.activeProject?.id || "",
+    user_id: state.user?.id || "",
+    base_location_id: site?.id || "",
+    base_location_label: getSiteDisplayName(site),
+    visit_label: visitDraft?.visitLabel || "",
+    visit_type: visitDraft?.visitType || "",
+    before_reading: visitDraft?.beforeReading || "",
+    after_reading: visitDraft?.afterReading || "",
+    final_status: visitDraft?.finalStatus || "",
+    audit_notes: visitDraft?.auditNotes || "",
+    description_notes: visitDraft?.finalNotes || "",
+    work_codes: getMapFieldVisitCodes(site?.id),
+    materials_used: getMapFieldVisitMaterials(site?.id),
+    timestamp: nowISO(),
+    gps_lat: gps.lat ?? null,
+    gps_lng: gps.lng ?? null,
+    gps_accuracy_m: gps.accuracy_m ?? gps.accuracy ?? null,
+    answers: closeout.answers || {},
+    notes: closeout.notes || {},
+    no_photo_possible: Boolean(closeout.noPhotoPossible),
+    no_photo_reason: closeout.noPhotoReason || "",
+    still_bad_note: closeout.stillBadNote || "",
+    blocker_note: closeout.blockerNote || "",
+    next_step_notes: closeout.nextStepNotes || "",
+    photo_count: photoCount,
+  };
+}
+
+function renderFieldCloseoutText(payload){
+  if (!payload) return "";
+  return [
+    `Closeout checklist: ${JSON.stringify(payload)}`,
+    `Closeout photos: ${payload.photo_count || 0}`,
+    payload.no_photo_reason ? `No photo reason: ${payload.no_photo_reason}` : "",
+    payload.still_bad_note ? `Still bad note: ${payload.still_bad_note}` : "",
+    payload.blocker_note ? `Transfer blocker note: ${payload.blocker_note}` : "",
+    payload.next_step_notes ? `Next step notes: ${payload.next_step_notes}` : "",
+  ].filter(Boolean).join("\n");
+}
+
+async function saveFieldCloseoutChecklistRecord(payload){
+  if (!payload || isDemo || !state.client || !state.user) return null;
+  const row = {
+    project_day_id: payload.project_day_id || null,
+    location_visit_id: payload.location_visit_id || null,
+    project_id: payload.project_id || null,
+    user_id: payload.user_id || state.user.id,
+    base_location_id: payload.base_location_id || null,
+    visit_label: payload.visit_label || "",
+    submitted_at: payload.timestamp || nowISO(),
+    gps_lat: payload.gps_lat ?? null,
+    gps_lng: payload.gps_lng ?? null,
+    gps_accuracy_m: payload.gps_accuracy_m ?? null,
+    checklist: payload,
+  };
+  try {
+    const { data, error } = await state.client
+      .from("splicer_location_closeout_checklists")
+      .insert(row)
+      .select("id")
+      .maybeSingle();
+    if (error){
+      if (!isMissingTable(error)){
+        console.warn("[field closeout] checklist save failed", error);
+      }
+      return null;
+    }
+    return data?.id || null;
+  } catch (error) {
+    console.warn("[field closeout] checklist save failed", error);
+    return null;
+  }
+}
+
+function parseFieldCloseoutFromNotes(notes){
+  const text = String(notes || "");
+  const match = text.match(/^Closeout checklist:\s*(\{.*\})$/m);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
+
 function normalizeFieldWorkLogRow(row){
   if (!row || typeof row !== "object") return null;
   return {
@@ -24772,19 +26065,27 @@ function renderMapFieldWorkLogForm(site, status){
   if (!site?.id) return "";
   const existingNotice = renderMapFieldExistingWorkNotice(site, status);
   const lastLog = getCachedFieldWorkLogs(site.id)[0] || null;
+  const photos = getCachedSitePhotos(site.id);
+  const visitLabel = state.map.fieldVisitDraft?.siteId === toSiteIdKey(site.id) ? state.map.fieldVisitDraft.visitLabel : "";
+  const previousPhotos = photos.filter((photo) => !isFieldVisitPhotoForLabel(photo, visitLabel));
   const lastLogText = lastLog
-    ? `<div class="muted tiny">Last log: ${escapeHtml(formatDprDateTime(lastLog.completed_at))}${lastLog.work_completed ? ` - ${escapeHtml(lastLog.work_completed).slice(0, 120)}` : ""}</div>`
+    ? `<div class="muted tiny">Last log: ${escapeHtml(formatDprDateTime(lastLog.completed_at))}${lastLog.work_completed ? ` - ${escapeHtml(lastLog.work_completed).slice(0, 160)}` : ""}</div>`
     : "";
   return `
-    <div class="map-field-work-log">
-      <div class="map-field-work-title">What work was completed at this location?</div>
+    <section class="map-field-guide-card map-field-history-card">
+      <div class="map-field-card-kicker">Previous Location History</div>
+      <div class="map-field-work-title">Previous work history for ${escapeHtml(getSiteDisplayName(site))}</div>
       ${existingNotice}
       ${lastLogText}
-      <textarea id="mapFieldWorkCompleted" class="input compact" rows="3" data-site-id="${escapeHtml(site.id)}" placeholder="Repair/correction notes, what was fixed, what still needs attention"></textarea>
-      <textarea id="mapFieldWorkCodes" class="input compact" rows="2" data-site-id="${escapeHtml(site.id)}" placeholder="Splicing or billing codes used, comma or one per line"></textarea>
-      <textarea id="mapFieldMaterialsUsed" class="input compact" rows="2" data-site-id="${escapeHtml(site.id)}" placeholder="Material used, one per line: item qty"></textarea>
-      <button class="btn secondary small" type="button" data-map-field-action="saveWorkLog" data-site-id="${escapeHtml(site.id)}">Save Work Log</button>
-    </div>
+      <div class="map-field-photo-counts">Previous photos: ${previousPhotos.length}</div>
+      ${previousPhotos.length ? `
+        <div class="map-field-history-photos">
+          ${previousPhotos.slice(0, 4).map((photo) => `
+            <a href="${escapeHtml(photo.url)}" target="_blank" rel="noopener">Photo ${escapeHtml(formatDprDateTime(photo.createdAt) || "")}</a>
+          `).join("")}
+        </div>
+      ` : `<div class="muted tiny">No previous photos loaded for this saved location.</div>`}
+    </section>
   `;
 }
 
@@ -24796,6 +26097,7 @@ function getFieldGpsAssociationRadius(gps){
 
 async function recordFieldLocationPingFromGps(gps, { nearest = null, source = "truck_gps" } = {}){
   if (isDemo || isDemoUser() || !state.client || !state.user || !gps) return null;
+  if (!getOpenFieldDaySession()) return null;
   const projectId = state.activeProject?.id || state.technician.timesheet?.project_id || null;
   if (!projectId) return null;
   const lat = Number(gps.lat);
@@ -24836,7 +26138,63 @@ async function recordFieldLocationPingFromGps(gps, { nearest = null, source = "t
   return data?.id || null;
 }
 
-async function saveMapFieldWorkLog(siteId, { allowEmpty = false, startedAt = null, completedAt = null, silent = false } = {}){
+async function uploadMapFieldVisitPhotos(siteId, proofType = "visit_issue"){
+  const site = getVisibleSiteByIdKey(siteId);
+  if (!site){
+    toast("Location missing", "Select a saved location before uploading photos.");
+    return;
+  }
+  if (isDemoUser()){
+    toast("Demo restriction", t("availableInProduction"));
+    return;
+  }
+  const active = state.fieldDay.activeEvent || null;
+  if (!active || active.event_type !== FIELD_DAY_EVENT_TYPES.LOCATION_WORK || toSiteIdKey(active.site_id) !== toSiteIdKey(site.id)){
+    toast("Start location first", "Start this location visit before adding visit photos.");
+    return;
+  }
+  const draft = updateMapFieldVisitDraftFromInputs(site.id) || getMapFieldVisitDraft(site);
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.multiple = true;
+  input.capture = "environment";
+  input.style.position = "fixed";
+  input.style.left = "-9999px";
+  document.body.appendChild(input);
+  input.addEventListener("change", async () => {
+    const files = Array.from(input.files || []);
+    input.remove();
+    if (!files.length) return;
+    const capturedAt = nowISO();
+    const siteCoords = getSiteCoords(site);
+    const gps = state.map.myLocation
+      || await requestMapCurrentLocation({ center: false, silent: true })
+      || (siteCoords ? { lat: siteCoords.lat, lng: siteCoords.lng, accuracy_m: null } : null);
+    let savedCount = 0;
+    for (const file of files){
+      const uploaded = await uploadSiteMediaForSite(file, site, gps, capturedAt, {
+        source: getFieldVisitSource(draft.visitLabel),
+        proofType,
+        isLiveProof: true,
+        backfilled: false,
+        deviceUserAgent: navigator.userAgent || "",
+        gpsLocked: Boolean(gps),
+        capturedAtLocked: true,
+      });
+      if (uploaded) savedCount += 1;
+    }
+    state.map.sitePhotosBySiteId.delete(toSiteIdKey(site.id));
+    await fetchSitePhotosForMapPopup(site.id);
+    renderMapFieldPanel();
+    if (savedCount){
+      toast("Photos uploaded", `${savedCount} photo${savedCount === 1 ? "" : "s"} saved to ${draft.visitLabel}.`);
+    }
+  }, { once: true });
+  input.click();
+}
+
+async function saveMapFieldWorkLog(siteId, { allowEmpty = false, startedAt = null, completedAt = null, silent = false, notesOverride = null, codesOverride = null, materialsOverride = null } = {}){
   const site = getVisibleSiteByIdKey(siteId);
   if (!site){
     toast("Location missing", "This location is not available.", "error");
@@ -24846,14 +26204,18 @@ async function saveMapFieldWorkLog(siteId, { allowEmpty = false, startedAt = nul
     toast("Demo restriction", t("availableInProduction"));
     return null;
   }
+  if (!getOpenFieldDaySession()){
+    toast("Start project day", "Start Recorded Project Day before saving field work.");
+    return null;
+  }
   const projectId = site.project_id || state.activeProject?.id || null;
   if (!projectId){
     toast("Project required", "Select a project before saving field work.");
     return null;
   }
-  const notes = String($("mapFieldWorkCompleted")?.value || "").trim();
-  const codes = parseMapFieldWorkCodes($("mapFieldWorkCodes")?.value || "");
-  const materials = parseMapFieldMaterialLines($("mapFieldMaterialsUsed")?.value || "");
+  const notes = notesOverride !== null ? String(notesOverride || "").trim() : composeFieldVisitWorkNotes(site.id);
+  const codes = Array.isArray(codesOverride) ? codesOverride : getMapFieldVisitCodes(site.id);
+  const materials = Array.isArray(materialsOverride) ? materialsOverride : getMapFieldVisitMaterials(site.id);
   if (!allowEmpty && !notes && !codes.length && !materials.length){
     toast("Work log needed", "Add notes, codes, or material before saving.");
     return null;
@@ -24861,7 +26223,12 @@ async function saveMapFieldWorkLog(siteId, { allowEmpty = false, startedAt = nul
   const gps = state.map.myLocation || await requestMapCurrentLocation({ center: false, silent: Boolean(silent) });
   const nearest = gps ? findNearestVisibleSite(gps, getFieldGpsAssociationRadius(gps)) : null;
   const statusBefore = getSiteWorkflowStatus(site);
-  const statusAfter = normalizeMapFieldStatus($("mapFieldStatusSelect")?.value || statusBefore);
+  const draft = state.map.fieldVisitDraft || {};
+  const statusAfter = normalizeMapFieldStatus(
+    $("mapFieldStatusSelect")?.value
+    || (draft.finalStatus === "Fixed" || draft.finalStatus === "Audit Complete" ? MAP_FIELD_STATUS.COMPLETE : MAP_FIELD_STATUS.IN_PROGRESS)
+    || statusBefore
+  );
   const completed = completedAt || nowISO();
   const row = {
     user_id: state.user?.id || null,
@@ -24903,9 +26270,18 @@ async function saveMapFieldWorkLog(siteId, { allowEmpty = false, startedAt = nul
     savedRow = data;
   }
   setSiteWorkflowStatus(site.id, statusAfter);
-  $("mapFieldWorkCompleted") && ($("mapFieldWorkCompleted").value = "");
-  $("mapFieldWorkCodes") && ($("mapFieldWorkCodes").value = "");
-  $("mapFieldMaterialsUsed") && ($("mapFieldMaterialsUsed").value = "");
+  const shouldResetDraft = Boolean(completedAt || allowEmpty);
+  if (shouldResetDraft){
+    $("mapFieldWorkCompleted") && ($("mapFieldWorkCompleted").value = "");
+    $("mapFieldWorkCodes") && ($("mapFieldWorkCodes").value = "");
+    $("mapFieldMaterialsUsed") && ($("mapFieldMaterialsUsed").value = "");
+  }
+  if (shouldResetDraft && state.map.fieldVisitDraft?.siteId === toSiteIdKey(site.id)){
+    state.map.fieldVisitDraft = createFieldVisitDraft(site, {
+      visitLabel: state.map.fieldVisitDraft.visitLabel,
+      visitType: state.map.fieldVisitDraft.visitType,
+    });
+  }
   await recordFieldLocationPingFromGps(gps || {
     lat: row.gps_lat,
     lng: row.gps_lng,
@@ -26027,6 +27403,7 @@ async function loadSiteMedia(siteId){
         url: String(row?.previewUrl || row?.media_path || "").trim(),
         createdAt: row?.created_at || "",
         source: row?.source || "",
+        proofType: row?.proof_type || "",
         readonly: Boolean(row?.readonly),
       })).filter((row) => row.url));
       return;
@@ -26064,6 +27441,7 @@ async function loadSiteMedia(siteId){
     url: String(row?.previewUrl || "").trim(),
     createdAt: row?.created_at || "",
     source: row?.source || "",
+    proofType: row?.proof_type || "",
     readonly: Boolean(row?.readonly),
   })).filter((row) => row.url));
   if (!withUrls.length && state.siteMedia.length){
@@ -26073,6 +27451,7 @@ async function loadSiteMedia(siteId){
       url: String(row?.previewUrl || row?.media_path || "").trim(),
       createdAt: row?.created_at || "",
       source: row?.source || "",
+      proofType: row?.proof_type || "",
       readonly: Boolean(row?.readonly),
     })).filter((row) => row.url));
   }
@@ -35931,6 +37310,32 @@ function wireUI(){
   }, true);
   const mapFieldPanel = $("mapFieldPanel");
   if (mapFieldPanel){
+    mapFieldPanel.addEventListener("input", (e) => {
+      const input = e.target?.closest?.("[data-field-visit-input]");
+      if (input){
+        updateMapFieldVisitDraftFromInputs(input.dataset.siteId || state.map.fieldVisitDraft?.siteId || "");
+        refreshMapFieldCloseoutValidationState(input.dataset.siteId || state.map.fieldVisitDraft?.siteId || "");
+        return;
+      }
+      const closeoutInput = e.target?.closest?.("[data-field-closeout-input]");
+      if (closeoutInput){
+        updateMapFieldCloseoutDraftFromInputs(closeoutInput.dataset.siteId || state.map.fieldCloseoutDraft?.siteId || "");
+        refreshMapFieldCloseoutValidationState(closeoutInput.dataset.siteId || state.map.fieldCloseoutDraft?.siteId || "");
+      }
+    });
+    mapFieldPanel.addEventListener("change", (e) => {
+      const input = e.target?.closest?.("[data-field-visit-input]");
+      if (input){
+        updateMapFieldVisitDraftFromInputs(input.dataset.siteId || state.map.fieldVisitDraft?.siteId || "");
+        refreshMapFieldCloseoutValidationState(input.dataset.siteId || state.map.fieldVisitDraft?.siteId || "");
+        return;
+      }
+      const closeoutInput = e.target?.closest?.("[data-field-closeout-input]");
+      if (closeoutInput){
+        updateMapFieldCloseoutDraftFromInputs(closeoutInput.dataset.siteId || state.map.fieldCloseoutDraft?.siteId || "");
+        renderMapFieldPanel();
+      }
+    });
     mapFieldPanel.addEventListener("click", async (e) => {
       const actionBtn = e.target.closest("[data-map-field-action]");
       if (actionBtn){
@@ -35953,13 +37358,61 @@ function wireUI(){
           await endFieldDay();
           return;
         }
+        if (action === "searchVisitLocation"){
+          await searchMapFieldVisitLocation($("mapFieldVisitSearch")?.value || "");
+          return;
+        }
         if (!siteId) return;
+        if (action === "selectWorklistSite"){
+          setMapFieldSelectedSite(siteId);
+          focusSiteOnMap(siteId);
+          void hydrateMapFieldSiteActivity(siteId);
+          return;
+        }
         if (action === "startFieldLocation"){
-          await startFieldDayEvent(FIELD_DAY_EVENT_TYPES.LOCATION_WORK, { siteId });
+          const site = getVisibleSiteByIdKey(siteId);
+          const draft = site ? updateMapFieldVisitDraftFromInputs(siteId) || getMapFieldVisitDraft(site) : null;
+          await startFieldDayEvent(FIELD_DAY_EVENT_TYPES.LOCATION_WORK, { siteId, label: draft?.visitLabel || "" });
           return;
         }
         if (action === "endFieldLocation"){
-          await endFieldDayLocation(siteId);
+          state.map.fieldCloseoutOpen = true;
+          renderMapFieldPanel();
+          return;
+        }
+        if (action === "openCloseout"){
+          state.map.fieldCloseoutOpen = true;
+          renderMapFieldPanel();
+          return;
+        }
+        if (action === "cancelCloseout"){
+          updateMapFieldCloseoutDraftFromInputs(siteId);
+          state.map.fieldCloseoutOpen = false;
+          renderMapFieldPanel();
+          return;
+        }
+        if (action === "finalizeFieldLocation"){
+          await finalizeFieldDayLocation(siteId);
+          return;
+        }
+        if (action === "setCloseoutAnswer"){
+          setMapFieldCloseoutAnswer(siteId, actionBtn.dataset.closeoutKey || "", actionBtn.dataset.closeoutValue || "");
+          return;
+        }
+        if (action === "uploadVisitPhoto"){
+          await uploadMapFieldVisitPhotos(siteId, actionBtn.dataset.photoType || "visit_issue");
+          return;
+        }
+        if (action === "addDraftMaterial"){
+          addMapFieldDraftMaterial(siteId);
+          return;
+        }
+        if (action === "addDraftCode"){
+          addMapFieldDraftCode(siteId);
+          return;
+        }
+        if (action === "removeDraftItem"){
+          removeMapFieldDraftListItem(siteId, actionBtn.dataset.listName || "", actionBtn.dataset.listIndex);
           return;
         }
         if (action === "open"){
