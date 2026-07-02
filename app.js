@@ -24682,13 +24682,7 @@ function renderFieldDayControls(gps, nearest, selectedSite){
         ${guidance.actionHtml}
       </div>
       ${session && !session.ended_at ? `<div class="map-field-recording-notice">Project Day Active - time, GPS pings, photos, notes, and work activity are being recorded for this project.</div>` : ""}
-      ${session && !session.ended_at ? `
-        <div class="map-field-end-day-row">
-          <button class="btn danger wide" type="button" data-map-field-action="endFieldDay">End Project Day</button>
-        </div>
-      ` : ""}
     </section>
-    ${renderMapFieldGpsAwareness(gps, nearest)}
   `;
 }
 
@@ -25027,6 +25021,20 @@ function renderFieldBreakLunchCard(){
   `;
 }
 
+function renderFieldDayEndCard(){
+  const session = state.fieldDay.session || null;
+  if (!session || session.ended_at) return "";
+  const activeType = getActiveFieldDayEventType();
+  return `
+    <section class="map-field-guide-card map-field-end-day-card">
+      <div class="map-field-card-kicker">End Project Day</div>
+      <div class="map-field-base-location">End the project day only after location work, closeout, break, and lunch timers are closed.</div>
+      <button class="btn danger wide" type="button" data-map-field-action="endFieldDay" ${activeType ? "disabled" : ""}>End Project Day</button>
+      ${activeType ? `<div class="map-field-warning">Finish ${escapeHtml(getFieldDayEventLabel(state.fieldDay.activeEvent))} before ending the project day.</div>` : ""}
+    </section>
+  `;
+}
+
 function renderMapFieldPanel(){
   const panel = $("mapFieldPanel");
   const showBtn = $("btnMapFieldShow");
@@ -25034,7 +25042,8 @@ function renderMapFieldPanel(){
   const actionsWrap = $("mapFieldNearbyActions");
   const createWrap = $("mapFieldCreateWrap");
   const card = $("mapFieldLocationCard");
-  if (!panel || !gpsState || !actionsWrap || !createWrap || !card) return;
+  const tailActions = $("mapFieldDayTailActions");
+  if (!panel || !gpsState || !actionsWrap || !createWrap || !card || !tailActions) return;
   const panelVisible = state.map.fieldPanelVisible !== false;
   panel.hidden = !panelVisible;
   panel.style.display = panelVisible ? "grid" : "none";
@@ -25054,6 +25063,7 @@ function renderMapFieldPanel(){
   }
   document.body.classList.toggle("map-create-open", createOpen);
   actionsWrap.hidden = createOpen;
+  tailActions.hidden = createOpen;
 
   const gps = state.map.myLocation;
   const nearestId = toSiteIdKey(state.map.nearestSiteId);
@@ -25073,7 +25083,6 @@ function renderMapFieldPanel(){
 
   actionsWrap.innerHTML = `
     ${renderFieldDayControls(gps, nearest, selected)}
-    ${renderTodayWorklistCard(selected)}
     ${!selected ? `
       <section class="map-field-guide-card">
         <div class="map-field-card-kicker">Select Saved Location</div>
@@ -25086,12 +25095,18 @@ function renderMapFieldPanel(){
         ${state.activeProject ? `<button id="btnMapShowCreateLocation" class="btn ghost small" type="button">Create New Location Here</button>` : ""}
       </section>
     ` : ""}
-    ${renderFieldBreakLunchCard()}
   `;
+  tailActions.innerHTML = "";
 
   if (!selected){
     card.hidden = true;
     card.innerHTML = "";
+    tailActions.innerHTML = `
+      ${renderFieldBreakLunchCard()}
+      ${renderFieldDayEndCard()}
+      ${renderMapFieldGpsAwareness(gps, nearest)}
+      ${renderTodayWorklistCard(selected)}
+    `;
     return;
   }
   card.hidden = false;
@@ -25120,6 +25135,12 @@ function renderMapFieldPanel(){
       </select>
     </div>
     ${renderMapFieldWorkLogForm(selected, status)}
+  `;
+  tailActions.innerHTML = `
+    ${renderFieldBreakLunchCard()}
+    ${renderFieldDayEndCard()}
+    ${renderMapFieldGpsAwareness(gps, nearest)}
+    ${renderTodayWorklistCard(selected)}
   `;
   void hydrateMapFieldSiteActivity(selected.id);
 }

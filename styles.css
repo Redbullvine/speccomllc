@@ -1580,6 +1580,11 @@ a{color:inherit; text-decoration:none;}
   display:grid;
   gap:8px;
 }
+.map-field-day-tail-actions{
+  display:grid;
+  gap:8px;
+  margin-top:8px;
+}
 .map-field-location-meta{
   font-size:12px;
   color:#cbd5e1;
@@ -1675,7 +1680,8 @@ body.map-create-open #mapFieldCreateWrap{
 body.map-create-open #mapFieldPanelHeader,
 body.map-create-open #mapFieldGpsState,
 body.map-create-open #mapFieldNearbyActions,
-body.map-create-open #mapFieldLocationCard{
+body.map-create-open #mapFieldLocationCard,
+body.map-create-open #mapFieldDayTailActions{
   display:none !important;
 }
 body.map-create-open #mapSidebarToggle{
@@ -9456,5 +9462,238 @@ body.map-mode #map-float-panel #kmzTreeSearch:-webkit-autofill {
   .dpr-closeout-grid,
   .map-field-status-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Production mobile UI stabilization: readable controls + full-screen field map */
+:root {
+  --ui-danger-bg: #b91c1c;
+  --ui-danger-border: #7f1d1d;
+  --ui-danger-text: #ffffff;
+  --ui-input-bg: #ffffff;
+  --ui-input-text: #111827;
+  --ui-input-border: #94a3b8;
+  --ui-input-placeholder: #64748b;
+  --ui-dark-text: #f8fafc;
+  --ui-dark-muted: #cbd5e1;
+}
+
+:where(
+  .btn.danger,
+  button.btn.danger,
+  .project-row-delete,
+  [data-project-delete],
+  [data-action*="delete" i],
+  [data-office-action*="delete" i],
+  [data-redline-action*="delete" i],
+  [data-onboarding-admin-action*="reject" i],
+  [id*="delete" i].btn,
+  [id*="Delete" i].btn
+):not(:disabled):not(.disabled) {
+  background: var(--ui-danger-bg) !important;
+  border-color: var(--ui-danger-border) !important;
+  color: var(--ui-danger-text) !important;
+  -webkit-text-fill-color: var(--ui-danger-text) !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select, .input, .form-control) {
+  background: var(--ui-input-bg) !important;
+  border-color: var(--ui-input-border) !important;
+  color: var(--ui-input-text) !important;
+  caret-color: var(--ui-input-text) !important;
+  -webkit-text-fill-color: var(--ui-input-text) !important;
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, .input, .form-control)::placeholder {
+  color: var(--ui-input-placeholder) !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: var(--ui-input-placeholder) !important;
+}
+
+:where(.sidebar, .gis-sidebar, .map-panel, .map-field-panel, #map-float-panel, .field-ops-studio, #projectsModal, #viewAdmin, body.map-mode) :is(.muted, .small, label, .label) {
+  color: var(--ui-dark-muted) !important;
+  -webkit-text-fill-color: var(--ui-dark-muted) !important;
+}
+
+:where(.sidebar, .gis-sidebar, .map-panel, .map-field-panel, #map-float-panel, .field-ops-studio, #projectsModal, #viewAdmin, body.map-mode) :is(h1, h2, h3, h4, .site-panel-title, .project-row-title, .project-row-select) {
+  color: var(--ui-dark-text) !important;
+  -webkit-text-fill-color: var(--ui-dark-text) !important;
+}
+
+.map-field-closeout-pill:not(:disabled) {
+  background: #111827 !important;
+  border-color: #64748b !important;
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+}
+
+.map-field-closeout-pill.is-active:not(:disabled) {
+  background: #1d4ed8 !important;
+  border-color: #93c5fd !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+body.map-mode .map-field-panel .btn.primary:disabled,
+body.map-mode .map-field-panel button.btn.primary:disabled,
+body.map-mode #map-float-panel .btn.primary:disabled,
+body.map-mode #map-float-panel button.btn.primary:disabled {
+  background: #334155 !important;
+  border-color: #64748b !important;
+  color: #e2e8f0 !important;
+  -webkit-text-fill-color: #e2e8f0 !important;
+  opacity: 1 !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
+#mobileBottomNav,
+.mobile-nav {
+  background: rgba(7, 14, 28, 0.96) !important;
+  border-color: rgba(148, 163, 184, 0.48) !important;
+}
+
+.mobile-nav-btn {
+  color: #e5eef7 !important;
+  -webkit-text-fill-color: #e5eef7 !important;
+  opacity: 1 !important;
+}
+
+.mobile-nav-btn svg {
+  stroke: currentColor;
+}
+
+.mobile-nav-btn.is-active {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background: rgba(22, 101, 52, 0.46) !important;
+  border-radius: 12px;
+}
+
+body.map-mode {
+  background: #0f172a !important;
+  overflow: hidden;
+}
+
+body.map-mode #app-footer {
+  display: none !important;
+}
+
+body.map-mode .page,
+body.map-mode .container,
+body.map-mode #viewApp,
+body.map-mode .content,
+body.map-mode #viewMap {
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+body.map-mode #viewMap.view.active {
+  display: block !important;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.map-mode #mapWorkspace,
+body.map-mode .map-workspace {
+  background: #d6dde7 !important;
+}
+
+body.map-mode #mapCanvas,
+body.map-mode #liveMap {
+  min-height: 0;
+  background: #d6dde7 !important;
+}
+
+@media (max-width: 900px) {
+  body.map-mode .page,
+  body.map-mode .container,
+  body.map-mode #viewApp,
+  body.map-mode .app-shell,
+  body.map-mode .content {
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+
+  body.map-mode #viewMap.view.active {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 45px;
+    bottom: 0;
+    width: 100vw;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    z-index: 1;
+  }
+
+  body.map-mode #mapWorkspace,
+  body.map-mode .map-workspace {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    overflow: hidden !important;
+  }
+
+  body.map-mode #mapCanvas,
+  body.map-mode .map-canvas,
+  body.map-mode #liveMap,
+  body.map-mode .map-leaflet {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+  }
+
+  body.map-mode #map-float-panel {
+    top: 58px !important;
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-height: min(54dvh, calc(100dvh - 150px)) !important;
+  }
+
+  body.map-mode .map-field-panel {
+    top: 58px !important;
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-height: min(52dvh, calc(100dvh - 150px)) !important;
+    overflow-y: auto !important;
+  }
+
+  body.map-mode #mobileBottomNav {
+    bottom: max(8px, env(safe-area-inset-bottom)) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  body.map-mode #viewMap,
+  body.map-mode .view,
+  body.map-mode .content,
+  body.map-mode .container,
+  body.map-mode #viewApp,
+  body.map-mode .app-container {
+    padding-bottom: 0 !important;
+  }
+
+  body.map-mode .map-canvas .leaflet-top.leaflet-left {
+    bottom: calc(88px + env(safe-area-inset-bottom)) !important;
+  }
+
+  body.map-mode .map-view-floating {
+    bottom: calc(88px + env(safe-area-inset-bottom)) !important;
   }
 }
