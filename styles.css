@@ -8923,27 +8923,56 @@ body.map-mode #map-float-panel #kmzTreeSearch:-webkit-autofill {
   -webkit-text-fill-color: var(--form-light-placeholder) !important;
 }
 
-/* Admin and project dark-panel readability */
+/* Admin and project contrast guard */
+#viewAdmin {
+  --admin-surface-bg: #fbfcff;
+  --admin-surface-text: #0f172a;
+  --admin-surface-muted: #475569;
+  --admin-surface-border: #cbd5e1;
+  --admin-row-bg: #ffffff;
+  --admin-row-hover: #f1f5f9;
+  --admin-row-active: #dcfce7;
+}
+
 #viewAdmin .card,
-#viewAdmin #adminWorkspaceBody,
 #viewAdmin #adminWorkspaceBody .card {
-  color: #f8fafc !important;
+  background: var(--admin-surface-bg) !important;
+  border-color: var(--admin-surface-border) !important;
+  color: var(--admin-surface-text) !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+#viewAdmin #adminWorkspaceBody {
+  color: var(--admin-surface-text) !important;
 }
 
 #viewAdmin .card :is(h1, h2, h3, h4, p, td, th, .project-row-title, .project-row-select),
 #viewAdmin #adminWorkspaceBody :is(h1, h2, h3, h4, p, td, th, .project-row-title, .project-row-select),
-#viewAdmin :is(#adminProjectsList, #adminCompaniesList) span {
-  color: #f8fafc !important;
-  -webkit-text-fill-color: #f8fafc !important;
+#viewAdmin #adminProjectsList span:not(.admin-project-badge),
+#viewAdmin #adminCompaniesList span {
+  color: var(--admin-surface-text) !important;
+  -webkit-text-fill-color: var(--admin-surface-text) !important;
 }
 
-#viewAdmin .card :is(.muted, .small, .project-row-meta, label),
-#viewAdmin #adminWorkspaceBody :is(.muted, .small, .project-row-meta, label) {
-  color: #cbd5e1 !important;
-  -webkit-text-fill-color: #cbd5e1 !important;
+#viewAdmin .card :is(.muted, .project-row-meta, label),
+#viewAdmin #adminWorkspaceBody :is(.muted, .project-row-meta, label),
+#viewAdmin .card .small:not(.btn),
+#viewAdmin #adminWorkspaceBody .small:not(.btn) {
+  color: var(--admin-surface-muted) !important;
+  -webkit-text-fill-color: var(--admin-surface-muted) !important;
 }
 
-#viewAdmin .card .project-row,
+#viewAdmin .card .project-row {
+  background: var(--admin-row-bg) !important;
+  border-color: var(--admin-surface-border) !important;
+  color: var(--admin-surface-text) !important;
+  -webkit-text-fill-color: var(--admin-surface-text) !important;
+}
+
+#viewAdmin .card .project-row:hover {
+  background: var(--admin-row-hover) !important;
+}
+
 #projectsModal .project-row {
   background: rgba(7, 18, 24, 0.88) !important;
   border-color: rgba(148, 163, 184, 0.38) !important;
@@ -8951,21 +8980,35 @@ body.map-mode #map-float-panel #kmzTreeSearch:-webkit-autofill {
   -webkit-text-fill-color: #f8fafc !important;
 }
 
-#viewAdmin .card .project-row.active,
+#viewAdmin .card .project-row.active {
+  background: var(--admin-row-active) !important;
+  border-color: #22c55e !important;
+  color: var(--admin-surface-text) !important;
+  -webkit-text-fill-color: var(--admin-surface-text) !important;
+}
+
 #projectsModal .project-row.active {
-  background: rgba(22, 101, 52, 0.36) !important;
+  background: #14532d !important;
   border-color: rgba(212, 175, 55, 0.85) !important;
   color: #f8fafc !important;
   -webkit-text-fill-color: #f8fafc !important;
 }
 
-#viewAdmin .card .project-row :is(.project-row-title, .project-row-select),
+#viewAdmin .card .project-row :is(.project-row-title, .project-row-select) {
+  color: var(--admin-surface-text) !important;
+  -webkit-text-fill-color: var(--admin-surface-text) !important;
+}
+
 #projectsModal .project-row :is(.project-row-title, .project-row-select) {
   color: #f8fafc !important;
   -webkit-text-fill-color: #f8fafc !important;
 }
 
-#viewAdmin .card .project-row .project-row-meta,
+#viewAdmin .card .project-row .project-row-meta {
+  color: var(--admin-surface-muted) !important;
+  -webkit-text-fill-color: var(--admin-surface-muted) !important;
+}
+
 #projectsModal .project-row .project-row-meta {
   color: #cbd5e1 !important;
   -webkit-text-fill-color: #cbd5e1 !important;
@@ -8976,8 +9019,8 @@ body.map-mode #map-float-panel #kmzTreeSearch:-webkit-autofill {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.32);
+  padding: 12px 0;
+  border-bottom: 1px solid var(--admin-surface-border);
 }
 
 .admin-project-main {
@@ -8985,9 +9028,9 @@ body.map-mode #map-float-panel #kmzTreeSearch:-webkit-autofill {
 }
 
 .admin-project-name {
-  color: #f8fafc !important;
+  color: var(--admin-surface-text) !important;
   font-weight: 800;
-  -webkit-text-fill-color: #f8fafc !important;
+  -webkit-text-fill-color: var(--admin-surface-text) !important;
 }
 
 .admin-project-meta {
@@ -8995,26 +9038,36 @@ body.map-mode #map-float-panel #kmzTreeSearch:-webkit-autofill {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 4px;
-  color: #cbd5e1 !important;
+  color: var(--admin-surface-muted) !important;
   font-size: 0.82rem;
-  -webkit-text-fill-color: #cbd5e1 !important;
+  -webkit-text-fill-color: var(--admin-surface-muted) !important;
 }
 
 .admin-project-badge {
-  border: 1px solid rgba(148, 163, 184, 0.34);
+  border: 1px solid var(--admin-surface-border);
   border-radius: 999px;
   padding: 1px 7px;
-  color: #f8fafc !important;
-  -webkit-text-fill-color: #f8fafc !important;
+  color: var(--admin-surface-text) !important;
+  background: #f8fafc;
+  -webkit-text-fill-color: var(--admin-surface-text) !important;
 }
 
+#viewAdmin .admin-project-badge.ok,
 .admin-project-badge.ok {
-  background: rgba(22, 101, 52, 0.38);
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #14532d !important;
+  -webkit-text-fill-color: #14532d !important;
 }
 
+#viewAdmin .admin-project-badge.warn,
+#viewAdmin .admin-project-badge.test,
 .admin-project-badge.warn,
 .admin-project-badge.test {
-  background: rgba(120, 53, 15, 0.42);
+  background: #ffedd5;
+  border-color: #fdba74;
+  color: #7c2d12 !important;
+  -webkit-text-fill-color: #7c2d12 !important;
 }
 
 .admin-project-actions {
@@ -9026,14 +9079,27 @@ body.map-mode #map-float-panel #kmzTreeSearch:-webkit-autofill {
 #viewAdmin .table tbody tr,
 #viewAdmin .table tbody tr:nth-child(even),
 #viewAdmin .table tbody tr:hover {
-  background: rgba(7, 18, 24, 0.78) !important;
+  background: var(--admin-row-bg) !important;
 }
 
 #viewAdmin .table :is(th, td) {
-  border-color: rgba(148, 163, 184, 0.28) !important;
+  border-color: var(--admin-surface-border) !important;
 }
 
-#viewAdmin .card :is(.btn.secondary, .btn.ghost, .btn.btn-secondary, .btn-secondary, button.btn.secondary, button.btn.ghost):not(.danger),
+#viewAdmin .card :is(.btn.secondary, .btn.ghost, .btn.btn-secondary, .btn-secondary, button.btn.secondary, button.btn.ghost):not(.danger) {
+  background: #ffffff !important;
+  border-color: #94a3b8 !important;
+  color: var(--admin-surface-text) !important;
+  -webkit-text-fill-color: var(--admin-surface-text) !important;
+}
+
+#viewAdmin .card :is(.btn.danger, button.btn.danger) {
+  background: #b91c1c !important;
+  border-color: #7f1d1d !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
 #projectsModal :is(.btn.secondary, .btn.ghost, .btn.btn-secondary, .btn-secondary, button.btn.secondary, button.btn.ghost):not(.danger),
 #map-float-panel :is(.btn.secondary, .btn.ghost, .btn.btn-secondary, .btn-secondary, button.btn.secondary, button.btn.ghost):not(.danger),
 .map-field-panel :is(.btn.secondary, .btn.ghost, .btn.btn-secondary, .btn-secondary, button.btn.secondary, button.btn.ghost):not(.danger) {
@@ -9043,7 +9109,14 @@ body.map-mode #map-float-panel #kmzTreeSearch:-webkit-autofill {
   -webkit-text-fill-color: #f8fafc !important;
 }
 
-#viewAdmin .card :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select, .input, .form-control),
+#viewAdmin .card :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select, .input, .form-control) {
+  background: #ffffff !important;
+  border-color: #94a3b8 !important;
+  color: var(--admin-surface-text) !important;
+  caret-color: var(--admin-surface-text) !important;
+  -webkit-text-fill-color: var(--admin-surface-text) !important;
+}
+
 #projectsModal :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select, .input, .form-control) {
   background: rgba(7, 18, 24, 0.9) !important;
   border-color: rgba(148, 163, 184, 0.42) !important;
@@ -9055,7 +9128,12 @@ body.map-mode #map-float-panel #kmzTreeSearch:-webkit-autofill {
 #viewAdmin .card input::placeholder,
 #viewAdmin .card textarea::placeholder,
 #viewAdmin .card .input::placeholder,
-#viewAdmin .card .form-control::placeholder,
+#viewAdmin .card .form-control::placeholder {
+  color: #64748b !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: #64748b !important;
+}
+
 #projectsModal input::placeholder,
 #projectsModal textarea::placeholder,
 #projectsModal .input::placeholder,
@@ -9512,12 +9590,12 @@ body.map-mode #map-float-panel #kmzTreeSearch:-webkit-autofill {
   -webkit-text-fill-color: var(--ui-input-placeholder) !important;
 }
 
-:where(.sidebar, .gis-sidebar, .map-panel, .map-field-panel, #map-float-panel, .field-ops-studio, #projectsModal, #viewAdmin, body.map-mode) :is(.muted, .small, label, .label) {
+:where(.sidebar, .gis-sidebar, .map-panel, .map-field-panel, #map-float-panel, .field-ops-studio, #projectsModal, body.map-mode) :is(.muted, .small, label, .label) {
   color: var(--ui-dark-muted) !important;
   -webkit-text-fill-color: var(--ui-dark-muted) !important;
 }
 
-:where(.sidebar, .gis-sidebar, .map-panel, .map-field-panel, #map-float-panel, .field-ops-studio, #projectsModal, #viewAdmin, body.map-mode) :is(h1, h2, h3, h4, .site-panel-title, .project-row-title, .project-row-select) {
+:where(.sidebar, .gis-sidebar, .map-panel, .map-field-panel, #map-float-panel, .field-ops-studio, #projectsModal, body.map-mode) :is(h1, h2, h3, h4, .site-panel-title, .project-row-title, .project-row-select) {
   color: var(--ui-dark-text) !important;
   -webkit-text-fill-color: var(--ui-dark-text) !important;
 }
