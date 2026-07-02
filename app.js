@@ -10451,14 +10451,27 @@ function isFieldRole(roleCode = getRoleCode()){
   return ["TDS", "SUB", "SUBCONTRACTOR", "SPLICER", "TECHNICIAN"].includes(String(roleCode || "").toUpperCase());
 }
 
-function canManageProjectControls(){
-  return isOwnerOrAdmin();
+function getProjectCreatorId(project){
+  return String(project?.created_by || project?.created_by_id || "").trim();
+}
+
+function isProjectCreator(project){
+  const creatorId = getProjectCreatorId(project);
+  return Boolean(creatorId && state.user?.id && creatorId === String(state.user.id));
+}
+
+function canControlProject(project = state.activeProject){
+  if (SpecCom.helpers.isRoot()) return true;
+  if (isDemo && project?.is_demo) return true;
+  return isProjectCreator(project);
+}
+
+function canManageProjectControls(project = state.activeProject){
+  return canControlProject(project);
 }
 
 function shouldUseFieldProjectBucket(){
-  if (isPrivilegedRole()) return false;
-  if (isFieldRole() || isFieldSubcontractorMode()) return true;
-  return Boolean((state.projectMembershipIds?.size || 0) || getProfileCurrentProjectId());
+  return false;
 }
 
 function isProjectMarkedInactive(project){
@@ -10595,7 +10608,7 @@ function canViewInvoiceVault(){
 
 function canCreateProjects(){
   if (CONTROL_CENTER_DEV_MODE) return true;
-  return hasAuthenticatedSession() && canManageProjectControls();
+  return hasAuthenticatedSession();
 }
 
 function getOnboardingStatus(){
@@ -12469,6 +12482,10 @@ SpecCom.helpers.editProject = async function(){
   const project = state.activeProject;
   if (!project){
     toast("Project required", "Select a project first.");
+    return;
+  }
+  if (!canControlProject(project)){
+    toast("Not allowed", "Only the project creator or root can edit this project.");
     return;
   }
   const nextName = prompt("Edit project name", project.name || "");
@@ -19675,8 +19692,8 @@ function renderProjectInfo(){
   const createdByLabel = createdBy
     ? (createdBy === state.user?.id ? "You" : String(createdBy).slice(0, 8))
     : "";
-  const canDelete = isOwnerOrAdmin();
-  const canEdit = isPrivilegedRole();
+  const canEdit = canControlProject(project);
+  const canDelete = canEdit;
   wrap.innerHTML = `
     <div class="project-info-row"><span class="project-info-label">Name</span><span class="project-info-value">${name}</span></div>
     ${description ? `<div class="project-info-row"><span class="project-info-label">Description</span><span class="project-info-value">${description}</span></div>` : ""}
@@ -19701,7 +19718,6 @@ function renderProjectsList(){
   const list = $("projectsList");
   if (!list) return;
   list.innerHTML = "";
-  const canDeleteProjects = isOwnerOrAdmin();
   const empty = $("projectsEmpty");
   const footer = $("projectsFooter");
   if (empty) empty.style.display = state.projects.length ? "none" : "";
@@ -19722,7 +19738,7 @@ function renderProjectsList(){
           <div class="project-row-title">${escapeHtml(title)}</div>
           ${meta ? `<div class="project-row-meta">${escapeHtml(meta)}</div>` : ""}
         </button>
-        ${canDeleteProjects ? `<button type="button" class="btn danger small project-row-delete" data-project-delete="${project.id}">Delete</button>` : ""}
+        ${canControlProject(project) ? `<button type="button" class="btn danger small project-row-delete" data-project-delete="${project.id}">Delete</button>` : ""}
       </div>
     `;
     const selectBtn = row.querySelector("[data-project-open]");
@@ -20812,12 +20828,16 @@ async function confirmImportPriceSheet(){
 }
 
 function openGrantAccessModal(){
-  if (!canManageProjectControls()){
-    toast("Not allowed", "Only authorized accounts can grant project access.");
-    return;
-  }
   const modal = $("grantAccessModal");
   if (!modal) return;
+  if (!state.activeProject){
+    toast("Project required", "Select a project first.");
+    return;
+  }
+  if (!canManageProjectControls(state.activeProject)){
+    toast("Not allowed", "Only the project creator or root can grant project access.");
+    return;
+  }
   const userInput = $("grantAccessUser");
   const note = $("grantAccessNote");
   if (userInput) userInput.value = "";
@@ -20835,12 +20855,12 @@ function closeGrantAccessModal(){
 }
 
 async function confirmGrantAccess(){
-  if (!canManageProjectControls()){
-    toast("Not allowed", "Only authorized accounts can grant project access.");
-    return;
-  }
   if (!state.activeProject){
     toast("Project required", "Select a project first.");
+    return;
+  }
+  if (!canManageProjectControls(state.activeProject)){
+    toast("Not allowed", "Only the project creator or root can grant project access.");
     return;
   }
   const userInput = $("grantAccessUser")?.value.trim();
@@ -20873,7 +20893,7 @@ function openCreateProjectModal(){
     return;
   }
   if (!canCreateProjects() && !isDemo){
-    toast("Not allowed", "Only admin and office users can create projects.");
+    toast("Not allowed", "Sign in to create projects.");
     return;
   }
   const modal = $("createProjectModal");
@@ -20896,8 +20916,8 @@ function openDeleteProjectModal(){
     toast("Project required", "Select a project to delete.");
     return;
   }
-  if (!isOwnerOrAdmin()){
-    toast("Not allowed", "Only authorized team members can delete projects.");
+  if (!canControlProject(state.activeProject)){
+    toast("Not allowed", "Only the project creator or root can delete this project.");
     return;
   }
   const modal = $("deleteProjectModal");
@@ -20930,8 +20950,8 @@ async function deleteProject(){
     toast("Project required", "Select a project to delete.");
     return;
   }
-  if (!isOwnerOrAdmin()){
-    toast("Not allowed", "Only authorized team members can delete projects.");
+  if (!canControlProject(state.activeProject)){
+    toast("Not allowed", "Only the project creator or root can delete this project.");
     return;
   }
   if (!state.client){
@@ -20992,7 +21012,7 @@ async function createProject(){
     || isDemo
     || hasSupportOrDemoRole;
   if (!canCreateProjects() && !canCreateInDemoOrSupport){
-    toast("Not allowed", "Authorized access required.");
+    toast("Not allowed", "Sign in to create projects.");
     return;
   }
   if (isDemo){
@@ -23708,15 +23728,15 @@ function renderAdminWorkspace(tab){
     `;
     renderAdminCompaniesList();
   } else if (_activeAdminTab === "projects"){
-    const canManageProjects = canManageProjectControls();
+    const canCreateProject = canCreateProjects() || isDemo;
     body.innerHTML = `
       <div class="card">
         <h3 style="margin:0 0 12px;">Projects</h3>
         <div class="muted small" style="margin-bottom:12px;">
-          Field users only see assigned live projects. Admins can open or delete old test projects here.
+          All signed-in users can open projects. Project creators and root can edit, grant access, or delete.
         </div>
         <div id="adminProjectsList" class="field-stack"></div>
-        <div class="row" style="margin-top:12px; ${canManageProjects ? "" : "display:none;"}">
+        <div class="row" style="margin-top:12px; ${canCreateProject ? "" : "display:none;"}">
           <button class="btn secondary small" data-action="openCreateProject" type="button">+ New Project</button>
         </div>
       </div>
@@ -23765,7 +23785,6 @@ function renderAdminProjectsList(){
     wrap.innerHTML = `<div class="muted small">No projects found.</div>`;
     return;
   }
-  const canManageProjects = canManageProjectControls();
   wrap.innerHTML = projects.map((p) => `
     <div class="admin-project-row">
       <div class="admin-project-main">
@@ -23779,7 +23798,7 @@ function renderAdminProjectsList(){
       </div>
       <div class="admin-project-actions">
         <button class="btn ghost small" type="button" data-action="adminOpenProject" data-project-id="${escapeHtml(String(p.id || ""))}">Open</button>
-        ${canManageProjects ? `<button class="btn danger small" type="button" data-action="adminDeleteProject" data-project-id="${escapeHtml(String(p.id || ""))}">Delete</button>` : ""}
+        ${canControlProject(p) ? `<button class="btn danger small" type="button" data-action="adminDeleteProject" data-project-id="${escapeHtml(String(p.id || ""))}">Delete</button>` : ""}
       </div>
     </div>
   `).join("");

@@ -26,38 +26,6 @@ async function fetchProjects(adminClient) {
     .order("name", { ascending: true });
 }
 
-function normalizeRole(role) {
-  return String(role || "").trim().toUpperCase();
-}
-
-function isPrivilegedRole(role) {
-  return ["ROOT", "OWNER", "ADMIN", "OFFICE", "SUPPORT", "PRIME"].includes(normalizeRole(role));
-}
-
-function isFieldRole(role) {
-  return ["TDS", "SUB", "SUBCONTRACTOR", "SPLICER", "TECHNICIAN"].includes(normalizeRole(role));
-}
-
-function isProjectMarkedInactive(project) {
-  if (project?.active === false) return true;
-  return String(project?.active || "").trim().toLowerCase() === "false";
-}
-
-function isLikelyTestProject(project) {
-  if (project?.is_demo) return true;
-  const blob = [
-    project?.name,
-    project?.description,
-    project?.job_number,
-    project?.location,
-  ].map((value) => String(value || "").toLowerCase()).join(" ");
-  return /\b(test|testing|demo|dev|sample|sandbox|training)\b/.test(blob);
-}
-
-function isProjectActiveForField(project) {
-  return Boolean(project && !isProjectMarkedInactive(project) && !isLikelyTestProject(project));
-}
-
 async function fetchUserProfile(client, userId) {
   if (!userId) return null;
   const attempts = [
@@ -100,30 +68,8 @@ async function fetchProjectMembershipIds(client, userId) {
   return ids;
 }
 
-function filterProjectsForUser(projects, profile, membershipIds) {
-  const list = Array.isArray(projects) ? projects : [];
-  const role = normalizeRole(profile?.role);
-  if (isPrivilegedRole(role)) return list;
-
-  const currentProjectId = String(profile?.current_project_id || "").trim();
-  const assignedIds = currentProjectId
-    ? new Set([currentProjectId])
-    : new Set(
-      Array.from(membershipIds || [])
-        .map((id) => String(id || "").trim())
-        .filter(Boolean)
-    );
-
-  const shouldScope = isFieldRole(role) || assignedIds.size > 0;
-  if (!shouldScope) return list;
-
-  const assignedProjects = assignedIds.size
-    ? list.filter((project) => assignedIds.has(String(project?.id || "")))
-    : [];
-  const source = assignedProjects.length ? assignedProjects : list;
-  const activeSource = source.filter(isProjectActiveForField);
-  if (activeSource.length) return activeSource;
-  return assignedProjects.length ? assignedProjects : list.filter(isProjectActiveForField);
+function filterProjectsForUser(projects) {
+  return Array.isArray(projects) ? projects : [];
 }
 
 exports.handler = async function handler(event) {
@@ -160,7 +106,7 @@ exports.handler = async function handler(event) {
   if (error) return json(500, { error: error.message || "Failed to load projects" });
   const profile = userId ? await fetchUserProfile(projectClient, userId) : null;
   const membershipIds = userId ? await fetchProjectMembershipIds(projectClient, userId) : new Set();
-  const projects = filterProjectsForUser(data, profile, membershipIds);
+  const projects = filterProjectsForUser(data);
 
   return json(200, {
     ok: true,
