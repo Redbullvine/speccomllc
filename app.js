@@ -22520,6 +22520,7 @@ function getMessagesForFilter(filter = state.messageFilter){
   const selected = filter === "direct" ? "direct" : "board";
   const myId = state.user?.id;
   return (state.messages || []).filter((msg) => {
+    if (isMessageDeletedForCurrentUser(msg)) return false;
     const channel = String(msg?.channel || "BOARD").toUpperCase();
     if (selected === "board") return channel === "BOARD";
     if (channel !== "DM") return false;
@@ -22530,6 +22531,16 @@ function getMessagesForFilter(filter = state.messageFilter){
     }
     return true;
   });
+}
+
+function isMessageDeletedForCurrentUser(msg){
+  if (!msg || !state.user?.id) return false;
+  const channel = String(msg.channel || "BOARD").toUpperCase();
+  if (channel !== "DM") return false;
+  const myId = String(state.user.id);
+  if (String(msg.sender_id || "") === myId && msg.sender_deleted_at) return true;
+  if (String(msg.recipient_id || "") === myId && msg.recipient_deleted_at) return true;
+  return false;
 }
 
 function hasUnreadDirectMessage(){
@@ -22690,15 +22701,17 @@ async function loadMessages(){
     updateMessagesBadge();
     return;
   }
+  const messageSelect = "id, org_id, channel, sender_id, recipient_id, body, created_at, sender_deleted_at, recipient_deleted_at";
+  const legacyMessageSelect = "id, org_id, channel, sender_id, recipient_id, body, created_at";
   let boardQuery = state.client
     .from("messages")
-    .select("id, org_id, channel, sender_id, recipient_id, body, created_at")
+    .select(messageSelect)
     .eq("channel", "BOARD")
     .order("created_at", { ascending: false })
     .limit(100);
   let directQuery = state.client
     .from("messages")
-    .select("id, org_id, channel, sender_id, recipient_id, body, created_at")
+    .select(messageSelect)
     .eq("channel", "DM")
     .or(`sender_id.eq.${state.user.id},recipient_id.eq.${state.user.id}`)
     .order("created_at", { ascending: false })
@@ -22707,7 +22720,32 @@ async function loadMessages(){
     boardQuery = boardQuery.eq("org_id", orgId);
     directQuery = directQuery.eq("org_id", orgId);
   }
-  const [boardRes, directRes] = await Promise.all([boardQuery, directQuery]);
+  let [boardRes, directRes] = await Promise.all([boardQuery, directQuery]);
+  if (
+    isMissingColumnError(boardRes.error, "sender_deleted_at")
+    || isMissingColumnError(boardRes.error, "recipient_deleted_at")
+    || isMissingColumnError(directRes.error, "sender_deleted_at")
+    || isMissingColumnError(directRes.error, "recipient_deleted_at")
+  ){
+    boardQuery = state.client
+      .from("messages")
+      .select(legacyMessageSelect)
+      .eq("channel", "BOARD")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    directQuery = state.client
+      .from("messages")
+      .select(legacyMessageSelect)
+      .eq("channel", "DM")
+      .or(`sender_id.eq.${state.user.id},recipient_id.eq.${state.user.id}`)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (!SpecCom.helpers.isRoot()){
+      boardQuery = boardQuery.eq("org_id", orgId);
+      directQuery = directQuery.eq("org_id", orgId);
+    }
+    [boardRes, directRes] = await Promise.all([boardQuery, directQuery]);
+  }
   const error = boardRes.error || directRes.error;
   if (error){
     if (isMissingTable(error)){
@@ -22731,6 +22769,7 @@ async function loadMessages(){
 function canManageMessage(msg){
   if (!msg) return false;
   if (msg.sender_id === state.user?.id) return true;
+  if (String(msg.channel || "BOARD").toUpperCase() === "DM" && msg.recipient_id === state.user?.id) return true;
   return String(msg.channel || "BOARD").toUpperCase() === "BOARD" && canClearMainBoardMessages();
 }
 
@@ -22816,7 +22855,9 @@ async function deleteMessageById(messageId){
     toast("Not allowed", "You can only delete your own messages.", "error");
     return;
   }
-  const ok = confirm("Delete this message?");
+  const channel = String(msg.channel || "BOARD").toUpperCase();
+  const isDirect = channel === "DM";
+  const ok = confirm(isDirect ? "Delete this direct message from your view?" : "Delete this message?");
   if (!ok) return;
   if (isDemo){
     state.demo.messages = (state.demo.messages || []).filter((row) => String(row?.id || "") !== id);
@@ -22828,7 +22869,15 @@ async function deleteMessageById(messageId){
     toast("Delete failed", "Client not ready.", "error");
     return;
   }
-  if (String(msg.channel || "BOARD").toUpperCase() === "BOARD" && canClearMainBoardMessages()){
+  if (isDirect){
+    const deleted = await deleteDirectMessageForCurrentUser(id, msg);
+    if (deleted){
+      await loadMessages();
+      renderMessages();
+    }
+    return;
+  }
+  if (channel === "BOARD" && canClearMainBoardMessages()){
     const rpcRes = await state.client.rpc("fn_delete_message", { p_message_id: id });
     if (!rpcRes.error && Number(rpcRes.data || 0) > 0){
       await loadMessages();
@@ -22889,6 +22938,48 @@ async function deleteMessageById(messageId){
   }
   await loadMessages();
   renderMessages();
+}
+
+function isAuthzError(error){
+  const code = String(error?.code || "").toLowerCase();
+  const message = String(error?.message || "").toLowerCase();
+  return code === "42501"
+    || message.includes("not authorized")
+    || message.includes("permission denied")
+    || message.includes("violates row-level security");
+}
+
+async function deleteDirectMessageForCurrentUser(id, msg){
+  if (!state.client || !state.user) return false;
+  const myId = String(state.user.id);
+  const isSender = String(msg?.sender_id || "") === myId;
+  const isRecipient = String(msg?.recipient_id || "") === myId;
+  if (!isSender && !isRecipient && !SpecCom.helpers.isRoot()){
+    toast("Not allowed", "You can only delete direct messages you sent or received.", "error");
+    return false;
+  }
+  const rpcRes = await state.client.rpc("fn_delete_message", { p_message_id: id });
+  if (!rpcRes.error && Number(rpcRes.data || 0) > 0){
+    return true;
+  }
+  if (rpcRes.error && !isMissingRpcFunctionError(rpcRes.error, "fn_delete_message") && !isAuthzError(rpcRes.error)){
+    toast("Delete failed", rpcRes.error.message || "Could not delete message.", "error");
+    return false;
+  }
+
+  const deletedColumn = isRecipient ? "recipient_deleted_at" : "sender_deleted_at";
+  const ownerColumn = isRecipient ? "recipient_id" : "sender_id";
+  const { error } = await state.client
+    .from("messages")
+    .update({ [deletedColumn]: nowISO() })
+    .eq("id", id)
+    .eq("channel", "DM")
+    .eq(ownerColumn, myId);
+  if (error){
+    toast("Delete failed", "Apply the latest Supabase direct-message deletion migration, then retry.", "error");
+    return false;
+  }
+  return true;
 }
 
 async function deleteMessagesByIdsFallback(messageIds, { orgId = null, boardOnly = false, senderOnly = false } = {}){
