@@ -24348,7 +24348,7 @@ async function saveFieldDayAcceptance(sessionId, acceptedAt){
 
 async function startFieldDay(){
   if (!state.activeProject?.id){
-    toast("Project required", "Select RUIDOSO_1635CA before starting the day.");
+    toast("Project required", "Select a project before starting the day.");
     return;
   }
   const existing = getOpenFieldDaySession();
@@ -25019,21 +25019,24 @@ function renderActiveFieldVisitCard(site, draft, active){
 }
 
 function renderFieldBreakLunchCard(){
+  if (!state.activeProject?.id) return "";
   const session = state.fieldDay.session || null;
-  if (!session || session.ended_at) return "";
   const activeType = getActiveFieldDayEventType();
+  const isDayActive = Boolean(session && !session.ended_at);
   return `
     <section class="map-field-guide-card map-field-time-card">
       <div class="map-field-card-kicker">Break / Lunch</div>
       <div class="map-field-day-actions">
         ${activeType === FIELD_DAY_EVENT_TYPES.BREAK_15
           ? `<button class="btn secondary small" type="button" data-map-field-action="endFieldDayEvent">End Break</button>`
-          : `<button class="btn ghost small" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.BREAK_15}" ${activeType ? "disabled" : ""}>Start Break</button>`}
+          : `<button class="btn ghost small" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.BREAK_15}" ${!isDayActive || activeType ? "disabled" : ""}>Start Break</button>`}
         ${activeType === FIELD_DAY_EVENT_TYPES.LUNCH
           ? `<button class="btn secondary small" type="button" data-map-field-action="endFieldDayEvent">End Lunch</button>`
-          : `<button class="btn ghost small" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.LUNCH}" ${activeType ? "disabled" : ""}>Start Lunch</button>`}
+          : `<button class="btn ghost small" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.LUNCH}" ${!isDayActive || activeType ? "disabled" : ""}>Start Lunch</button>`}
       </div>
-      ${activeType && ![FIELD_DAY_EVENT_TYPES.BREAK_15, FIELD_DAY_EVENT_TYPES.LUNCH].includes(activeType)
+      ${!isDayActive
+        ? `<div class="map-field-warning">Start the recorded project day to use break and lunch timers.</div>`
+        : activeType && ![FIELD_DAY_EVENT_TYPES.BREAK_15, FIELD_DAY_EVENT_TYPES.LUNCH].includes(activeType)
         ? `<div class="map-field-warning">Finish the active item before starting break or lunch.</div>`
         : `<div class="muted tiny">Break is expected around 15 minutes. Lunch is expected around 30 to 60 minutes.</div>`}
     </section>
@@ -25041,15 +25044,18 @@ function renderFieldBreakLunchCard(){
 }
 
 function renderFieldDayEndCard(){
+  if (!state.activeProject?.id) return "";
   const session = state.fieldDay.session || null;
-  if (!session || session.ended_at) return "";
   const activeType = getActiveFieldDayEventType();
+  const isDayActive = Boolean(session && !session.ended_at);
   return `
     <section class="map-field-guide-card map-field-end-day-card">
       <div class="map-field-card-kicker">End Project Day</div>
       <div class="map-field-base-location">End the project day only after location work, closeout, break, and lunch timers are closed.</div>
-      <button class="btn danger wide" type="button" data-map-field-action="endFieldDay" ${activeType ? "disabled" : ""}>End Project Day</button>
-      ${activeType ? `<div class="map-field-warning">Finish ${escapeHtml(getFieldDayEventLabel(state.fieldDay.activeEvent))} before ending the project day.</div>` : ""}
+      <button class="btn danger wide" type="button" data-map-field-action="endFieldDay" ${!isDayActive || activeType ? "disabled" : ""}>End Project Day</button>
+      ${!isDayActive
+        ? `<div class="map-field-warning">Start the recorded project day before ending it.</div>`
+        : activeType ? `<div class="map-field-warning">Finish ${escapeHtml(getFieldDayEventLabel(state.fieldDay.activeEvent))} before ending the project day.</div>` : ""}
     </section>
   `;
 }
