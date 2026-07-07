@@ -24265,6 +24265,7 @@ async function searchMapFieldVisitLocation(query){
   setMapFieldSelectedSite(match.id);
   await setActiveSite(match.id, { openOverview: false });
   focusSiteOnMap(match.id);
+  hideMapFloatPanelForMapAction();
   await hydrateMapFieldSiteActivity(match.id);
   renderMapFieldPanel();
   toast("Location selected", `${getSiteDisplayName(match)} is ready for a visit.`);
@@ -25209,6 +25210,7 @@ function renderMapFieldPanel(){
         </div>
         <div class="muted tiny">No saved location is selected yet.</div>
         ${state.activeProject ? `<button id="btnMapShowCreateLocation" class="btn ghost small" type="button">Create New Location Here</button>` : ""}
+        ${state.activeProject ? `<button id="btnMapFieldImportLocations" class="btn ghost small" type="button">Import Locations (KMZ / ZIP / CSV / PDF)</button>` : ""}
       </section>
     ` : ""}
   `;
@@ -25273,6 +25275,30 @@ function setMapFieldPanelVisible(visible){
     document.body.classList.remove("map-create-open");
   }
   renderMapFieldPanel();
+}
+
+function setMapFloatPanelHidden(hidden){
+  const next = Boolean(hidden);
+  if (typeof window.__setMapFloatPanelHidden === "function"){
+    window.__setMapFloatPanelHidden(next);
+  } else {
+    const panel = $("map-float-panel");
+    const body = $("map-float-body");
+    const minBtn = $("map-float-minimize");
+    document.body.classList.toggle("map-float-panel-hidden", next);
+    if (panel){
+      panel.classList.toggle("is-hidden-for-map", next);
+      panel.setAttribute("aria-hidden", next ? "true" : "false");
+    }
+    if (!next && body) body.style.display = "";
+    if (!next && minBtn) minBtn.textContent = "−";
+  }
+  queueMapInvalidate([80, 180]);
+}
+
+function hideMapFloatPanelForMapAction(){
+  if (!isMobileViewport()) return;
+  setMapFloatPanelHidden(true);
 }
 
 function setMapFieldCreateOpen(open){
@@ -25341,6 +25367,9 @@ async function openLocationForField(siteId, { center = true, forAdd = false } = 
   await setActiveSite(siteId, { openOverview: false });
   setMapFieldSelectedSite(siteId);
   const popupOpened = await openSitePopupForSiteId(siteId, { center, syncSelection: true });
+  if (center){
+    hideMapFloatPanelForMapAction();
+  }
   if (forAdd && !popupOpened){
     // Stay on map — navigating to viewNodes hides the map container and causes tile reload
     // artifacts ("Map data not yet available") when the user returns to the map view.
@@ -25375,6 +25404,9 @@ async function requestMapCurrentLocation({ center = false, silent = false } = {}
   void recordFieldLocationPingFromGps(enriched, { nearest, source: "field_location_button" });
   if (center && state.map.instance){
     state.map.instance.setView([enriched.lat, enriched.lng], Math.max(state.map.instance.getZoom() || 0, 18));
+    if (!silent){
+      hideMapFloatPanelForMapAction();
+    }
   }
   renderMapFieldPanel();
   return enriched;
@@ -26695,6 +26727,7 @@ function syncMapToSearchResults(resultSet){
       state.map.searchJumpKey = key;
       state.map.instance.setView([resultSet.coordQuery.lat, resultSet.coordQuery.lng], 18);
     }
+    hideMapFloatPanelForMapAction();
     if (resultSet.nearest[0]){
       const nearest = resultSet.nearest[0];
       const siteName = getSiteDisplayName(nearest.site);
@@ -26717,10 +26750,12 @@ function syncMapToSearchResults(resultSet){
   if (!bounds.length) return;
   if (bounds.length === 1){
     state.map.instance.setView(bounds[0], Math.max(state.map.instance.getZoom() || 0, 17));
+    hideMapFloatPanelForMapAction();
     setActiveSite(rows[0].id, { openOverview: false }).then(() => focusSiteOnMap(rows[0].id));
     return;
   }
   state.map.instance.fitBounds(window.L.latLngBounds(bounds), { padding: [24, 24], maxZoom: 16 });
+  hideMapFloatPanelForMapAction();
 }
 
 async function loadProjectFieldPhotos(projectId){
@@ -26875,6 +26910,7 @@ function focusFirstSearchResult(){
   const first = resultSet.rows[0];
   setActiveSite(first.id, { openOverview: false }).then(() => {
     focusSiteOnMap(first.id);
+    hideMapFloatPanelForMapAction();
   });
 }
 
@@ -37160,6 +37196,10 @@ function wireUI(){
     if (!isMapViewActive()){
       setActiveView("viewMap");
     }
+    if (isMobileViewport() && $("map-float-panel")?.classList.contains("is-hidden-for-map")){
+      setMapFloatPanelHidden(false);
+      return;
+    }
     setDrawerOpen(state.map.drawerOpen === false);
     if (state.map.drawerOpen !== false && !["data", "legend"].includes(state.map.drawerTab)){
       setDrawerTab("data", { open: true });
@@ -37503,6 +37543,7 @@ function wireUI(){
         if (action === "selectWorklistSite"){
           setMapFieldSelectedSite(siteId);
           focusSiteOnMap(siteId);
+          hideMapFloatPanelForMapAction();
           void hydrateMapFieldSiteActivity(siteId);
           return;
         }
@@ -37608,6 +37649,10 @@ function wireUI(){
         setMapFieldCreateOpen(true);
         return;
       }
+      if (id === "btnMapFieldImportLocations"){
+        await handleLocationImport(null);
+        return;
+      }
       if (id === "btnMapFieldCancelCreate"){
         setMapFieldCreateOpen(false);
         return;
@@ -37706,6 +37751,7 @@ function wireUI(){
       dlog("siteList click", { siteId });
       await setActiveSite(siteId);
       focusSiteOnMap(siteId);
+      hideMapFloatPanelForMapAction();
     });
   }
   const closePanelBtn = $("btnCloseSitePanel");

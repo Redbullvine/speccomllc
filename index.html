@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Exo+2:wght@200;300;400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" />
-  <link rel="stylesheet" href="./styles.css?v=20260707-mobile-map-panel-scroll" />
+  <link rel="stylesheet" href="./styles.css?v=20260707-mobile-map-panel-fullheight" />
   <link rel="stylesheet" href="./styles/background.css" />
   <style>
     /* ===== SPLASH SCREEN ===== */
@@ -1843,8 +1843,10 @@
         top: 58px !important;
         left: 8px !important;
         right: 8px !important;
+        bottom: calc(88px + env(safe-area-inset-bottom)) !important;
         width: auto !important;
-        max-height: min(54dvh, calc(100dvh - 150px)) !important;
+        height: auto !important;
+        max-height: none !important;
         min-height: 0 !important;
         overflow: hidden !important;
       }
@@ -1860,6 +1862,17 @@
 
       body.map-mode .field-message-button {
         display: none !important;
+      }
+
+      body.map-mode #map-float-panel.is-hidden-for-map {
+        display: none !important;
+      }
+
+      body.map-mode.map-float-panel-hidden #mapSidebarToggle {
+        display: inline-flex !important;
+        top: 58px !important;
+        left: 10px !important;
+        z-index: 991 !important;
       }
 
       body.map-mode .map-field-panel {
@@ -3836,6 +3849,15 @@
       var fm = document.getElementById('map-float-minimize');
       if(fp && fh){
         var dr=false,sx,sy,sl,st;
+        function isMobileMapTools(){return window.matchMedia&&window.matchMedia('(max-width: 900px)').matches;}
+        function setMapFloatHidden(hidden){
+          fp.classList.toggle('is-hidden-for-map', !!hidden);
+          document.body.classList.toggle('map-float-panel-hidden', !!hidden);
+          fp.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+          if(!hidden&&fb){fb.style.display='';}
+          if(!hidden&&fm){fm.textContent='−';}
+        }
+        window.__setMapFloatPanelHidden=setMapFloatHidden;
         try{var s=JSON.parse(localStorage.getItem('speccom-map-fp')||'null');if(s){fp.style.left=Math.max(0,Math.min(s.x,window.innerWidth-100))+'px';fp.style.top=Math.max(0,Math.min(s.y,window.innerHeight-50))+'px';}}catch(e){}
         function savePos(){try{localStorage.setItem('speccom-map-fp',JSON.stringify({x:parseInt(fp.style.left)||14,y:parseInt(fp.style.top)||14}));}catch(e){}}
         fh.addEventListener('mousedown',function(e){if(e.target.closest('button'))return;dr=true;sx=e.clientX;sy=e.clientY;var r=fp.getBoundingClientRect();sl=r.left;st=r.top;fh.classList.add('is-dragging');e.preventDefault();});
@@ -3844,7 +3866,7 @@
         fh.addEventListener('touchstart',function(e){if(e.target.closest('button'))return;var t=e.touches[0];dr=true;sx=t.clientX;sy=t.clientY;var r=fp.getBoundingClientRect();sl=r.left;st=r.top;e.preventDefault();},{passive:false});
         document.addEventListener('touchmove',function(e){if(!dr)return;var t=e.touches[0];fp.style.left=Math.max(0,Math.min(sl+t.clientX-sx,window.innerWidth-fp.offsetWidth))+'px';fp.style.top=Math.max(0,Math.min(st+t.clientY-sy,window.innerHeight-50))+'px';e.preventDefault();},{passive:false});
         document.addEventListener('touchend',function(){if(!dr)return;dr=false;savePos();});
-        if(fm&&fb){fm.addEventListener('click',function(){var c=fb.style.display==='none';fb.style.display=c?'':'none';fm.textContent=c?'−':'+';});}
+        if(fm&&fb){fm.addEventListener('click',function(){if(isMobileMapTools()){setMapFloatHidden(true);return;}var c=fb.style.display==='none';fb.style.display=c?'':'none';fm.textContent=c?'−':'+';});}
       }
     })();
     (function(){

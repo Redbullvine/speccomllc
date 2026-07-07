@@ -21,3 +21,6 @@ mapboard.*
 
 # stray artifact from AI toolings, .mapboard*
 
+
+# Local Claude Code settings
+.claude/

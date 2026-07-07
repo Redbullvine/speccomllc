@@ -7524,8 +7524,10 @@ body.map-mode #map-float-panel{
 @media (max-width:900px){
   #map-float-panel{
     top:58px;left:8px;right:8px;
+    bottom:calc(88px + env(safe-area-inset-bottom));
     width:auto;
-    max-height:54vh;
+    height:auto;
+    max-height:none;
   }
 }
 @media (max-width:480px){
@@ -9746,8 +9748,10 @@ body.map-mode #liveMap {
     top: 58px !important;
     left: 8px !important;
     right: 8px !important;
+    bottom: calc(88px + env(safe-area-inset-bottom)) !important;
     width: auto !important;
-    max-height: min(54dvh, calc(100dvh - 150px)) !important;
+    height: auto !important;
+    max-height: none !important;
     min-height: 0 !important;
     overflow: hidden !important;
   }
@@ -9763,6 +9767,17 @@ body.map-mode #liveMap {
 
   body.map-mode .field-message-button {
     display: none !important;
+  }
+
+  body.map-mode #map-float-panel.is-hidden-for-map {
+    display: none !important;
+  }
+
+  body.map-mode.map-float-panel-hidden #mapSidebarToggle {
+    display: inline-flex !important;
+    top: 58px !important;
+    left: 10px !important;
+    z-index: 991 !important;
   }
 
   body.map-mode .map-field-panel {
