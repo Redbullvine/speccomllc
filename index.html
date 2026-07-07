@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Exo+2:wght@200;300;400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" />
-  <link rel="stylesheet" href="./styles.css?v=20260702-mobile-ui-stabilization" />
+  <link rel="stylesheet" href="./styles.css?v=20260707-mobile-map-panel-scroll" />
   <link rel="stylesheet" href="./styles/background.css" />
   <style>
     /* ===== SPLASH SCREEN ===== */
@@ -1845,6 +1845,21 @@
         right: 8px !important;
         width: auto !important;
         max-height: min(54dvh, calc(100dvh - 150px)) !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+      }
+
+      body.map-mode #map-float-body {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        overflow-y: auto !important;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 14px;
+      }
+
+      body.map-mode .field-message-button {
+        display: none !important;
       }
 
       body.map-mode .map-field-panel {
@@ -1854,6 +1869,17 @@
         width: auto !important;
         max-height: min(52dvh, calc(100dvh - 150px)) !important;
         overflow-y: auto !important;
+      }
+
+      body.map-mode #map-float-panel .map-field-panel {
+        position: static !important;
+        top: auto !important;
+        left: auto !important;
+        right: auto !important;
+        width: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        flex: 0 0 auto !important;
       }
     }
 
