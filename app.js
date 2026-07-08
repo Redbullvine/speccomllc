@@ -2466,12 +2466,20 @@ function toSiteIdKey(id){
   return String(id);
 }
 
+// Number(null) and Number("") are 0, which reads as a valid coordinate or
+// test value — treat null/undefined/blank as "no value" before converting.
+function toFiniteNumberOrNull(value){
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const num = Number(text);
+  return Number.isFinite(num) ? num : null;
+}
+
 function getSiteCoords(site){
-  const lat = site?.gps_lat ?? site?.lat ?? site?.latitude ?? null;
-  const lng = site?.gps_lng ?? site?.lng ?? site?.longitude ?? null;
-  const latNum = Number(lat);
-  const lngNum = Number(lng);
-  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return null;
+  const latNum = toFiniteNumberOrNull(site?.gps_lat ?? site?.lat ?? site?.latitude);
+  const lngNum = toFiniteNumberOrNull(site?.gps_lng ?? site?.lng ?? site?.longitude);
+  if (latNum === null || lngNum === null) return null;
   return { lat: latNum, lng: lngNum };
 }
 
@@ -2480,17 +2488,16 @@ function getSiteCoords(site){
 const TEST_RESULT_REVISIT_THRESHOLD_DB = -25;
 
 function getSiteTestResult(site){
-  const low = Number(site?.test_result_low);
-  const high = Number(site?.test_result_high);
-  const readings = [low, high].filter((value) => Number.isFinite(value));
+  const low = toFiniteNumberOrNull(site?.test_result_low);
+  const high = toFiniteNumberOrNull(site?.test_result_high);
+  const readings = [low, high].filter((value) => value !== null);
   if (!readings.length) return null;
   const worst = Math.min(...readings);
-  const wavelength = Number(site?.testing_wavelength);
   return {
-    low: Number.isFinite(low) ? low : null,
-    high: Number.isFinite(high) ? high : null,
+    low,
+    high,
     worst,
-    wavelength: Number.isFinite(wavelength) ? wavelength : null,
+    wavelength: toFiniteNumberOrNull(site?.testing_wavelength),
     needsRevisit: worst < TEST_RESULT_REVISIT_THRESHOLD_DB,
   };
 }
@@ -4890,11 +4897,9 @@ async function geocodeImportAddress(query){
 
 async function resolveImportRowCoordinates(rows){
   const summary = { matched: 0, geocoded: 0, unresolved: 0 };
-  const pending = (Array.isArray(rows) ? rows : []).filter((row) => {
-    const lat = Number(row?.latitude);
-    const lng = Number(row?.longitude);
-    return !Number.isFinite(lat) || !Number.isFinite(lng);
-  });
+  const pending = (Array.isArray(rows) ? rows : []).filter((row) => (
+    toFiniteNumberOrNull(row?.latitude) === null || toFiniteNumberOrNull(row?.longitude) === null
+  ));
   if (!pending.length) return summary;
 
   const siteCoordsByName = new Map();
