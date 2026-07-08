@@ -106,8 +106,9 @@ const REDLINE_TYPE_LABELS = {
   issue_found: "Issue Found",
 };
 
-// Field request: hide engineering KMZ node dots and route/path linework on the live map.
-const HIDE_KMZ_NETWORK_VISUALS = true;
+// KMZ features render Google Earth style (styled points, lines, polygons).
+// The KMZ overlay is a toggleable map layer, so field users can still hide it.
+const HIDE_KMZ_NETWORK_VISUALS = false;
 // Field request: hide blue site dots and aqua span lines from the map.
 // Location pins are scoped to the active project's saved locations.
 const HIDE_MAP_SITE_PINS = false;
@@ -4633,6 +4634,97 @@ function getOrderedKmzLayerList(values, { includeCritical = false } = {}){
   return [...critical, ...extras];
 }
 
+// KML colors are aabbggrr hex (alpha, blue, green, red) — convert to a CSS
+// hex color + 0..1 opacity so Leaflet can render the file's own styling.
+function kmlColorToRgba(kmlColor){
+  const raw = String(kmlColor || "").trim().replace(/^#/, "");
+  if (raw.length !== 8) return null;
+  const a = parseInt(raw.slice(0, 2), 16);
+  const b = parseInt(raw.slice(2, 4), 16);
+  const g = parseInt(raw.slice(4, 6), 16);
+  const r = parseInt(raw.slice(6, 8), 16);
+  if ([a, b, g, r].some((v) => Number.isNaN(v))) return null;
+  const hex = `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+  return { hex, opacity: a / 255 };
+}
+
+function parseKmlStyleElement(styleEl){
+  if (!styleEl) return null;
+  const style = {};
+  const iconStyle = styleEl.getElementsByTagName("IconStyle")[0];
+  if (iconStyle){
+    const rgba = kmlColorToRgba(iconStyle.getElementsByTagName("color")[0]?.textContent);
+    const scale = Number(iconStyle.getElementsByTagName("scale")[0]?.textContent);
+    const href = iconStyle.getElementsByTagName("href")[0]?.textContent?.trim() || "";
+    style.icon = {
+      color: rgba?.hex || null,
+      opacity: rgba ? rgba.opacity : null,
+      scale: Number.isFinite(scale) && scale > 0 ? scale : null,
+      href: href || null,
+    };
+  }
+  const lineStyle = styleEl.getElementsByTagName("LineStyle")[0];
+  if (lineStyle){
+    const rgba = kmlColorToRgba(lineStyle.getElementsByTagName("color")[0]?.textContent);
+    const width = Number(lineStyle.getElementsByTagName("width")[0]?.textContent);
+    style.line = {
+      color: rgba?.hex || null,
+      opacity: rgba ? rgba.opacity : null,
+      width: Number.isFinite(width) && width > 0 ? width : null,
+    };
+  }
+  const polyStyle = styleEl.getElementsByTagName("PolyStyle")[0];
+  if (polyStyle){
+    const rgba = kmlColorToRgba(polyStyle.getElementsByTagName("color")[0]?.textContent);
+    const fillNode = polyStyle.getElementsByTagName("fill")[0]?.textContent?.trim();
+    const outlineNode = polyStyle.getElementsByTagName("outline")[0]?.textContent?.trim();
+    style.poly = {
+      color: rgba?.hex || null,
+      opacity: rgba ? rgba.opacity : null,
+      fill: fillNode !== "0",
+      outline: outlineNode !== "0",
+    };
+  }
+  const labelStyle = styleEl.getElementsByTagName("LabelStyle")[0];
+  if (labelStyle){
+    const rgba = kmlColorToRgba(labelStyle.getElementsByTagName("color")[0]?.textContent);
+    style.label = { color: rgba?.hex || null, hidden: rgba ? rgba.opacity === 0 : false };
+  }
+  return Object.keys(style).length ? style : null;
+}
+
+// Build a lookup of shared styles (id -> parsed style), resolving <StyleMap>
+// to its "normal" <Style> so placemark styleUrl references can be applied.
+function parseKmlStyleCatalog(xml){
+  const catalog = new Map();
+  const styleEls = Array.from(xml.getElementsByTagName("Style"));
+  styleEls.forEach((el) => {
+    const id = String(el.getAttribute("id") || "").trim();
+    if (!id) return;
+    const parsed = parseKmlStyleElement(el);
+    if (parsed) catalog.set(id, parsed);
+  });
+  const styleMaps = Array.from(xml.getElementsByTagName("StyleMap"));
+  styleMaps.forEach((mapEl) => {
+    const id = String(mapEl.getAttribute("id") || "").trim();
+    if (!id) return;
+    const pairs = Array.from(mapEl.getElementsByTagName("Pair"));
+    const normalPair = pairs.find((p) => p.getElementsByTagName("key")[0]?.textContent?.trim() === "normal") || pairs[0];
+    const ref = String(normalPair?.getElementsByTagName("styleUrl")[0]?.textContent || "").trim().replace(/^#/, "");
+    if (ref && catalog.has(ref)) catalog.set(id, catalog.get(ref));
+  });
+  return catalog;
+}
+
+function resolveKmlPlacemarkStyle(placemark, catalog){
+  const inline = Array.from(placemark.children || []).find((c) => String(c.localName || c.nodeName || "").toLowerCase() === "style");
+  const inlineStyle = inline ? parseKmlStyleElement(inline) : null;
+  const ref = String(placemark.getElementsByTagName("styleUrl")[0]?.textContent || "").trim().replace(/^#/, "");
+  const sharedStyle = ref && catalog.has(ref) ? catalog.get(ref) : null;
+  if (inlineStyle && sharedStyle) return { ...sharedStyle, ...inlineStyle };
+  return inlineStyle || sharedStyle || null;
+}
+
 function parseKmlText(kmlText){
   const parser = new DOMParser();
   const raw = String(kmlText || "");
@@ -4665,6 +4757,7 @@ function parseKmlText(kmlText){
   const featureIdCounts = new Map();
   const allLayerNames = [];
   const layerSeen = new Set();
+  const styleCatalog = parseKmlStyleCatalog(xml);
   const treeRoot = {
     id: "kmz-root",
     type: "folder",
@@ -4747,6 +4840,7 @@ function parseKmlText(kmlText){
         longitude: center?.lng ?? null,
         geometry,
         __address: addressText || null,
+        __kml_style: resolveKmlPlacemarkStyle(child, styleCatalog),
         raw_description_html: descriptionRaw || "",
         notes: stripHtmlTags(descriptionRaw) || null,
         __kml_layer: layerName || null,
@@ -9189,32 +9283,38 @@ function getKmzLeafletStyle(row, geometryType){
     drops: "#f97316",
     cable: "#0ea5e9",
   };
-  const color = palette[layerType] || "#2563eb";
+  const fallbackColor = palette[layerType] || "#2563eb";
+  const kmlStyle = row?.__kml_style || null;
   if (geometryType === "Point"){
+    const icon = kmlStyle?.icon || {};
     return {
-      radius: 6,
-      color,
-      fillColor: color,
-      fillOpacity: 0.88,
+      radius: icon.scale ? Math.max(4, Math.round(6 * icon.scale)) : 6,
+      color: icon.color || fallbackColor,
+      fillColor: icon.color || fallbackColor,
+      fillOpacity: Number.isFinite(icon.opacity) ? Math.max(0.5, icon.opacity) : 0.88,
       weight: 2,
       pane: MAP_PANES.kmz,
       bubblingMouseEvents: false,
     };
   }
   if (geometryType === "Polygon"){
+    const poly = kmlStyle?.poly || {};
+    const line = kmlStyle?.line || {};
     return {
-      color,
-      weight: 2,
-      fillColor: color,
-      fillOpacity: 0.14,
+      color: line.color || poly.color || fallbackColor,
+      weight: line.width || 2,
+      fillColor: poly.color || fallbackColor,
+      fillOpacity: poly.fill === false ? 0 : (Number.isFinite(poly.opacity) ? poly.opacity : 0.14),
+      opacity: poly.outline === false ? 0 : (Number.isFinite(line.opacity) ? line.opacity : 1),
       pane: MAP_PANES.kmz,
       bubblingMouseEvents: false,
     };
   }
+  const line = kmlStyle?.line || {};
   return {
-    color,
-    weight: 2,
-    opacity: 0.44,
+    color: line.color || fallbackColor,
+    weight: line.width || 2,
+    opacity: Number.isFinite(line.opacity) ? line.opacity : 0.7,
     pane: MAP_PANES.kmz,
     bubblingMouseEvents: false,
   };
@@ -9897,6 +9997,18 @@ function registerKmzTreeNode(node, parentNodeId, parentGroup){
       }
       void openKmzFeaturePopup(node.featureId, { focusMap: false });
     });
+    // Label point features with their name, like Google Earth.
+    const labelText = getKmzPreferredLocationName(row) || row.placemark_name || "";
+    if (feature.geometry?.type === "Point" && labelText && typeof layer.bindTooltip === "function"){
+      const permanent = state.map.kmzShowPermanentLabels === true;
+      layer.bindTooltip(escapeHtml(labelText), {
+        permanent,
+        direction: "top",
+        offset: [0, -6],
+        className: "kmz-feature-label",
+        opacity: 0.95,
+      });
+    }
     const visible = state.map.kmzFeatureVisibility.get(node.featureId) !== false;
     const skipParentGroup = overlayKey === "paths" || overlayKey === "boundaries";
     if (visible && !skipParentGroup){
@@ -9969,6 +10081,10 @@ function renderKmzPreviewFeatures(rows, sourceName = "KMZ Import"){
     state.map.kmzFeatureRows.set(featureId, row);
     state.map.kmzFeatureVisibility.set(featureId, true);
   });
+  // Show permanent name labels (Google Earth style) only when the point count
+  // is modest; dense files fall back to hover labels to avoid a wall of text.
+  const pointCount = (rows || []).filter((row) => (row?.geometry?.type || "") === "Point").length;
+  state.map.kmzShowPermanentLabels = pointCount > 0 && pointCount <= 250;
   rebuildRuidosoEvidenceIndex();
   let rootTree = rows?.__kmlFolderTree && rows.__kmlFolderTree.type === "folder"
     ? rows.__kmlFolderTree
