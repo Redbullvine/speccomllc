@@ -6103,6 +6103,7 @@ function buildSiteMarkerPopupHtml(site, {
         </div>
         ${pagerHtml}
       </div>
+      ${renderSiteTestResultChip(site)}
       ${locationsHtml}
       <div class="scSitePopup-grid">
         ${gridRows.map((row) => `
@@ -6151,6 +6152,9 @@ function bindSiteMarkerPopup(marker, site, options = {}){
     maxWidth: 520,
     minWidth: 280,
     autoPanPadding: [20, 20],
+    // Field crews pan/zoom while reading a location — only the X (or opening
+    // another location) should dismiss the popup, not a stray map tap.
+    closeOnClick: false,
   });
 }
 
