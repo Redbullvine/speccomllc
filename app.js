@@ -2483,6 +2483,23 @@ function getSiteCoords(site){
   return { lat: latNum, lng: lngNum };
 }
 
+// Users need to see that a tap registered: while an async action runs, the
+// pressed button shows a spinner and rejects further taps. Only buttons we
+// disabled here get re-enabled, so intentionally-disabled buttons stay off.
+function setButtonBusy(btn, busy){
+  if (!btn || typeof btn.classList?.toggle !== "function") return;
+  if (busy){
+    if (btn.dataset.scBusy === "1" || btn.disabled) return;
+    btn.dataset.scBusy = "1";
+    btn.classList.add("is-busy");
+    btn.disabled = true;
+  } else if (btn.dataset.scBusy === "1"){
+    delete btn.dataset.scBusy;
+    btn.classList.remove("is-busy");
+    btn.disabled = false;
+  }
+}
+
 // Readings at or better than this are considered passing; anything more
 // negative flags the location for a field revisit.
 const TEST_RESULT_REVISIT_THRESHOLD_DB = -25;
@@ -8917,10 +8934,10 @@ function registerMapUiBindings(){
           lng: getValue("lng"),
           notes: getValue("notes"),
         };
-        saveBtn.disabled = true;
+        setButtonBusy(saveBtn, true);
         void saveMapPopupSiteEdits(siteKey, payload)
           .finally(() => {
-            saveBtn.disabled = false;
+            setButtonBusy(saveBtn, false);
           });
         return;
       }
@@ -8930,10 +8947,10 @@ function registerMapUiBindings(){
         e.stopPropagation();
         if (deleteBtn.disabled) return;
         const siteKey = String(deleteBtn.dataset.popupSiteId || popupRoot.dataset.popupSiteId || "").trim();
-        deleteBtn.disabled = true;
+        setButtonBusy(deleteBtn, true);
         void deleteMapPopupSite(siteKey)
           .finally(() => {
-            deleteBtn.disabled = false;
+            setButtonBusy(deleteBtn, false);
           });
         return;
       }
@@ -8949,7 +8966,7 @@ function registerMapUiBindings(){
           toast("Photo required", "Choose a photo before upload.", "error");
           return;
         }
-        uploadBtn.disabled = true;
+        setButtonBusy(uploadBtn, true);
         void (async () => {
           let uploadedCount = 0;
           for (const file of files){
@@ -8964,7 +8981,7 @@ function registerMapUiBindings(){
             toast("Upload failed", "No photos were uploaded.", "error");
           }
         })().finally(() => {
-          uploadBtn.disabled = false;
+          setButtonBusy(uploadBtn, false);
           if (input) input.value = "";
         });
         return;
@@ -8976,10 +8993,10 @@ function registerMapUiBindings(){
         if (removePhotoBtn.disabled) return;
         const siteKey = String(popupRoot.dataset.popupSiteId || "").trim();
         const photoId = String(removePhotoBtn.dataset.popupPhotoId || "").trim();
-        removePhotoBtn.disabled = true;
+        setButtonBusy(removePhotoBtn, true);
         void deleteMapPopupSitePhoto(siteKey, photoId)
           .finally(() => {
-            removePhotoBtn.disabled = false;
+            setButtonBusy(removePhotoBtn, false);
           });
       }
     });
@@ -37740,7 +37757,7 @@ function wireUI(){
         renderMapFieldPanel();
       }
     });
-    mapFieldPanel.addEventListener("click", async (e) => {
+    const handleMapFieldPanelClick = async (e) => {
       const actionBtn = e.target.closest("[data-map-field-action]");
       if (actionBtn){
         const action = String(actionBtn.dataset.mapFieldAction || "");
@@ -37899,6 +37916,11 @@ function wireUI(){
       if (id === "btnMapFieldCreateLocation"){
         await createFieldLocationFromCurrentGps();
       }
+    };
+    mapFieldPanel.addEventListener("click", (e) => {
+      const pressedBtn = e.target.closest("button");
+      setButtonBusy(pressedBtn, true);
+      handleMapFieldPanelClick(e).finally(() => setButtonBusy(pressedBtn, false));
     });
     mapFieldPanel.addEventListener("change", (e) => {
       const select = e.target.closest("#mapFieldStatusSelect");
@@ -37952,8 +37974,17 @@ function wireUI(){
     });
     importLocationsInput.addEventListener("change", async (e) => {
       const file = e.target.files?.[0] || null;
-      await handleLocationImport(file);
-      e.target.value = "";
+      const busyButtons = [$("btnImportLocations"), $("btnMapFieldImportLocations")].filter(Boolean);
+      if (file){
+        toast("Import started", `Reading ${file.name}…`);
+        busyButtons.forEach((btn) => setButtonBusy(btn, true));
+      }
+      try{
+        await handleLocationImport(file);
+      } finally {
+        busyButtons.forEach((btn) => setButtonBusy(btn, false));
+        e.target.value = "";
+      }
     });
   }
   const invoiceAgentBtn = $("btnInvoiceAgent");
