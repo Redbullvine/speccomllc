@@ -20132,9 +20132,27 @@ function openProjectsModal(){
   }
   const modal = $("projectsModal");
   if (!modal) return;
+  // Render the cached list immediately so the modal opens instantly, then
+  // refresh from the server so projects created by teammates since login
+  // appear without a full page reload.
   renderProjectsList();
   updateProjectScopedControls();
   modal.style.display = "";
+  void refreshProjectsModalList();
+}
+
+async function refreshProjectsModalList(){
+  try {
+    await loadProjects();
+  } catch (err) {
+    dlog("[projects] modal refresh failed", err);
+    return;
+  }
+  const modal = $("projectsModal");
+  if (modal && modal.style.display !== "none"){
+    renderProjectsList();
+    updateProjectScopedControls();
+  }
 }
 
 function closeProjectsModal(){
