@@ -2472,6 +2472,45 @@ function getSiteCoords(site){
   return { lat: latNum, lng: lngNum };
 }
 
+// Readings at or better than this are considered passing; anything more
+// negative flags the location for a field revisit.
+const TEST_RESULT_REVISIT_THRESHOLD_DB = -25;
+
+function getSiteTestResult(site){
+  const low = Number(site?.test_result_low);
+  const high = Number(site?.test_result_high);
+  const readings = [low, high].filter((value) => Number.isFinite(value));
+  if (!readings.length) return null;
+  const worst = Math.min(...readings);
+  const wavelength = Number(site?.testing_wavelength);
+  return {
+    low: Number.isFinite(low) ? low : null,
+    high: Number.isFinite(high) ? high : null,
+    worst,
+    wavelength: Number.isFinite(wavelength) ? wavelength : null,
+    needsRevisit: worst < TEST_RESULT_REVISIT_THRESHOLD_DB,
+  };
+}
+
+function renderSiteTestResultChip(site){
+  const result = getSiteTestResult(site);
+  if (!result) return "";
+  const readings = [
+    result.low !== null ? `low ${result.low}` : "",
+    result.high !== null ? `high ${result.high}` : "",
+  ].filter(Boolean).join(" / ");
+  const wavelengthText = result.wavelength ? `${result.wavelength}nm ` : "";
+  const label = result.needsRevisit
+    ? `REVISIT — worse than ${TEST_RESULT_REVISIT_THRESHOLD_DB} dB`
+    : "PASS";
+  return `
+    <div class="map-field-test-result ${result.needsRevisit ? "is-revisit" : "is-pass"}">
+      <span class="map-field-test-value">Test ${escapeHtml(`${wavelengthText}${readings} dBm`)}</span>
+      <span class="map-field-test-flag">${escapeHtml(label)}</span>
+    </div>
+  `;
+}
+
 function normalizeMapFieldStatus(value){
   const normalized = String(value || "").trim().toUpperCase();
   if (normalized === MAP_FIELD_STATUS.IN_PROGRESS || normalized === MAP_FIELD_STATUS.COMPLETE){
@@ -3267,12 +3306,13 @@ function stopLocationPolling(){
 }
 
 const SITE_BILLING_COLUMNS = "units_allowed, units_billed";
-const SITE_SELECT_COLUMNS = `id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, lat, lng, created_at, ${SITE_BILLING_COLUMNS}`;
-const SITE_SELECT_COLUMNS_GPS_ONLY = `id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at, ${SITE_BILLING_COLUMNS}`;
-const SITE_SELECT_COLUMNS_LEGACY_ONLY = `id, project_id, name, notes, lat, lng, created_at, ${SITE_BILLING_COLUMNS}`;
-const SITE_SELECT_COLUMNS_NO_BILLING = "id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, lat, lng, created_at";
-const SITE_SELECT_COLUMNS_GPS_ONLY_NO_BILLING = "id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at";
-const SITE_SELECT_COLUMNS_LEGACY_ONLY_NO_BILLING = "id, project_id, name, notes, lat, lng, created_at";
+const SITE_TEST_COLUMNS = "testing_wavelength, test_result_low, test_result_high";
+const SITE_SELECT_COLUMNS = `id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, lat, lng, created_at, ${SITE_TEST_COLUMNS}, ${SITE_BILLING_COLUMNS}`;
+const SITE_SELECT_COLUMNS_GPS_ONLY = `id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at, ${SITE_TEST_COLUMNS}, ${SITE_BILLING_COLUMNS}`;
+const SITE_SELECT_COLUMNS_LEGACY_ONLY = `id, project_id, name, notes, lat, lng, created_at, ${SITE_TEST_COLUMNS}, ${SITE_BILLING_COLUMNS}`;
+const SITE_SELECT_COLUMNS_NO_BILLING = `id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, lat, lng, created_at, ${SITE_TEST_COLUMNS}`;
+const SITE_SELECT_COLUMNS_GPS_ONLY_NO_BILLING = `id, project_id, name, notes, gps_lat, gps_lng, gps_accuracy_m, created_at, ${SITE_TEST_COLUMNS}`;
+const SITE_SELECT_COLUMNS_LEGACY_ONLY_NO_BILLING = `id, project_id, name, notes, lat, lng, created_at, ${SITE_TEST_COLUMNS}`;
 
 function isMissingColumnError(error, column){
   const message = String(error?.message || "").toLowerCase();
@@ -4575,7 +4615,12 @@ function parseKmlText(kmlText){
       if (local !== "placemark") return;
       const placemarkName = getDirectKmlName(child) || `Placemark ${featureSeq}`;
       const geometry = parsePlacemarkGeometry(child);
-      if (!geometry) return;
+      const addressText = String(getDirectKmlChildText(child, "address") || "").trim();
+      const hasDataFields = child.getElementsByTagName("Data").length > 0
+        || child.getElementsByTagName("SimpleData").length > 0;
+      // Address-only exports carry no geometry; keep those placemarks so
+      // coordinates can be resolved later (existing-site match or geocoding).
+      if (!geometry && !addressText && !hasDataFields) return;
       const placemarkId = String(
         child.getAttribute("id")
         || child.getAttribute("targetId")
@@ -4612,6 +4657,7 @@ function parseKmlText(kmlText){
         latitude: center?.lat ?? null,
         longitude: center?.lng ?? null,
         geometry,
+        __address: addressText || null,
         raw_description_html: descriptionRaw || "",
         notes: stripHtmlTags(descriptionRaw) || null,
         __kml_layer: layerName || null,
@@ -4754,6 +4800,150 @@ async function parseKmzFile(file){
   }
   if (lastError) throw lastError;
   throw new Error("KMZ contains KML files but no valid placemarks were found.");
+}
+
+async function parseKmlFile(file){
+  const kmlText = await file.text();
+  const rows = parseKmlText(kmlText);
+  if (!rows.length){
+    throw new Error("KML file has no placemarks.");
+  }
+  const serviceRows = rows.filter((row) => /service\s*location/i.test(String(row?.__kml_layer_raw || "")));
+  const selectedRows = serviceRows.length ? serviceRows : rows;
+  const allRows = rows.slice();
+  try{
+    Object.defineProperty(allRows, "__kmlLayerNames", {
+      value: Array.isArray(rows.__kmlLayerNames) ? rows.__kmlLayerNames.slice() : [],
+      enumerable: false,
+      writable: true,
+    });
+    Object.defineProperty(allRows, "__kmlFolderTree", {
+      value: rows.__kmlFolderTree || null,
+      enumerable: false,
+      writable: true,
+    });
+  } catch {}
+  try{
+    Object.defineProperty(selectedRows, "__allKmzRows", {
+      value: allRows,
+      enumerable: false,
+      writable: true,
+    });
+    Object.defineProperty(selectedRows, "__kmlLayerNames", {
+      value: Array.isArray(rows.__kmlLayerNames) ? rows.__kmlLayerNames.slice() : [],
+      enumerable: false,
+      writable: true,
+    });
+    Object.defineProperty(selectedRows, "__kmlFolderTree", {
+      value: rows.__kmlFolderTree || null,
+      enumerable: false,
+      writable: true,
+    });
+  } catch {}
+  return selectedRows;
+}
+
+const GEOCODE_ENDPOINT = "https://nominatim.openstreetmap.org/search";
+const GEOCODE_MAX_ADDRESSES = 40;
+const GEOCODE_DELAY_MS = 1100; // Nominatim usage policy: max 1 request/second
+
+function parseImportNumberOrNull(value){
+  const num = Number(String(value ?? "").trim());
+  return String(value ?? "").trim() !== "" && Number.isFinite(num) ? num : null;
+}
+
+function getImportRowNameCandidates(row){
+  return [
+    row?.network_point_name,
+    row?.name,
+    row?.location_name,
+    row?.placemark_name,
+    row?.connectivity_point_name,
+  ]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean);
+}
+
+async function geocodeImportAddress(query){
+  const url = `${GEOCODE_ENDPOINT}?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`;
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) return null;
+  const results = await res.json();
+  const hit = Array.isArray(results) ? results[0] : null;
+  const lat = Number(hit?.lat);
+  const lng = Number(hit?.lon);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+
+async function resolveImportRowCoordinates(rows){
+  const summary = { matched: 0, geocoded: 0, unresolved: 0 };
+  const pending = (Array.isArray(rows) ? rows : []).filter((row) => {
+    const lat = Number(row?.latitude);
+    const lng = Number(row?.longitude);
+    return !Number.isFinite(lat) || !Number.isFinite(lng);
+  });
+  if (!pending.length) return summary;
+
+  const siteCoordsByName = new Map();
+  getVisibleSites().forEach((site) => {
+    const coords = getSiteCoords(site);
+    const key = String(site?.name || "").trim().toLowerCase();
+    if (coords && key && !siteCoordsByName.has(key)) siteCoordsByName.set(key, coords);
+  });
+
+  const applyCoords = (row, coords, source) => {
+    row.latitude = coords.lat;
+    row.longitude = coords.lng;
+    if (!row.geometry) row.geometry = { type: "Point", coordinates: [coords.lng, coords.lat] };
+    if (!row.gps_status) row.gps_status = source;
+  };
+
+  const geocodeQueue = [];
+  pending.forEach((row) => {
+    let coords = null;
+    for (const candidate of getImportRowNameCandidates(row)){
+      if (siteCoordsByName.has(candidate)){
+        coords = siteCoordsByName.get(candidate);
+        break;
+      }
+    }
+    if (coords){
+      applyCoords(row, coords, "matched existing location");
+      summary.matched += 1;
+      return;
+    }
+    const address = String(row?.__address || row?.address || "").trim();
+    if (address) geocodeQueue.push({ row, address });
+    else summary.unresolved += 1;
+  });
+
+  if (!geocodeQueue.length) return summary;
+
+  const uniqueAddresses = [...new Set(geocodeQueue.map((entry) => entry.address))];
+  const lookupAddresses = uniqueAddresses.slice(0, GEOCODE_MAX_ADDRESSES);
+  if (uniqueAddresses.length > lookupAddresses.length){
+    toast("Address lookup capped", `Looking up the first ${GEOCODE_MAX_ADDRESSES} of ${uniqueAddresses.length} addresses.`);
+  }
+  toast("Looking up addresses", `Geocoding ${lookupAddresses.length} address${lookupAddresses.length === 1 ? "" : "es"} — about ${Math.ceil(lookupAddresses.length * GEOCODE_DELAY_MS / 1000)}s.`);
+  const cache = new Map();
+  for (let i = 0; i < lookupAddresses.length; i += 1){
+    if (i > 0) await new Promise((resolve) => setTimeout(resolve, GEOCODE_DELAY_MS));
+    try{
+      cache.set(lookupAddresses[i], await geocodeImportAddress(lookupAddresses[i]));
+    } catch {
+      cache.set(lookupAddresses[i], null);
+    }
+  }
+  geocodeQueue.forEach(({ row, address }) => {
+    const coords = cache.get(address) || null;
+    if (coords){
+      applyCoords(row, coords, "geocoded from address");
+      summary.geocoded += 1;
+    } else {
+      summary.unresolved += 1;
+    }
+  });
+  return summary;
 }
 
 function parseWiredProductionPdfText(text){
@@ -17831,7 +18021,7 @@ async function handleLocationImport(file){
   const activeProjectId = state.activeProject?.id || null;
   dlog("Import handler reached, file selected:", file.name);
   const name = file.name.toLowerCase();
-  const isKmzFile = name.endsWith(".kmz");
+  const isKmzFile = name.endsWith(".kmz") || name.endsWith(".kml");
   if (!activeProjectId && !isKmzFile){
     toast("Project required", "Select a project before importing ZIP, CSV, or PDF packages.");
     return;
@@ -17842,6 +18032,8 @@ async function handleLocationImport(file){
   try{
     if (name.endsWith(".kmz")){
       rows = await parseKmzFile(file);
+    } else if (name.endsWith(".kml")){
+      rows = await parseKmlFile(file);
     } else if (name.endsWith(".zip")){
       const result = await importRuidosoPackageZip(file);
       const sync = await syncImportedEvidenceToDb({
@@ -17927,7 +18119,7 @@ async function handleLocationImport(file){
       );
       return;
     } else {
-      toast("Import error", "Unsupported file type. Upload KMZ, ZIP, CSV, or PDF.");
+      toast("Import error", "Unsupported file type. Upload KMZ, KML, ZIP, CSV, or PDF.");
       return;
     }
   } catch (error){
@@ -17939,6 +18131,14 @@ async function handleLocationImport(file){
     return;
   }
   dlog("Parsed rows:", rows);
+  const coordResolution = await resolveImportRowCoordinates(rows);
+  if (coordResolution.matched || coordResolution.geocoded || coordResolution.unresolved){
+    const parts = [];
+    if (coordResolution.matched) parts.push(`${coordResolution.matched} matched to existing locations`);
+    if (coordResolution.geocoded) parts.push(`${coordResolution.geocoded} geocoded from address`);
+    if (coordResolution.unresolved) parts.push(`${coordResolution.unresolved} still missing coordinates`);
+    toast("Coordinates resolved", `${parts.join(", ")}.`);
+  }
   const kmzAllRows = Array.isArray(rows.__allKmzRows) ? rows.__allKmzRows : rows;
   const kmzLayerNames = getOrderedKmzLayerList(rows.__kmlLayerNames || kmzAllRows.map((row) => row?.__kml_layer || row?.__kml_layer_raw));
   state.map.kmzLayerCatalog = kmzLayerNames;
@@ -17961,6 +18161,9 @@ async function handleLocationImport(file){
     items: Array.isArray(row.items) ? row.items : buildItemsFromRow(row),
     billing_codes: buildBillingCodesFromRow(row),
     photo_urls: buildPhotoUrlsFromRow(row),
+    testing_wavelength: parseImportNumberOrNull(row.testing_wavelength),
+    test_result_low: parseImportNumberOrNull(row.test_results_low ?? row.test_result_low),
+    test_result_high: parseImportNumberOrNull(row.test_results_high ?? row.test_result_high),
     __kml_layer: canonicalKmzLayerName(row.__kml_layer || row.__kml_layer_raw || ""),
     __kml_layer_raw: String(row.__kml_layer_raw || row.__kml_layer || "").trim() || null,
     __layer_type: row.__layer_type || inferKmzLayerType(String(row.folder_path || row.folder_name || row.__kml_layer || "").split("/")),
@@ -19771,7 +19974,7 @@ function updateProjectScopedControls(){
     importBtn.disabled = false;
     importBtn.title = hasProject
       ? ""
-      : "KMZ files can be loaded without a project. Select a project for ZIP, CSV, PDF, or database import.";
+      : "KMZ/KML files can be loaded without a project. Select a project for ZIP, CSV, PDF, or database import.";
   }
 
   const createBtn = $("btnProjectsCreate");
@@ -24910,6 +25113,7 @@ function renderFieldDayLocationControls(site){
     <section class="map-field-guide-card map-field-start-visit-card">
       <div class="map-field-card-kicker">Start Location Visit</div>
       <div class="map-field-base-location">Base saved location: <strong>${escapeHtml(baseLabel)}</strong></div>
+      ${renderSiteTestResultChip(site)}
       <label for="mapFieldVisitSearch">Search saved location</label>
       <div class="map-field-search-row">
         <input id="mapFieldVisitSearch" class="input compact" type="search" placeholder="1704, 1748, 2123" value="${escapeHtml(baseLabel)}" />
@@ -25210,7 +25414,7 @@ function renderMapFieldPanel(){
         </div>
         <div class="muted tiny">No saved location is selected yet.</div>
         ${state.activeProject ? `<button id="btnMapShowCreateLocation" class="btn ghost small" type="button">Create New Location Here</button>` : ""}
-        ${state.activeProject ? `<button id="btnMapFieldImportLocations" class="btn ghost small" type="button">Import Locations (KMZ / ZIP / CSV / PDF)</button>` : ""}
+        ${state.activeProject ? `<button id="btnMapFieldImportLocations" class="btn ghost small" type="button">Import Locations (KMZ / KML / ZIP / CSV / PDF)</button>` : ""}
       </section>
     ` : ""}
   `;
@@ -25239,6 +25443,7 @@ function renderMapFieldPanel(){
       <span class="map-field-status-chip ${statusClass}">${escapeHtml(statusLabel)}</span>
     </div>
     <div class="map-field-location-meta">${escapeHtml(coordText)}</div>
+    ${renderSiteTestResultChip(selected)}
     ${renderFieldDayLocationControls(selected)}
     <div class="map-field-utility-row">
       <button class="btn ghost small" type="button" data-map-field-action="open" data-site-id="${selected.id}">Open Full Location Details</button>
