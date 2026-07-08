@@ -19454,6 +19454,16 @@ window.showProfilePage = function showProfilePage() {
   if (displayInput) displayInput.value = name;
   if (emailInput) emailInput.value = email;
   if (languageInput) languageInput.value = language;
+  const firstNameInput = $("profilePageFirstName");
+  const lastNameInput = $("profilePageLastName");
+  const phoneInput = $("profilePagePhone");
+  if (firstNameInput) firstNameInput.value = String(state.profile?.first_name || "").trim();
+  if (lastNameInput) lastNameInput.value = String(state.profile?.last_name || "").trim();
+  if (phoneInput) phoneInput.value = String(state.profile?.phone || "").trim();
+  const newPasswordInput = $("profilePageNewPassword");
+  const confirmPasswordInput = $("profilePageConfirmPassword");
+  if (newPasswordInput) newPasswordInput.value = "";
+  if (confirmPasswordInput) confirmPasswordInput.value = "";
   const avatar = $("profile-page-avatar-display");
   const photoUrl = getProfilePhotoUrl();
   if (avatar){
@@ -19473,9 +19483,19 @@ async function saveProfilePageDetails(){
     toast("Profile", "Sign in to update your profile.", "error");
     return;
   }
-  const nextName = String($("profilePageDisplayName")?.value || "").trim();
+  const nextFirstName = String($("profilePageFirstName")?.value || "").trim();
+  const nextLastName = String($("profilePageLastName")?.value || "").trim();
+  const nextPhone = String($("profilePagePhone")?.value || "").trim();
+  const typedDisplayName = String($("profilePageDisplayName")?.value || "").trim();
+  const nextName = typedDisplayName || [nextFirstName, nextLastName].filter(Boolean).join(" ");
   const nextLanguage = String($("profilePageLanguage")?.value || "en").trim();
-  const updates = { display_name: nextName || null, preferred_language: nextLanguage || "en" };
+  const updates = {
+    display_name: nextName || null,
+    first_name: nextFirstName || null,
+    last_name: nextLastName || null,
+    phone: nextPhone || null,
+    preferred_language: nextLanguage || "en",
+  };
   const { error } = await state.client.from("profiles").update(updates).eq("id", state.user.id);
   if (error){
     toast("Profile", error.message || "Could not save profile.", "error");
@@ -19483,6 +19503,9 @@ async function saveProfilePageDetails(){
   }
   state.profile = state.profile || {};
   state.profile.display_name = updates.display_name;
+  state.profile.first_name = updates.first_name;
+  state.profile.last_name = updates.last_name;
+  state.profile.phone = updates.phone;
   // Re-broadcast updated name to presence channel
   if (_presenceChannel) {
     _presenceChannel.track({
@@ -19498,6 +19521,33 @@ async function saveProfilePageDetails(){
   renderProfileHomeCard();
   window.hideProfilePage();
   toast("Profile", "Profile updated.");
+}
+
+async function updateProfilePagePassword(){
+  if (!state.client || !state.user?.id){
+    toast("Password", "Sign in to change your password.", "error");
+    return;
+  }
+  const nextPassword = String($("profilePageNewPassword")?.value || "");
+  const confirmPassword = String($("profilePageConfirmPassword")?.value || "");
+  if (nextPassword.length < 8){
+    toast("Password too short", "Use at least 8 characters.", "error");
+    return;
+  }
+  if (nextPassword !== confirmPassword){
+    toast("Passwords do not match", "Retype the confirmation to match.", "error");
+    return;
+  }
+  const { error } = await state.client.auth.updateUser({ password: nextPassword });
+  if (error){
+    toast("Password", error.message || "Could not update password.", "error");
+    return;
+  }
+  const newInput = $("profilePageNewPassword");
+  const confirmInput = $("profilePageConfirmPassword");
+  if (newInput) newInput.value = "";
+  if (confirmInput) confirmInput.value = "";
+  toast("Password updated", "Use the new password the next time you sign in.");
 }
 
 function formatMsgTime(value){
@@ -36055,7 +36105,7 @@ async function loadProfile(client, userId){
   }
 
   // Expect a public.profiles row keyed by auth.uid()
-  let profileSelect = "display_name, preferred_language, is_demo, current_project_id, org_id, avatar_url, role";
+  let profileSelect = "display_name, first_name, last_name, phone, preferred_language, is_demo, current_project_id, org_id, avatar_url, role";
   let { data, error } = await client
     .from("profiles")
     .select(profileSelect)
@@ -36983,7 +37033,17 @@ function wireUI(){
   }
   const profilePageSaveBtn = $("btnProfilePageSave");
   if (profilePageSaveBtn){
-    profilePageSaveBtn.addEventListener("click", () => { void saveProfilePageDetails(); });
+    profilePageSaveBtn.addEventListener("click", () => {
+      setButtonBusy(profilePageSaveBtn, true);
+      saveProfilePageDetails().finally(() => setButtonBusy(profilePageSaveBtn, false));
+    });
+  }
+  const profilePagePasswordBtn = $("btnProfilePageUpdatePassword");
+  if (profilePagePasswordBtn){
+    profilePagePasswordBtn.addEventListener("click", () => {
+      setButtonBusy(profilePagePasswordBtn, true);
+      updateProfilePagePassword().finally(() => setButtonBusy(profilePagePasswordBtn, false));
+    });
   }
 
   const profilePhotoUploadBtn = $("btnProfilePhotoUpload");

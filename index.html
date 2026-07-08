@@ -854,9 +854,12 @@
       border-radius: 14px;
       padding: 28px;
       max-width: 560px;
-      margin: 24px auto;
+      width: 100%;
+      margin: auto;
       position: relative;
-      overflow: hidden;
+      max-height: calc(100dvh - 40px);
+      overflow-y: auto;
+      overflow-x: hidden;
     }
     #profile-view::before, .profile-card::before {
       content: "";
@@ -2113,6 +2116,7 @@
             <div class="row" style="margin-top:8px;">
               <button id="btnForgotPassword" class="btn ghost small" type="button">Forgot password?</button>
             </div>
+            <p class="muted" style="margin:12px 0 0; font-size:11px; line-height:1.5;">SpecCom uses only essential cookies and device storage to keep you signed in and save your work. No advertising or tracking.</p>
           </form>
           <form id="resetForm" autocomplete="on" style="display:none;">
             <div class="field-stack">
@@ -3633,8 +3637,20 @@
         </div>
         <p class="prof-photo-hint" id="profile-page-photo-hint" style="text-align:center;">Click avatar to upload . JPG, PNG, or WEBP . Max 2MB</p>
         <p class="prof-photo-uploading" id="profile-page-photo-uploading" style="text-align:center;">Uploading...</p>
+        <div class="row" style="gap:10px;">
+          <div style="flex:1; min-width:120px;">
+            <label class="prof-field-label" for="profilePageFirstName">First Name</label>
+            <input id="profilePageFirstName" class="prof-field-input" type="text" placeholder="First name" autocomplete="given-name" data-enter-click="btnProfilePageSave" />
+          </div>
+          <div style="flex:1; min-width:120px;">
+            <label class="prof-field-label" for="profilePageLastName">Last Name</label>
+            <input id="profilePageLastName" class="prof-field-input" type="text" placeholder="Last name" autocomplete="family-name" data-enter-click="btnProfilePageSave" />
+          </div>
+        </div>
+        <label class="prof-field-label" for="profilePagePhone">Phone</label>
+        <input id="profilePagePhone" class="prof-field-input" type="tel" placeholder="(555) 555-5555" autocomplete="tel" data-enter-click="btnProfilePageSave" />
         <label class="prof-field-label" for="profilePageDisplayName">Display Name</label>
-        <input id="profilePageDisplayName" class="prof-field-input" type="text" placeholder="Display name" />
+        <input id="profilePageDisplayName" class="prof-field-input" type="text" placeholder="Shown to teammates (defaults to first + last)" data-enter-click="btnProfilePageSave" />
         <label class="prof-field-label" for="profilePageEmail">Email</label>
         <input id="profilePageEmail" class="prof-field-input" type="text" placeholder="Email" readonly />
         <label class="prof-field-label" for="profilePageLanguage">Language</label>
@@ -3644,7 +3660,16 @@
           <option value="pt">Portugues</option>
         </select>
         <div class="row" style="justify-content:flex-end;">
-          <button id="btnProfilePageSave" class="prof-save-btn" type="button">Save Profile</button>
+          <button id="btnProfilePageSave" class="prof-save-btn" type="button" data-busy-label="Saving…">Save Profile</button>
+        </div>
+        <div class="hr" style="margin:16px 0 12px;"></div>
+        <h3 style="margin:0 0 10px; font-size:15px;">Change Password</h3>
+        <label class="prof-field-label" for="profilePageNewPassword">New Password</label>
+        <input id="profilePageNewPassword" class="prof-field-input" type="password" placeholder="At least 8 characters" autocomplete="new-password" data-enter-click="btnProfilePageUpdatePassword" />
+        <label class="prof-field-label" for="profilePageConfirmPassword">Confirm New Password</label>
+        <input id="profilePageConfirmPassword" class="prof-field-input" type="password" placeholder="Retype new password" autocomplete="new-password" data-enter-click="btnProfilePageUpdatePassword" />
+        <div class="row" style="justify-content:flex-end;">
+          <button id="btnProfilePageUpdatePassword" class="btn secondary" type="button" data-busy-label="Updating Password…">Update Password</button>
         </div>
       </div>
     </div>
