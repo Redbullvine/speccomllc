@@ -1626,7 +1626,8 @@ a{color:inherit; text-decoration:none;}
 }
 button.is-busy{
   pointer-events:none;
-  opacity:0.78;
+  opacity:0.55;
+  filter:grayscale(0.6);
 }
 button.is-busy::after{
   content:"";

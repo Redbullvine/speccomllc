@@ -2493,10 +2493,20 @@ function setButtonBusy(btn, busy){
     btn.dataset.scBusy = "1";
     btn.classList.add("is-busy");
     btn.disabled = true;
+    // Buttons with data-busy-label announce what they're doing ("Starting…")
+    // so a pressed workflow button never still reads as pressable.
+    if (btn.dataset.busyLabel){
+      btn.dataset.scRestoreLabel = btn.textContent;
+      btn.textContent = btn.dataset.busyLabel;
+    }
   } else if (btn.dataset.scBusy === "1"){
     delete btn.dataset.scBusy;
     btn.classList.remove("is-busy");
     btn.disabled = false;
+    if (btn.dataset.scRestoreLabel !== undefined){
+      btn.textContent = btn.dataset.scRestoreLabel;
+      delete btn.dataset.scRestoreLabel;
+    }
   }
 }
 
@@ -24950,7 +24960,7 @@ function getFieldDayGuidance(selectedSite){
       step: "Start project day",
       action: "Start Recorded Project Day",
       detail: "Begin the work day before VI, visits, breaks, lunch, and close-out.",
-      actionHtml: `<button class="btn primary wide" type="button" data-map-field-action="startFieldDay">Start Recorded Project Day</button>`,
+      actionHtml: `<button class="btn primary wide" type="button" data-map-field-action="startFieldDay" data-busy-label="Starting Project Day…">Start Recorded Project Day</button>`,
     };
   }
   if (active?.event_type === FIELD_DAY_EVENT_TYPES.VEHICLE_INSPECTION){
@@ -24958,7 +24968,7 @@ function getFieldDayGuidance(selectedSite){
       step: "Vehicle inspection running",
       action: "End Vehicle Inspection",
       detail: "Finish the basic vehicle inspection before starting location work.",
-      actionHtml: `<button class="btn secondary wide" type="button" data-map-field-action="endFieldDayEvent">End Vehicle Inspection</button>`,
+      actionHtml: `<button class="btn secondary wide" type="button" data-map-field-action="endFieldDayEvent" data-busy-label="Ending Inspection…">End Vehicle Inspection</button>`,
     };
   }
   if (!hasCompletedFieldDayEvent(FIELD_DAY_EVENT_TYPES.VEHICLE_INSPECTION)){
@@ -24966,7 +24976,7 @@ function getFieldDayGuidance(selectedSite){
       step: "Vehicle inspection required",
       action: "Start Vehicle Inspection",
       detail: "Do the quick VI before the first location visit.",
-      actionHtml: `<button class="btn primary wide" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.VEHICLE_INSPECTION}">Start Vehicle Inspection</button>`,
+      actionHtml: `<button class="btn primary wide" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.VEHICLE_INSPECTION}" data-busy-label="Starting Inspection…">Start Vehicle Inspection</button>`,
     };
   }
   if (active?.event_type === FIELD_DAY_EVENT_TYPES.BREAK_15){
@@ -24974,7 +24984,7 @@ function getFieldDayGuidance(selectedSite){
       step: "Break running",
       action: "End Break",
       detail: "Close the break timer before starting another activity.",
-      actionHtml: `<button class="btn secondary wide" type="button" data-map-field-action="endFieldDayEvent">End Break</button>`,
+      actionHtml: `<button class="btn secondary wide" type="button" data-map-field-action="endFieldDayEvent" data-busy-label="Ending Break…">End Break</button>`,
     };
   }
   if (active?.event_type === FIELD_DAY_EVENT_TYPES.LUNCH){
@@ -24982,7 +24992,7 @@ function getFieldDayGuidance(selectedSite){
       step: "Lunch running",
       action: "End Lunch",
       detail: "Close lunch before starting another activity.",
-      actionHtml: `<button class="btn secondary wide" type="button" data-map-field-action="endFieldDayEvent">End Lunch</button>`,
+      actionHtml: `<button class="btn secondary wide" type="button" data-map-field-action="endFieldDayEvent" data-busy-label="Ending Lunch…">End Lunch</button>`,
     };
   }
   if (active?.event_type === FIELD_DAY_EVENT_TYPES.LOCATION_WORK){
@@ -24998,7 +25008,7 @@ function getFieldDayGuidance(selectedSite){
       step: "Drive to / verify next location",
       action: "Start Location Visit",
       detail: "Confirm the saved location ID, name this visit, then start the timer.",
-      actionHtml: `<button class="btn primary wide" type="button" data-map-field-action="startFieldLocation" data-site-id="${escapeHtml(selectedSite.id)}">Start Location Visit</button>`,
+      actionHtml: `<button class="btn primary wide" type="button" data-map-field-action="startFieldLocation" data-site-id="${escapeHtml(selectedSite.id)}" data-busy-label="Starting Visit…">Start Location Visit</button>`,
     };
   }
   return {
@@ -25164,7 +25174,7 @@ function renderFieldDayLocationControls(site){
       <select id="mapFieldVisitType" class="input compact" data-field-visit-input data-site-id="${escapeHtml(site.id)}">
         ${renderFieldVisitOptions(FIELD_VISIT_TYPES, draft.visitType)}
       </select>
-      <button class="btn primary wide" type="button" data-map-field-action="startFieldLocation" data-site-id="${escapeHtml(site.id)}">Start Location Visit</button>
+      <button class="btn primary wide" type="button" data-map-field-action="startFieldLocation" data-site-id="${escapeHtml(site.id)}" data-busy-label="Starting Visit…">Start Location Visit</button>
     </section>
   `;
 }
@@ -25244,7 +25254,7 @@ function renderLocationCloseoutChecklist(site, draft, active){
       ` : `<div id="mapFieldCloseoutValidation" class="map-field-ready-list">Closeout requirements complete.</div>`}
       <div class="map-field-closeout-actions">
         <button class="btn ghost wide" type="button" data-map-field-action="cancelCloseout" data-site-id="${escapeHtml(site.id)}">Cancel / Continue Working</button>
-        <button id="btnMapFieldFinalizeCloseout" class="btn primary wide" type="button" data-map-field-action="finalizeFieldLocation" data-site-id="${escapeHtml(site.id)}" ${missing.length ? "disabled" : ""}>Finalize Location Visit</button>
+        <button id="btnMapFieldFinalizeCloseout" class="btn primary wide" type="button" data-map-field-action="finalizeFieldLocation" data-site-id="${escapeHtml(site.id)}" data-busy-label="Finalizing Visit…" ${missing.length ? "disabled" : ""}>Finalize Location Visit</button>
       </div>
     </section>
   `;
@@ -25346,7 +25356,7 @@ function renderActiveFieldVisitCard(site, draft, active){
           <option value="" ${draft.finalStatus ? "" : "selected"}>Select final status</option>
           ${renderFieldVisitOptions(FIELD_VISIT_FINAL_STATUSES, draft.finalStatus)}
         </select>
-        <button class="btn primary wide" type="button" data-map-field-action="openCloseout" data-site-id="${escapeHtml(site.id)}">End Location</button>
+        <button class="btn primary wide" type="button" data-map-field-action="openCloseout" data-site-id="${escapeHtml(site.id)}" data-busy-label="Opening Closeout…">End Location</button>
       </div>
       ${renderLocationCloseoutChecklist(site, draft, active)}
     </section>
@@ -25363,10 +25373,10 @@ function renderFieldBreakLunchCard(){
       <div class="map-field-card-kicker">Break / Lunch</div>
       <div class="map-field-day-actions">
         ${activeType === FIELD_DAY_EVENT_TYPES.BREAK_15
-          ? `<button class="btn secondary small" type="button" data-map-field-action="endFieldDayEvent">End Break</button>`
+          ? `<button class="btn secondary small" type="button" data-map-field-action="endFieldDayEvent" data-busy-label="Ending Break…">End Break</button>`
           : `<button class="btn ghost small" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.BREAK_15}" ${!isDayActive || activeType ? "disabled" : ""}>Start Break</button>`}
         ${activeType === FIELD_DAY_EVENT_TYPES.LUNCH
-          ? `<button class="btn secondary small" type="button" data-map-field-action="endFieldDayEvent">End Lunch</button>`
+          ? `<button class="btn secondary small" type="button" data-map-field-action="endFieldDayEvent" data-busy-label="Ending Lunch…">End Lunch</button>`
           : `<button class="btn ghost small" type="button" data-map-field-action="startFieldDayEvent" data-field-day-event="${FIELD_DAY_EVENT_TYPES.LUNCH}" ${!isDayActive || activeType ? "disabled" : ""}>Start Lunch</button>`}
       </div>
       ${!isDayActive
@@ -25387,7 +25397,7 @@ function renderFieldDayEndCard(){
     <section class="map-field-guide-card map-field-end-day-card">
       <div class="map-field-card-kicker">End Project Day</div>
       <div class="map-field-base-location">End the project day only after location work, closeout, break, and lunch timers are closed.</div>
-      <button class="btn danger wide" type="button" data-map-field-action="endFieldDay" ${!isDayActive || activeType ? "disabled" : ""}>End Project Day</button>
+      <button class="btn danger wide" type="button" data-map-field-action="endFieldDay" data-busy-label="Ending Project Day…" ${!isDayActive || activeType ? "disabled" : ""}>End Project Day</button>
       ${!isDayActive
         ? `<div class="map-field-warning">Start the recorded project day before ending it.</div>`
         : activeType ? `<div class="map-field-warning">Finish ${escapeHtml(getFieldDayEventLabel(state.fieldDay.activeEvent))} before ending the project day.</div>` : ""}
