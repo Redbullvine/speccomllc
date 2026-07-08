@@ -36369,6 +36369,7 @@ async function postLoginBootstrap(client, user){
         }
       }
     }
+    startLocationWatch();
     startLocationPolling();
     setTimeout(() => {
       refreshTeamLocations();
