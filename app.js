@@ -2510,6 +2510,48 @@ function setButtonBusy(btn, busy){
   }
 }
 
+// Enter in a text box triggers its obvious action (sign in, search, save)
+// instead of doing nothing. Inputs with their own Enter handler call
+// preventDefault, which this global fallback respects.
+const ENTER_ACTION_BUTTON_BY_INPUT_ID = {
+  email: "btnSignIn",
+  password: "btnSignIn",
+  resetPassword: "btnResetPassword",
+  resetPasswordConfirm: "btnResetPassword",
+};
+
+function findEnterActionButton(input){
+  const explicitId = String(input.dataset?.enterClick || "").trim();
+  if (explicitId){
+    const explicitBtn = document.getElementById(explicitId);
+    if (explicitBtn && !explicitBtn.disabled) return explicitBtn;
+  }
+  const mappedId = ENTER_ACTION_BUTTON_BY_INPUT_ID[input.id];
+  if (mappedId){
+    const mappedBtn = document.getElementById(mappedId);
+    if (mappedBtn && !mappedBtn.disabled) return mappedBtn;
+  }
+  // Row pattern: the input shares its parent with exactly one action button.
+  const rowButtons = input.parentElement
+    ? Array.from(input.parentElement.querySelectorAll("button")).filter((btn) => !btn.disabled)
+    : [];
+  return rowButtons.length === 1 ? rowButtons[0] : null;
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || e.defaultPrevented || e.isComposing) return;
+  if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
+  const input = e.target;
+  if (!input || input.tagName !== "INPUT") return;
+  const type = String(input.type || "text").toLowerCase();
+  if (!["text", "search", "email", "password", "tel", "number", "url"].includes(type)) return;
+  const actionBtn = findEnterActionButton(input);
+  if (!actionBtn) return;
+  e.preventDefault();
+  if (typeof input.blur === "function") input.blur();
+  actionBtn.click();
+});
+
 // Readings at or better than this are considered passing; anything more
 // negative flags the location for a field revisit.
 const TEST_RESULT_REVISIT_THRESHOLD_DB = -25;
