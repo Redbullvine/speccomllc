@@ -109,7 +109,10 @@ const REDLINE_TYPE_LABELS = {
 // Field request: hide engineering KMZ node dots and route/path linework on the live map.
 const HIDE_KMZ_NETWORK_VISUALS = true;
 // Field request: hide blue site dots and aqua span lines from the map.
-const HIDE_MAP_PINS_AND_SPANS = true;
+// Location pins are scoped to the active project's saved locations.
+const HIDE_MAP_SITE_PINS = false;
+// The auto-drawn project span polyline (sites connected alphabetically) stays disabled.
+const HIDE_MAP_SPANS = true;
 
 const state = {
   client: null,
@@ -2539,6 +2542,16 @@ function getSiteWorkflowStatus(site){
 function getSiteStatusColor(site){
   const status = getSiteWorkflowStatus(site);
   return MAP_FIELD_STATUS_COLORS[status] || MAP_FIELD_STATUS_COLORS[MAP_FIELD_STATUS.NOT_STARTED];
+}
+
+function getSitePinColor(site){
+  const status = getSiteWorkflowStatus(site);
+  if (status === MAP_FIELD_STATUS.NOT_STARTED){
+    const testResult = getSiteTestResult(site);
+    // Passing points don't need a return visit — keep red for actual revisit work.
+    if (testResult && !testResult.needsRevisit) return "#3b82f6";
+  }
+  return getSiteStatusColor(site);
 }
 
 function getMapFieldStatusLabel(status){
@@ -10193,7 +10206,7 @@ function updateMapMarkers(rows){
   if (!state.map.instance) return;
   ensureMapLayerRegistry();
   const pinsLayer = state.map.layers?.pins;
-  if (HIDE_MAP_PINS_AND_SPANS){
+  if (HIDE_MAP_SITE_PINS){
     const markers = state.map.markers;
     markers.forEach((marker) => {
       if (pinsLayer?.removeLayer) pinsLayer.removeLayer(marker);
@@ -10219,7 +10232,7 @@ function updateMapMarkers(rows){
     if (!id) return;
     const markerCoords = [coords.lat, coords.lng];
     let marker = markers.get(id);
-    const color = getSiteStatusColor(row);
+    const color = getSitePinColor(row);
     if (!marker){
       marker = window.L.circleMarker(markerCoords, {
         radius: 8,
@@ -10341,7 +10354,7 @@ function renderDerivedMapLayers(rows){
     });
     boundaryLayer.addLayer(rectangle);
   }
-  if (!HIDE_MAP_PINS_AND_SPANS && sites.length >= 2 && spansLayer){
+  if (!HIDE_MAP_SPANS && sites.length >= 2 && spansLayer){
     const ordered = sites.slice().sort((a, b) => String(a.site?.name || "").localeCompare(String(b.site?.name || "")));
     const linePoints = ordered.map((x) => [x.coords.lat, x.coords.lng]);
     const span = window.L.polyline(linePoints, {
