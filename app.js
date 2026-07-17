@@ -270,6 +270,12 @@ const state = {
     reportDate: null,
     metrics: null,
     summary: "",
+    users: [],
+    userId: null,
+    userDateFrom: null,
+    userDateTo: null,
+    userActivity: null,
+    userActivityLoading: false,
   },
   fieldDay: {
     session: null,
@@ -3253,6 +3259,7 @@ function setActiveView(viewId, { syncHash = true } = {}){
   if (viewId === "viewDailyReport"){
     syncDprProjectSelection();
     renderDprProjectOptions();
+    void loadDprUsers();
     loadDailyProgressReport();
   }
   if (viewId === "viewInvoices"){
@@ -22369,6 +22376,257 @@ function renderDprProjectOptions(){
   select.value = state.dpr.projectId || "";
 }
 
+function getDprUserDisplayName(user){
+  return String(user?.display_name || "").trim() || `User ${String(user?.id || "").slice(0, 8)}`;
+}
+
+function renderDprUserOptions(query = ""){
+  const select = $("dprUserSelect");
+  if (!select) return;
+  const search = String(query || "").trim().toLowerCase();
+  const users = (state.dpr.users || []).filter((user) => {
+    if (!search) return true;
+    return getDprUserDisplayName(user).toLowerCase().includes(search);
+  });
+  const selected = state.dpr.userId || select.value || "";
+  select.innerHTML = `<option value="">${users.length ? "Select user" : "No matching users"}</option>`;
+  users.forEach((user) => {
+    const option = document.createElement("option");
+    option.value = user.id;
+    option.textContent = getDprUserDisplayName(user);
+    select.appendChild(option);
+  });
+  if (users.some((user) => user.id === selected)) select.value = selected;
+  if (search && users.length === 1){
+    select.value = users[0].id;
+    state.dpr.userId = users[0].id;
+  }
+}
+
+async function loadDprUsers(){
+  if (isDemo){
+    state.dpr.users = [{ id: state.user?.id || "demo-bootstrap-user", display_name: "Demo Technician" }];
+    renderDprUserOptions($("dprUserSearch")?.value || "");
+    return;
+  }
+  if (!state.client) return;
+  const { data, error } = await state.client
+    .from("profiles")
+    .select("id, display_name")
+    .order("display_name", { ascending: true });
+  if (error){
+    console.warn("[daily report] user list load failed", error);
+    return;
+  }
+  state.dpr.users = (data || []).filter((user) => user?.id);
+  renderDprUserOptions($("dprUserSearch")?.value || "");
+}
+
+function getDprActivityDate(value){
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatDprActivityDay(dateValue){
+  const date = new Date(`${dateValue}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return dateValue;
+  return date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", year: "numeric" });
+}
+
+function renderDprUserActivity(){
+  const wrap = $("dprUserResults");
+  if (!wrap) return;
+  if (state.dpr.userActivityLoading){
+    wrap.innerHTML = `<div class="muted small">Loading user activity...</div>`;
+    return;
+  }
+  const activity = state.dpr.userActivity;
+  if (!activity){
+    wrap.innerHTML = `<div class="muted small">Choose a user and date range to see their daily activity.</div>`;
+    return;
+  }
+  if (!activity.days.length){
+    wrap.innerHTML = `<div class="muted small">No hours or field activity were found for ${escapeHtml(activity.userName)} in this date range.</div>`;
+    return;
+  }
+  wrap.innerHTML = `
+    <div class="dpr-user-summary">
+      <div><span>User</span><strong>${escapeHtml(activity.userName)}</strong></div>
+      <div><span>Total hours</span><strong>${escapeHtml((activity.totalMinutes / 60).toFixed(2))}</strong></div>
+      <div><span>Days worked</span><strong>${activity.days.length}</strong></div>
+      <div><span>Projects</span><strong>${activity.projectCount}</strong></div>
+    </div>
+    <div class="dpr-user-day-list">
+      ${activity.days.map((day) => `
+        <article class="dpr-user-day">
+          <header>
+            <div>
+              <h3>${escapeHtml(formatDprActivityDay(day.date))}</h3>
+              <span class="muted tiny">${day.projects.length} project${day.projects.length === 1 ? "" : "s"}</span>
+            </div>
+            <strong>${escapeHtml(formatDurationMinutes(day.totalMinutes))}</strong>
+          </header>
+          <div class="dpr-user-project-list">
+            ${day.projects.map((project) => `
+              <section class="dpr-user-project">
+                <div class="dpr-user-project-head">
+                  <div>
+                    <strong>${escapeHtml(project.projectName)}</strong>
+                    ${project.jobNumber ? `<span class="muted tiny">Job ${escapeHtml(project.jobNumber)}</span>` : ""}
+                  </div>
+                  <strong>${escapeHtml(formatDurationMinutes(project.totalMinutes))}</strong>
+                </div>
+                <div class="muted tiny">${project.timesheetMinutes ? "Timesheet" : "Field-day session"}${project.clockIn ? `: ${escapeHtml(formatDprDateTime(project.clockIn))}` : ""}${project.clockOut ? ` to ${escapeHtml(formatDprDateTime(project.clockOut))}` : ""}</div>
+                ${project.items.length ? `<div class="dpr-entry-list">
+                  ${project.items.map((item) => `
+                    <div class="dpr-entry-row dpr-entry-row-stack">
+                      <span>${escapeHtml(item.title)}</span>
+                      ${item.durationMinutes ? `<strong>${escapeHtml(formatDurationMinutes(item.durationMinutes))}</strong>` : ""}
+                      ${item.notes ? `<div class="muted tiny">${escapeHtml(item.notes)}</div>` : ""}
+                      ${item.codes?.length ? `<div class="dpr-code-wrap">${renderDprCodeChips(item.codes)}</div>` : ""}
+                    </div>
+                  `).join("")}
+                </div>` : `<div class="muted small">Hours recorded; no detailed work notes were captured.</div>`}
+              </section>
+            `).join("")}
+          </div>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+async function loadDprUserActivity(){
+  const select = $("dprUserSelect");
+  const searchText = String($("dprUserSearch")?.value || "").trim().toLowerCase();
+  if (!select?.value && searchText){
+    const matches = (state.dpr.users || []).filter((user) => getDprUserDisplayName(user).toLowerCase().includes(searchText));
+    if (matches.length === 1) select.value = matches[0].id;
+  }
+  const userId = select ? (select.value || null) : (state.dpr.userId || null);
+  const dateFrom = $("dprUserDateFrom")?.value || state.dpr.userDateFrom;
+  const dateTo = $("dprUserDateTo")?.value || state.dpr.userDateTo;
+  if (!userId){
+    toast("User required", "Search for and select a user first.");
+    return;
+  }
+  if (!dateFrom || !dateTo || dateFrom > dateTo){
+    toast("Date range required", "Choose a valid From and Through date range.");
+    return;
+  }
+  state.dpr.userId = userId;
+  state.dpr.userDateFrom = dateFrom;
+  state.dpr.userDateTo = dateTo;
+  state.dpr.userActivityLoading = true;
+  renderDprUserActivity();
+  const user = (state.dpr.users || []).find((row) => row.id === userId);
+  const userName = getDprUserDisplayName(user || { id: userId });
+  if (isDemo){
+    const demoRows = (state.demo.timesheets || []).filter((row) => row.user_id === userId && row.work_date >= dateFrom && row.work_date <= dateTo);
+    const projectMap = new Map((state.projects || []).map((project) => [project.id, project]));
+    const days = demoRows.map((row) => {
+      const project = projectMap.get(row.project_id) || {};
+      const minutes = Number(row.total_minutes_worked || getDurationMinutesBetween(row.clock_in_at, row.clock_out_at || nowISO()));
+      return { date: row.work_date, totalMinutes: minutes, projects: [{ projectId: row.project_id, projectName: project.name || "Project", jobNumber: project.job_number || "", totalMinutes: minutes, timesheetMinutes: minutes, clockIn: row.clock_in_at, clockOut: row.clock_out_at, items: [] }] };
+    });
+    state.dpr.userActivity = { userName, days, totalMinutes: days.reduce((sum, day) => sum + day.totalMinutes, 0), projectCount: new Set(demoRows.map((row) => row.project_id)).size };
+    state.dpr.userActivityLoading = false;
+    renderDprUserActivity();
+    return;
+  }
+  if (!state.client){
+    state.dpr.userActivityLoading = false;
+    renderDprUserActivity();
+    return;
+  }
+  const rangeStart = startOfDay(new Date(`${dateFrom}T00:00:00`)).toISOString();
+  const rangeEnd = endOfDay(new Date(`${dateTo}T00:00:00`)).toISOString();
+  const [timesheetsRes, sessionsRes, eventsRes, logsRes, closeoutsRes] = await Promise.all([
+    state.client.from("technician_timesheets").select("id, user_id, project_id, work_date, clock_in_at, clock_out_at, total_minutes_worked").eq("user_id", userId).gte("work_date", dateFrom).lte("work_date", dateTo).order("work_date", { ascending: false }),
+    state.client.from("field_day_sessions").select("id, user_id, project_id, work_date, started_at, ended_at, total_minutes, notes").eq("user_id", userId).gte("work_date", dateFrom).lte("work_date", dateTo).order("started_at", { ascending: true }),
+    state.client.from("field_day_events").select("id, session_id, user_id, project_id, site_id, event_type, label, started_at, ended_at, duration_minutes, notes, work_codes, materials_used").eq("user_id", userId).gte("started_at", rangeStart).lte("started_at", rangeEnd).order("started_at", { ascending: true }),
+    state.client.from("field_work_logs").select("id, user_id, project_id, site_id, work_date, arrived_at, completed_at, status_before, status_after, work_completed, work_codes, materials_used").eq("user_id", userId).gte("work_date", dateFrom).lte("work_date", dateTo).order("completed_at", { ascending: true }),
+    state.client.from("splicer_location_closeout_checklists").select("id, user_id, project_id, base_location_id, visit_label, submitted_at, checklist").eq("user_id", userId).gte("submitted_at", rangeStart).lte("submitted_at", rangeEnd).order("submitted_at", { ascending: true }),
+  ]);
+  const results = [timesheetsRes, sessionsRes, eventsRes, logsRes, closeoutsRes];
+  const seriousErrors = results.map((result) => result.error).filter((error) => error && !isMissingTable(error));
+  if (seriousErrors.length === results.length){
+    state.dpr.userActivityLoading = false;
+    state.dpr.userActivity = null;
+    renderDprUserActivity();
+    toast("User activity load error", seriousErrors[0].message);
+    return;
+  }
+  seriousErrors.forEach((error) => console.warn("[daily report] a user activity source could not be loaded", error));
+  const timesheets = timesheetsRes.error ? [] : (timesheetsRes.data || []);
+  const sessions = sessionsRes.error ? [] : (sessionsRes.data || []);
+  const events = eventsRes.error ? [] : (eventsRes.data || []);
+  const logs = logsRes.error ? [] : (logsRes.data || []);
+  const closeouts = closeoutsRes.error ? [] : (closeoutsRes.data || []);
+  const projectIds = Array.from(new Set([...timesheets, ...sessions, ...events, ...logs, ...closeouts].map((row) => row.project_id).filter(Boolean)));
+  const projectMap = new Map((state.projects || []).map((project) => [project.id, project]));
+  const missingProjectIds = projectIds.filter((id) => !projectMap.has(id));
+  if (missingProjectIds.length){
+    const { data: projectRows } = await state.client.from("projects").select("id, name, job_number").in("id", missingProjectIds);
+    (projectRows || []).forEach((project) => projectMap.set(project.id, project));
+  }
+  const grouped = new Map();
+  const ensureGroup = (date, projectId) => {
+    const safeDate = String(date || "").slice(0, 10);
+    const safeProjectId = projectId || "unassigned";
+    const key = `${safeDate}|${safeProjectId}`;
+    if (!grouped.has(key)){
+      const project = projectMap.get(projectId) || {};
+      grouped.set(key, { date: safeDate, projectId: safeProjectId, projectName: project.name || "Unassigned project", jobNumber: project.job_number || "", timesheetMinutes: 0, sessionMinutes: 0, clockIn: "", clockOut: "", items: [] });
+    }
+    return grouped.get(key);
+  };
+  timesheets.forEach((row) => {
+    const group = ensureGroup(row.work_date, row.project_id);
+    group.timesheetMinutes += Number(row.total_minutes_worked ?? getDurationMinutesBetween(row.clock_in_at, row.clock_out_at || nowISO()));
+    group.clockIn = group.clockIn || row.clock_in_at || "";
+    group.clockOut = row.clock_out_at || group.clockOut;
+  });
+  sessions.forEach((row) => {
+    const group = ensureGroup(row.work_date, row.project_id);
+    group.sessionMinutes += Number(row.total_minutes || getDurationMinutesBetween(row.started_at, row.ended_at || nowISO()));
+    group.clockIn = group.clockIn || row.started_at || "";
+    group.clockOut = group.clockOut || row.ended_at || "";
+  });
+  events.forEach((row) => {
+    const group = ensureGroup(getDprActivityDate(row.started_at), row.project_id);
+    const materials = normalizeDprMaterialRows(row.materials_used || []);
+    group.items.push({ title: row.label || getFieldDayEventLabel(row), durationMinutes: Number(row.duration_minutes || getDurationMinutesBetween(row.started_at, row.ended_at)), notes: [row.notes || "", materials.length ? `Materials: ${formatDprMaterialSummary(materials)}` : ""].filter(Boolean).join(" | "), codes: row.work_codes || [], sortAt: row.started_at || "" });
+  });
+  logs.forEach((row) => {
+    const group = ensureGroup(row.work_date, row.project_id);
+    const visit = parseFieldVisitWorkNotes(row.work_completed || "");
+    group.items.push({ title: visit.visit_label ? `Location ${visit.visit_label}` : "Field work logged", durationMinutes: getDurationMinutesBetween(row.arrived_at, row.completed_at), notes: [visit.final_notes || row.work_completed || "", row.status_after ? `Status: ${row.status_after}` : ""].filter(Boolean).join(" | "), codes: row.work_codes || [], sortAt: row.completed_at || row.arrived_at || "" });
+  });
+  closeouts.forEach((row) => {
+    const group = ensureGroup(getDprActivityDate(row.submitted_at), row.project_id);
+    const closeout = normalizeDprCloseoutPayload(row);
+    const flags = getDprCloseoutFlags(closeout || {}, {});
+    group.items.push({ title: `Closeout${row.visit_label ? ` - ${row.visit_label}` : ""}`, durationMinutes: 0, notes: flags.length ? flags.join(" | ") : "Checklist submitted", codes: closeout?.work_codes || [], sortAt: row.submitted_at || "" });
+  });
+  const byDay = new Map();
+  grouped.forEach((group) => {
+    group.items.sort((a, b) => String(a.sortAt).localeCompare(String(b.sortAt)));
+    group.totalMinutes = group.timesheetMinutes || group.sessionMinutes;
+    if (!byDay.has(group.date)) byDay.set(group.date, []);
+    byDay.get(group.date).push(group);
+  });
+  const days = Array.from(byDay.entries()).map(([date, projects]) => ({ date, projects: projects.sort((a, b) => a.projectName.localeCompare(b.projectName)), totalMinutes: projects.reduce((sum, project) => sum + project.totalMinutes, 0) })).sort((a, b) => b.date.localeCompare(a.date));
+  state.dpr.userActivity = { userName, days, totalMinutes: days.reduce((sum, day) => sum + day.totalMinutes, 0), projectCount: new Set(projectIds).size };
+  state.dpr.userActivityLoading = false;
+  renderDprUserActivity();
+}
+
 function renderDprMetrics(){
   const wrap = $("dprMetrics");
   if (!wrap) return;
@@ -37852,6 +38110,36 @@ function wireUI(){
   const dprSaveBtn = $("btnDprSave");
   if (dprSaveBtn){
     dprSaveBtn.addEventListener("click", () => saveDailyProgressComments());
+  }
+  const dprUserSearch = $("dprUserSearch");
+  if (dprUserSearch){
+    dprUserSearch.addEventListener("input", () => renderDprUserOptions(dprUserSearch.value));
+    dprUserSearch.addEventListener("keydown", (event) => {
+      if (event.key === "Enter"){
+        event.preventDefault();
+        loadDprUserActivity();
+      }
+    });
+  }
+  const dprUserSelect = $("dprUserSelect");
+  if (dprUserSelect){
+    dprUserSelect.addEventListener("change", () => {
+      state.dpr.userId = dprUserSelect.value || null;
+    });
+  }
+  const dprUserDateTo = $("dprUserDateTo");
+  const dprUserDateFrom = $("dprUserDateFrom");
+  if (dprUserDateTo && !dprUserDateTo.value) dprUserDateTo.value = getLocalDateISO();
+  if (dprUserDateFrom && !dprUserDateFrom.value){
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - 30);
+    dprUserDateFrom.value = getLocalDateISO(fromDate);
+  }
+  state.dpr.userDateFrom = dprUserDateFrom?.value || null;
+  state.dpr.userDateTo = dprUserDateTo?.value || null;
+  const dprUserSearchBtn = $("btnDprUserSearch");
+  if (dprUserSearchBtn){
+    dprUserSearchBtn.addEventListener("click", () => loadDprUserActivity());
   }
   const techOpenDailyReportBtn = $("btnTechOpenDailyReport");
   if (techOpenDailyReportBtn){

@@ -3584,6 +3584,110 @@ body.map-create-open .map-floating-places{
   display:grid;
   gap:8px;
 }
+.dpr-user-search-panel{
+  display:grid;
+  gap:14px;
+  padding:14px;
+  margin:12px 0 20px;
+  border:1px solid rgba(34,197,94,.28);
+  border-radius:12px;
+  background:rgba(22,101,52,.08);
+}
+.dpr-user-search-panel h2,
+.dpr-project-report-heading h2{
+  margin:0 0 4px;
+  font-size:16px;
+}
+.dpr-user-search-controls{
+  display:grid;
+  grid-template-columns:minmax(220px, 2fr) minmax(145px, 1fr) minmax(145px, 1fr) auto;
+  gap:10px;
+  align-items:end;
+}
+.dpr-user-field{
+  gap:6px;
+}
+.dpr-user-search-controls .btn{
+  min-height:42px;
+}
+.dpr-user-results{
+  display:grid;
+  gap:12px;
+}
+.dpr-user-summary{
+  display:grid;
+  grid-template-columns:repeat(4, minmax(110px, 1fr));
+  gap:8px;
+}
+.dpr-user-summary > div{
+  display:grid;
+  gap:3px;
+  padding:10px;
+  border:1px solid rgba(148,163,184,.22);
+  border-radius:8px;
+  background:rgba(255,255,255,.04);
+}
+.dpr-user-summary span{
+  color:var(--muted);
+  font-size:12px;
+}
+.dpr-user-summary strong{
+  font-size:18px;
+}
+.dpr-user-day-list,
+.dpr-user-project-list{
+  display:grid;
+  gap:10px;
+}
+.dpr-user-day{
+  display:grid;
+  gap:10px;
+  padding:12px;
+  border:1px solid rgba(148,163,184,.24);
+  border-radius:10px;
+  background:rgba(5,14,7,.28);
+}
+.dpr-user-day > header,
+.dpr-user-project-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+}
+.dpr-user-day h3{
+  margin:0;
+  font-size:15px;
+}
+.dpr-user-project{
+  display:grid;
+  gap:7px;
+  padding:10px;
+  border-left:3px solid rgba(34,197,94,.55);
+  border-radius:6px;
+  background:rgba(255,255,255,.035);
+}
+.dpr-user-project-head > div{
+  display:flex;
+  flex-wrap:wrap;
+  gap:7px;
+  align-items:baseline;
+}
+.dpr-project-report-heading{
+  padding-top:4px;
+  margin-bottom:12px;
+}
+@media (max-width: 800px){
+  .dpr-user-search-controls{
+    grid-template-columns:1fr 1fr;
+  }
+  .dpr-user-field,
+  .dpr-user-search-controls .btn{
+    grid-column:1 / -1;
+  }
+  .dpr-user-summary{
+    grid-template-columns:1fr 1fr;
+  }
+}
 .dpr-metric-row{
   display:flex;
   justify-content:space-between;

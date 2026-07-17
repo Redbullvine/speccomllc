@@ -3170,6 +3170,37 @@
         <section id="viewDailyReport" class="view">
           <div class="card">
             <h1 data-i18n="dailyReportTitle">Daily Report</h1>
+            <section class="dpr-user-search-panel" aria-labelledby="dprUserSearchTitle">
+              <div>
+                <h2 id="dprUserSearchTitle">User activity</h2>
+                <div class="muted small">See one person's hours and work across every project, grouped by day.</div>
+              </div>
+              <div class="dpr-user-search-controls">
+                <div class="field-stack dpr-user-field">
+                  <label class="muted small" for="dprUserSearch">Search user</label>
+                  <input id="dprUserSearch" class="input" type="search" placeholder="Search by name (for example, Andrew)" autocomplete="off" />
+                  <select id="dprUserSelect" class="input" aria-label="Matching users">
+                    <option value="">Select user</option>
+                  </select>
+                </div>
+                <div class="field-stack">
+                  <label class="muted small" for="dprUserDateFrom">From</label>
+                  <input id="dprUserDateFrom" class="input" type="date" />
+                </div>
+                <div class="field-stack">
+                  <label class="muted small" for="dprUserDateTo">Through</label>
+                  <input id="dprUserDateTo" class="input" type="date" />
+                </div>
+                <button id="btnDprUserSearch" class="btn secondary" type="button">Show activity</button>
+              </div>
+              <div id="dprUserResults" class="dpr-user-results" aria-live="polite">
+                <div class="muted small">Choose a user and date range to see their daily activity.</div>
+              </div>
+            </section>
+            <div class="dpr-project-report-heading">
+              <h2>Project daily report</h2>
+              <div class="muted small">Generate and save the report for one project and date.</div>
+            </div>
             <div class="field-stack">
               <label class="muted small" data-i18n="dprProjectLabel">Project</label>
               <select id="dprProjectSelect" class="input">
