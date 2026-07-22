@@ -7,6 +7,15 @@ import {
   refreshConfig,
 } from "./supabaseClient.js";
 import { offlinePhotoQueue } from "./services/offlinePhotoQueue.js";
+import {
+  assessReportDuration,
+  calculateWorkedTime,
+  getSpecComDateKey,
+  getSpecComDayBounds,
+  makeReportTimeWarning,
+  REPORT_TIME_STATUS,
+  SPECCOM_TIME_ZONE,
+} from "./services/dailyReportTime.mjs";
 
 const isDebug = new URLSearchParams(location.search).has("debug");
 const dlog = (...args) => { if (isDebug) console.log(...args); };
@@ -21706,6 +21715,7 @@ function getDprDefaultMetrics(){
     field_day_sessions: [],
     field_day_events: [],
     field_location_closeouts: [],
+    time_warnings: [],
     summary: "",
   };
 }
@@ -21725,6 +21735,7 @@ function formatDprDateTime(value){
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleString([], {
+    timeZone: SPECCOM_TIME_ZONE,
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -21970,10 +21981,10 @@ function renderDprFieldDayTimeline(sessions, events, closeouts = []){
     if (closeout.location_visit_id) closeoutByVisitId.set(closeout.location_visit_id, closeout);
   });
   const sessionSummary = sessionList.map((session) => {
+    const assessment = assessDprDuration(session, session?.work_date);
     const start = formatDprDateTime(session?.started_at);
-    const end = session?.ended_at ? formatDprDateTime(session.ended_at) : "open";
-    const minutes = Number(session?.total_minutes || getDurationMinutesBetween(session?.started_at, session?.ended_at || nowISO()));
-    return `<div class="muted tiny">Project day: ${escapeHtml(start)} to ${escapeHtml(end)} (${escapeHtml(formatDurationMinutes(minutes))})</div>`;
+    const end = (session?.ended_at ? formatDprDateTime(session.ended_at) : "") || assessment.label;
+    return `<div class="muted tiny">Project day: ${escapeHtml(start || assessment.label)} to ${escapeHtml(end)} (${escapeHtml(renderDprDuration(assessment))})</div>`;
   }).join("");
   return `
     <div class="dpr-section">
@@ -21982,9 +21993,10 @@ function renderDprFieldDayTimeline(sessions, events, closeouts = []){
       ${eventList.length ? `
         <div class="dpr-entry-list">
           ${eventList.map((event) => {
+            const session = sessionList.find((row) => row?.id && row.id === event?.session_id);
+            const assessment = assessDprDuration(event, session?.work_date || getDprActivityDate(event?.started_at));
             const start = formatDprDateTime(event?.started_at);
-            const end = event?.ended_at ? formatDprDateTime(event.ended_at) : "open";
-            const minutes = Number(event?.duration_minutes || getDurationMinutesBetween(event?.started_at, event?.ended_at || nowISO()));
+            const end = (event?.ended_at ? formatDprDateTime(event.ended_at) : "") || assessment.label;
             const codes = Array.isArray(event?.work_codes) && event.work_codes.length ? ` Codes: ${event.work_codes.join(", ")}` : "";
             const visit = parseFieldVisitWorkNotes(event?.notes || "");
             const closeout = closeoutByVisitId.get(event?.id) || parseFieldCloseoutFromNotes(event?.notes || "");
@@ -21997,7 +22009,7 @@ function renderDprFieldDayTimeline(sessions, events, closeouts = []){
             return `
               <div class="dpr-entry-row dpr-entry-row-stack">
                 <span>${escapeHtml(getFieldDayEventLabel(event))} <span class="muted tiny">${escapeHtml(start)} to ${escapeHtml(end)}${visitBits ? ` - ${escapeHtml(visitBits)}` : ""}${escapeHtml(codes)}</span></span>
-                <strong>${escapeHtml(formatDurationMinutes(minutes))}</strong>
+                <strong>${escapeHtml(renderDprDuration(assessment))}</strong>
                 ${visit.final_notes ? `<div class="muted tiny">${escapeHtml(visit.final_notes)}</div>` : ""}
                 ${renderDprCloseoutSummary(closeout, {
                   event,
@@ -22031,12 +22043,10 @@ function normalizeDprMaterialRows(rows){
 
 async function loadFieldWorkReportRows(projectId, reportDate){
   if (isDemo || !state.client || !projectId || !reportDate){
-    return { logs: [], pings: [], sessions: [], events: [], closeouts: [] };
+    return { logs: [], pings: [], timesheets: [], sessions: [], events: [], closeouts: [] };
   }
-  const reportDay = new Date(`${reportDate}T00:00:00`);
-  const reportStart = startOfDay(reportDay).toISOString();
-  const reportEnd = endOfDay(reportDay).toISOString();
-  const [logsRes, pingsRes] = await Promise.all([
+  const { start: reportStart, endExclusive: reportEnd } = getSpecComDayBounds(reportDate);
+  const [logsRes, pingsRes, timesheetsRes] = await Promise.all([
     state.client
       .from("field_work_logs")
       .select("id, user_id, project_id, site_id, work_date, arrived_at, completed_at, gps_lat, gps_lng, gps_accuracy_m, nearest_distance_m, status_before, status_after, work_completed, work_codes, materials_used, created_at")
@@ -22049,6 +22059,12 @@ async function loadFieldWorkReportRows(projectId, reportDate){
       .eq("project_id", projectId)
       .eq("work_date", reportDate)
       .order("captured_at", { ascending: true }),
+    state.client
+      .from("technician_timesheets")
+      .select("id, user_id, project_id, work_date, clock_in_at, clock_out_at, total_minutes_worked")
+      .eq("project_id", projectId)
+      .eq("work_date", reportDate)
+      .order("clock_in_at", { ascending: true }),
   ]);
   const sessionsRes = await state.client
     .from("field_day_sessions")
@@ -22070,13 +22086,16 @@ async function loadFieldWorkReportRows(projectId, reportDate){
     .select("id, project_day_id, location_visit_id, project_id, user_id, base_location_id, visit_label, submitted_at, gps_lat, gps_lng, gps_accuracy_m, checklist, created_at")
     .eq("project_id", projectId)
     .gte("submitted_at", reportStart)
-    .lte("submitted_at", reportEnd)
+    .lt("submitted_at", reportEnd)
     .order("submitted_at", { ascending: true });
   if (logsRes.error && !isMissingTable(logsRes.error)){
     console.warn("[daily report] field work logs load failed", logsRes.error);
   }
   if (pingsRes.error && !isMissingTable(pingsRes.error)){
     console.warn("[daily report] field GPS pings load failed", pingsRes.error);
+  }
+  if (timesheetsRes.error && !isMissingTable(timesheetsRes.error)){
+    console.warn("[daily report] technician timesheets load failed", timesheetsRes.error);
   }
   if (sessionsRes.error && !isMissingTable(sessionsRes.error)){
     console.warn("[daily report] field day sessions load failed", sessionsRes.error);
@@ -22090,6 +22109,7 @@ async function loadFieldWorkReportRows(projectId, reportDate){
   return {
     logs: logsRes.error ? [] : (logsRes.data || []),
     pings: pingsRes.error ? [] : (pingsRes.data || []),
+    timesheets: timesheetsRes.error ? [] : (timesheetsRes.data || []),
     sessions: sessionsRes.error ? [] : (sessionsRes.data || []),
     events: eventsRes.error ? [] : (eventsRes.data || []),
     closeouts: closeoutsRes.error ? [] : (closeoutsRes.data || []),
@@ -22133,8 +22153,7 @@ function buildDprSummary(metrics){
 
 async function enhanceDprMetricsWithFieldWork(baseMetrics, projectId, reportDate, { persist = false, reportId = null } = {}){
   const metrics = { ...getDprDefaultMetrics(), ...(baseMetrics || {}) };
-  const { logs, pings, sessions, events, closeouts } = await loadFieldWorkReportRows(projectId, reportDate);
-  if (!logs.length && !pings.length && !sessions.length && !events.length && !closeouts.length) return metrics;
+  const { logs, pings, timesheets, sessions, events, closeouts } = await loadFieldWorkReportRows(projectId, reportDate);
   const normalizedCloseouts = closeouts.map(normalizeDprCloseoutPayload).filter(Boolean);
   const siteIds = Array.from(new Set([
     ...logs.map((row) => row.site_id),
@@ -22287,36 +22306,65 @@ async function enhanceDprMetricsWithFieldWork(baseMetrics, projectId, reportDate
       needs_return: closeout.final_status === "Needs Return" ? "yes" : "",
       escalate: closeout.final_status === "Escalate" ? "yes" : "",
     }));
-  const projectDayMinutes = normalizedSessions.reduce((sum, session) => (
-    sum + (Number(session.total_minutes) || getDurationMinutesBetween(session.started_at, session.ended_at || nowISO()))
-  ), 0);
-  const minutesByType = normalizedEvents.reduce((map, event) => {
-    const minutes = Number(event.duration_minutes) || getDurationMinutesBetween(event.started_at, event.ended_at || nowISO());
-    map[event.event_type] = (map[event.event_type] || 0) + minutes;
+  const eventAssessments = normalizedEvents.map((event) => ({
+    event,
+    assessment: assessDprDuration(event, reportDate),
+  }));
+  const minutesByType = eventAssessments.reduce((map, { event, assessment }) => {
+    if (assessment.included) map[event.event_type] = (map[event.event_type] || 0) + assessment.minutes;
     return map;
   }, {});
-  if (projectDayMinutes > getDprNumber(metrics, "labor_minutes_today")){
-    metrics.labor_minutes_today = projectDayMinutes;
-    metrics.labor_hours_today = Math.round((projectDayMinutes / 60) * 100) / 100;
-  }
-  if (normalizedSessions.length){
-    const crewIds = new Set(getDprArray(metrics, "crew").map((row) => String(row?.user_id || "").trim()).filter(Boolean));
-    const crew = getDprArray(metrics, "crew").slice();
-    normalizedSessions.forEach((session) => {
-      const userId = String(session.user_id || "").trim();
-      if (!userId || crewIds.has(userId)) return;
-      crewIds.add(userId);
-      crew.push({
-        user_id: userId,
-        name: userId === state.user?.id ? (state.profile?.display_name || state.user?.email || "Field crew") : `Crew ${userId.slice(0, 8)}`,
-        clock_in_at: session.started_at,
-        clock_out_at: session.ended_at,
-        total_minutes_worked: Number(session.total_minutes) || getDurationMinutesBetween(session.started_at, session.ended_at || nowISO()),
-      });
+  const completedBreakEvents = eventAssessments
+    .filter(({ event, assessment }) => [FIELD_DAY_EVENT_TYPES.BREAK_15, FIELD_DAY_EVENT_TYPES.LUNCH].includes(event.event_type)
+      && assessment.status === REPORT_TIME_STATUS.VALID)
+    .map(({ event }) => event);
+  const usesProjectDays = normalizedSessions.length > 0;
+  const authoritativeRows = usesProjectDays ? normalizedSessions : timesheets;
+  const startKey = usesProjectDays ? "started_at" : "clock_in_at";
+  const endKey = usesProjectDays ? "ended_at" : "clock_out_at";
+  const rowsByWorker = new Map();
+  authoritativeRows.forEach((row) => {
+    const workerId = String(row?.user_id || "unknown");
+    if (!rowsByWorker.has(workerId)) rowsByWorker.set(workerId, []);
+    rowsByWorker.get(workerId).push(row);
+  });
+  const baseCrewById = new Map(getDprArray(metrics, "crew").map((row) => [String(row?.user_id || ""), row]));
+  const crew = [];
+  const timeWarnings = [];
+  let projectDayMinutes = 0;
+  rowsByWorker.forEach((workerRows, workerId) => {
+    const workerSessionIds = new Set(workerRows.map((row) => row?.id).filter(Boolean));
+    const workerEvents = usesProjectDays
+      ? completedBreakEvents.filter((event) => String(event?.user_id || "unknown") === workerId
+        || (event?.session_id && workerSessionIds.has(event.session_id)))
+      : [];
+    const result = calculateWorkedTime(workerRows, workerEvents, {
+      workDate: reportDate,
+      startKey,
+      endKey,
+      source: usesProjectDays ? "Project Day" : "Timesheet",
     });
-    metrics.crew = crew;
-    metrics.crew_count_today = Math.max(getDprNumber(metrics, "crew_count_today"), crewIds.size);
-  }
+    projectDayMinutes += result.minutes;
+    timeWarnings.push(...result.warnings);
+    const baseCrew = baseCrewById.get(workerId) || {};
+    crew.push({
+      user_id: workerId === "unknown" ? "" : workerId,
+      name: baseCrew.name || (workerId === state.user?.id ? (state.profile?.display_name || state.user?.email || "Field crew") : `Crew ${workerId.slice(0, 8)}`),
+      clock_in_at: workerRows[0]?.[startKey] || "",
+      clock_out_at: workerRows.map((row) => row?.[endKey]).filter(Boolean).at(-1) || "",
+      total_minutes_worked: result.minutes,
+      time_status: result.sessionAssessments.some(({ assessment }) => assessment.active) ? REPORT_TIME_STATUS.ACTIVE : "",
+      time_label: result.sessionAssessments.find(({ assessment }) => !assessment.included)?.assessment.label || "",
+    });
+  });
+  timeWarnings.push(...eventAssessments
+    .map(({ event, assessment }) => makeReportTimeWarning(event, assessment, "Event"))
+    .filter(Boolean));
+  metrics.labor_minutes_today = projectDayMinutes;
+  metrics.labor_hours_today = Math.round((projectDayMinutes / 60) * 100) / 100;
+  metrics.crew = crew;
+  metrics.crew_count_today = crew.length;
+  metrics.time_warnings = timeWarnings;
   metrics.locations_worked = locations;
   metrics.material_usage = materialUsage;
   metrics.material_items_used_today = materialUsage.length;
@@ -22376,6 +22424,40 @@ function renderDprProjectOptions(){
   select.value = state.dpr.projectId || "";
 }
 
+function assessDprDuration(row, workDate = "", startKey = "started_at", endKey = "ended_at"){
+  return assessReportDuration({
+    startedAt: row?.[startKey],
+    endedAt: row?.[endKey],
+    workDate: row?.work_date || workDate,
+  });
+}
+
+function renderDprDuration(assessment){
+  if (!assessment?.included) return assessment?.label || "Invalid Duration";
+  const duration = formatDurationMinutes(assessment.minutes);
+  return assessment.active ? `${duration} · Active` : duration;
+}
+
+function renderDprTimeWarnings(warnings){
+  const list = Array.isArray(warnings) ? warnings : [];
+  if (!list.length || !isOwnerOrAdmin()) return "";
+  return `
+    <div class="dpr-section dpr-time-warning" role="alert">
+      <h3>Time records need admin review</h3>
+      <div class="dpr-entry-list">
+        ${list.map((warning) => `
+          <div class="dpr-entry-row dpr-entry-row-stack">
+            <strong>${escapeHtml(warning.label || "Invalid time record")}</strong>
+            <span class="muted tiny">${escapeHtml(warning.source || "Record")}${warning.id ? ` ${escapeHtml(warning.id)}` : ""}${warning.workDate ? ` · ${escapeHtml(warning.workDate)}` : ""}</span>
+            <span class="muted tiny">Start: ${escapeHtml(warning.startedAt || "missing")} · End: ${escapeHtml(warning.endedAt || "missing")}</span>
+          </div>
+        `).join("")}
+      </div>
+      <div class="muted tiny">These records are excluded from all hour totals. Enter the correct stored timestamp; the report does not repair records automatically.</div>
+    </div>
+  `;
+}
+
 function getDprUserDisplayName(user){
   return String(user?.display_name || "").trim() || `User ${String(user?.id || "").slice(0, 8)}`;
 }
@@ -22424,18 +22506,13 @@ async function loadDprUsers(){
 
 function getDprActivityDate(value){
   if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return getSpecComDateKey(value) || String(value).slice(0, 10);
 }
 
 function formatDprActivityDay(dateValue){
-  const date = new Date(`${dateValue}T12:00:00`);
+  const date = new Date(`${dateValue}T12:00:00Z`);
   if (Number.isNaN(date.getTime())) return dateValue;
-  return date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", year: "numeric" });
+  return date.toLocaleDateString(undefined, { timeZone: "UTC", weekday: "long", month: "short", day: "numeric", year: "numeric" });
 }
 
 function renderDprUserActivity(){
@@ -22461,6 +22538,7 @@ function renderDprUserActivity(){
       <div><span>Days worked</span><strong>${activity.days.length}</strong></div>
       <div><span>Projects</span><strong>${activity.projectCount}</strong></div>
     </div>
+    ${renderDprTimeWarnings(activity.warnings)}
     <div class="dpr-user-day-list">
       ${activity.days.map((day) => `
         <article class="dpr-user-day">
@@ -22481,12 +22559,12 @@ function renderDprUserActivity(){
                   </div>
                   <strong>${escapeHtml(formatDurationMinutes(project.totalMinutes))}</strong>
                 </div>
-                <div class="muted tiny">${project.timesheetMinutes ? "Timesheet" : "Field-day session"}${project.clockIn ? `: ${escapeHtml(formatDprDateTime(project.clockIn))}` : ""}${project.clockOut ? ` to ${escapeHtml(formatDprDateTime(project.clockOut))}` : ""}</div>
+                <div class="muted tiny">${project.timesheetMinutes ? "Timesheet" : "Project Day"}${project.clockIn ? `: ${escapeHtml(formatDprDateTime(project.clockIn))}` : ""}${project.clockOut && formatDprDateTime(project.clockOut) ? ` to ${escapeHtml(formatDprDateTime(project.clockOut))}` : (project.clockIn ? ` · ${escapeHtml(project.timeLabel || (project.timeStatus === REPORT_TIME_STATUS.ACTIVE ? "Active" : "Missing End Time"))}` : "")}</div>
                 ${project.items.length ? `<div class="dpr-entry-list">
                   ${project.items.map((item) => `
                     <div class="dpr-entry-row dpr-entry-row-stack">
                       <span>${escapeHtml(item.title)}</span>
-                      ${item.durationMinutes ? `<strong>${escapeHtml(formatDurationMinutes(item.durationMinutes))}</strong>` : ""}
+                      ${item.durationLabel ? `<strong>${escapeHtml(item.durationLabel)}</strong>` : (item.durationMinutes ? `<strong>${escapeHtml(formatDurationMinutes(item.durationMinutes))}</strong>` : "")}
                       ${item.notes ? `<div class="muted tiny">${escapeHtml(item.notes)}</div>` : ""}
                       ${item.codes?.length ? `<div class="dpr-code-wrap">${renderDprCodeChips(item.codes)}</div>` : ""}
                     </div>
@@ -22531,10 +22609,10 @@ async function loadDprUserActivity(){
     const projectMap = new Map((state.projects || []).map((project) => [project.id, project]));
     const days = demoRows.map((row) => {
       const project = projectMap.get(row.project_id) || {};
-      const minutes = Number(row.total_minutes_worked || getDurationMinutesBetween(row.clock_in_at, row.clock_out_at || nowISO()));
-      return { date: row.work_date, totalMinutes: minutes, projects: [{ projectId: row.project_id, projectName: project.name || "Project", jobNumber: project.job_number || "", totalMinutes: minutes, timesheetMinutes: minutes, clockIn: row.clock_in_at, clockOut: row.clock_out_at, items: [] }] };
+      const result = calculateWorkedTime([row], [], { workDate: row.work_date, startKey: "clock_in_at", endKey: "clock_out_at", source: "Timesheet" });
+      return { date: row.work_date, totalMinutes: result.minutes, projects: [{ projectId: row.project_id, projectName: project.name || "Project", jobNumber: project.job_number || "", totalMinutes: result.minutes, timesheetMinutes: result.minutes, sessionMinutes: 0, clockIn: row.clock_in_at, clockOut: row.clock_out_at, timeStatus: result.sessionAssessments[0]?.assessment.status, timeLabel: result.sessionAssessments.find(({ assessment }) => !assessment.included)?.assessment.label || "", warnings: result.warnings, items: [] }] };
     });
-    state.dpr.userActivity = { userName, days, totalMinutes: days.reduce((sum, day) => sum + day.totalMinutes, 0), projectCount: new Set(demoRows.map((row) => row.project_id)).size };
+    state.dpr.userActivity = { userName, days, totalMinutes: days.reduce((sum, day) => sum + day.totalMinutes, 0), projectCount: new Set(demoRows.map((row) => row.project_id)).size, warnings: days.flatMap((day) => day.projects.flatMap((project) => project.warnings || [])) };
     state.dpr.userActivityLoading = false;
     renderDprUserActivity();
     return;
@@ -22544,14 +22622,14 @@ async function loadDprUserActivity(){
     renderDprUserActivity();
     return;
   }
-  const rangeStart = startOfDay(new Date(`${dateFrom}T00:00:00`)).toISOString();
-  const rangeEnd = endOfDay(new Date(`${dateTo}T00:00:00`)).toISOString();
+  const rangeStart = getSpecComDayBounds(dateFrom).start;
+  const rangeEnd = getSpecComDayBounds(dateTo).endExclusive;
   const [timesheetsRes, sessionsRes, eventsRes, logsRes, closeoutsRes] = await Promise.all([
     state.client.from("technician_timesheets").select("id, user_id, project_id, work_date, clock_in_at, clock_out_at, total_minutes_worked").eq("user_id", userId).gte("work_date", dateFrom).lte("work_date", dateTo).order("work_date", { ascending: false }),
     state.client.from("field_day_sessions").select("id, user_id, project_id, work_date, started_at, ended_at, total_minutes, notes").eq("user_id", userId).gte("work_date", dateFrom).lte("work_date", dateTo).order("started_at", { ascending: true }),
-    state.client.from("field_day_events").select("id, session_id, user_id, project_id, site_id, event_type, label, started_at, ended_at, duration_minutes, notes, work_codes, materials_used").eq("user_id", userId).gte("started_at", rangeStart).lte("started_at", rangeEnd).order("started_at", { ascending: true }),
+    state.client.from("field_day_events").select("id, session_id, user_id, project_id, site_id, event_type, label, started_at, ended_at, duration_minutes, notes, work_codes, materials_used").eq("user_id", userId).gte("started_at", rangeStart).lt("started_at", rangeEnd).order("started_at", { ascending: true }),
     state.client.from("field_work_logs").select("id, user_id, project_id, site_id, work_date, arrived_at, completed_at, status_before, status_after, work_completed, work_codes, materials_used").eq("user_id", userId).gte("work_date", dateFrom).lte("work_date", dateTo).order("completed_at", { ascending: true }),
-    state.client.from("splicer_location_closeout_checklists").select("id, user_id, project_id, base_location_id, visit_label, submitted_at, checklist").eq("user_id", userId).gte("submitted_at", rangeStart).lte("submitted_at", rangeEnd).order("submitted_at", { ascending: true }),
+    state.client.from("splicer_location_closeout_checklists").select("id, user_id, project_id, base_location_id, visit_label, submitted_at, checklist").eq("user_id", userId).gte("submitted_at", rangeStart).lt("submitted_at", rangeEnd).order("submitted_at", { ascending: true }),
   ]);
   const results = [timesheetsRes, sessionsRes, eventsRes, logsRes, closeoutsRes];
   const seriousErrors = results.map((result) => result.error).filter((error) => error && !isMissingTable(error));
@@ -22582,31 +22660,32 @@ async function loadDprUserActivity(){
     const key = `${safeDate}|${safeProjectId}`;
     if (!grouped.has(key)){
       const project = projectMap.get(projectId) || {};
-      grouped.set(key, { date: safeDate, projectId: safeProjectId, projectName: project.name || "Unassigned project", jobNumber: project.job_number || "", timesheetMinutes: 0, sessionMinutes: 0, clockIn: "", clockOut: "", items: [] });
+      grouped.set(key, { date: safeDate, projectId: safeProjectId, projectName: project.name || "Unassigned project", jobNumber: project.job_number || "", timesheetMinutes: 0, sessionMinutes: 0, clockIn: "", clockOut: "", timeStatus: "", timesheetRows: [], sessionRows: [], eventRows: [], warnings: [], items: [] });
     }
     return grouped.get(key);
   };
   timesheets.forEach((row) => {
     const group = ensureGroup(row.work_date, row.project_id);
-    group.timesheetMinutes += Number(row.total_minutes_worked ?? getDurationMinutesBetween(row.clock_in_at, row.clock_out_at || nowISO()));
-    group.clockIn = group.clockIn || row.clock_in_at || "";
-    group.clockOut = row.clock_out_at || group.clockOut;
+    group.timesheetRows.push(row);
   });
   sessions.forEach((row) => {
     const group = ensureGroup(row.work_date, row.project_id);
-    group.sessionMinutes += Number(row.total_minutes || getDurationMinutesBetween(row.started_at, row.ended_at || nowISO()));
-    group.clockIn = group.clockIn || row.started_at || "";
-    group.clockOut = group.clockOut || row.ended_at || "";
+    group.sessionRows.push(row);
   });
   events.forEach((row) => {
     const group = ensureGroup(getDprActivityDate(row.started_at), row.project_id);
+    const assessment = assessDprDuration(row, group.date);
     const materials = normalizeDprMaterialRows(row.materials_used || []);
-    group.items.push({ title: row.label || getFieldDayEventLabel(row), durationMinutes: Number(row.duration_minutes || getDurationMinutesBetween(row.started_at, row.ended_at)), notes: [row.notes || "", materials.length ? `Materials: ${formatDprMaterialSummary(materials)}` : ""].filter(Boolean).join(" | "), codes: row.work_codes || [], sortAt: row.started_at || "" });
+    group.eventRows.push(row);
+    group.items.push({ title: row.label || getFieldDayEventLabel(row), durationMinutes: assessment.included ? assessment.minutes : 0, durationLabel: renderDprDuration(assessment), notes: [row.notes || "", materials.length ? `Materials: ${formatDprMaterialSummary(materials)}` : ""].filter(Boolean).join(" | "), codes: row.work_codes || [], sortAt: row.started_at || "" });
+    const warning = makeReportTimeWarning(row, assessment, "Event");
+    if (warning) group.warnings.push(warning);
   });
   logs.forEach((row) => {
     const group = ensureGroup(row.work_date, row.project_id);
     const visit = parseFieldVisitWorkNotes(row.work_completed || "");
-    group.items.push({ title: visit.visit_label ? `Location ${visit.visit_label}` : "Field work logged", durationMinutes: getDurationMinutesBetween(row.arrived_at, row.completed_at), notes: [visit.final_notes || row.work_completed || "", row.status_after ? `Status: ${row.status_after}` : ""].filter(Boolean).join(" | "), codes: row.work_codes || [], sortAt: row.completed_at || row.arrived_at || "" });
+    const assessment = assessReportDuration({ startedAt: row.arrived_at, endedAt: row.completed_at, workDate: row.work_date });
+    group.items.push({ title: visit.visit_label ? `Location ${visit.visit_label}` : "Field work logged", durationMinutes: assessment.included ? assessment.minutes : 0, durationLabel: renderDprDuration(assessment), notes: [visit.final_notes || row.work_completed || "", row.status_after ? `Status: ${row.status_after}` : ""].filter(Boolean).join(" | "), codes: row.work_codes || [], sortAt: row.completed_at || row.arrived_at || "" });
   });
   closeouts.forEach((row) => {
     const group = ensureGroup(getDprActivityDate(row.submitted_at), row.project_id);
@@ -22617,12 +22696,32 @@ async function loadDprUserActivity(){
   const byDay = new Map();
   grouped.forEach((group) => {
     group.items.sort((a, b) => String(a.sortAt).localeCompare(String(b.sortAt)));
-    group.totalMinutes = group.timesheetMinutes || group.sessionMinutes;
+    const usesProjectDays = group.sessionRows.length > 0;
+    const authoritativeRows = usesProjectDays ? group.sessionRows : group.timesheetRows;
+    const completedBreaks = usesProjectDays ? group.eventRows.filter((row) => {
+      const assessment = assessDprDuration(row, group.date);
+      return [FIELD_DAY_EVENT_TYPES.BREAK_15, FIELD_DAY_EVENT_TYPES.LUNCH].includes(row.event_type)
+        && assessment.status === REPORT_TIME_STATUS.VALID;
+    }) : [];
+    const result = calculateWorkedTime(authoritativeRows, completedBreaks, {
+      workDate: group.date,
+      startKey: usesProjectDays ? "started_at" : "clock_in_at",
+      endKey: usesProjectDays ? "ended_at" : "clock_out_at",
+      source: usesProjectDays ? "Project Day" : "Timesheet",
+    });
+    group.totalMinutes = result.minutes;
+    group.timesheetMinutes = usesProjectDays ? 0 : result.minutes;
+    group.sessionMinutes = usesProjectDays ? result.minutes : 0;
+    group.clockIn = authoritativeRows[0]?.[usesProjectDays ? "started_at" : "clock_in_at"] || "";
+    group.clockOut = authoritativeRows.map((row) => row?.[usesProjectDays ? "ended_at" : "clock_out_at"]).filter(Boolean).at(-1) || "";
+    group.timeStatus = result.sessionAssessments.some(({ assessment }) => assessment.active) ? REPORT_TIME_STATUS.ACTIVE : "";
+    group.timeLabel = result.sessionAssessments.find(({ assessment }) => !assessment.included)?.assessment.label || "";
+    group.warnings.push(...result.warnings);
     if (!byDay.has(group.date)) byDay.set(group.date, []);
     byDay.get(group.date).push(group);
   });
   const days = Array.from(byDay.entries()).map(([date, projects]) => ({ date, projects: projects.sort((a, b) => a.projectName.localeCompare(b.projectName)), totalMinutes: projects.reduce((sum, project) => sum + project.totalMinutes, 0) })).sort((a, b) => b.date.localeCompare(a.date));
-  state.dpr.userActivity = { userName, days, totalMinutes: days.reduce((sum, day) => sum + day.totalMinutes, 0), projectCount: new Set(projectIds).size };
+  state.dpr.userActivity = { userName, days, totalMinutes: days.reduce((sum, day) => sum + day.totalMinutes, 0), projectCount: new Set(projectIds).size, warnings: days.flatMap((day) => day.projects.flatMap((project) => project.warnings || [])) };
   state.dpr.userActivityLoading = false;
   renderDprUserActivity();
 }
@@ -22665,6 +22764,7 @@ function renderDprMetrics(){
       <div class="dpr-metric-tile"><span>${t("dprMetricWorkOrders")}</span><strong>${getDprNumber(metrics, "work_orders_completed_today")}</strong></div>
       <div class="dpr-metric-tile"><span>${t("dprMetricBlocked")}</span><strong>${getDprNumber(metrics, "blocked_items_today")}</strong></div>
     </div>
+    ${renderDprTimeWarnings(metrics.time_warnings)}
     ${renderDprFieldDayTimeline(metrics.field_day_sessions || [], metrics.field_day_events || [], metrics.field_location_closeouts || [])}
     <div class="dpr-section">
       <h3>Locations and photos</h3>
@@ -22733,7 +22833,7 @@ function renderDprMetrics(){
         <div class="dpr-entry-list">
           ${crew.map((row) => `
             <div class="dpr-entry-row">
-              <span>${escapeHtml(row?.name || "Crew member")} <span class="muted tiny">${escapeHtml([formatDprDateTime(row?.clock_in_at), row?.clock_out_at ? formatDprDateTime(row.clock_out_at) : "open"].filter(Boolean).join(" - "))}</span></span>
+              <span>${escapeHtml(row?.name || "Crew member")} <span class="muted tiny">${escapeHtml([formatDprDateTime(row?.clock_in_at), (row?.clock_out_at ? formatDprDateTime(row.clock_out_at) : "") || row?.time_label || (row?.time_status === REPORT_TIME_STATUS.ACTIVE ? "Active" : "Missing End Time")].filter(Boolean).join(" - "))}</span></span>
               <strong>${escapeHtml(formatDurationMinutes(Number(row?.total_minutes_worked || 0)))}</strong>
             </div>
           `).join("")}
@@ -22779,7 +22879,7 @@ async function loadDailyProgressReport(){
   const select = $("dprProjectSelect");
   const dateInput = $("dprDate");
   if (select) state.dpr.projectId = select.value || null;
-  if (dateInput) state.dpr.reportDate = dateInput.value || getTodayDate();
+  if (dateInput) state.dpr.reportDate = dateInput.value || getSpecComDateKey();
   const projectId = state.dpr.projectId;
   if (!projectId){
     state.dpr.reportId = null;
@@ -22841,7 +22941,7 @@ async function generateDailyProgressReport(){
     return;
   }
   const dateInput = $("dprDate");
-  if (dateInput) state.dpr.reportDate = dateInput.value || getTodayDate();
+  if (dateInput) state.dpr.reportDate = dateInput.value || getSpecComDateKey();
   const comments = $("dprComments")?.value || null;
   if (isDemo){
     const metrics = {
@@ -38099,7 +38199,7 @@ function wireUI(){
   }
   const dprDate = $("dprDate");
   if (dprDate){
-    if (!dprDate.value) dprDate.value = getTodayDate();
+    if (!dprDate.value) dprDate.value = getSpecComDateKey();
     state.dpr.reportDate = dprDate.value;
     dprDate.addEventListener("change", () => loadDailyProgressReport());
   }
