@@ -533,7 +533,9 @@ function getRoleCode(member = state.profile){
 }
 
 function isEffectiveRootRole(){
-  return getRoleCode() === "ROOT";
+  if (getRoleCode() === "ROOT") return true;
+  const authoritativeRootCheck = SpecCom.helpers?.isRoot;
+  return typeof authoritativeRootCheck === "function" && authoritativeRootCheck();
 }
 
 function isTechnician(x){
@@ -25998,8 +26000,29 @@ function renderFieldDayEndCard(){
   `;
 }
 
+function renderRootMapAdminControls(){
+  const projectName = state.activeProject?.name || "No project selected";
+  return `
+    <section class="map-root-admin-card" aria-labelledby="mapRootAdminTitle">
+      <div class="map-field-card-kicker">ROOT Map Administration</div>
+      <div id="mapRootAdminTitle" class="map-root-admin-title">${escapeHtml(projectName)}</div>
+      <div class="muted small">Manage map data, users, projects, reporting, and billing.</div>
+      <div class="map-root-admin-grid">
+        <button class="btn secondary small" type="button" data-map-field-action="rootOpenView" data-root-view="viewAdmin">Administration</button>
+        <button class="btn secondary small" type="button" data-map-field-action="rootOpenProjects">Projects</button>
+        <button class="btn secondary small" type="button" data-map-field-action="rootOpenView" data-root-view="viewDailyReport">Reports</button>
+        <button class="btn secondary small" type="button" data-map-field-action="rootOpenView" data-root-view="viewInvoices">Invoices</button>
+        <button class="btn ghost small" type="button" data-map-field-action="rootOpenView" data-root-view="viewNodes">Location Records</button>
+        <button class="btn ghost small" type="button" data-map-field-action="rootCreateLocation">Create Location</button>
+        <button class="btn ghost small" type="button" data-map-field-action="rootImportLocations">Import Locations</button>
+      </div>
+    </section>
+  `;
+}
+
 function renderMapFieldPanel(){
   const panel = $("mapFieldPanel");
+  const panelHeader = $("mapFieldPanelHeader");
   const showBtn = $("btnMapFieldShow");
   const gpsState = $("mapFieldGpsState");
   const actionsWrap = $("mapFieldNearbyActions");
@@ -26010,21 +26033,35 @@ function renderMapFieldPanel(){
   const isRoot = isEffectiveRootRole();
   const createOpen = Boolean(state.map.fieldCreateOpen);
   if (isRoot){
-    panel.hidden = !createOpen;
-    panel.style.display = createOpen ? "grid" : "none";
+    panel.hidden = false;
+    panel.style.display = "grid";
     panel.classList.toggle("is-create-open", createOpen);
+    panel.classList.add("is-root-admin");
     document.body.classList.toggle("map-create-open", createOpen);
     if (showBtn) showBtn.style.display = "none";
+    if (panelHeader){
+      panelHeader.hidden = true;
+      panelHeader.style.display = "none";
+    }
+    gpsState.hidden = true;
+    gpsState.style.display = "none";
     createWrap.hidden = !createOpen;
     createWrap.style.display = createOpen ? "grid" : "none";
-    actionsWrap.hidden = true;
-    actionsWrap.innerHTML = "";
+    actionsWrap.hidden = createOpen;
+    actionsWrap.innerHTML = createOpen ? "" : renderRootMapAdminControls();
     card.hidden = true;
     card.innerHTML = "";
     tailActions.hidden = true;
     tailActions.innerHTML = "";
     return;
   }
+  panel.classList.remove("is-root-admin");
+  if (panelHeader){
+    panelHeader.hidden = false;
+    panelHeader.style.display = "";
+  }
+  gpsState.hidden = false;
+  gpsState.style.display = "";
   const panelVisible = state.map.fieldPanelVisible !== false;
   panel.hidden = !panelVisible;
   panel.style.display = panelVisible ? "grid" : "none";
@@ -38434,6 +38471,28 @@ function wireUI(){
       if (actionBtn){
         const action = String(actionBtn.dataset.mapFieldAction || "");
         const siteId = actionBtn.dataset.siteId;
+        if (action === "rootOpenView"){
+          const viewId = String(actionBtn.dataset.rootView || "");
+          if (isEffectiveRootRole() && viewId && isViewAllowed(viewId)) setActiveView(viewId);
+          return;
+        }
+        if (action === "rootOpenProjects"){
+          if (isEffectiveRootRole()) openProjectsModal();
+          return;
+        }
+        if (action === "rootCreateLocation"){
+          if (!isEffectiveRootRole()) return;
+          if (!state.activeProject?.id){
+            toast("Project required", "Select a project before creating a location.");
+            return;
+          }
+          setMapFieldCreateOpen(true);
+          return;
+        }
+        if (action === "rootImportLocations"){
+          if (isEffectiveRootRole()) await handleLocationImport(null);
+          return;
+        }
         if (action === "startFieldDay"){
           await startFieldDay();
           return;
