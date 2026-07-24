@@ -7526,12 +7526,16 @@ body.map-mode #map-float-panel .sidebar-header-actions{
   display:flex;
   align-items:center;
   gap:8px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
 }
 #map-float-panel #btnPlacesHide{
   display:none;
 }
 #map-float-panel #btnImportLocations,
-body.map-mode #map-float-panel #btnImportLocations{
+#map-float-panel #btnMapManageCreateLocation,
+body.map-mode #map-float-panel #btnImportLocations,
+body.map-mode #map-float-panel #btnMapManageCreateLocation{
   min-height:32px;
   padding:5px 9px;
   border-radius:8px;

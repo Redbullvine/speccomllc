@@ -532,6 +532,10 @@ function getRoleCode(member = state.profile){
   return role || AUTHENTICATED_ACCESS_CODE;
 }
 
+function isEffectiveRootRole(){
+  return getRoleCode() === "ROOT";
+}
+
 function isTechnician(x){
   return getRoleCode() === "TECHNICIAN";
 }
@@ -25184,6 +25188,11 @@ function setFieldDayState(session, events = []){
 }
 
 async function loadFieldDaySession({ silent = true } = {}){
+  if (isEffectiveRootRole()){
+    setFieldDayState(null, []);
+    renderMapFieldPanel();
+    return null;
+  }
   if (isDemo || isDemoUser() || !state.client || !state.user || !state.activeProject?.id){
     setFieldDayState(null, []);
     renderMapFieldPanel();
@@ -25998,6 +26007,24 @@ function renderMapFieldPanel(){
   const card = $("mapFieldLocationCard");
   const tailActions = $("mapFieldDayTailActions");
   if (!panel || !gpsState || !actionsWrap || !createWrap || !card || !tailActions) return;
+  const isRoot = isEffectiveRootRole();
+  const createOpen = Boolean(state.map.fieldCreateOpen);
+  if (isRoot){
+    panel.hidden = !createOpen;
+    panel.style.display = createOpen ? "grid" : "none";
+    panel.classList.toggle("is-create-open", createOpen);
+    document.body.classList.toggle("map-create-open", createOpen);
+    if (showBtn) showBtn.style.display = "none";
+    createWrap.hidden = !createOpen;
+    createWrap.style.display = createOpen ? "grid" : "none";
+    actionsWrap.hidden = true;
+    actionsWrap.innerHTML = "";
+    card.hidden = true;
+    card.innerHTML = "";
+    tailActions.hidden = true;
+    tailActions.innerHTML = "";
+    return;
+  }
   const panelVisible = state.map.fieldPanelVisible !== false;
   panel.hidden = !panelVisible;
   panel.style.display = panelVisible ? "grid" : "none";
@@ -26009,7 +26036,6 @@ function renderMapFieldPanel(){
     setMapViewDropdownOpen(false);
   }
   if (!panelVisible) return;
-  const createOpen = Boolean(state.map.fieldCreateOpen);
   createWrap.hidden = !createOpen;
   createWrap.style.display = createOpen ? "grid" : "none";
   if (panel){
@@ -38345,6 +38371,17 @@ function wireUI(){
   const mapFieldShowBtn = $("btnMapFieldShow");
   if (mapFieldShowBtn){
     mapFieldShowBtn.addEventListener("click", () => setMapFieldPanelVisible(true));
+  }
+  const mapManageCreateLocationBtn = $("btnMapManageCreateLocation");
+  if (mapManageCreateLocationBtn){
+    mapManageCreateLocationBtn.addEventListener("click", () => {
+      if (Date.now() < Number(state.map.fieldCreateRecentlyClosedUntil || 0)) return;
+      if (!state.activeProject?.id){
+        toast("Project required", "Select a project before creating a location.");
+        return;
+      }
+      setMapFieldCreateOpen(true);
+    });
   }
   ["btnMapFieldCreateClose", "btnMapFieldDismissCreate", "btnMapFieldCancelCreate"].forEach((id) => {
     const btn = $(id);
