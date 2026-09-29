@@ -10961,3 +10961,15 @@ table.ebc-compare tr.is-feasible td:first-child{ font-weight:800; }
   .ebc-tabs, .ebc-splice-controls, .ebc-manual, #main-navbar, .mobile-bottom-nav{ display:none !important; }
   .ebc-diagram-host{ border:0; padding:0; overflow:visible; }
 }
+
+/* ---- Splicing handoff (projects, redlines and billing moved) ------------- */
+body.splicing-moved [data-splicing-hide]{display:none !important}
+body:not(.splicing-moved) [data-splicing-launch]{display:none !important}
+.splicing-launch-icon{display:inline-block;width:14px;height:14px;flex:0 0 14px;vertical-align:-2px;margin-right:6px;
+  background:no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%231d7a45' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M1 5c2-3 4 3 6 0s4-3 6 0'/%3E%3Cpath d='M1 9c2 3 4-3 6 0s4 3 6 0'/%3E%3C/svg%3E")}
+.feature-hub-btn.splicing-launch{border-color:rgba(29,122,69,.55)}
+.splicing-tile{display:flex;align-items:center;gap:12px;cursor:pointer;border:1px solid rgba(29,122,69,.55);
+  background:linear-gradient(135deg,rgba(29,122,69,.16),rgba(29,122,69,.04));margin-bottom:12px}
+.splicing-tile .splicing-launch-icon{width:26px;height:26px;flex-basis:26px;margin:0}
+.splicing-tile-title{font-weight:800;letter-spacing:.04em;color:#1d7a45}
+.splicing-tile:focus-visible{outline:2px solid #1d7a45;outline-offset:2px}

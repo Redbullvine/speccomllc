@@ -2616,6 +2616,50 @@ const BUILD_MODE = String(
   || (window.process && window.process.env && window.process.env.BUILD_MODE)
   || ""
 ).toLowerCase() === "true";
+// Projects, redlines and billing now live in Splicing. Flip to false (or set
+// SPLICING_MOVED=false in the env) to restore every hidden entry point; no data
+// is ever touched by this flag.
+const SPLICING_MOVED = String(
+  (window.__ENV && window.__ENV.SPLICING_MOVED)
+  || (window.ENV && window.ENV.SPLICING_MOVED)
+  || "true"
+).toLowerCase() !== "false";
+const SPLICING_MOVED_MESSAGE = "Projects, redlines and billing are now in Splicing.";
+const SPLICING_HIDDEN_VIEWS = new Set(["viewInvoices", "viewBilling"]);
+const SPLICING_HIDDEN_ROUTE_TOKENS = new Set([
+  "billing", "office", "invoices", "invoice", "viewinvoices", "viewbilling", "demo", "redline",
+]);
+try { document.body.classList.toggle("splicing-moved", SPLICING_MOVED); } catch {}
+
+// True when the current URL points at a route that moved to Splicing.
+function isSplicingHiddenRoute(hashValue = window.location.hash, pathname = window.location.pathname){
+  if (!SPLICING_MOVED) return false;
+  const rawHash = String(hashValue || "").trim();
+  const hash = rawHash.startsWith("#") ? rawHash.slice(1) : rawHash;
+  const token = hash.split(/[?&/]/)[0].trim().toLowerCase();
+  if (SPLICING_HIDDEN_ROUTE_TOKENS.has(token)) return true;
+  if (/(?:^|[?&])invoice=/i.test(hash)) return true;
+  return /^\/(?:invoice|billing|office|invoices)(?:\/|$)/i.test(String(pathname || ""));
+}
+
+// Send a hidden-route deep link Home with a one-line toast. Returns true when it acted.
+function redirectHiddenSplicingRoute(){
+  if (!isSplicingHiddenRoute()) return false;
+  try {
+    const path = /^\/(?:invoice|billing|office|invoices)(?:\/|$)/i.test(window.location.pathname) ? "/" : window.location.pathname;
+    window.history.replaceState(null, "", path + window.location.search);
+  } catch {}
+  showToast(SPLICING_MOVED_MESSAGE);
+  return true;
+}
+if (SPLICING_MOVED){
+  const sendHome = () => {
+    if (redirectHiddenSplicingRoute() && state?.user) setActiveView(getDefaultView());
+  };
+  window.addEventListener("hashchange", sendHome);
+  window.addEventListener("popstate", sendHome);
+  queueMicrotask(() => redirectHiddenSplicingRoute());
+}
 const SINGLE_PROOF_PHOTO_MODE = String(
   (window.__ENV && window.__ENV.SINGLE_PROOF_PHOTO_MODE)
   || (window.ENV && window.ENV.SINGLE_PROOF_PHOTO_MODE)
@@ -3348,6 +3392,13 @@ function setActiveView(viewId, { syncHash = true } = {}){
   if (!CONTROL_CENTER_DEV_MODE && !hasAuthenticatedSession()){
     applySignedOutUi("set-active-view-blocked");
     return;
+  }
+  if (SPLICING_MOVED){
+    const urlMoved = redirectHiddenSplicingRoute();
+    if (SPLICING_HIDDEN_VIEWS.has(viewId)){
+      if (!urlMoved) showToast(SPLICING_MOVED_MESSAGE);
+      viewId = getDefaultView();
+    }
   }
   if (isFieldSubcontractorMode() && !FIELD_SUBCONTRACTOR_ALLOWED_VIEWS.has(viewId)){
     viewId = "viewMap";
@@ -12461,6 +12512,7 @@ function parseViewFromHash(hashValue = window.location.hash){
   const normalized = raw && raw !== "#" ? (raw.startsWith("#") ? raw.slice(1) : raw) : pathRoute;
   const routeToken = normalized.split(/[?&]/)[0].replace(/^\/+|\/+$/g, "").trim().toLowerCase();
   if (!routeToken) return null;
+  if (SPLICING_MOVED && SPLICING_HIDDEN_ROUTE_TOKENS.has(routeToken)) return null;
   if (routeToken === "onboarding" || routeToken === "viewonboarding") return "viewOnboarding";
   if (routeToken === "admin/onboarding" || routeToken === "admin-onboarding"){
     _activeAdminTab = "onboarding";
@@ -12532,6 +12584,7 @@ function decodeInvoiceUrlToken(value){
 }
 
 function getInvoiceIdFromUrl(locationLike = window.location){
+  if (SPLICING_MOVED) return "";
   const hash = String(locationLike?.hash || "").trim();
   if (hash){
     const normalizedHash = hash.startsWith("#") ? hash.slice(1) : hash;
@@ -12548,6 +12601,7 @@ function getInvoiceIdFromUrl(locationLike = window.location){
 }
 
 function hasInvoiceHashRoute(hashValue = window.location.hash){
+  if (SPLICING_MOVED) return false;
   const hash = String(hashValue || "").trim();
   if (!hash) return false;
   const normalized = hash.startsWith("#") ? hash.slice(1) : hash;
@@ -12555,6 +12609,7 @@ function hasInvoiceHashRoute(hashValue = window.location.hash){
 }
 
 function hasRedlineHashRoute(hashValue = window.location.hash){
+  if (SPLICING_MOVED) return false;
   const hash = String(hashValue || "").trim();
   if (!hash) return false;
   const normalized = hash.startsWith("#") ? hash.slice(1) : hash;
@@ -12913,6 +12968,7 @@ function getDefaultView({ allowHash = false } = {}){
 }
 
 function isViewAllowed(viewId){
+  if (SPLICING_MOVED && SPLICING_HIDDEN_VIEWS.has(viewId)) return false;
   if (CONTROL_CENTER_DEV_MODE){
     return true;
   }
@@ -20662,6 +20718,10 @@ function closeMenuModal(){
 }
 
 async function launchRedlineFromMenu(){
+  if (SPLICING_MOVED){
+    showToast(SPLICING_MOVED_MESSAGE);
+    return;
+  }
   if (!state.user){
     toast("Sign in required", "Sign in to use redline.");
     return;
@@ -27437,9 +27497,9 @@ function renderRootMapAdminControls(){
         <button class="btn root-cc-q-button small" type="button" data-map-field-action="rootOpenView" data-root-view="viewRootCommandCenter">Command Center</button>
         <button class="btn secondary small" type="button" data-map-field-action="rootXrayOn">Project X-Ray</button>
         <button class="btn secondary small" type="button" data-map-field-action="rootOpenView" data-root-view="viewAdmin">Administration</button>
-        <button class="btn secondary small" type="button" data-map-field-action="rootOpenProjects">Projects</button>
+        <button class="btn secondary small" type="button" data-map-field-action="rootOpenProjects" data-splicing-hide>Projects</button>
         <button class="btn secondary small" type="button" data-map-field-action="rootOpenView" data-root-view="viewDailyReport">Reports</button>
-        <button class="btn secondary small" type="button" data-map-field-action="rootOpenView" data-root-view="viewInvoices">Invoices</button>
+        <button class="btn secondary small" type="button" data-map-field-action="rootOpenView" data-root-view="viewInvoices" data-splicing-hide>Invoices</button>
         <button class="btn ghost small" type="button" data-map-field-action="rootOpenView" data-root-view="viewNodes">Location Records</button>
         <button class="btn ghost small" type="button" data-map-field-action="rootCreateLocation">Create Location</button>
         <button class="btn ghost small" type="button" data-map-field-action="rootImportLocations">Import Locations</button>
@@ -41910,9 +41970,9 @@ async function handleWpDownload(){
   if (dlBtn){ dlBtn.disabled = true; dlBtn.textContent = "Building…"; }
   try {
     const blob = await buildWorkPackage({
-      includeInvoices: $("wpIncInvoices")?.checked !== false,
+      includeInvoices: !SPLICING_MOVED && $("wpIncInvoices")?.checked !== false,
       includeWorkOrders: $("wpIncWorkOrders")?.checked !== false,
-      includeRedlines: $("wpIncRedlines")?.checked !== false,
+      includeRedlines: !SPLICING_MOVED && $("wpIncRedlines")?.checked !== false,
       includePhotos: $("wpIncPhotos")?.checked === true,
     });
     const projectSlug = (state.activeProject?.name || "work-package").replace(/[^a-z0-9]/gi, "-").toLowerCase();
@@ -41937,9 +41997,9 @@ async function handleWpShare(){
   if (shareBtn){ shareBtn.disabled = true; shareBtn.textContent = "Building…"; }
   try {
     const blob = await buildWorkPackage({
-      includeInvoices: $("wpIncInvoices")?.checked !== false,
+      includeInvoices: !SPLICING_MOVED && $("wpIncInvoices")?.checked !== false,
       includeWorkOrders: $("wpIncWorkOrders")?.checked !== false,
-      includeRedlines: $("wpIncRedlines")?.checked !== false,
+      includeRedlines: !SPLICING_MOVED && $("wpIncRedlines")?.checked !== false,
       includePhotos: $("wpIncPhotos")?.checked === true,
     });
 
@@ -42439,6 +42499,10 @@ function initLiveBoardUI(){
   const menuUploadBtn = document.getElementById("btnMenuUploadProject");
   if (menuUploadBtn) {
     menuUploadBtn.addEventListener("click", () => {
+      if (SPLICING_MOVED){
+        showToast(SPLICING_MOVED_MESSAGE);
+        return;
+      }
       const uploadInput = document.getElementById("kmzUploadInput") || document.querySelector('input[type="file"][accept*="kmz"]');
       if (uploadInput) uploadInput.click();
       const menu = document.getElementById("menuModal");

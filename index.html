@@ -2307,7 +2307,8 @@
               <div class="muted small">Quick shortcuts for core platform capabilities.</div>
               <div id="featureHubGrid" class="feature-hub-grid" style="margin-top:12px;">
                 <button class="btn feature-hub-btn" type="button" data-demo-feature="viewTechnician">Timesheet</button>
-                <button class="btn feature-hub-btn" type="button" data-demo-feature="viewInvoices">Invoicing</button>
+                <button class="btn feature-hub-btn" type="button" data-demo-feature="viewInvoices" data-splicing-hide>Invoicing</button>
+                <button class="btn feature-hub-btn splicing-launch" type="button" data-splicing-launch><span class="splicing-launch-icon" aria-hidden="true"></span>Splicing</button>
                 <button class="btn feature-hub-btn" type="button" data-demo-feature="viewCatalog">Material Search</button>
                 <button class="btn feature-hub-btn" type="button" data-demo-feature="messages">Messaging</button>
               </div>
@@ -2503,6 +2504,13 @@
         </section>
 
         <section id="viewNodes" class="view">
+          <div class="card splicing-tile" data-splicing-launch role="button" tabindex="0" aria-label="Open Splicing">
+            <span class="splicing-launch-icon" aria-hidden="true"></span>
+            <div class="splicing-tile-text">
+              <div class="splicing-tile-title">Splicing</div>
+              <div class="muted small">Projects, redlines and billing.</div>
+            </div>
+          </div>
           <div class="card">
             <div class="node-workspace-header">
               <div>
@@ -3321,7 +3329,7 @@
                 <div class="workspace-hero-actions">
                   <button class="menu-link workspace-hero-link" type="button" data-view="viewDashboard">Workspace Gateway</button>
                   <button class="menu-link workspace-hero-link workspace-hero-link-strong" type="button" data-view="viewDailyReport">Daily Report</button>
-                  <button class="menu-link workspace-hero-link workspace-hero-link-strong" type="button" data-view="viewInvoices">Billing Desk</button>
+                  <button class="menu-link workspace-hero-link workspace-hero-link-strong" type="button" data-view="viewInvoices" data-splicing-hide>Billing Desk</button>
                 </div>
               </div>
             </div>
@@ -3611,6 +3619,10 @@
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 7h10M5 4l-3 3 3 3M9 4l3 3-3 3"/></svg>
             OSP Specialist
           </button>
+          <button class="menu-link splicing-launch" type="button" data-splicing-launch>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 5c2-3 4 3 6 0s4-3 6 0"/><path d="M1 9c2 3 4-3 6 0s4 3 6 0"/></svg>
+            Splicing
+          </button>
           <button class="menu-link" type="button" data-view="viewTechnician" data-ws-key="drop_crew">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 7.5L7 2.5l5 5"/><path d="M4 7V12h6V7"/><path d="M6.5 12V9h1v3"/></svg>
             Drop Crew
@@ -3624,7 +3636,7 @@
             Fiber Engineer
           </button>
         </div>
-        <div class="menu-section">
+        <div class="menu-section" data-splicing-hide>
           <div class="muted small menu-title">Projects</div>
           <button class="menu-link" type="button" data-view="viewDashboard" data-projects-menu="true">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="4" height="4" rx="0.5"/><rect x="8" y="2" width="4" height="4" rx="0.5"/><rect x="2" y="8" width="4" height="4" rx="0.5"/><rect x="8" y="8" width="4" height="4" rx="0.5"/></svg>
@@ -4004,13 +4016,13 @@
 
         <div style="margin-bottom:12px;">
           <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.07em;color:#5aabdf;margin-bottom:8px;">Include in package</div>
-          <label style="display:flex;align-items:center;gap:8px;padding:7px 0;cursor:pointer;font-size:.88rem;">
+          <label data-splicing-hide style="display:flex;align-items:center;gap:8px;padding:7px 0;cursor:pointer;font-size:.88rem;">
             <input type="checkbox" id="wpIncInvoices" checked /> Invoices &amp; Billing
           </label>
           <label style="display:flex;align-items:center;gap:8px;padding:7px 0;cursor:pointer;font-size:.88rem;">
             <input type="checkbox" id="wpIncWorkOrders" checked /> Work Orders
           </label>
-          <label style="display:flex;align-items:center;gap:8px;padding:7px 0;cursor:pointer;font-size:.88rem;">
+          <label data-splicing-hide style="display:flex;align-items:center;gap:8px;padding:7px 0;cursor:pointer;font-size:.88rem;">
             <input type="checkbox" id="wpIncRedlines" checked /> Redlines
           </label>
           <label style="display:flex;align-items:center;gap:8px;padding:7px 0;cursor:pointer;font-size:.88rem;">
@@ -4177,6 +4189,7 @@
       });
     })();
   </script>
+  <script src="./js/splicingLauncher.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
