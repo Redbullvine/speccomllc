@@ -1,0 +1,22 @@
+name: boundary-guard
+# Same rules as .githooks/pre-commit, applied to everything a push or PR adds.
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan added lines for boundary tokens
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+          fi
+          case "$BASE" in 0000000*|"") BASE="$(git rev-list --max-parents=0 HEAD | tail -1)";; esac
+          BOUNDARY_DIFF_ARGS="$BASE...HEAD" sh .githooks/pre-commit

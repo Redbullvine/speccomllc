@@ -1,0 +1,93 @@
+#!/bin/sh
+#
+# SpecCom pre-commit guard.
+#
+# Refuses any commit that introduces TelecomEngine content into this repo.
+# TelecomEngine is a separate app, separate owner, separate Supabase project;
+# the two share no code, assets, schema or naming. See CLAUDE.md.
+#
+# Wired up with:  git config core.hooksPath .githooks
+#
+set -u
+
+# Splicing launcher exception (narrow). The launcher file may contain the exact
+# string below -- nothing else. Any other TelecomEngine token in that file, and
+# any occurrence in any other file, is still blocked.
+ALLOWED_FILE="js/splicingLauncher.js"
+
+# Local commit: scan the staged diff. CI sets BOUNDARY_DIFF_ARGS (e.g.
+# "origin/main...HEAD") to scan a range with the same rules.
+DIFF_ARGS="${BOUNDARY_DIFF_ARGS:---cached}"
+
+TOKENS="telecomengine sgrxziinfvwswjlrhzqu capture_events capture_project_codes capture_projects carlsbadtally"
+
+# The files whose JOB is to define this boundary have to be able to name the
+# tokens. Without this the hook blocks the commit that installs it.
+is_exempt() {
+  case "$1" in
+    CLAUDE.md|AGENTS.md|.githooks/*|.cursorrules|.github/copilot-instructions.md) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+found=0
+
+report_header() {
+  if [ "$found" -eq 0 ]; then
+    echo "BLOCKED: TelecomEngine content in SpecCom repo."
+    echo
+    found=1
+  fi
+}
+
+# --diff-filter=ACMR: added/copied/modified/renamed. A DELETION is never
+# blocked -- removing contamination must always be allowed through.
+git diff $DIFF_ARGS --name-only --diff-filter=ACMR -z |
+while IFS= read -r -d '' file; do
+  is_exempt "$file" && continue
+
+  # 1. the path itself
+  for t in $TOKENS; do
+    if printf '%s' "$file" | grep -iq -- "$t"; then
+      report_header
+      echo "  $file"
+      echo "      token in FILENAME: $t"
+    fi
+  done
+
+  # 2. lines being ADDED (leading '+', excluding the '+++' file header).
+  #    Removed lines are ignored on purpose, same reason as --diff-filter.
+  added=$(git diff $DIFF_ARGS -U0 --no-color -- "$file" 2>/dev/null | grep '^+' | grep -v '^+++')
+  if [ "$file" = "$ALLOWED_FILE" ]; then
+    # Strip the exact allowed URL, but only when nothing that extends it (query,
+    # hash, path, extra host characters) follows. Case-sensitive on purpose.
+    added=$(printf '%s\n' "$added" | sed -E 's#https://telecomengine\.app/([^?\#A-Za-z0-9._~%/-]|$)#\1#g')
+  fi
+  [ -n "$added" ] || continue
+
+  for t in $TOKENS; do
+    if printf '%s\n' "$added" | grep -iq -- "$t"; then
+      report_header
+      echo "  $file"
+      echo "      token: $t"
+      printf '%s\n' "$added" | grep -i -- "$t" | head -3 | cut -c1-100 | sed 's/^/        /'
+    fi
+  done
+done > "${TMPDIR:-/tmp}/speccom-precommit-$$" 2>&1
+
+# The while loop runs in a subshell (pipeline), so $found does not survive it.
+# The report file is the signal instead.
+REPORT="${TMPDIR:-/tmp}/speccom-precommit-$$"
+if [ -s "$REPORT" ]; then
+  cat "$REPORT"
+  rm -f "$REPORT"
+  echo
+  echo "  You are in the wrong directory."
+  echo "  TelecomEngine lives at: C:\\Users\\redbu\\Projects\\telecomengine"
+  echo
+  echo "  Nothing was committed. Move the work to the right repo."
+  exit 1
+fi
+
+rm -f "$REPORT"
+exit 0
