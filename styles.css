@@ -10973,3 +10973,9 @@ body:not(.splicing-moved) [data-splicing-launch]{display:none !important}
 .splicing-tile .splicing-launch-icon{width:26px;height:26px;flex-basis:26px;margin:0}
 .splicing-tile-title{font-weight:800;letter-spacing:.04em;color:#1d7a45}
 .splicing-tile:focus-visible{outline:2px solid #1d7a45;outline-offset:2px}
+
+/* ---- Current job picker (field workspaces) --------------------------------- */
+.job-picker{display:flex;flex-direction:column;gap:6px;margin:0 0 12px;padding:10px 12px;border:1px solid rgba(29,122,69,.35);border-radius:10px;background:rgba(29,122,69,.06)}
+.job-picker-label{font-size:.72rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#1d7a45}
+.job-picker-select{width:100%}
+.job-picker-single{font-weight:700}

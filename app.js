@@ -1900,6 +1900,26 @@ function setPreferredLanguage(lang, { persist = true } = {}){
   applyI18n();
 }
 
+function sessionJobKey(){
+  const uid = String(state.user?.id || "").trim();
+  return uid ? `speccom.session_job.${uid}` : "";
+}
+
+function getSessionJobId(){
+  const key = sessionJobKey();
+  if (!key) return "";
+  try { return String(window.sessionStorage.getItem(key) || ""); } catch { return ""; }
+}
+
+function setSessionJobId(projectId){
+  const key = sessionJobKey();
+  if (!key) return;
+  try {
+    if (projectId) window.sessionStorage.setItem(key, String(projectId));
+    else window.sessionStorage.removeItem(key);
+  } catch {}
+}
+
 function getSavedProjectPreference(){
   return safeLocalStorageGet(CURRENT_PROJECT_KEY);
 }
@@ -11237,6 +11257,9 @@ function canViewInvoiceVault(){
 }
 
 function canCreateProjects(){
+  if (SPLICING_MOVED && !CONTROL_CENTER_DEV_MODE){
+    return SpecCom.helpers.isRoot() || ["ROOT", "OWNER", "ADMIN"].includes(getRoleCode());
+  }
   if (CONTROL_CENTER_DEV_MODE) return true;
   return hasAuthenticatedSession();
 }
@@ -13121,6 +13144,8 @@ function clearAuthenticatedWorkspaceState(){
       modal.style.display = "none";
     }
   });
+  setSessionJobId(null);
+  state.jobListScope = null;
   setSavedProjectPreference(null);
   setActiveOrgContext(null);
   showProfileSetupModal(false);
@@ -20521,10 +20546,41 @@ function renderProjects(){
   }
   renderProjectInfo();
   renderProjectsList();
+  renderJobPickers();
   syncDprProjectSelection();
   renderDprProjectOptions();
   updateProjectScopedControls();
 }
+
+// "Current job" selector at the top of the field workspaces. Lists exactly what
+// my_jobs() returned; there is no other filter.
+function renderJobPickers(){
+  const hosts = document.querySelectorAll("[data-job-picker]");
+  if (!hosts.length) return;
+  const jobs = state.projects || [];
+  const n = jobs.length;
+  const activeId = String(state.activeProject?.id || "");
+  const rule = state.jobListScope === "root"
+    ? `Root: showing all ${n} active job${n === 1 ? "" : "s"}`
+    : `Showing ${n} job${n === 1 ? "" : "s"} you're a member of`;
+  const label = (p) => (p.job_number ? `${p.name || "Job"} (Job ${p.job_number})` : (p.name || "Job"));
+  let control;
+  if (!n){
+    control = `<div class="job-picker-single muted">No jobs yet. Ask an admin to add you to one.</div>`;
+  } else if (n === 1){
+    control = `<div class="job-picker-single">${escapeHtml(label(jobs[0]))}</div>`;
+  } else {
+    control = `<select class="input job-picker-select" data-job-select aria-label="Current job">${jobs.map((p) => `<option value="${escapeHtml(String(p.id))}"${String(p.id) === activeId ? " selected" : ""}>${escapeHtml(label(p))}</option>`).join("")}</select>`;
+  }
+  const html = `<label class="job-picker-label">Current job</label>${control}<div class="job-picker-rule muted small">${escapeHtml(rule)}</div>`;
+  hosts.forEach((host) => { host.innerHTML = html; });
+}
+
+document.addEventListener("change", (event) => {
+  const select = event.target instanceof Element ? event.target.closest("select[data-job-select]") : null;
+  if (!select) return;
+  if (!setActiveProjectById(select.value)) renderJobPickers();
+});
 
 function renderProjectInfo(){
   const wrap = $("projectInfoBody");
@@ -24528,30 +24584,6 @@ async function sendMessage(){
   markMessagesRead();
 }
 
-async function loadProjectsViaServer(){
-  const token = await getCurrentAccessToken();
-  if (!token) return { data: null, error: new Error("Missing auth token") };
-  try {
-    const response = await fetch("/.netlify/functions/list-projects", {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      cache: "no-store",
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok){
-      const err = new Error(payload?.error || `Projects service failed (${response.status})`);
-      err.status = response.status;
-      return { data: null, error: err };
-    }
-    return { data: Array.isArray(payload?.data) ? payload.data : [], error: null };
-  } catch (error) {
-    return { data: null, error };
-  }
-}
-
 async function loadProjects(){
   if (isDemo){
     state.projects = state.demo.project ? [state.demo.project] : [];
@@ -24567,111 +24599,38 @@ async function loadProjects(){
   }
   const orgId = await initializeOrgContext({ attemptRepair: true });
   const userId = state.user?.id || null;
-  if (!orgId){
-    console.warn("[projects] org undefined; loading all visible projects", { user_id: userId, org_id: null });
+
+  // ONE source for every job list: my_jobs(). No service-role list, no
+  // active-company filter, no client-side re-filtering, no membership fallback,
+  // and nothing carried over from a previous sign-in.
+  const { data: jobRows, error: jobError } = await state.client.rpc("my_jobs");
+  if (jobError){
+    console.warn("[projects] my_jobs failed", jobError);
+    toast("Jobs load error", jobError.message);
+    state.projects = [];
+    state.jobListScope = null;
+    state.activeProject = null;
+    renderProjects();
+    return;
   }
-  const baseSelect = "id, org_id, name, description, created_at, location, job_number, is_demo, created_by, active";
-  let projects = [];
-  const serverProjects = await loadProjectsViaServer();
+  const jobs = Array.isArray(jobRows) ? jobRows : [];
+  state.jobListScope = jobs[0]?.scope || (SpecCom.helpers.isRoot() ? "root" : "member");
+  state.projects = jobs.map(({ scope, ...job }) => job);
+  await loadProjectMembershipIdsForCurrentUser();
 
-  if (!serverProjects.error){
-    projects = serverProjects.data || [];
-  } else {
-    console.warn("[projects] server list unavailable; falling back to client query", serverProjects.error);
-
-    let projectsQuery = state.client
-      .from("projects")
-      .select(baseSelect)
-      .order("name");
-    let projectsResp = await projectsQuery;
-    if (projectsResp.error){
-      const message = String(projectsResp.error.message || "").toLowerCase();
-      if (message.includes("active") && message.includes("does not exist")){
-        projectsQuery = state.client
-          .from("projects")
-          .select(baseSelect.replace(", active", ""))
-          .order("name");
-        projectsResp = await projectsQuery;
-      }
-    }
-    if (projectsResp.error){
-      const message = String(projectsResp.error.message || "").toLowerCase();
-      if (message.includes("created_by") && message.includes("does not exist")){
-        projectsQuery = state.client
-          .from("projects")
-          .select(baseSelect.replace(", created_by", "").replace(", active", ""))
-          .order("name");
-        projectsResp = await projectsQuery;
-      }
-    }
-    if (projectsResp.error){
-      toast("Projects load error", projectsResp.error.message);
-      return;
-    }
-    projects = projectsResp.data || [];
-  }
-
-  if (!projects.length){
-    const membershipSelect = baseSelect.replace(", active", "");
-    const { data: memberRows, error: memberError } = await state.client
-      .from("project_members")
-      .select(`
-        project_id,
-        projects (
-          ${membershipSelect}
-        )
-      `)
-      .eq("user_id", state.user.id);
-    if (!memberError){
-      projects = (memberRows || [])
-        .map((row) => {
-          if (!row?.projects) return null;
-          return {
-            ...row.projects,
-          };
-        })
-        .filter(Boolean);
-    } else if (!serverProjects.error) {
-      console.warn("[projects] membership fallback failed", memberError);
-    } else {
-      let legacyQuery = state.client
-        .from("projects")
-        .select(membershipSelect)
-        .order("name");
-      if (orgId){
-        legacyQuery = legacyQuery.eq("org_id", orgId);
-      }
-      const legacyResp = await legacyQuery;
-      if (!legacyResp.error){
-        projects = legacyResp.data || projects;
-      }
-    }
-  }
-
-  const memberProjectIds = await loadProjectMembershipIdsForCurrentUser();
-  const uniqueProjects = [];
-  const seen = new Set();
-  (projects || []).forEach((row) => {
-    const id = String(row?.id || "").trim();
-    if (!id || seen.has(id)) return;
-    seen.add(id);
-    uniqueProjects.push(row);
-  });
-
-  const resolvedProjects = filterProjectsForFieldBucket(uniqueProjects, memberProjectIds);
-
-  resolvedProjects.sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
-  state.projects = resolvedProjects;
   const savedProjectId = String(
-    state.activeProject?.id
+    getSessionJobId()
+    || state.activeProject?.id
     || state.profile?.current_project_id
-    || getSavedProjectPreference()
     || ""
   ).trim();
   const preferredProject = savedProjectId
     ? state.projects.find((p) => String(p?.id || "") === savedProjectId)
     : null;
-  state.activeProject = preferredProject || state.projects[0] || null;
+  state.activeProject = state.projects.length === 1
+    ? state.projects[0]
+    : (preferredProject || state.projects[0] || null);
+  setSessionJobId(state.activeProject?.id || null);
   setSavedProjectPreference(state.activeProject?.id || null);
   const resolvedOrgId = state.activeProject?.org_id || orgId || state.projects[0]?.org_id || null;
   if (resolvedOrgId){
@@ -31296,6 +31255,7 @@ function setActiveProjectById(id){
 
 async function saveCurrentProjectPreference(projectId){
   setSavedProjectPreference(projectId);
+  setSessionJobId(projectId);
   if (!state.client || !state.user || isDemo) return;
   try{
     const { error } = await state.client
