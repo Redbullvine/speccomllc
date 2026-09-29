@@ -11320,6 +11320,18 @@ function getOnboardingProfilePayload(){
 }
 
 function syncOnboardingProfileForm(){
+  const owner = state.user?.id || "";
+  if (state.onboarding.formOwner !== undefined && state.onboarding.formOwner !== owner){
+    $("subcontractorProfileForm")?.querySelectorAll("input").forEach((input) => {
+      delete input.dataset.onboardingDirty;
+    });
+    state.onboarding.agreementDrafts = {};
+    $("onboardingSignerName").value = "";
+    $("onboardingSignatureConsent").checked = false;
+    $("onboardingTypedSignature").checked = false;
+    clearOnboardingSignaturePad();
+  }
+  state.onboarding.formOwner = owner;
   const profile = state.onboarding.profile || {};
   const defaults = {
     subFullName: profile.full_name || getProfileDisplayName(),
@@ -11336,8 +11348,53 @@ function syncOnboardingProfileForm(){
   };
   Object.entries(defaults).forEach(([id, value]) => {
     const el = $(id);
-    if (el && document.activeElement !== el) el.value = value || "";
+    if (el && !el.dataset.onboardingDirty && document.activeElement !== el) el.value = value || "";
   });
+}
+
+function focusOnboardingSection(id, focusId = id){
+  const section = $(id);
+  const target = $(focusId);
+  if (!section || !target) return;
+  target.focus({ preventScroll: true });
+  section.scrollIntoView({ block: "start", behavior: "instant" });
+}
+
+function selectOnboardingAgreement(type){
+  if (!SUBCONTRACTOR_REQUIRED_AGREEMENTS.some((item) => item.type === type)) return;
+  const previous = state.onboarding.activeAgreementType;
+  if (type !== previous){
+    // Keep each unfinished signature separate; navigation must never erase answers.
+    const drafts = state.onboarding.agreementDrafts ||= {};
+    drafts[previous] = {
+      name: $("onboardingSignerName").value,
+      consent: $("onboardingSignatureConsent").checked,
+      typed: $("onboardingTypedSignature").checked,
+      signature: state.onboarding.signatureDirty
+        ? $("onboardingSignaturePad").getContext("2d").getImageData(0, 0, 720, 220) : null,
+    };
+    state.onboarding.activeAgreementType = type;
+    const draft = drafts[type];
+    clearOnboardingSignaturePad();
+    $("onboardingSignerName").value = draft?.name || state.onboarding.profile?.full_name || getProfileDisplayName();
+    $("onboardingSignatureConsent").checked = draft?.consent || false;
+    $("onboardingTypedSignature").checked = draft?.typed || false;
+    if (draft?.signature){
+      $("onboardingSignaturePad").getContext("2d").putImageData(draft.signature, 0, 0);
+      state.onboarding.signatureDirty = true;
+    }
+  }
+  renderSubcontractorOnboarding();
+  focusOnboardingSection("onboardingAgreementContent");
+}
+
+function navigateOnboardingItem(key){
+  if (key === "profile") return focusOnboardingSection("subcontractorProfileForm", "subFullName");
+  if (key === "emergency") return focusOnboardingSection("onboardingEmergencyContact", "subEmergencyName");
+  if (SUBCONTRACTOR_REQUIRED_DOCUMENTS.some((item) => item.type === key)){
+    return focusOnboardingSection(`onboardingDocument-${key}`, `onboardingUpload-${key}`);
+  }
+  selectOnboardingAgreement(key);
 }
 
 function renderOnboardingAgreementCopy(type){
@@ -11531,10 +11588,12 @@ function renderSubcontractorOnboarding(){
   const checklistWrap = $("onboardingChecklist");
   if (checklistWrap){
     checklistWrap.innerHTML = checklist.map((item) => `
-      <div class="onboarding-check-card ${item.complete ? "is-complete" : ""}">
-        <span class="onboarding-check-icon">${item.complete ? "✓" : ""}</span>
+      <button type="button" class="onboarding-check-card ${item.complete ? "is-complete" : ""}"
+        data-onboarding-action="navigateItem" data-item-key="${item.key}"
+        aria-label="${escapeHtml(item.label)} — ${item.complete ? "Complete" : "Incomplete"}. Open section">
+        <span class="onboarding-check-icon" aria-hidden="true">${item.complete ? "✓" : ""}</span>
         <span>${escapeHtml(item.label)}</span>
-      </div>
+      </button>
     `).join("");
   }
 
@@ -11545,7 +11604,7 @@ function renderSubcontractorOnboarding(){
       const docStatus = doc ? String(doc.status || "uploaded").toLowerCase() : "missing";
       const rejected = docStatus === "rejected";
       return `
-        <div class="onboarding-doc-card ${required ? "is-required" : ""} ${rejected ? "is-rejected" : ""}">
+        <div id="onboardingDocument-${config.type}" class="onboarding-doc-card ${required ? "is-required" : ""} ${rejected ? "is-rejected" : ""}">
           <div class="onboarding-doc-main">
             <div>
               <div class="onboarding-doc-title">${escapeHtml(config.label)}${required ? " *" : ""}</div>
@@ -11557,7 +11616,7 @@ function renderSubcontractorOnboarding(){
             <span class="onboarding-badge ${onboardingStatusClass(docStatus)}">${escapeHtml(doc ? formatOnboardingStatus(docStatus) : "Missing")}</span>
           </div>
           <div class="onboarding-doc-actions">
-            <button class="btn secondary small" type="button" data-onboarding-action="chooseDocument" data-doc-type="${escapeHtml(config.type)}">Upload</button>
+            <button id="onboardingUpload-${config.type}" class="btn secondary small" type="button" data-onboarding-action="chooseDocument" data-doc-type="${escapeHtml(config.type)}">${doc ? "Upload another file" : "Upload"}</button>
             ${doc ? `<button class="btn ghost small" type="button" data-onboarding-action="openDocument" data-doc-id="${escapeHtml(doc.id)}">Open</button>` : ""}
           </div>
         </div>
@@ -11574,10 +11633,17 @@ function renderSubcontractorOnboarding(){
     tabs.innerHTML = SUBCONTRACTOR_REQUIRED_AGREEMENTS.map((item) => {
       const signed = isAgreementComplete(item.type);
       const active = state.onboarding.activeAgreementType === item.type;
-      return `<button class="onboarding-tab ${active ? "is-active" : ""}" type="button" data-onboarding-action="selectAgreement" data-agreement-type="${escapeHtml(item.type)}">${escapeHtml(item.label)}${signed ? " ✓" : ""}</button>`;
+      return `<button class="onboarding-tab ${active ? "is-active" : ""}" type="button" aria-pressed="${active}" aria-controls="onboardingAgreementContent" data-onboarding-action="selectAgreement" data-agreement-type="${escapeHtml(item.type)}">${escapeHtml(item.label)}${signed ? " ✓" : ""}</button>`;
     }).join("");
   }
   renderOnboardingAgreementCopy(state.onboarding.activeAgreementType);
+  const savedAgreement = getLatestOnboardingAgreement(state.onboarding.activeAgreementType);
+  const receipt = $("onboardingAgreementReceipt");
+  if (receipt){
+    receipt.textContent = isAgreementComplete(state.onboarding.activeAgreementType)
+      ? `Saved on file: ${savedAgreement.signer_name || "Signer"}${savedAgreement.signed_at ? ` · ${new Date(savedAgreement.signed_at).toLocaleString()}` : ""}. You can review this agreement without signing again.`
+      : "Review this document, then sign or acknowledge below.";
+  }
   const signer = $("onboardingSignerName");
   if (signer && !String(signer.value || "").trim()) signer.value = profile.full_name || getProfileDisplayName();
   const submitBtn = $("btnOnboardingSubmit");
@@ -11639,6 +11705,7 @@ async function saveSubcontractorDraft({ silent = false } = {}){
     return false;
   }
   const payload = getOnboardingProfilePayload();
+  const submittedValues = new Map(Array.from($("subcontractorProfileForm").querySelectorAll("input"), (input) => [input.id, input.value]));
   payload.user_id = state.user.id;
   state.onboarding.saving = true;
   const { data, error } = await state.client
@@ -11652,6 +11719,9 @@ async function saveSubcontractorDraft({ silent = false } = {}){
     return false;
   }
   state.onboarding.profile = data;
+  submittedValues.forEach((value, id) => {
+    if ($(id)?.value === value) delete $(id).dataset.onboardingDirty;
+  });
   renderSubcontractorOnboarding();
   if (!silent) toast("Draft saved", "Your onboarding packet draft is saved.");
   return true;
@@ -11719,11 +11789,26 @@ async function saveSubcontractorAgreement(){
     toast("Consent required", "Check the electronic signature consent box.", "error");
     return;
   }
-  if (!canvas || !state.onboarding.signatureDirty){
-    toast("Signature required", "Sign in the signature pad before saving.", "error");
+  const typedSignature = Boolean($("onboardingTypedSignature")?.checked);
+  if (!canvas || (!typedSignature && !state.onboarding.signatureDirty)){
+    toast("Signature required", "Draw your signature or choose to use your typed signer name.", "error");
     return;
   }
-  const signatureData = canvas.toDataURL("image/png");
+  // Store both methods in the existing PNG format, without changing saved records.
+  const signatureCanvas = typedSignature ? document.createElement("canvas") : canvas;
+  if (typedSignature){
+    signatureCanvas.width = 720;
+    signatureCanvas.height = 220;
+    const context = signatureCanvas.getContext("2d");
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, 720, 220);
+    context.fillStyle = "#111827";
+    context.font = "36px serif";
+    context.fillText(signerName, 28, 110, 664);
+    context.font = "16px sans-serif";
+    context.fillText("Electronically signed using typed name", 28, 175);
+  }
+  const signatureData = signatureCanvas.toDataURL("image/png");
   const { error } = await state.client
     .from("subcontractor_agreements")
     .insert({
@@ -11740,7 +11825,12 @@ async function saveSubcontractorAgreement(){
     return;
   }
   toast("Agreement saved", `${getAgreementConfig(type).label} signature saved.`);
-  clearOnboardingSignaturePad();
+  delete (state.onboarding.agreementDrafts ||= {})[type];
+  if (state.onboarding.activeAgreementType === type){
+    clearOnboardingSignaturePad();
+    $("onboardingSignatureConsent").checked = false;
+    $("onboardingTypedSignature").checked = false;
+  }
   await loadSubcontractorOnboarding();
 }
 
@@ -11773,16 +11863,14 @@ async function refreshOnboardingStatus(){
 
 function handleOnboardingAction(action, target){
   if (!action) return;
+  if (action === "navigateItem") return navigateOnboardingItem(target?.dataset?.itemKey);
   if (action === "refresh") return void refreshOnboardingStatus();
   if (action === "saveDraft") return void saveSubcontractorDraft();
   if (action === "submit") return void submitSubcontractorOnboarding();
   if (action === "clearSignature") return clearOnboardingSignaturePad();
   if (action === "saveAgreement") return void saveSubcontractorAgreement();
   if (action === "selectAgreement"){
-    state.onboarding.activeAgreementType = String(target?.dataset?.agreementType || "subcontractor_agreement");
-    clearOnboardingSignaturePad();
-    renderSubcontractorOnboarding();
-    return;
+    return selectOnboardingAgreement(String(target?.dataset?.agreementType || "subcontractor_agreement"));
   }
   if (action === "chooseDocument"){
     const input = $("subcontractorDocumentInput");
@@ -38567,6 +38655,13 @@ function wireUI(){
   });
   const onboardingView = $("viewOnboarding");
   if (onboardingView){
+    $("subcontractorProfileForm")?.addEventListener("input", (event) => {
+      if (event.target.matches("input")) event.target.dataset.onboardingDirty = "true";
+    });
+    $("subcontractorProfileForm")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void saveSubcontractorDraft();
+    });
     onboardingView.addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-onboarding-action]");
       if (!btn) return;

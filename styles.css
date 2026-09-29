@@ -8500,7 +8500,39 @@ body.field-subcontractor-mode .liveboard {
   border-radius: 8px;
   background: rgba(255,255,255,0.92);
   color: #334155;
+  width: 100%;
+  font: inherit;
   font-weight: 850;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.onboarding-check-card:hover {
+  border-color: #2563eb;
+}
+
+.onboarding-view :is(button, input, [tabindex]):focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 3px;
+}
+
+.onboarding-view :is(form, fieldset, .onboarding-doc-card, #onboardingAgreements, #onboardingAgreementContent) {
+  scroll-margin-top: 120px;
+}
+
+.onboarding-emergency {
+  min-width: 0;
+  border: 0;
+  border-top: 1px solid #cbd5e1;
+  margin: 20px 0 0;
+  padding: 16px 0 0;
+}
+
+.onboarding-emergency legend {
+  padding-right: 8px;
+  color: #334155;
+  font-weight: 700;
 }
 
 .onboarding-check-card.is-complete {
@@ -8705,9 +8737,8 @@ body.field-subcontractor-mode .liveboard {
 }
 
 .onboarding-submit-bar {
-  position: sticky;
-  bottom: 12px;
-  z-index: 10;
+  position: static;
+  margin-top: 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;

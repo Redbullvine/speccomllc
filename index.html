@@ -2341,7 +2341,7 @@
               <div class="row" style="justify-content:space-between; align-items:center;">
                 <div>
                   <div class="muted small">Packet progress</div>
-                  <strong id="onboardingProgressText">0 of 7 complete</strong>
+                  <strong id="onboardingProgressText" role="status" aria-live="polite">0 of 10 complete</strong>
                 </div>
                 <span id="onboardingStatusBadge" class="onboarding-badge">Draft</span>
               </div>
@@ -2368,11 +2368,16 @@
                   <label>City<input id="subCity" class="input" autocomplete="address-level2" /></label>
                   <label>State<input id="subState" class="input" autocomplete="address-level1" maxlength="2" /></label>
                   <label>ZIP<input id="subZip" class="input" autocomplete="postal-code" inputmode="numeric" /></label>
-                  <label>Emergency contact<input id="subEmergencyName" class="input" /></label>
-                  <label>Emergency phone<input id="subEmergencyPhone" class="input" inputmode="tel" /></label>
                 </div>
+                <fieldset id="onboardingEmergencyContact" class="onboarding-emergency">
+                  <legend>Emergency contact</legend>
+                  <div class="onboarding-form-grid">
+                    <label>Contact name<input id="subEmergencyName" class="input" autocomplete="off" /></label>
+                    <label>Contact phone<input id="subEmergencyPhone" class="input" type="tel" autocomplete="off" /></label>
+                  </div>
+                </fieldset>
                 <div class="onboarding-actions">
-                  <button id="btnOnboardingSaveDraft" class="btn secondary" type="button" data-onboarding-action="saveDraft">Save Draft</button>
+                  <button id="btnOnboardingSaveDraft" class="btn secondary" type="submit">Save Draft</button>
                 </div>
               </form>
 
@@ -2386,21 +2391,26 @@
               </div>
             </div>
 
-            <div class="onboarding-panel">
+            <div id="onboardingAgreements" class="onboarding-panel">
               <div class="onboarding-panel-head">
                 <h2>Agreements</h2>
                 <div id="onboardingAgreementTabs" class="onboarding-tabs"></div>
               </div>
-              <div id="onboardingAgreementContent" class="onboarding-agreement-copy"></div>
+              <p id="onboardingAgreementReceipt" class="onboarding-ok" role="status"></p>
+              <div id="onboardingAgreementContent" class="onboarding-agreement-copy" tabindex="-1" role="region" aria-label="Selected agreement document"></div>
               <label class="onboarding-consent">
                 <input id="onboardingSignatureConsent" type="checkbox" />
                 <span>I agree that my electronic signature has the same effect as a handwritten signature.</span>
               </label>
               <label class="onboarding-sign-name">Signer name<input id="onboardingSignerName" class="input" autocomplete="name" /></label>
+              <label class="onboarding-consent">
+                <input id="onboardingTypedSignature" type="checkbox" />
+                <span>Use my typed signer name as my electronic signature, instead of drawing below.</span>
+              </label>
               <canvas id="onboardingSignaturePad" class="onboarding-signature-pad" width="720" height="220" aria-label="Signature pad"></canvas>
               <div class="onboarding-actions">
                 <button class="btn ghost" type="button" data-onboarding-action="clearSignature">Clear</button>
-                <button class="btn secondary" type="button" data-onboarding-action="saveAgreement">Save Signature</button>
+                <button class="btn secondary" type="button" data-onboarding-action="saveAgreement">Save Signature / Acknowledgment</button>
               </div>
             </div>
 
