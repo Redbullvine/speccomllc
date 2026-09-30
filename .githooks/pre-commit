@@ -42,8 +42,13 @@ report_header() {
 
 # --diff-filter=ACMR: added/copied/modified/renamed. A DELETION is never
 # blocked -- removing contamination must always be allowed through.
-git diff $DIFF_ARGS --name-only --diff-filter=ACMR -z |
-while IFS= read -r -d '' file; do
+#
+# One path per line, not -z / read -d: `read -d` is a bash extension, and CI
+# runs this under plain sh (dash), where it is an error. That error landed in
+# the report file and blocked every push while scanning nothing at all.
+# quotePath=false keeps non-ASCII names readable instead of octal-escaped.
+git -c core.quotePath=false diff $DIFF_ARGS --name-only --diff-filter=ACMR |
+while IFS= read -r file; do
   is_exempt "$file" && continue
 
   # 1. the path itself
@@ -83,7 +88,9 @@ if [ -s "$REPORT" ]; then
   rm -f "$REPORT"
   echo
   echo "  You are in the wrong directory."
-  echo "  TelecomEngine lives at: C:\\Users\\redbu\\Projects\\telecomengine"
+  # printf, not echo: dash's echo turns \r and \t in this path into control
+  # characters.
+  printf '%s\n' '  TelecomEngine lives at: C:\Users\redbu\Projects\telecomengine'
   echo
   echo "  Nothing was committed. Move the work to the right repo."
   exit 1
