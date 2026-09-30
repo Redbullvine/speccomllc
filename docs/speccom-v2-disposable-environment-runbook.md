@@ -2,7 +2,7 @@
 
 This package must run only in a newly created, explicitly named disposable
 Supabase project. It must never link to `speccomllc`, shared staging, production,
-or any telecomengine project.
+or any other app's Supabase project.
 
 1. Create a new Supabase project named `speccom-v2-isolation-disposable`.
 2. Generate an ES256 key with `supabase gen signing-key --algorithm ES256`; import
