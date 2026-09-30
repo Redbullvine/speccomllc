@@ -38183,12 +38183,15 @@ async function initAuth(){
   }
   state.authResolved = true;
 
-  state.client.auth.onAuthStateChange(async (event, session) => {
+  // Must stay synchronous: supabase-js runs this while holding its auth lock, so awaiting
+  // any Supabase call here deadlocks the client (every later query hangs until reload).
+  state.client.auth.onAuthStateChange((event, session) => {
     console.info("[auth] onAuthStateChange", {
       event: event || "UNKNOWN",
       has_session: Boolean(session),
       user_id: session?.user?.id || null,
     });
+    const previousUserId = state.user?.id || null;
     state.session = session;
     state.user = session?.user || null;
     state.authResolved = true;
@@ -38197,8 +38200,15 @@ async function initAuth(){
       isDemo = false;
       appMode = "real";
       showAuth(false);
-      await postLoginBootstrap(state.client, state.user);
-      setProofStatus();
+      if (previousUserId === state.user.id){
+        setProofStatus();
+        return;
+      }
+      const user = state.user;
+      setTimeout(async () => {
+        await postLoginBootstrap(state.client, user);
+        setProofStatus();
+      }, 0);
       return;
     } else {
       state.profile = null;
